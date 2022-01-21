@@ -110,12 +110,12 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 	defer resp.Body.Close()
 
@@ -126,12 +126,12 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 
 	content, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
