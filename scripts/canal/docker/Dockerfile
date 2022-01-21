@@ -8,8 +8,8 @@ RUN yum clean all
 RUN yum makecache
 
 # Install mysql client.
-RUN wget https://dev.mysql.com/get/mysql57-community-release-el6-9.noarch.rpm
-RUN rpm -ivh mysql57-community-release-el6-9.noarch.rpm
+RUN rpm -ivh https://repo.mysql.com//mysql57-community-release-el7-11.noarch.rpm
+RUN curl -i https://repo.mysql.com/RPM-GPG-KEY-mysql-2022 > /etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
 RUN yum install mysql-community-client.x86_64 -y
 
 WORKDIR /root
