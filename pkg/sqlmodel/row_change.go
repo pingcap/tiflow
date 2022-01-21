@@ -80,7 +80,8 @@ type RowChange struct {
 // - targetTableInfo: when same as sourceTableInfo or not applicable
 // - tiSessionCtx: will use default sessionCtx which is UTC timezone
 // All arguments must not be changed after assigned to RowChange, any
-// modification (like convert []byte to string) should be done before NewRowChange.
+// modification (like convert []byte to string) should be done before
+// NewRowChange.
 func NewRowChange(
 	sourceTable *cdcmodel.TableName,
 	targetTable *cdcmodel.TableName,
@@ -142,7 +143,8 @@ func (r *RowChange) calculateType() {
 	case r.preValues != nil && r.postValues == nil:
 		r.tp = RowChangeDelete
 	default:
-		log.L().DPanic("preValues and postValues can't both be nil", zap.Stringer("sourceTable", r.sourceTable))
+		log.L().DPanic("preValues and postValues can't both be nil",
+			zap.Stringer("sourceTable", r.sourceTable))
 	}
 }
 
@@ -177,7 +179,11 @@ func (r *RowChange) lazyInitIdentityInfo() {
 	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
 }
 
-func getColsAndValuesOfIdx(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo, data []interface{}) ([]*timodel.ColumnInfo, []interface{}) {
+func getColsAndValuesOfIdx(
+	columns []*timodel.ColumnInfo,
+	indexColumns *timodel.IndexInfo,
+	data []interface{},
+) ([]*timodel.ColumnInfo, []interface{}) {
 	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
 	values := make([]interface{}, 0, len(indexColumns.Columns))
 	for _, col := range indexColumns.Columns {
@@ -210,9 +216,11 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 
 	failpoint.Inject("DownstreamTrackerWhereCheck", func() {
 		if r.tp == RowChangeUpdate {
-			log.L().Info("UpdateWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+			log.L().Info("UpdateWhereColumnsCheck",
+				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
 		} else if r.tp == RowChangeDelete {
-			log.L().Info("DeleteWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+			log.L().Info("DeleteWhereColumnsCheck",
+				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
 		}
 	})
 

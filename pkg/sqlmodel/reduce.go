@@ -101,7 +101,8 @@ func (r *RowChange) IdentityKey() string {
 }
 
 // Reduce will merge two row changes of same row into one row changes,
-// e.g., INSERT{1} + UPDATE{1 -> 2} -> INSERT{2}. Receiver will be changed in-place.
+// e.g., INSERT{1} + UPDATE{1 -> 2} -> INSERT{2}. Receiver will be changed
+// in-place.
 func (r *RowChange) Reduce(preRowChange *RowChange) {
 	if r.IdentityKey() != preRowChange.IdentityKey() {
 		log.L().DPanic("reduce row change failed, identity key not match",

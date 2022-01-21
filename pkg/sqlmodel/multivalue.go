@@ -28,10 +28,12 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 	if lhs.tp != rhs.tp {
 		return false
 	}
-	if lhs.sourceTable.Schema == rhs.sourceTable.Schema && lhs.sourceTable.Table == rhs.sourceTable.Table {
+	if lhs.sourceTable.Schema == rhs.sourceTable.Schema &&
+		lhs.sourceTable.Table == rhs.sourceTable.Table {
 		return true
 	}
-	if lhs.targetTable.Schema != rhs.targetTable.Schema || lhs.targetTable.Table != rhs.targetTable.Table {
+	if lhs.targetTable.Schema != rhs.targetTable.Schema ||
+		lhs.targetTable.Table != rhs.targetTable.Table {
 		return false
 	}
 
@@ -100,7 +102,8 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 		}
 		buf.WriteString(holder)
 		_, whereValues := change.whereColumnsAndValues()
-		// a simple check about different number of WHERE values, not cover all cases
+		// a simple check about different number of WHERE values, not trying to
+		// cover all cases
 		if len(whereValues) != len(whereColumns) {
 			log.L().DPanic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
