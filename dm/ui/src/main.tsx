@@ -8,9 +8,21 @@ import { render } from 'react-dom'
 
 import App from './App'
 
-render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-  document.getElementById('root')
-)
+function mountApp() {
+  render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+    document.getElementById('root')
+  )
+}
+
+if (import.meta.env.MODE === 'mock') {
+  // @ts-ignore
+  import('./mock').then(({ startWorker }) => {
+    startWorker()
+    mountApp()
+  })
+} else {
+  mountApp()
+}
