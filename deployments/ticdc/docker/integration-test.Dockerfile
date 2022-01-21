@@ -40,7 +40,7 @@ RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y epel-release-latest-7.noarch.rpm
 RUN yum --enablerepo=epel install -y s3cmd
 # Install mysql client.
-RUN rpm -ivh https://repo.mysql.com//mysql57-community-release-el7-11.noarch.rpm
+RUN rpm -ivh https://repo.mysql.com/mysql57-community-release-el7-11.noarch.rpm
 # See: https://support.cpanel.net/hc/en-us/articles/4419382481815?input_string=gpg+keys+problem+with+mysql+5.7
 RUN rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
 RUN yum install mysql-community-client.x86_64 -y
