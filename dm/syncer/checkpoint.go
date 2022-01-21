@@ -229,7 +229,7 @@ type CheckPoint interface {
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
 	// IsOlderThanTablePoint checks whether job's checkpoint is older than previous saved checkpoint
-	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, useLE bool) bool
+	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, isDDL bool) bool
 
 	// SaveGlobalPoint saves the global binlog stream's checkpoint
 	// corresponding to Meta.Save
@@ -575,14 +575,12 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 }
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
-// For GTID replication, go-mysql will only update GTID set in a XID event after the rows event, for example, the binlog events are:
-//   - Query event e1, location is gset1
-//   - Rows event e2, location is gset1
-//   - XID event, location is gset2
-// We should note that e1 is not older than e2
-// For binlog position replication, currently DM will split rows changes of an event to jobs, so some job may has save position.
-// if useLE is true, we use less than or equal.
-func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, useLE bool) bool {
+// This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
+// - For GTID based and position based replication, DML handling is different. When using position based, each event has
+//   unique position so we have confident to skip event which is <= table checkpoint. When using GTID based, there may
+//   be more than one event with same GTID, so we can only skip event which is < table checkpoint.
+// - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
+func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, isDDL bool) bool {
 	cp.RLock()
 	defer cp.RUnlock()
 	sourceSchema, sourceTable := table.Schema, table.Name
@@ -597,7 +595,7 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 	oldLocation := point.MySQLLocation()
 	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
 
-	if useLE {
+	if isDDL || !cp.cfg.EnableGTID {
 		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
 	}
 	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) < 0
