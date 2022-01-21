@@ -122,7 +122,7 @@ func main() {
 				}
 
 				if ev.CRTs == uint64(((*numEvents)<<5)+1) {
-					log.Info("Sorter finished", zap.Int("sorter-id", finalI))
+					log.Info("Sorter finished", zap.Int("sorterID", finalI))
 					if atomic.AddInt32(&finishCount, 1) == int32(*numSorters) {
 						log.Info("Many Sorters test finished, cancelling all goroutines")
 						cancel()

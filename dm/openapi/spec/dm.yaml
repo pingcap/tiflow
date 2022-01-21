@@ -371,6 +371,14 @@ paths:
       tags:
         - task
       summary: "get task list"
+      parameters:
+        - name: "with_status"
+          in: query
+          required: false
+          description: "get task with status"
+          schema:
+            type: boolean
+            example: true
       operationId: "DMAPIGetTaskList"
       responses:
         "200":
@@ -723,12 +731,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs:
+  /api/v1/tasks/templates:
     post:
       tags:
         - task
-      summary: "create task config"
-      operationId: "DMAPICreateTaskConfig"
+      summary: "create task template"
+      operationId: "DMAPICreateTaskTemplate"
       requestBody:
         description: "request body"
         content:
@@ -751,8 +759,8 @@ paths:
     get:
       tags:
         - task
-      summary: "get task config list"
-      operationId: "DMAPIGetTaskConfigList"
+      summary: "get task template list"
+      operationId: "DMAPIGetTaskTemplateList"
       responses:
         "200":
           description: "task list"
@@ -766,37 +774,37 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs/import:
+  /api/v1/tasks/templates/import:
     post:
       tags:
         - task
-      summary: "import task config"
-      operationId: "DMAPIImportTaskConfig"
+      summary: "import task template"
+      operationId: "DMAPIImportTaskTemplate"
       requestBody:
         description: "request body"
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/TaskConfigRequest"
+              $ref: "#/components/schemas/TaskTemplateRequest"
       responses:
         "202":
           description: "success"
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/TaskConfigResponse"
+                $ref: "#/components/schemas/TaskTemplateResponse"
         "400":
           description: "failed"
           content:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/task/configs/{task-name}:
+  /api/v1/tasks/templates/{task-name}:
     get:
       tags:
         - task
-      summary: "get task_config"
-      operationId: "DMAPIGetTaskConfig"
+      summary: "get task template template"
+      operationId: "DMAPIGetTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -821,8 +829,8 @@ paths:
     put:
       tags:
         - task
-      summary: "update task_config"
-      operationId: "DMAPUpdateTaskConfig"
+      summary: "update task template template"
+      operationId: "DMAPUpdateTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -847,8 +855,8 @@ paths:
     delete:
       tags:
         - task
-      summary: "delete task_config"
-      operationId: "DMAPIDeleteTaskConfig"
+      summary: "delete task template template"
+      operationId: "DMAPIDeleteTaskTemplate"
       parameters:
         - name: task-name
           in: path
@@ -1224,6 +1232,31 @@ components:
         - "synced"
         - "binlog_type"
         - "seconds_behind_master"
+    DumpStatus:
+      type: object
+      description: "status of dump unit"
+      properties:
+        total_tables:
+          type: integer
+          format: int64
+        completed_tables:
+          type: number
+          format: double
+        finished_bytes:
+          type: number
+          format: double
+        finished_rows:
+          type: number
+          format: double
+        estimate_total_rows:
+          type: number
+          format: double
+      required:
+        - "total_tables"
+        - "completed_tables"
+        - "finished_bytes"
+        - "finished_rows"
+        - "estimate_total_rows" 
     SubTaskStatus:
       type: object
       properties:
@@ -1252,6 +1285,9 @@ components:
         sync_status:
           nullable: true
           $ref: "#/components/schemas/SyncStatus"
+        dump_status:
+          nullable: true
+          $ref: "#/components/schemas/DumpStatus"
       required:
         - "name"
         - "source_name"
@@ -1483,6 +1519,10 @@ components:
             $ref: "#/components/schemas/TaskTableMigrateRule"
         source_config:
           $ref: "#/components/schemas/TaskSourceConfig"
+        status_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubTaskStatus"
       required:
         - "name"
         - "task_mode"
@@ -1762,16 +1802,16 @@ components:
         - "total"
         - "data"
 
-    TaskConfigRequest:
+    TaskTemplateRequest:
       type: object
       properties:
         overwrite:
           type: boolean
           default: false
-          description: whether to overwrite task config template
+          description: whether to overwrite task template template
       required:
         - "overwrite"
-    TaskConfigResponse:
+    TaskTemplateResponse:
       type: object
       properties:
         success_task_list:

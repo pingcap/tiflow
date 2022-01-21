@@ -89,7 +89,8 @@ func init() {
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
-		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`", zap.String("upstream-uri", upstreamURIStr))
+		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
+			zap.String("upstreamURI", upstreamURIStr))
 	}
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
@@ -405,7 +406,7 @@ ClaimMessages:
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
 				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
+					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
 			}
 
 			switch tp {

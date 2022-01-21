@@ -136,12 +136,17 @@ func (s *Storage) Init(tctx *tcontext.Context) error {
 	s.db = db
 	s.dbConn = dbConns[0]
 
-	err = s.prepare(tctx)
-	if err != nil {
+	if err = s.prepare(tctx); err != nil {
+		s.Close()
 		return err
 	}
 
-	return s.Load(tctx)
+	if err = s.Load(tctx); err != nil {
+		s.Close()
+		return err
+	}
+
+	return nil
 }
 
 // Load loads information from storage.

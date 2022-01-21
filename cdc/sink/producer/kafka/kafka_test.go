@@ -191,7 +191,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	}
 }
 
-func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
+func (s *kafkaSuite) TestValidateAndCreateTopic(c *check.C) {
 	defer testleak.AfterTest(c)
 	config := NewConfig()
 	adminClient := kafka.NewClusterAdminClientMockImpl()
@@ -204,7 +204,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err := newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts := make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
 
@@ -215,7 +215,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
@@ -224,7 +224,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
@@ -234,7 +234,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "non-exist", config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, "non-exist", config, cfg, opts)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -248,7 +248,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-success", config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, "create-random1", config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
@@ -260,7 +260,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "create-new-fail", config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, "create-random2", config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
@@ -279,7 +279,7 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	err = adminClient.CreateTopic("test-topic", detail, false)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
@@ -291,10 +291,36 @@ func (s *kafkaSuite) TestValidateMaxMessageBytesAndCreateTopic(c *check.C) {
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	opts = make(map[string]string)
-	err = validateMaxMessageBytesAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
+	err = validateAndCreateTopic(adminClient, "test-topic", config, cfg, opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.Producer.MaxMessageBytes, check.Equals, defaultMaxMessageBytes)
 	c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(cfg.Producer.MaxMessageBytes))
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does not exist.
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, "create-new-fail-invalid-min-insync-replicas", config, cfg, opts)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
+	)
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does exist.
+	cfg, err = newSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	opts = make(map[string]string)
+	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg, opts)
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
+	)
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {

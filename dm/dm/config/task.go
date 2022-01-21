@@ -387,6 +387,11 @@ type TaskConfig struct {
 
 	// deprecated, replaced by `start-task --remove-meta`
 	RemoveMeta bool `yaml:"remove-meta"`
+
+	// task experimental configs
+	Experimental struct {
+		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
+	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 }
 
 // NewTaskConfig creates a TaskConfig.

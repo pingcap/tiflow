@@ -127,6 +127,9 @@ func TestApplyDMLs(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
+			mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
+				WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
+					AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 			columns := []string{"Variable_name", "Value"}
 			mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 				sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),

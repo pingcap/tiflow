@@ -709,21 +709,21 @@ func (st *SubTask) fail(err error) {
 }
 
 // HandleError handle error for syncer unit.
-func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest, relay relay.Process) error {
+func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest, relay relay.Process) (string, error) {
 	syncUnit, ok := st.currUnit.(*syncer.Syncer)
 	if !ok {
-		return terror.ErrWorkerOperSyncUnitOnly.Generate(st.currUnit.Type())
+		return "", terror.ErrWorkerOperSyncUnitOnly.Generate(st.currUnit.Type())
 	}
 
-	err := syncUnit.HandleError(ctx, req)
+	msg, err := syncUnit.HandleError(ctx, req)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	if st.Stage() == pb.Stage_Paused {
+	if st.Stage() == pb.Stage_Paused && req.Op != pb.ErrorOp_List {
 		err = st.Resume(relay)
 	}
-	return err
+	return msg, err
 }
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {

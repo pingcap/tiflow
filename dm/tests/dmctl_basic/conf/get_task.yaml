@@ -162,3 +162,5 @@ syncers:
 clean-dump-file: true
 ansi-quotes: false
 remove-meta: false
+experimental:
+  async-checkpoint-flush: false

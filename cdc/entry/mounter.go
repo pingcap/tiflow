@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/rand"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -39,7 +39,9 @@ import (
 )
 
 const (
-	defaultOutputChanSize = 128000
+	// The buffer size of input channel of each mounter worker.
+	// 16 is large enough, because a channel exclusively belongs to a worker.
+	defaultInputChanSize = 16
 )
 
 type baseKVEntry struct {
@@ -67,7 +69,11 @@ type rowKVEntry struct {
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
-	Input() chan<- *model.PolymorphicEvent
+	// AddEntry accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
+	// decodes `RawKVEntry` into `RowChangedEvent`.
+	// It also close `model.PolymorphicEvent.finished` channel to notify callers
+	// that decoding is done.
+	AddEntry(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounterImpl struct {
@@ -76,6 +82,9 @@ type mounterImpl struct {
 	tz               *time.Location
 	workerNum        int
 	enableOldValue   bool
+
+	// index is an atomic variable to dispatch input events to workers.
+	index int64
 }
 
 // NewMounter creates a mounter
@@ -85,7 +94,7 @@ func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool)
 	}
 	chs := make([]chan *model.PolymorphicEvent, workerNum)
 	for i := 0; i < workerNum; i++ {
-		chs[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
+		chs[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
 	}
 	return &mounterImpl{
 		schemaStorage:    schemaStorage,
@@ -100,17 +109,34 @@ const defaultMounterWorkerNum = 32
 func (m *mounterImpl) Run(ctx context.Context) error {
 	m.tz = util.TimezoneFromCtx(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
-	errg.Go(func() error {
-		m.collectMetrics(ctx)
-		return nil
-	})
 	for i := 0; i < m.workerNum; i++ {
 		index := i
 		errg.Go(func() error {
 			return m.codecWorker(ctx, index)
 		})
 	}
-	return errg.Wait()
+
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
+
+	flushMetricsInterval := 15 * time.Second
+	timer := time.NewTimer(flushMetricsInterval)
+	defer timer.Stop()
+	for {
+		select {
+		// ctx.Done returns when parent ctx done or error occurs in errg.
+		case <-ctx.Done():
+			return errg.Wait()
+		case <-timer.C:
+			chSize := 0
+			for _, ch := range m.rawRowChangedChs {
+				chSize += len(ch)
+			}
+			metricMounterInputChanSize.Set(float64(chSize))
+			timer.Reset(flushMetricsInterval)
+		}
+	}
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
@@ -148,26 +174,13 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 	}
 }
 
-func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
-	return m.rawRowChangedChs[rand.Intn(m.workerNum)]
-}
-
-func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Second * 15):
-			chSize := 0
-			for _, ch := range m.rawRowChangedChs {
-				chSize += len(ch)
-			}
-			metricMounterInputChanSize.Set(float64(chSize))
-		}
+func (m *mounterImpl) AddEntry(ctx context.Context, event *model.PolymorphicEvent) error {
+	index := atomic.AddInt64(&m.index, 1) % int64(m.workerNum)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.rawRowChangedChs[index] <- event:
+		return nil
 	}
 }
 
@@ -293,6 +306,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("get new DDL job", zap.String("detail", job.String()))
 	if !job.IsDone() && !job.IsSynced() {
 		return nil, nil
 	}
@@ -490,25 +504,42 @@ func formatColVal(datum types.Datum, tp byte) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), warn, nil
 	default:
-		// FIXME: GetValue() may return some types that go sql not support, which will cause sink DML fail
+		// NOTICE: GetValue() may return some types that go sql not support, which will cause sink DML fail
 		// Make specified convert upper if you need
 		// Go sql support type ref to: https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 		return datum.GetValue(), sizeOfDatum(datum), "", nil
 	}
 }
 
+// Scenarios when call this function:
+// (1) column define default null at creating + insert without explicit column
+// (2) alter table add column default xxx + old existing data
+// (3) amend + insert without explicit column + alter table add column default xxx
+// (4) online DDL drop column + data insert at state delete-only
+//
 // getDefaultOrZeroValue return interface{} need to meet to require type in
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
+// TODO: Check default expr support
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
 	var d types.Datum
+	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
+	// https://github.com/pingcap/tiflow/issues/4048
+	// FIXME: Too many corner cases may hit here, like type truncate, timezone
+	// (1) If this column is uk(no pk), will cause data inconsistency in Scenarios(2)
+	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
+	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
+	if col.GetOriginDefaultValue() != nil {
+		d = types.NewDatum(col.GetOriginDefaultValue())
+		return d.GetValue(), sizeOfDatum(d), "", nil
+	}
+
 	if !mysql.HasNotNullFlag(col.Flag) {
-		// see https://github.com/pingcap/tidb/issues/9304
+		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
+		// ref: https://github.com/pingcap/ticdc/issues/3929
 		// must use null if TiDB not write the column value when default value is null
-		// and the value is null
+		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
 		d = types.NewDatum(nil)
-	} else if col.GetDefaultValue() != nil {
-		d = types.NewDatum(col.GetDefaultValue())
 	} else {
 		switch col.Tp {
 		case mysql.TypeEnum:
@@ -519,6 +550,9 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			return emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
+			if d.IsNull() {
+				log.Error("meet unsupported column type", zap.String("columnInfo", col.String()))
+			}
 		}
 	}
 

@@ -195,6 +195,9 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
@@ -1079,17 +1082,17 @@ func (w *SourceWorker) getAllSubTaskStatus() map[string]*pb.SubTaskStatus {
 }
 
 // HandleError handle worker error.
-func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) error {
+func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (string, error) {
 	w.Lock()
 	defer w.Unlock()
 
 	if w.closed.Load() {
-		return terror.ErrWorkerAlreadyClosed.Generate()
+		return "", terror.ErrWorkerAlreadyClosed.Generate()
 	}
 
 	st := w.subTaskHolder.findSubTask(req.Task)
 	if st == nil {
-		return terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
+		return "", terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
 	}
 
 	return st.HandleError(ctx, req, w.getRelayWithoutLock())

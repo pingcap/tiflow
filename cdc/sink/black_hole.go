@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// newBlackHoleSink creates a block hole sink
+// newBlackHoleSink creates a black hole sink
 func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
 	return &blackHoleSink{
 		statistics: NewStatistics(ctx, "blackhole", opts),
@@ -33,6 +33,14 @@ type blackHoleSink struct {
 	statistics      *Statistics
 	accumulated     uint64
 	lastAccumulated uint64
+}
+
+func (b *blackHoleSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := b.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {

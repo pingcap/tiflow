@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -56,8 +57,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -90,6 +89,11 @@ const (
 	Write
 	Update
 	Delete
+
+	DMLQuery
+
+	Headers
+	Rotate
 )
 
 type testSyncerSuite struct {
@@ -149,6 +153,7 @@ func (s *testSyncerSuite) SetUpSuite(c *C) {
 		Flavor:           "mysql",
 		LoaderConfig:     loaderCfg,
 	}
+	s.cfg.Experimental.AsyncCheckpointFlush = true
 	s.cfg.From.Adjust()
 	s.cfg.To.Adjust()
 
@@ -179,7 +184,7 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 			events = append(events, evs...)
 
 		case DDL:
-			evs, _, err := s.eventsGenerator.GenDDLEvents(e.args[0].(string), e.args[1].(string))
+			evs, _, err := s.eventsGenerator.GenDDLEvents(e.args[0].(string), e.args[1].(string), 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 
@@ -204,7 +209,7 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []
 			default:
 				c.Fatal(fmt.Sprintf("mock event generator don't support event type: %d", e.typ))
 			}
-			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 		}
@@ -840,9 +845,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -951,6 +957,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	cancel()
+	<-resultCh // wait for the process to finish
 	// when syncer exit Run(), will flush job
 	syncer.Pause()
 
@@ -981,6 +988,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -1016,6 +1024,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	testJobs.RUnlock()
 
 	cancel()
+	<-resultCh // wait for the process to finish
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
@@ -1117,9 +1126,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		cp:           syncer.checkpoint,
 		execError:    &syncer.execError,
 		afterFlushFn: syncer.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 
-	syncer.addJobFunc = syncer.addJobToMemory
+	syncer.handleJobFunc = syncer.addJobToMemory
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1462,7 +1472,7 @@ func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	}
 }
 
-func (s *Syncer) addJobToMemory(job *job) error {
+func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 	log.L().Info("add job to memory", zap.Stringer("job", job))
 
 	switch job.tp {
@@ -1502,7 +1512,7 @@ func (s *Syncer) addJobToMemory(job *job) error {
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPointMock sqlmock.Sqlmock) {
@@ -1521,8 +1531,11 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 		cp:           s.checkpoint,
 		execError:    &s.execError,
 		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
+	// disable flush checkpoint periodically
+	s.checkpoint.(*RemoteCheckPoint).globalPointSaveTime = time.Now()
 }
 
 func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {

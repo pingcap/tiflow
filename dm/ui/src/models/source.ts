@@ -2,147 +2,86 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
-    dmapiCreateSource: build.mutation<
-      DmapiCreateSourceApiResponse,
-      DmapiCreateSourceApiArg
-    >({
+    dmapiCreateSource: build.mutation<Source, Partial<Source>>({
       query: queryArg => ({
         url: `/sources`,
         method: 'POST',
         body: queryArg,
       }),
+      invalidatesTags: ['Source'],
     }),
     dmapiGetSourceList: build.query<
-      DmapiGetSourceListApiResponse,
-      DmapiGetSourceListApiArg
+      ListResponse<Source>,
+      {
+        withStatus?: boolean
+      }
     >({
       query: queryArg => ({
         url: `/sources`,
         params: { with_status: queryArg.withStatus },
       }),
+      providesTags: ['Source'],
     }),
     dmapiDeleteSource: build.mutation<
-      DmapiDeleteSourceApiResponse,
-      DmapiDeleteSourceApiArg
+      {
+        task_name_list?: string[]
+      },
+      {
+        sourceName: string
+        force?: boolean
+      }
     >({
       query: queryArg => ({
         url: `/sources/${queryArg.sourceName}`,
         method: 'DELETE',
         params: { force: queryArg.force },
       }),
+      invalidatesTags: ['Source'],
     }),
     dmapiGetSourceStatus: build.query<
-      DmapiGetSourceStatusApiResponse,
-      DmapiGetSourceStatusApiArg
+      ListResponse<SourceStatus>,
+      {
+        sourceName: string
+      }
     >({
       query: queryArg => ({
         url: `/sources/${queryArg.sourceName}/status`,
       }),
     }),
     dmapiTransferSource: build.mutation<
-      DmapiTransferSourceApiResponse,
-      DmapiTransferSourceApiArg
+      void,
+      {
+        sourceName: string
+        workerName: string
+      }
     >({
       query: queryArg => ({
         url: `/sources/${queryArg.sourceName}/transfer`,
         method: 'POST',
-        body: queryArg.workerNameRequest,
+        body: {
+          worker_name: queryArg.workerName,
+        },
       }),
+      invalidatesTags: ['Source'],
     }),
-    dmapiGetSourceSchemaList: build.query<
-      DmapiGetSourceSchemaListApiResponse,
-      DmapiGetSourceSchemaListApiArg
-    >({
+    dmapiGetSourceSchemaList: build.query<string[], { sourceName: string }>({
       query: queryArg => ({
         url: `/sources/${queryArg.sourceName}/schemas`,
       }),
     }),
-    dmapiGetSourceTableList: build.query<
-      DmapiGetSourceTableListApiResponse,
-      DmapiGetSourceTableListApiArg
+    dmapiGetSourceTableList: build.mutation<
+      string[],
+      { sourceName: string; schemaName: string }
     >({
       query: queryArg => ({
         url: `/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
       }),
     }),
-    dmapiGetSchemaListByTaskAndSource: build.query<
-      DmapiGetSchemaListByTaskAndSourceApiResponse,
-      DmapiGetSchemaListByTaskAndSourceApiArg
-    >({
-      query: queryArg => ({
-        url: `/tasks/${queryArg['task-name']}/sources/${queryArg.sourceName}/schemas`,
-      }),
-    }),
-    dmapiGetTableListByTaskAndSource: build.query<
-      DmapiGetTableListByTaskAndSourceApiResponse,
-      DmapiGetTableListByTaskAndSourceApiArg
-    >({
-      query: queryArg => ({
-        url: `/tasks/${queryArg['task-name']}/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
-      }),
-    }),
   }),
-  overrideExisting: false,
 })
-
-export { injectedRtkApi as enhancedApi }
-
-export type DmapiCreateSourceApiResponse = Source
-
-export type DmapiCreateSourceApiArg = Partial<Source>
-
-export type DmapiGetSourceListApiResponse = GetSourceListResponse
-
-export type DmapiGetSourceListApiArg = {
-  withStatus?: boolean
-}
-
-export type DmapiDeleteSourceApiResponse = DeleteSourceResponse
-
-export type DmapiDeleteSourceApiArg = {
-  sourceName: string
-  force?: boolean
-}
-
-export type DmapiGetSourceStatusApiResponse = GetSourceStatusResponse
 
 export type DmapiGetSourceStatusApiArg = {
   sourceName: string
-}
-
-export type DmapiTransferSourceApiResponse = undefined
-
-export type DmapiTransferSourceApiArg = {
-  sourceName: string
-  workerNameRequest: WorkerNameRequest
-}
-
-export type DmapiGetSourceSchemaListApiResponse = SchemaNameList
-
-export type DmapiGetSourceSchemaListApiArg = {
-  sourceName: string
-}
-
-export type DmapiGetSourceTableListApiResponse = TableNameList
-
-export type DmapiGetSourceTableListApiArg = {
-  sourceName: string
-  schemaName: string
-}
-
-export type DmapiGetSchemaListByTaskAndSourceApiResponse = SchemaNameList
-
-export type DmapiGetSchemaListByTaskAndSourceApiArg = {
-  'task-name': string
-  sourceName: string
-}
-
-export type DmapiGetTableListByTaskAndSourceApiResponse = TableNameList
-
-export type DmapiGetTableListByTaskAndSourceApiArg = {
-  'task-name': string
-  sourceName: string
-  schemaName: string
 }
 
 export type Security = {
@@ -194,24 +133,6 @@ export type Source = {
   relay_config?: RelayConfig
 }
 
-export type GetSourceListResponse = ListResponse<Source>
-
-export type TaskNameList = string[]
-
-export type DeleteSourceResponse = {
-  task_name_list?: TaskNameList
-}
-
-export type GetSourceStatusResponse = ListResponse<SourceStatus>
-
-export type WorkerNameRequest = {
-  worker_name: string
-}
-
-export type SchemaNameList = string[]
-
-export type TableNameList = string[]
-
 export const {
   useDmapiCreateSourceMutation,
   useDmapiGetSourceListQuery,
@@ -219,7 +140,5 @@ export const {
   useDmapiGetSourceStatusQuery,
   useDmapiTransferSourceMutation,
   useDmapiGetSourceSchemaListQuery,
-  useDmapiGetSourceTableListQuery,
-  useDmapiGetSchemaListByTaskAndSourceQuery,
-  useDmapiGetTableListByTaskAndSourceQuery,
+  useDmapiGetSourceTableListMutation,
 } = injectedRtkApi

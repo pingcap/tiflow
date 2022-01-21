@@ -15,6 +15,8 @@ package scheduler
 
 import (
 	"math"
+	"math/rand"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
@@ -49,15 +51,34 @@ type balancer interface {
 // workload of each table.
 type tableNumberBalancer struct {
 	logger *zap.Logger
+
+	// random is used to provide some randomness in the schedule.
+	random *rand.Rand
 }
 
 func newTableNumberRebalancer(logger *zap.Logger) balancer {
+	return newTableNumberRebalancerWithRandomSeed(logger, time.Now().UnixNano())
+}
+
+func newTableNumberRebalancerWithRandomSeed(logger *zap.Logger, seed int64) balancer {
+	return &tableNumberBalancer{
+		logger: logger,
+		random: rand.New(rand.NewSource(seed)),
+	}
+}
+
+// newDeterministicTableNumberRebalancer is only used in unit tests.
+func newDeterministicTableNumberRebalancer(logger *zap.Logger) balancer {
 	return &tableNumberBalancer{
 		logger: logger,
 	}
 }
 
 // FindTarget returns the capture with the smallest workload (in table count).
+// Complexity note: This function can be called O(n) times during one scheduler tick,
+// where `n` is the number of tables. So we need to keep the time complexity of this function
+// reasonable. The current implementation has complexity O(c), where `c` is the number of
+// TiCDC nodes.
 func (r *tableNumberBalancer) FindTarget(
 	tables *util.TableSet,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -68,12 +89,7 @@ func (r *tableNumberBalancer) FindTarget(
 
 	captureWorkload := make(map[model.CaptureID]int)
 	for captureID := range captures {
-		captureWorkload[captureID] = 0
-	}
-
-	for captureID, tables := range tables.GetAllTablesGroupedByCaptures() {
-		// We use the number of tables as workload
-		captureWorkload[captureID] = len(tables)
+		captureWorkload[captureID] = r.randomizeWorkload(tables.CountTableByCaptureID(captureID))
 	}
 
 	candidate := ""
@@ -93,8 +109,32 @@ func (r *tableNumberBalancer) FindTarget(
 	return candidate, true
 }
 
+const (
+	randomPartBitSize = 8
+	randomPartMask    = (1 << randomPartBitSize) - 1
+)
+
+// randomizeWorkload injects small randomness into the workload, so that
+// when two captures tied in competing for the minimum workload, the result
+// will not always be the same.
+// The bitwise layout of the return value is:
+// 63                8                0
+// |----- input -----|-- random val --|
+func (r *tableNumberBalancer) randomizeWorkload(input int) int {
+	var randomPart int
+	if r.random != nil {
+		randomPart = int(r.random.Uint32() & randomPartMask)
+	}
+	// randomPart is a small random value that only affects the
+	// result of comparison of workloads when two workloads are equal.
+	return (input << randomPartBitSize) | randomPart
+}
+
 // FindVictims returns some victims to remove.
 // Read the comment in the function body on the details of the victim selection.
+// Complexity note: This function is called O(c) times during one scheduler tick,
+// where `c` is the number of TiCDC nodes. The function itself has complexity O(n),
+// where `n` is the number of tables.
 func (r *tableNumberBalancer) FindVictims(
 	tables *util.TableSet,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -117,9 +157,9 @@ func (r *tableNumberBalancer) FindVictims(
 	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
 
 	r.logger.Info("Start rebalancing",
-		zap.Int("table-num", totalTableNum),
-		zap.Int("capture-num", captureNum),
-		zap.Int("target-limit", upperLimitPerCapture))
+		zap.Int("tableNum", totalTableNum),
+		zap.Int("captureNum", captureNum),
+		zap.Int("targetLimit", upperLimitPerCapture))
 
 	var victims []*util.TableRecord
 	for _, tables := range tables.GetAllTablesGroupedByCaptures() {
@@ -127,9 +167,22 @@ func (r *tableNumberBalancer) FindVictims(
 		for tableID := range tables {
 			tableList = append(tableList, tableID)
 		}
-		// We sort the tableIDs here so that the result is deterministic,
-		// which would aid testing and debugging.
-		util.SortTableIDs(tableList)
+
+		if r.random != nil {
+			// Complexity note: Shuffle has O(n), where `n` is the number of tables.
+			// Also, during a single call of FindVictims, Shuffle can be called at most
+			// `c` times, where `c` is the number of captures (TiCDC nodes).
+			// Since FindVictims is called only when a rebalance is triggered, which happens
+			// only rarely, we do not expect a performance degradation as a result of adding
+			// the randomness.
+			r.random.Shuffle(len(tableList), func(i, j int) {
+				tableList[i], tableList[j] = tableList[j], tableList[i]
+			})
+		} else {
+			// We sort the tableIDs here so that the result is deterministic,
+			// which would aid testing and debugging.
+			util.SortTableIDs(tableList)
+		}
 
 		tableNum2Remove := len(tables) - upperLimitPerCapture
 		if tableNum2Remove <= 0 {
@@ -148,7 +201,7 @@ func (r *tableNumberBalancer) FindVictims(
 			}
 
 			r.logger.Info("Rebalance: find victim table",
-				zap.Any("table-record", record))
+				zap.Any("tableRecord", record))
 			victims = append(victims, record)
 			tableNum2Remove--
 		}

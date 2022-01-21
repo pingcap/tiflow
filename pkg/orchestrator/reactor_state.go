@@ -66,7 +66,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
 			log.Info("remote capture offline",
-				zap.String("capture-id", k.CaptureID),
+				zap.String("captureID", k.CaptureID),
 				zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
 			if s.onCaptureRemoved != nil {
@@ -81,7 +81,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
-		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
+		log.Info("remote capture online",
+			zap.String("captureID", k.CaptureID), zap.Any("info", newCaptureInfo))
 		if s.onCaptureAdded != nil {
 			s.onCaptureAdded(k.CaptureID, newCaptureInfo.AdvertiseAddr)
 		}

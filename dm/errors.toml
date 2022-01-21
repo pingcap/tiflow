@@ -2027,7 +2027,7 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-sync-unit-36066]
-message = "replace event not exist, location: %s"
+message = "replace or inject event not exist, location: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]

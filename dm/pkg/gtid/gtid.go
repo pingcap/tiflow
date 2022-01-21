@@ -35,6 +35,7 @@ type Set interface {
 	Origin() mysql.GTIDSet
 	Equal(other Set) bool
 	Contain(other Set) bool
+	Update(gtidStr string) error
 
 	// Truncate truncates the current GTID sets until the `end` in-place.
 	// NOTE: the original GTID sets should contain the end GTID sets, otherwise it's invalid.
@@ -226,6 +227,10 @@ func (g *MySQLGTIDSet) Contain(other Set) bool {
 	return g.set.Contain(other.Origin())
 }
 
+func (g *MySQLGTIDSet) Update(gtidStr string) error {
+	return g.set.Update(gtidStr)
+}
+
 // Truncate implements Set.Truncate.
 func (g *MySQLGTIDSet) Truncate(end Set) error {
 	if end == nil {
@@ -390,6 +395,10 @@ func (m *MariadbGTIDSet) Contain(other Set) bool {
 		return false // nil only contains nil
 	}
 	return m.set.Contain(other.Origin())
+}
+
+func (m *MariadbGTIDSet) Update(gtidStr string) error {
+	return m.set.Update(gtidStr)
 }
 
 // Truncate implements Set.Truncate.

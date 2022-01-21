@@ -111,8 +111,8 @@ const (
     "enable-table-actor": false,
     "enable-db-sorter": false,
     "db": {
-      "count": 16,
-      "concurrency": 256,
+      "count": 8,
+      "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
       "block-cache-size": 4294967296,

@@ -16,9 +16,11 @@ package operator
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -32,17 +34,20 @@ import (
 // Operator contains an operation for specified binlog pos
 // used by `handle-error`.
 type Operator struct {
-	uuid   string // add a UUID, make it more friendly to be traced in log
-	op     pb.ErrorOp
-	events []*replication.BinlogEvent // startLocation -> events
+	uuid          string // add a UUID, make it more friendly to be traced in log
+	op            pb.ErrorOp
+	isAllInjected bool                       // is all injected, used by inject
+	events        []*replication.BinlogEvent // startLocation -> events
+	originReq     *pb.HandleWorkerErrorRequest
 }
 
 // newOperator creates a new operator with a random UUID.
-func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent) *Operator {
+func newOperator(op pb.ErrorOp, events []*replication.BinlogEvent, originReq *pb.HandleWorkerErrorRequest) *Operator {
 	return &Operator{
-		uuid:   uuid.New().String(),
-		op:     op,
-		events: events,
+		uuid:      uuid.New().String(),
+		op:        op,
+		events:    events,
+		originReq: originReq,
 	}
 }
 
@@ -53,14 +58,15 @@ func (o *Operator) String() string {
 		e.Dump(buf)
 		events = append(events, buf.String())
 	}
-	return fmt.Sprintf("uuid: %s, op: %s, events: %s", o.uuid, o.op, strings.Join(events, "\n"))
+	return fmt.Sprintf("uuid: %s, op: %s, events: %s, originReq: %v", o.uuid, o.op, strings.Join(events, "\n"), o.originReq)
 }
 
 // Holder holds error operator.
 type Holder struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	operators map[string]*Operator
-	logger    log.Logger
+
+	logger log.Logger
 }
 
 // NewHolder creates a new Holder.
@@ -72,9 +78,12 @@ func NewHolder(pLogger *log.Logger) *Holder {
 }
 
 // Set sets an Operator.
-func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEvent) error {
+func (h *Holder) Set(req *pb.HandleWorkerErrorRequest, events []*replication.BinlogEvent) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	op := req.Op
+	pos := req.BinlogPos
 
 	if op == pb.ErrorOp_Revert {
 		if _, ok := h.operators[pos]; !ok {
@@ -84,7 +93,7 @@ func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEven
 		return nil
 	}
 
-	oper := newOperator(op, events)
+	oper := newOperator(op, events, req)
 	pre, ok := h.operators[pos]
 	if ok {
 		h.logger.Warn("overwrite operator", zap.String("position", pos), zap.Stringer("old operator", pre))
@@ -92,6 +101,57 @@ func (h *Holder) Set(pos string, op pb.ErrorOp, events []*replication.BinlogEven
 	h.operators[pos] = oper
 	h.logger.Info("set a new operator", zap.String("position", pos), zap.Stringer("new operator", oper))
 	return nil
+}
+
+// GetBehindCommands gets behind commands.
+func (h *Holder) GetBehindCommands(pos string) []*pb.HandleWorkerErrorRequest {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	current, _ := binlog.PositionFromPosStr(pos)
+
+	// find behind position
+	var behindPositions []mysql.Position
+	for key := range h.operators {
+		p, _ := binlog.PositionFromPosStr(key)
+		if current.Compare(p) <= 0 {
+			behindPositions = append(behindPositions, p)
+		}
+	}
+	sort.Slice(behindPositions, func(i, j int) bool {
+		return behindPositions[i].Compare(behindPositions[j]) < 0
+	})
+
+	res := make([]*pb.HandleWorkerErrorRequest, 0, len(behindPositions))
+	for _, behindPosition := range behindPositions {
+		res = append(res, h.operators[behindPosition.String()].originReq)
+	}
+
+	return res
+}
+
+func (h *Holder) SetHasAllInjected(startLocation binlog.Location) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	key := startLocation.Position.String()
+	operator, ok := h.operators[key]
+	if !ok {
+		return
+	}
+	operator.isAllInjected = true
+}
+
+func (h *Holder) IsInject(startLocation binlog.Location) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	key := startLocation.Position.String()
+	operator, ok := h.operators[key]
+	if !ok {
+		return false
+	}
+	return operator.op == pb.ErrorOp_Inject
 }
 
 // GetEvent return a replace binlog event
@@ -110,17 +170,17 @@ func (h *Holder) GetEvent(startLocation binlog.Location) (*replication.BinlogEve
 	key := startLocation.Position.String()
 	operator, ok := h.operators[key]
 	if !ok {
-		return nil, terror.ErrSyncerReplaceEventNotExist.Generate(startLocation)
+		return nil, terror.ErrSyncerEventNotExist.Generate(startLocation)
 	}
 
 	if len(operator.events) <= startLocation.Suffix {
-		return nil, terror.ErrSyncerReplaceEvent.Generatef("replace events out of range, index: %d, total: %d", startLocation.Suffix, len(operator.events))
+		return nil, terror.ErrSyncerEvent.Generatef("%s events out of range, index: %d, total: %d", operator.op.String(), startLocation.Suffix, len(operator.events))
 	}
 
 	e := operator.events[startLocation.Suffix]
 	buf := new(bytes.Buffer)
 	e.Dump(buf)
-	h.logger.Info("get replace event", zap.Stringer("event", buf))
+	h.logger.Info("get event", zap.String("operatorType", operator.op.String()), zap.Stringer("event", buf))
 
 	return e, nil
 }
@@ -136,7 +196,11 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, realE
 		return false, pb.ErrorOp_InvalidErrorOp
 	}
 
-	if operator.op == pb.ErrorOp_Replace {
+	if operator.isAllInjected {
+		return false, pb.ErrorOp_InvalidErrorOp
+	}
+
+	if operator.op == pb.ErrorOp_Replace || operator.op == pb.ErrorOp_Inject {
 		if len(operator.events) == 0 {
 			// this should not happen
 			return false, pb.ErrorOp_InvalidErrorOp

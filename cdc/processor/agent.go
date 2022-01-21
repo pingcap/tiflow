@@ -100,8 +100,8 @@ func newAgent(
 	flushInterval := time.Duration(conf.ProcessorFlushInterval)
 
 	log.Debug("creating processor agent",
-		zap.String("changefeed-id", changeFeedID),
-		zap.Duration("send-checkpoint-ts-interval", flushInterval))
+		zap.String("changefeed", changeFeedID),
+		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
 	ret.BaseAgent = scheduler.NewBaseAgent(
 		changeFeedID,
@@ -112,7 +112,7 @@ func newAgent(
 	// Note that registerPeerMessageHandlers sets handlerErrChs.
 	if err := ret.registerPeerMessageHandlers(); err != nil {
 		log.Warn("failed to register processor message handlers",
-			zap.String("changefeed-id", changeFeedID),
+			zap.String("changefeed", changeFeedID),
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
@@ -128,13 +128,13 @@ func newAgent(
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("no owner found. We will wait for an owner to contact us.",
-			zap.String("changefeed-id", changeFeedID),
+			zap.String("changefeed", changeFeedID),
 			zap.Error(err))
 	} else {
 		ret.ownerCaptureID = ownerCaptureID
 		log.Debug("found owner",
-			zap.String("changefeed-id", changeFeedID),
-			zap.String("owner-capture-id", ownerCaptureID))
+			zap.String("changefeed", changeFeedID),
+			zap.String("ownerID", ownerCaptureID))
 	}
 	return ret, nil
 }
@@ -222,8 +222,8 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		sinceLastAdvanced := a.clock.Since(a.barrierLastCleared)
 		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.barrierLogRateLimiter.Allow() {
 			log.Warn("processor send barrier not advancing, report a bug if this log repeats",
-				zap.String("changefeed-id", a.changeFeed),
-				zap.String("owner-id", a.ownerCaptureID),
+				zap.String("changefeed", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID),
 				zap.Duration("duration", sinceLastAdvanced))
 		}
 	}()
@@ -237,7 +237,7 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		// We need to wait for the sync request anyways, and
 		// there would not be any table to replicate for now.
 		log.Debug("waiting for owner to request sync",
-			zap.String("changefeed-id", a.changeFeed))
+			zap.String("changefeed", a.changeFeed))
 		return false
 	}
 
@@ -275,7 +275,7 @@ func (a *agentImpl) Close() error {
 	log.Debug("processor messenger: closing", zap.Stack("stack"))
 	if err := a.deregisterPeerMessageHandlers(); err != nil {
 		log.Warn("failed to deregister processor message handlers",
-			zap.String("changefeed-id", a.changeFeed),
+			zap.String("changefeed", a.changeFeed),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -305,7 +305,7 @@ func (a *agentImpl) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed-id", a.changeFeed),
+				zap.String("changefeed", a.changeFeed),
 				zap.String("target", target))
 			return false, nil
 		}
@@ -388,5 +388,5 @@ func (a *agentImpl) printNoClientWarning(target model.CaptureID) {
 		return
 	}
 	log.Warn("processor: no message client found for owner, retry later",
-		zap.String("owner-id", target))
+		zap.String("ownerID", target))
 }

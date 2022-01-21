@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -135,6 +136,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
+		err = errors.Annotate(err, "invalid PD version")
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 
@@ -171,6 +173,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	for _, s := range stores {
 		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
+			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		minOrd := ver.Compare(*MinTiKVVersion)
@@ -218,6 +221,16 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
+// ShouldRunCliWithAPIClientByDefault returns whether to run cmd cli with api client by default
+func (v *TiCDCClusterVersion) ShouldRunCliWithAPIClientByDefault() bool {
+	// we assume the unknown version to be the latest version
+	if v.Version == nil {
+		return true
+	}
+
+	return !v.LessThan(*semver.New("5.4.0")) || (v.Major == 5 && v.Minor == 4 && v.Patch == 0)
+}
+
 // TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
 var TiCDCClusterVersionUnknown = TiCDCClusterVersion{}
 
@@ -236,6 +249,7 @@ func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error
 			ver = defaultTiCDCVersion
 		}
 		if err != nil {
+			err = errors.Annotate(err, "invalid CDC cluster version")
 			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {

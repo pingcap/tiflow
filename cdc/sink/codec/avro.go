@@ -123,6 +123,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	}
 
 	mqMessage.Key = evlp
+	mqMessage.IncRowsCount()
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
 	return EncoderNeedAsyncWrite, nil
@@ -366,7 +367,7 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeYear:
 		return "long", nil
 	default:
-		log.Panic("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
+		log.Panic("Unknown MySql type", zap.Reflect("mysqlType", col.Type))
 		return "", errors.New("Unknown Mysql type")
 	}
 }

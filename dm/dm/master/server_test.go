@@ -53,6 +53,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -911,8 +912,8 @@ func (t *testMaster) TestStartTask(c *check.C) {
 
 	// test start task, but the first step check-task fails
 	bakCheckSyncConfigFunc := checker.CheckSyncConfigFunc
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) error {
-		return errors.New(errCheckSyncConfig)
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) (string, error) {
+		return "", errors.New(errCheckSyncConfig)
 	}
 	defer func() {
 		checker.CheckSyncConfigFunc = bakCheckSyncConfigFunc
@@ -1769,35 +1770,30 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	// 5. start workers, the unbounded sources should be bounded
 	var wg sync.WaitGroup
-	ctx1, cancel1 := context.WithCancel(ctx)
-	ctx2, cancel2 := context.WithCancel(ctx)
-	ctx3, cancel3 := context.WithCancel(ctx)
 	workerName1 := "worker1"
 	workerName2 := "worker2"
 	workerName3 := "worker3"
 	defer func() {
-		t.clearSchedulerEnv(c, cancel1, &wg)
-		t.clearSchedulerEnv(c, cancel2, &wg)
-		t.clearSchedulerEnv(c, cancel3, &wg)
+		t.clearSchedulerEnv(c, cancel, &wg)
 	}()
 	c.Assert(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx1, workerName1)
+	}(ctx, workerName1)
 	c.Assert(s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx2, workerName2)
+	}(ctx, workerName2)
 	c.Assert(s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx3, workerName3)
+	}(ctx, workerName3)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
@@ -2036,15 +2032,28 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	c.Assert(resp1.Result, check.IsTrue)
 	c.Assert(strings.Contains(resp1.Cfg, "name: test"), check.IsTrue)
 
-	// wrong task name
+	// not exist task name
+	taskName2 := "wrong"
 	req2 := &pb.GetCfgRequest{
-		Name: "haha",
+		Name: taskName2,
 		Type: pb.CfgType_TaskType,
 	}
 	resp2, err := server.GetCfg(context.Background(), req2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp2.Result, check.IsFalse)
 	c.Assert(resp2.Msg, check.Equals, "task not found")
+
+	// generate a template named `wrong`, test get this task template
+	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	openapiTask.Name = taskName2
+	c.Assert(ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: taskName2, Type: pb.CfgType_TaskTemplateType})
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp2.Result, check.IsTrue)
+	c.Assert(strings.Contains(resp2.Cfg, fmt.Sprintf("name: %s", taskName2)), check.IsTrue)
 
 	// test restart master
 	server.scheduler.Close()
