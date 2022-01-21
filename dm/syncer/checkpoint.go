@@ -30,6 +30,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -411,17 +412,30 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 }
 
 // Init implements CheckPoint.Init.
-func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) error {
+func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) (err error) {
+	var db *conn.BaseDB
+	var dbConns []*dbconn.DBConn
+
+	rollbackHolder := fr.NewRollbackHolder("syncer")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	checkPointDB := cp.cfg.To
 	checkPointDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
+	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
 	if err != nil {
-		return err
+		return
 	}
 	cp.db = db
 	cp.dbConn = dbConns[0]
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseRemoteCheckPoint", Fn: cp.Close})
 
-	return cp.prepare(tctx)
+	err = cp.prepare(tctx)
+
+	return
 }
 
 // Close implements CheckPoint.Close.
