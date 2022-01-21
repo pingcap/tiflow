@@ -20,6 +20,7 @@ import (
 	"math"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -282,14 +283,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-<<<<<<< HEAD
-	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
-=======
 	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
 
 	start := time.Now()
-	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
+	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("changefeed", p.changefeed.ID),
@@ -809,9 +806,6 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-<<<<<<< HEAD
-		return p.sinkManager.Close(ctx)
-=======
 		log.Info("processor try to close the sinkManager",
 			zap.String("changefeed", p.changefeedID))
 		start := time.Now()
@@ -824,7 +818,6 @@ func (p *processor) Close() error {
 		log.Info("processor close sinkManager success",
 			zap.String("changefeed", p.changefeedID),
 			zap.Duration("duration", time.Since(start)))
->>>>>>> 25b134de8 (capture(cdc): add owner info to help debug etcd_worker, and also some in sink. (#4325))
 	}
 	return nil
 }
