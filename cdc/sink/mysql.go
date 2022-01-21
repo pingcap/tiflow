@@ -226,7 +226,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 	// here even if the table was moved or removed.
-	// ref: https://github.com/pingcap/tiflow/pull/4356#:~:text=What%20if%20a%20table%20is%20removed%20between%20line%20213%20and%20214%3F
+	// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
 	v, ok := s.tableMaxResolvedTs.Load(tableID)
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
