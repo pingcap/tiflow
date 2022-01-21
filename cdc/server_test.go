@@ -144,7 +144,6 @@ func testSetUpDataDir(t *testing.T, s *testServer) {
 }
 
 func TestCheckDir(t *testing.T) {
-	t.Parallel()
 	me, err := user.Current()
 	require.Nil(t, err)
 	if me.Name == "root" || runtime.GOOS == "windows" {

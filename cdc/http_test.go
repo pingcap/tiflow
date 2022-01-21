@@ -37,8 +37,6 @@ func (a *testCase) String() string {
 }
 
 func TestPProfPath(t *testing.T) {
-	t.Parallel()
-
 	router := gin.New()
 	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
 
@@ -64,11 +62,8 @@ func TestPProfPath(t *testing.T) {
 }
 
 func TestHandleFailpoint(t *testing.T) {
-	t.Parallel()
-
 	router := gin.New()
 	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
-
 	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
 	uri := fmt.Sprintf("/debug/fail/%s", fp)
 	body := bytes.NewReader([]byte("return(true)"))
