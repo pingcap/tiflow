@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -296,6 +295,7 @@ type CDCKVClient interface {
 		ts uint64,
 		enableOldValue bool,
 		lockResolver txnutil.LockResolver,
+		regionRouter LimitRegionRouter,
 		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
 	) error
@@ -312,10 +312,11 @@ type CDCClient struct {
 
 	grpcPool GrpcPool
 
-	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
-	pdClock     pdtime.Clock
-	changefeed  string
+	regionCache  *tikv.RegionCache
+	regionRouter LimitRegionRouter
+	kvStorage    tikv.Storage
+	pdClock      pdtime.Clock
+	changefeed   string
 
 	regionLimiters *regionEventFeedLimiters
 }
@@ -327,6 +328,7 @@ func NewCDCClient(
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
+	regionRouter LimitRegionRouter,
 	pdClock pdtime.Clock,
 	changefeed string,
 ) (c CDCKVClient) {
@@ -338,6 +340,7 @@ func NewCDCClient(
 		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
 		regionCache:    regionCache,
+		regionRouter:   regionRouter,
 		pdClock:        pdClock,
 		changefeed:     changefeed,
 		regionLimiters: defaultRegionEventFeedLimiters,
@@ -406,11 +409,12 @@ func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
+	regionRouter LimitRegionRouter,
 	isPullerInit PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(ctx, c, span,
-		lockResolver, isPullerInit,
+	s := newEventFeedSession(c, span,
+		lockResolver, regionRouter, isPullerInit,
 		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
@@ -470,24 +474,23 @@ type rangeRequestTask struct {
 }
 
 func newEventFeedSession(
-	ctx context.Context,
 	client *CDCClient,
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
+	regionRouter LimitRegionRouter,
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs, client.changefeed)
 	return &eventFeedSession{
 		client:            client,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionRouter:      regionRouter,
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
@@ -507,13 +510,17 @@ func newEventFeedSession(
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
-	defer eventFeedGauge.Dec()
+	defer func() {
+		s.regionRouter.RemoveSession(s.id)
+		eventFeedGauge.Dec()
+	}()
 
 	log.Debug("event feed started",
 		zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts),
 		zap.String("changefeed", s.client.changefeed))
 
 	g, ctx := errgroup.WithContext(ctx)
+	s.regionRouter.AddSession(s.id)
 
 	g.Go(func() error {
 		return s.dispatchRequest(ctx)
@@ -587,10 +594,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				}
 			}
 		}
-	})
-
-	g.Go(func() error {
-		return s.regionRouter.Run(ctx)
 	})
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
@@ -678,7 +681,7 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 		zap.String("changefeed", s.client.changefeed))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
-		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
+		s.regionRouter.Release(s.id, errorInfo.rpcCtx.Addr)
 	}
 	s.enqueueError(ctx, errorInfo)
 }
@@ -703,7 +706,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri = <-s.regionRouter.Chan():
+		case sri = <-s.regionRouter.Chan(s.id):
 		}
 		requestID := allocID()
 
@@ -833,14 +836,14 @@ func (s *eventFeedSession) requestRegionToStore(
 			if !ok {
 				// since this pending region has been removed, the token has been
 				// released in advance, re-add one token here.
-				s.regionRouter.Acquire(rpcCtx.Addr)
+				s.regionRouter.Acquire(s.id, rpcCtx.Addr)
 				continue
 			}
 
 			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
 			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 		} else {
-			s.regionRouter.Acquire(rpcCtx.Addr)
+			s.regionRouter.Acquire(s.id, rpcCtx.Addr)
 		}
 	}
 }
@@ -907,7 +910,7 @@ func (s *eventFeedSession) dispatchRequest(
 			continue
 		}
 		sri.rpcCtx = rpcCtx
-		s.regionRouter.AddRegion(sri)
+		s.regionRouter.AddRegion(s.id, sri)
 	}
 }
 

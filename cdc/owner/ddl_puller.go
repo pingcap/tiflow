@@ -23,9 +23,11 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -60,6 +62,7 @@ type ddlPullerImpl struct {
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
 	cancel         context.CancelFunc
+	regionRouter   kv.LimitRegionRouter
 
 	clock clock.Clock
 }
@@ -72,12 +75,15 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 	var plr puller.Puller
 	kvStorage := ctx.GlobalVars().KVStorage
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
+	regionRouter := kv.NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit)
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(
 			ctx, pdCli,
 			ctx.GlobalVars().GrpcPool,
 			ctx.GlobalVars().RegionCache,
+			regionRouter,
 			kvStorage,
 			ctx.GlobalVars().PDClock,
 			// Add "_ddl_puller" to make it different from table pullers.
@@ -87,11 +93,12 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller:     plr,
-		resolvedTS: startTs,
-		filter:     f,
-		cancel:     func() {},
-		clock:      clock.New(),
+		puller:       plr,
+		resolvedTS:   startTs,
+		filter:       f,
+		cancel:       func() {},
+		clock:        clock.New(),
+		regionRouter: regionRouter,
 	}, nil
 }
 
@@ -106,6 +113,9 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 
 	errg.Go(func() error {
 		return h.puller.Run(stdCtx)
+	})
+	errg.Go(func() error {
+		return h.regionRouter.Run(stdCtx)
 	})
 
 	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())

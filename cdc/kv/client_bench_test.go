@@ -192,11 +192,15 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	r := NewSizedRegionRouter(ctx, 40)
+	go func() {
+		_ = r.Run(ctx)
+	}()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, r, pdtime.NewClock4Test(), "")
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, r, isPullInit, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
@@ -282,11 +286,15 @@ func prepareBench(b *testing.B, regionNum int) (
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	r := NewSizedRegionRouter(ctx, 40)
+	go func() {
+		_ = r.Run(ctx)
+	}()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, r, pdtime.NewClock4Test(), "")
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, r, isPullInit, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}

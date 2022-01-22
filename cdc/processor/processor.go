@@ -64,6 +64,7 @@ type processor struct {
 
 	filter        *filter.Filter
 	mounter       entry.Mounter
+	regionRouter  kv.LimitRegionRouter
 	sinkManager   *sink.Manager
 	redoManager   redo.LogManager
 	lastRedoFlush time.Time
@@ -458,6 +459,14 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sendError(p.mounter.Run(stdCtx))
 	}()
 
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
+	p.regionRouter = kv.NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.regionRouter.Run(ctx))
+	}()
+
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
 		opts[k] = v
@@ -665,11 +674,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	kvClientCfg := config.GetGlobalServerConfig().KVClient
+	regionRouter := kv.NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
+		regionRouter,
 		ctx.GlobalVars().KVStorage,
 		ctx.GlobalVars().PDClock,
 		ctx.ChangefeedVars().ID,
@@ -686,6 +698,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	go func() {
 		defer p.wg.Done()
 		p.sendError(ddlPuller.Run(stdCtx))
+	}()
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(regionRouter.Run(ctx))
 	}()
 	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)
@@ -973,6 +990,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		replicaInfo,
 		sink,
 		p.changefeed.Info.GetTargetTs(),
+		p.regionRouter,
 	)
 	p.wg.Add(1)
 	p.metricSyncTableNumGauge.Inc()

@@ -649,7 +649,7 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			state.initialized = true
-			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
+			w.session.regionRouter.Release(w.session.id, state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)

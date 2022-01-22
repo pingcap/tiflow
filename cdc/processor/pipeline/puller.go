@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -29,22 +30,25 @@ import (
 type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
-	tableID     model.TableID
-	replicaInfo *model.TableReplicaInfo
-	changefeed  string
-	cancel      context.CancelFunc
-	wg          *errgroup.Group
+	tableID      model.TableID
+	replicaInfo  *model.TableReplicaInfo
+	changefeed   string
+	cancel       context.CancelFunc
+	wg           *errgroup.Group
+	regionRouter kv.LimitRegionRouter
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName, changefeed string,
+	regionRouter kv.LimitRegionRouter,
 ) pipeline.Node {
 	return &pullerNode{
-		tableID:     tableID,
-		replicaInfo: replicaInfo,
-		tableName:   tableName,
-		changefeed:  changefeed,
+		tableID:      tableID,
+		replicaInfo:  replicaInfo,
+		tableName:    tableName,
+		changefeed:   changefeed,
+		regionRouter: regionRouter,
 	}
 }
 
@@ -77,6 +81,7 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
+		n.regionRouter,
 		ctx.GlobalVars().KVStorage,
 		ctx.GlobalVars().PDClock,
 		n.changefeed,

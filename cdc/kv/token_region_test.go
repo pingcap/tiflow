@@ -35,16 +35,17 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	store := "store-1"
 	limit := 10
 	r := NewSizedRegionRouter(context.Background(), limit)
+	sessionId := "session"
 	for i := 0; i < limit; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(sessionId, singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 	regions := make([]singleRegionInfo, 0, limit)
 	// limit is less than regionScanLimitPerTable
 	for i := 0; i < limit; i++ {
 		select {
-		case sri := <-r.Chan():
+		case sri := <-r.Chan(sessionId):
 			c.Assert(sri.ts, check.Equals, uint64(i))
-			r.Acquire(store)
+			r.Acquire(sessionId, store)
 			regions = append(regions, sri)
 		default:
 			c.Error("expect region info from router")
@@ -52,7 +53,7 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	}
 	c.Assert(r.tokens[store], check.Equals, limit)
 	for range regions {
-		r.Release(store)
+		r.Release(sessionId, store)
 	}
 	c.Assert(r.tokens[store], check.Equals, 0)
 }
@@ -74,14 +75,15 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	store := "store-1"
 	limit := 20
 	r := NewSizedRegionRouter(context.Background(), limit)
+	sessionId := "sessionId"
 	for i := 0; i < limit*2; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(sessionId, singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 	received := uint64(0)
 	for i := 0; i < regionRouterChanSize; i++ {
-		<-r.Chan()
+		<-r.Chan(sessionId)
 		atomic.AddUint64(&received, 1)
-		r.Acquire(store)
+		r.Acquire(sessionId, store)
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
@@ -91,7 +93,7 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 
 	wg.Go(func() error {
 		for i := 0; i < regionRouterChanSize; i++ {
-			r.Release(store)
+			r.Release(sessionId, store)
 		}
 		return nil
 	})
@@ -101,10 +103,10 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-r.Chan():
-				r.Acquire(store)
+			case <-r.Chan(sessionId):
+				r.Acquire(sessionId, store)
 				atomic.AddUint64(&received, 1)
-				r.Release(store)
+				r.Release(sessionId, store)
 				funcDoSth()
 				if atomic.LoadUint64(&received) == uint64(limit*4) {
 					cancel()
@@ -114,7 +116,7 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	})
 
 	for i := 0; i < limit*2; i++ {
-		r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+		r.AddRegion(sessionId, singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 	}
 
 	err := wg.Wait()
@@ -135,10 +137,11 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	}
 	limit := 20
 	r := NewSizedRegionRouter(context.Background(), limit)
+	sessionId := "sessionId"
 
 	for _, store := range stores {
 		for j := 0; j < limit*2; j++ {
-			r.AddRegion(singleRegionInfo{ts: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
+			r.AddRegion(sessionId, singleRegionInfo{ts: uint64(j), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
 	received := uint64(0)
@@ -154,10 +157,10 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-r.Chan():
-					r.Acquire(store)
+				case <-r.Chan(sessionId):
+					r.Acquire(sessionId, store)
 					atomic.AddUint64(&received, 1)
-					r.Release(store)
+					r.Release(sessionId, store)
 					if atomic.LoadUint64(&received) == uint64(limit*4*storeN) {
 						cancel()
 					}
@@ -168,7 +171,7 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 
 	for _, store := range stores {
 		for i := 0; i < limit*2; i++ {
-			r.AddRegion(singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
+			r.AddRegion(sessionId, singleRegionInfo{ts: uint64(i), rpcCtx: &tikv.RPCContext{Addr: store}})
 		}
 	}
 

@@ -62,6 +62,7 @@ type pullerImpl struct {
 	resolvedTs     uint64
 	initialized    int64
 	enableOldValue bool
+	regionRouter   kv.LimitRegionRouter
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -71,6 +72,7 @@ func NewPuller(
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
+	regionRouter kv.LimitRegionRouter,
 	kvStorage tidbkv.Storage,
 	pdClock pdtime.Clock,
 	changefeed string,
@@ -90,7 +92,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache, pdClock, changefeed)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache, regionRouter, pdClock, changefeed)
 	p := &pullerImpl{
 		kvCli:          kvCli,
 		kvStorage:      tikvStorage,
@@ -101,6 +103,7 @@ func NewPuller(
 		resolvedTs:     checkpointTs,
 		initialized:    0,
 		enableOldValue: enableOldValue,
+		regionRouter:   regionRouter,
 	}
 	return p
 }
@@ -117,7 +120,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p.regionRouter, p, eventCh)
 		})
 	}
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
@@ -176,7 +177,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	targetTs model.Ts) TablePipeline {
+	targetTs model.Ts,
+	regionRouter kv.LimitRegionRouter) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
 	replConfig := ctx.ChangefeedVars().Info.Config
@@ -207,7 +209,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig)
 	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
-	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
+	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed, regionRouter))
 	p.AppendNode(ctx, "sorter", sorterNode)
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
