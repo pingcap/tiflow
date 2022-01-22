@@ -106,7 +106,7 @@ func (r *sizedRegionRouter) AddRegion(sessionId string, sri singleRegionInfo) {
 	if sri.rpcCtx != nil {
 		id = sri.rpcCtx.Addr
 	}
-	if r.sizeLimit > r.tokens[sessionId][id] && len(r.output) < regionRouterChanSize {
+	if r.sizeLimit > r.tokens[sessionId][id] && len(r.output[sessionId]) < regionRouterChanSize {
 		r.output[sessionId] <- sri
 	} else {
 		r.buffer[sessionId][id] = append(r.buffer[sessionId][id], sri)
@@ -191,8 +191,8 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 					}
 					// to avoid deadlock because when consuming from the output channel.
 					// onRegionFail could decrease tokens, which requires lock protection.
-					if available > regionRouterChanSize-len(r.output) {
-						available = regionRouterChanSize - len(r.output)
+					if available > regionRouterChanSize-len(r.output[session]) {
+						available = regionRouterChanSize - len(r.output[session])
 					}
 					if available == 0 {
 						continue
