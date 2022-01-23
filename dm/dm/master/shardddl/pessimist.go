@@ -643,7 +643,7 @@ func (p *Pessimist) removeLock(lock *pessimism.Lock) error {
 		return err
 	}
 
-	if val, _err_ := failpoint.Eval(_curpkg_("SleepWhenRemoveLock")); _err_ == nil {
+	failpoint.Inject("SleepWhenRemoveLock", func(val failpoint.Value) {
 		t := val.(int)
 		log.L().Info("wait new ddl info putted into etcd in pessimistic",
 			zap.String("failpoint", "SleepWhenRemoveLock"),
@@ -670,7 +670,7 @@ func (p *Pessimist) removeLock(lock *pessimism.Lock) error {
 				}
 			}
 		}
-	}
+	})
 	p.lk.RemoveLock(lock.ID)
 	return nil
 }
