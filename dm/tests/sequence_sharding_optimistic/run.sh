@@ -90,10 +90,6 @@ run() {
 		"shard-ddl-lock unlock non-exist-task-\`test_db\`.\`test_table\`" \
 		"lock with ID non-exist-task-\`test_db\`.\`test_table\` not found" 1
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"shard-ddl-lock unlock $task_name-\`shard_db\`.\`shard_table\`" \
-		"\`unlock-ddl-lock\` is only supported in pessimistic shard mode currently" 1
-
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
