@@ -175,7 +175,7 @@ function DM_043_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS (id+2)' \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS(`id`+2) VIRTUAL' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
