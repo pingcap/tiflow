@@ -1,4 +1,4 @@
-<!-- Lots of ideas references from https://github.com/kubernetes/community/blob/master/contributors/devel/sig-release/cherry-picks.md, Thank!-->
+<!-- Lots of ideas references from https://github.com/kubernetes/community/blob/master/contributors/devel/sig-release/cherry-picks.md, Thanks!-->
 
 # Overview
 
