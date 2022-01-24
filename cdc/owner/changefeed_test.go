@@ -171,26 +171,25 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 	c.Assert(state.TaskStatuses, check.Not(check.HasKey), offlineCaputreID)
 	c.Assert(state.TaskPositions, check.Not(check.HasKey), offlineCaputreID)
 	c.Assert(state.Workloads, check.Not(check.HasKey), offlineCaputreID)
+
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
 }
 
-func (s *changefeedSuite) TestRunningStatusLifeCycle(c *check.C) {
+func (s *changefeedSuite) TestInitialize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	defer cf.Close(ctx)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 
-	// initialize the changefeed
+	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
 	c.Assert(cf.runningStatus, check.Equals, changeFeedRunning)
-
-	// close the changefeed
-	cf.Close(ctx)
-	c.Assert(cf.runningStatus, check.Equals, changeFeedClosing)
 }
 
 func (s *changefeedSuite) TestHandleError(c *check.C) {
@@ -201,10 +200,12 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
 
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
+	c.Assert(cf.runningStatus, check.Equals, changeFeedRunning)
 
 	cf.errCh <- errors.New("fake error")
 	// handle error
@@ -212,6 +213,10 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	tester.MustApplyPatches()
 	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
 	c.Assert(state.Info.Error.Message, check.Equals, "fake error")
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosing)
+
+	cf.tick(ctx, state, captures)
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
 }
 
 func (s *changefeedSuite) TestExecDDL(c *check.C) {
