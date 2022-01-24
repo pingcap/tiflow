@@ -53,7 +53,6 @@ type kafkaSaramaProducer struct {
 	syncClient  sarama.SyncProducer
 	// producersReleased records whether asyncClient and syncClient have been closed properly
 	producersReleased bool
-	topic             string
 	partitionNum      int32
 
 	partitionOffset []struct {
@@ -72,7 +71,7 @@ type kafkaSaramaProducer struct {
 
 type kafkaProducerClosingFlag = int32
 
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, topic string, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 
@@ -83,7 +82,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	}
 
 	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
+		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
@@ -113,13 +112,13 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage, topic string) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
-			Topic:     k.topic,
+			Topic:     topic,
 			Key:       sarama.ByteEncoder(message.Key),
 			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
@@ -307,7 +306,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
-		topic:        topic,
 		partitionNum: config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64

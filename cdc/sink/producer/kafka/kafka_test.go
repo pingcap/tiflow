@@ -116,12 +116,12 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(0))
+		}, topic, int32(0))
 		c.Assert(err, check.IsNil)
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(1))
+		}, topic, int32(1))
 		c.Assert(err, check.IsNil)
 	}
 
@@ -163,7 +163,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
 		Key:   []byte("test-broadcast"),
 		Value: nil,
-	})
+	}, topic)
 	c.Assert(err, check.IsNil)
 
 	err = producer.Close()
@@ -178,14 +178,14 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
-	}, int32(0))
+	}, topic, int32(0))
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
 	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
-	})
+	}, topic)
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
@@ -403,7 +403,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 			err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
-			}, int32(0))
+			}, topic, int32(0))
 			c.Assert(err, check.IsNil)
 		}
 	}()

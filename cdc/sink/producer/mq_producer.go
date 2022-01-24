@@ -22,9 +22,9 @@ import (
 // Producer is an interface of mq producer
 type Producer interface {
 	// AsyncSendMessage sends a message asynchronously.
-	AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error
+	AsyncSendMessage(ctx context.Context, message *codec.MQMessage, topic string, partition int32) error
 	// SyncBroadcastMessage broadcasts a message synchronously.
-	SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error
+	SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage, topic string) error
 	// Flush all the messages buffered in the client and wait until all messages have been successfully
 	// persisted.
 	Flush(ctx context.Context) error

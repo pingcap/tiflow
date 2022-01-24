@@ -60,6 +60,8 @@ const (
 )
 
 type mqSink struct {
+	// FIXME: for test
+	topic          string
 	mqProducer     producer.Producer
 	dispatcher     dispatcher.Dispatcher
 	encoderBuilder codec.EncoderBuilder
@@ -78,7 +80,7 @@ type mqSink struct {
 }
 
 func newMqSink(
-	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
+	ctx context.Context, credential *security.Credential, topic string, mqProducer producer.Producer,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
@@ -113,6 +115,7 @@ func newMqSink(
 	}
 
 	s := &mqSink{
+		topic:          topic,
 		mqProducer:     mqProducer,
 		dispatcher:     d,
 		encoderBuilder: encoderBuilder,
@@ -418,18 +421,18 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	switch op {
 	case codec.EncoderNeedAsyncWrite:
 		if partition >= 0 {
-			return k.mqProducer.AsyncSendMessage(ctx, message, partition)
+			return k.mqProducer.AsyncSendMessage(ctx, message, k.topic, partition)
 		}
 		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
-			err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
+			err := k.mqProducer.AsyncSendMessage(ctx, message, k.topic, partition)
 			if err != nil {
 				return err
 			}
 			return k.mqProducer.Flush(ctx)
 		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, message)
+		return k.mqProducer.SyncBroadcastMessage(ctx, message, k.topic)
 	}
 
 	log.Warn("writeToProducer called with no-op",
@@ -461,7 +464,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, producerConfig.Credential, topic, sProducer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -494,7 +497,13 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+	sink, err := newMqSink(ctx, credential, topic, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
