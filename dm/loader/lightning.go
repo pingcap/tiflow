@@ -195,7 +195,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	if err != nil {
 		l.logger.Warn("check lightning checkpoint status failed, skip this error", log.ShortError(err))
 	}
-	if err := l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
+	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
 	log2.SetAppLogger(l.logger.Logger)
