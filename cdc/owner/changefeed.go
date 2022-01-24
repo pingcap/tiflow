@@ -98,6 +98,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		barriers:         newBarriers(),
 		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
+		sinkCloseCh:      make(chan struct{}, 1),
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -358,7 +359,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	// for a period of time. This could happen due to bad network connection
 	// between the Kafka producer and the brokers. We close the sink in an
 	// asynchronous way, and the close of the sink, indicate that the changefeed is fully closed.
-	c.sinkCloseCh = make(chan struct{}, 1)
 	go func() {
 		// We don't need to wait sink Close, pass a canceled context is ok
 		canceledCtx, cancel := context.WithCancel(context.Background())
