@@ -957,6 +957,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	cancel()
+	<-resultCh // wait for the process to finish
 	// when syncer exit Run(), will flush job
 	syncer.Pause()
 
@@ -1023,6 +1024,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	testJobs.RUnlock()
 
 	cancel()
+	<-resultCh // wait for the process to finish
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
@@ -1470,7 +1472,7 @@ func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	}
 }
 
-func (s *Syncer) addJobToMemory(job *job) error {
+func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 	log.L().Info("add job to memory", zap.Stringer("job", job))
 
 	switch job.tp {
@@ -1510,7 +1512,7 @@ func (s *Syncer) addJobToMemory(job *job) error {
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPointMock sqlmock.Sqlmock) {
