@@ -38,11 +38,29 @@ import (
 	"go.uber.org/zap"
 )
 
+// ┌────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+// │changeFeedClosed│          │changeFeedRunning│          │changeFeedClosing│
+// └───────┬────────┘          └────────┬────────┘          └────────┬────────┘
+//         │                            │                            │
+//         │─ ─ ─ ─  new ddl sink ─ ─ ─>│                            │
+//         │                            │                            │
+//         │                            │                            │
+//         │                            │───── close ddl sink ──────>│
+//         │                            │                            │
+//         │                            │                            │
+//         │ <────────────────── ddl sink fully closed ──────────────│
+// ┌───────┴────────┐          ┌────────┴────────┐          ┌────────┴────────┐
+// │changeFeedClosed│          │changeFeedRunning│          │changeFeedClosing│
+// └────────────────┘          └─────────────────┘          └─────────────────┘
+
 type changeFeedRunningStatus int
 
 const (
+	// `changeFeedClosed` if the ddl sink fully closed.
 	changeFeedClosed changeFeedRunningStatus = iota
+	// `changeFeedRunning` if the ddl sink running
 	changeFeedRunning
+	// `changeFeedClosing` if the ddl sink closing
 	changeFeedClosing
 )
 
