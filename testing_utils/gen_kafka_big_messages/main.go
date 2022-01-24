@@ -98,25 +98,25 @@ func main() {
 		log.Panicf("Open sql file failed: %v", err)
 	}
 
-	_, err = file.Write([]byte(genDatabaseSql(o.databaseName)))
+	_, err = file.Write([]byte(genDatabaseSQL(o.databaseName)))
 	if err != nil {
 		log.Panicf("Wirte create database sql failed: %v", err)
 	}
 
-	_, err = file.Write([]byte(genCreateTableSql(o.rowBytes, o.tableName)))
+	_, err = file.Write([]byte(genCreateTableSQL(o.rowBytes, o.tableName)))
 	if err != nil {
 		log.Panicf("Wirte create table sql failed: %v", err)
 	}
 
 	for i := 0; i < o.rowCount; i++ {
-		_, err = file.Write([]byte(genInsertSql(o.rowBytes, o.tableName, i)))
+		_, err = file.Write([]byte(genInsertSQL(o.rowBytes, o.tableName, i)))
 		if err != nil {
 			log.Panicf("Wirte insert sql failed: %v", err)
 		}
 	}
 }
 
-func genDatabaseSql(databaseName string) string {
+func genDatabaseSQL(databaseName string) string {
 	return fmt.Sprintf(`DROP DATABASE IF EXISTS %s;
 CREATE DATABASE %s;
 USE %s;
@@ -124,7 +124,7 @@ USE %s;
 `, databaseName, databaseName, databaseName)
 }
 
-func genCreateTableSql(rawBytes int, tableName string) string {
+func genCreateTableSQL(rawBytes int, tableName string) string {
 	var cols string
 
 	for i := 0; i < rawBytes/varcharColumnMaxLen; i++ {
@@ -134,7 +134,7 @@ func genCreateTableSql(rawBytes int, tableName string) string {
 	return fmt.Sprintf("CREATE TABLE %s(id int primary key %s);\n", tableName, cols)
 }
 
-func genInsertSql(rawBytes int, tableName string, id int) string {
+func genInsertSQL(rawBytes int, tableName string, id int) string {
 	var values string
 
 	for i := 0; i < rawBytes/varcharColumnMaxLen; i++ {
