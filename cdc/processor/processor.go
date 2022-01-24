@@ -700,7 +700,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			}
 			markTableID = tableInfo.ID
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
+		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

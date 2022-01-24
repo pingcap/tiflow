@@ -68,7 +68,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	encoder := sink.newEncoder()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -216,5 +216,5 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	encoder := sink.newEncoder()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxKafkaMessageSize(), check.Equals, 4194304)
+	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)
 }
