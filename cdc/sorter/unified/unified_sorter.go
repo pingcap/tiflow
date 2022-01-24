@@ -125,6 +125,11 @@ func (s *Sorter) Run(ctx context.Context) error {
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
+	ctx, cancel := context.WithCancel(ctx)
+	var cancelOnce sync.Once
+	defer func() {
+		cancelOnce.Do(func() { cancel() })
+	}()
 	errg, subctx := errgroup.WithContext(ctx)
 	heapSorterCollectCh := make(chan *flushTask, heapCollectChSize)
 	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
@@ -151,7 +156,11 @@ func (s *Sorter) Run(ctx context.Context) error {
 	}
 
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+		err := printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh, ioCancelFunc))
+		if err != nil {
+			cancelOnce.Do(func() { cancel() })
+		}
+		return err
 	})
 
 	err := func() error {
@@ -226,9 +235,10 @@ func (s *Sorter) Run(ctx context.Context) error {
 		}
 	}()
 	if err != nil {
+		cancelOnce.Do(func() { cancel() })
 		return printError(err)
 	}
-	return printError(errg.Wait())
+	return errg.Wait()
 }
 
 // AddEntry implements the EventSorter interface
