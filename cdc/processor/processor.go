@@ -363,6 +363,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		p.handleWorkload()
 	}
 	p.doGCSchemaStorage(ctx)
+	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
@@ -974,17 +975,6 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
-	p.wg.Add(1)
-	p.metricSyncTableNumGauge.Inc()
-	go func() {
-		table.Wait()
-		p.wg.Done()
-		p.metricSyncTableNumGauge.Dec()
-		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
-			cdcContext.ZapFieldChangefeed(ctx),
-			zap.String("name", table.Name()),
-			zap.Any("replicaInfo", replicaInfo))
-	}()
 
 	if p.redoManager.Enabled() {
 		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
