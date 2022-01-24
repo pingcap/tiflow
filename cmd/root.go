@@ -31,7 +31,7 @@ func Execute() {
 	// Outputs cmd.Print to stdout.
 	rootCmd.SetOut(os.Stdout)
 	if err := rootCmd.Execute(); err != nil {
-		rootCmd.Println(err)
+		rootCmd.PrintErr(err.Error() + "\n")
 		os.Exit(1)
 	}
 }

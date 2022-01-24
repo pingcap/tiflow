@@ -75,7 +75,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		id:               id,
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
-		feedStateManager: new(feedStateManager),
+		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -112,7 +112,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		} else {
 			code = string(cerror.ErrOwnerUnknown.RFCCode())
 		}
-		c.feedStateManager.HandleError(&model.RunningError{
+		c.feedStateManager.handleError(&model.RunningError{
 			Addr:    util.CaptureAddrFromCtx(ctx),
 			Code:    code,
 			Message: err.Error(),
@@ -252,10 +252,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -473,6 +470,9 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 	}
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
+		if status == nil {
+			return nil, changed, nil
+		}
 		if status.ResolvedTs != resolvedTs {
 			status.ResolvedTs = resolvedTs
 			changed = true

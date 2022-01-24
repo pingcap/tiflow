@@ -282,9 +282,9 @@ func loop() {
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
 		command.SetOut(os.Stdout)
-		command.SetErr(os.Stdout)
+		command.SetErr(os.Stderr)
 		if err = command.Execute(); err != nil {
-			command.Println(err)
+			command.PrintErr(err.Error() + "\n")
 		}
 	}
 }
