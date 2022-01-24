@@ -704,9 +704,9 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				EnableGTID:              true,
 				SafeMode:                true,
 			},
-			ContinuousValidatorCfg: validatorCfg,
-			CleanDumpFile:          true,
-			EnableANSIQuotes:       true,
+			ValidatorCfg:     validatorCfg,
+			CleanDumpFile:    true,
+			EnableANSIQuotes: true,
 		}
 	)
 
@@ -723,7 +723,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 	stCfg2.BAList = &baList2
 	stCfg2.RouteRules = []*router.TableRule{&routeRule4, &routeRule1, &routeRule2}
 	stCfg2.ExprFilter = []*ExpressionFilter{&exprFilter1}
-	stCfg2.ContinuousValidatorCfg.Mode = ValidationFast
+	stCfg2.ValidatorCfg.Mode = ValidationFast
 
 	cfg := SubTaskConfigsToTaskConfig(stCfg1, stCfg2)
 

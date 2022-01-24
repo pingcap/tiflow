@@ -52,6 +52,10 @@ func NewSubTaskStage(expect pb.Stage, source, task string) Stage {
 	return newStage(expect, source, task)
 }
 
+func NewValidatorStage(expect pb.Stage, source, task string) Stage {
+	return newStage(expect, source, task)
+}
+
 // newStage creates a new Stage instance.
 func newStage(expect pb.Stage, source, task string) Stage {
 	return Stage{
@@ -172,6 +176,10 @@ func GetAllRelayStage(cli *clientv3.Client) (map[string]Stage, int64, error) {
 // if task name is "", it will return all subtasks' stage as a map{task-name: stage} for the source.
 // if task name is given, it will return a map{task-name: stage} whose length is 1.
 func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stage, int64, error) {
+	return getStageByKey(cli, common.StageSubTaskKeyAdapter, source, task)
+}
+
+func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task string) (map[string]Stage, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
@@ -181,22 +189,26 @@ func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stag
 		err  error
 	)
 	if task != "" {
-		resp, err = cli.Get(ctx, common.StageSubTaskKeyAdapter.Encode(source, task))
+		resp, err = cli.Get(ctx, key.Encode(source, task))
 	} else {
-		resp, err = cli.Get(ctx, common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix())
+		resp, err = cli.Get(ctx, key.Encode(source), clientv3.WithPrefix())
 	}
 
 	if err != nil {
 		return stm, 0, err
 	}
 
-	stages, err := subTaskStageFromResp(source, task, resp)
+	stages, err := getStagesFromResp(source, task, resp)
 	if err != nil {
 		return stm, 0, err
 	}
 	stm = stages[source]
 
 	return stm, resp.Header.Revision, nil
+}
+
+func GetValidatorStage(cli *clientv3.Client, source, task string) (map[string]Stage, int64, error) {
+	return getStageByKey(cli, common.StageValidatorKeyAdapter, source, task)
 }
 
 // GetAllSubTaskStage gets all subtask stages.
@@ -210,7 +222,7 @@ func GetAllSubTaskStage(cli *clientv3.Client) (map[string]map[string]Stage, int6
 		return nil, 0, err
 	}
 
-	stages, err := subTaskStageFromResp("", "", resp)
+	stages, err := getStagesFromResp("", "", resp)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -232,7 +244,7 @@ func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stag
 		return stm, scm, 0, err
 	}
 	stageResp := txnResp.Responses[0].GetResponseRange()
-	stages, err := subTaskStageFromResp(source, "", (*clientv3.GetResponse)(stageResp))
+	stages, err := getStagesFromResp(source, "", (*clientv3.GetResponse)(stageResp))
 	if err != nil {
 		return stm, scm, 0, err
 	}
@@ -268,6 +280,14 @@ func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
 	watchStage(ctx, ch, subTaskStageFromKey, outCh, errCh)
 }
 
+func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
+	source string, rev int64, outCh chan<- Stage, errCh chan<- error) {
+    wCtx, cancel := context.WithCancel(ctx)
+    defer cancel()
+    ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
+    watchStage(ctx, ch, validatorStageFromKey, outCh, errCh)
+}
+
 // DeleteSubTaskStage deletes the subtask stage.
 func DeleteSubTaskStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	ops := deleteSubTaskStageOp(stages...)
@@ -298,7 +318,18 @@ func subTaskStageFromKey(key string) (Stage, error) {
 	return stage, nil
 }
 
-func subTaskStageFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]Stage, error) {
+func validatorStageFromKey(key string) (Stage, error) {
+    var stage Stage
+    ks, err := common.StageValidatorKeyAdapter.Decode(key)
+    if err != nil {
+        return stage, err
+    }
+    stage.Source = ks[0]
+    stage.Task = ks[1]
+    return stage, nil
+}
+
+func getStagesFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]Stage, error) {
 	stages := make(map[string]map[string]Stage)
 	if source != "" {
 		stages[source] = make(map[string]Stage) // avoid stages[source] is nil

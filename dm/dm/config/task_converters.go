@@ -93,7 +93,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.MydumperConfig = *inst.Mydumper
 		cfg.LoaderConfig = *inst.Loader
 		cfg.SyncerConfig = *inst.Syncer
-		cfg.ContinuousValidatorCfg = inst.ContinuousValidator
+		cfg.ValidatorCfg = inst.ContinuousValidator
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
@@ -360,8 +360,8 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 			c.ExprFilter[efName] = f
 		}
 
-		validateName, validateIdx = getGenerateName(stCfg.ContinuousValidatorCfg, validateIdx, "validator", validatorMap)
-		c.Validators[validateName] = &stCfg.ContinuousValidatorCfg
+		validateName, validateIdx = getGenerateName(stCfg.ValidatorCfg, validateIdx, "validator", validatorMap)
+		c.Validators[validateName] = &stCfg.ValidatorCfg
 
 		cmNames := make([]string, 0, len(stCfg.ColumnMappingRules))
 		for _, rule := range stCfg.ColumnMappingRules {

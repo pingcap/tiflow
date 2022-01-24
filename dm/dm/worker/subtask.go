@@ -110,6 +110,8 @@ type SubTask struct {
 	etcdClient *clientv3.Client
 
 	workerName string
+
+	validator *syncer.DataValidator
 }
 
 // NewSubTask is subtask initializer
@@ -220,6 +222,8 @@ func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
 		return
 	}
 
+	st.StartValidator()
+
 	if expectStage == pb.Stage_Running {
 		st.run()
 	} else {
@@ -248,6 +252,38 @@ func (st *SubTask) run() {
 	st.resultWg.Add(1)
 	go st.fetchResultAndUpdateStage(pr)
 	go cu.Process(ctx, pr)
+}
+
+func (st *SubTask) StartValidator() {
+	st.Lock()
+	defer st.Unlock()
+	if st.cfg.ValidatorCfg.Mode == config.ValidationNone {
+		return
+	}
+	var syncerObj *syncer.Syncer
+	var ok bool
+	for _, u := range st.units {
+		if syncerObj, ok = u.(*syncer.Syncer); ok {
+			break
+		}
+	}
+	if syncerObj == nil {
+		st.l.Warn("cannot start validator without syncer")
+		return
+	}
+
+	if st.validator == nil {
+		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
+	}
+	st.validator.Start()
+}
+
+func (st *SubTask) StopValidator() {
+	st.Lock()
+	if st.validator != nil {
+		st.validator.Stop()
+	}
+	st.Unlock()
 }
 
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
@@ -485,7 +521,11 @@ func (st *SubTask) Close() {
 	}
 
 	st.closeUnits() // close all un-closed units
-	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	cfg := st.getCfg()
+	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	st.StopValidator()
 }
 
 // Pause pauses a running sub task or a sub task paused by error.
@@ -645,8 +685,9 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 
 		loadStatus := pu.Status(nil).(*pb.LoadStatus)
 
-		if st.cfg.EnableGTID {
-			gset1, err = gtid.ParserGTID(st.cfg.Flavor, loadStatus.MetaBinlogGTID)
+		cfg := st.getCfg()
+		if cfg.EnableGTID {
+			gset1, err = gtid.ParserGTID(cfg.Flavor, loadStatus.MetaBinlogGTID)
 			if err != nil {
 				return terror.WithClass(err, terror.ClassDMWorker)
 			}
@@ -660,8 +701,8 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 		for {
 			relayStatus := hub.w.relayHolder.Status(nil)
 
-			if st.cfg.EnableGTID {
-				gset2, err = gtid.ParserGTID(st.cfg.Flavor, relayStatus.RelayBinlogGtid)
+			if cfg.EnableGTID {
+				gset2, err = gtid.ParserGTID(cfg.Flavor, relayStatus.RelayBinlogGtid)
 				if err != nil {
 					return terror.WithClass(err, terror.ClassDMWorker)
 				}
@@ -682,11 +723,11 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 				}
 			}
 
-			st.l.Debug("wait relay to catchup", zap.Bool("enableGTID", st.cfg.EnableGTID), zap.Stringer("load end position", pos1), zap.String("load end gtid", loadStatus.MetaBinlogGTID), zap.Stringer("relay position", pos2), zap.String("relay gtid", relayStatus.RelayBinlogGtid))
+			st.l.Debug("wait relay to catchup", zap.Bool("enableGTID", cfg.EnableGTID), zap.Stringer("load end position", pos1), zap.String("load end gtid", loadStatus.MetaBinlogGTID), zap.Stringer("relay position", pos2), zap.String("relay gtid", relayStatus.RelayBinlogGtid))
 
 			select {
 			case <-ctxWait.Done():
-				if st.cfg.EnableGTID {
+				if cfg.EnableGTID {
 					return terror.ErrWorkerWaitRelayCatchupTimeout.Generate(waitRelayCatchupTimeout, loadStatus.MetaBinlogGTID, relayStatus.RelayBinlogGtid)
 				}
 				return terror.ErrWorkerWaitRelayCatchupTimeout.Generate(waitRelayCatchupTimeout, pos1, pos2)
@@ -724,6 +765,18 @@ func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReq
 		err = st.Resume(relay)
 	}
 	return msg, err
+}
+
+func (st *SubTask) getCfg() *config.SubTaskConfig {
+	st.RLock()
+	defer st.RUnlock()
+	return st.cfg
+}
+
+func (st *SubTask) SetCfg(taskConfig config.SubTaskConfig) {
+	st.Lock()
+	st.cfg = &taskConfig
+	st.Unlock()
 }
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {

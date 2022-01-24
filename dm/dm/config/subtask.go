@@ -273,7 +273,7 @@ type SubTaskConfig struct {
 	MydumperConfig         // Mydumper configuration
 	LoaderConfig           // Loader configuration
 	SyncerConfig           // Syncer configuration
-	ContinuousValidatorCfg ValidatorConfig
+	ValidatorCfg ValidatorConfig
 
 	// compatible with standalone dm unit
 	LogLevel  string `toml:"log-level" json:"log-level"`

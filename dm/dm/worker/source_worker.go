@@ -483,6 +483,11 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		//nolint:errcheck
 		w.observeSubtaskStage(w.subTaskCtx, w.etcdClient, revSubTask)
 	}()
+	w.subTaskWg.Add(1)
+	go func() {
+		defer w.subTaskWg.Add(1)
+		w.observeValidatorStage(w.subTaskCtx, revSubTask)
+	}()
 
 	w.subTaskEnabled.Store(true)
 	w.l.Info("handling subtask enabled")
@@ -1096,4 +1101,149 @@ func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErro
 	}
 
 	return st.HandleError(ctx, req, w.getRelayWithoutLock())
+}
+
+func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev int64) error {
+	var wg sync.WaitGroup
+
+	startRevision := lastUsedRev + 1
+	for {
+		stageCh := make(chan ha.Stage, 10)
+		errCh := make(chan error, 10)
+		wg.Add(1)
+		watchCtx, watchCancel := context.WithCancel(ctx)
+		go func() {
+			defer func() {
+				close(stageCh)
+				close(errCh)
+				wg.Done()
+			}()
+			ha.WatchValidatorStage(watchCtx, w.etcdClient, w.cfg.SourceID, startRevision, stageCh, errCh)
+		}()
+		err := w.handleValidatorStage(watchCtx, stageCh, errCh)
+		watchCancel()
+		wg.Wait()
+
+		if etcdutil.IsRetryableError(err) {
+			startRevision = 0
+			retryNum := 1
+			for startRevision == 0 {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(500 * time.Millisecond):
+					startRevision, err = w.getCurrentValidatorRevision(w.cfg.SourceID)
+					if err != nil {
+						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+					}
+				}
+				retryNum++
+			}
+		} else {
+			if err != nil {
+				log.L().Error("observe validator stage failed, quit now", zap.Error(err))
+			} else {
+				log.L().Info("observe validator stage will quit now")
+			}
+			return err
+		}
+	}
+}
+
+func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha.Stage, errCh chan error) error {
+	closed := false
+	for {
+		select {
+		case <-ctx.Done():
+			closed = true
+		case stage, ok := <-stageCh:
+			if !ok {
+				closed = true
+				break
+			}
+			// TODO right now stage = start/stop has same meaning as subtask, but we are refactoring stage logic
+			// to make it nearly same as resume/pause.
+			// We are implementing using old meaning, so need to change here to support new stage state after the refactor.
+			log.L().Info("receive validator stage change", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted))
+			err := w.operateValidatorStage(stage)
+			if err != nil {
+				opType := w.getValidatorOp(stage)
+				opErrCounter.WithLabelValues(w.name, opType).Inc()
+				log.L().Error("fail to operate validator stage", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted), zap.Error(err))
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
+			}
+		case err, ok := <-errCh:
+			if !ok {
+				closed = true
+				break
+			}
+			// TODO: deal with err
+			log.L().Error("watch validator stage received an error", zap.Error(err))
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
+		}
+		if closed {
+			log.L().Info("worker is closed, handle validator stage will quit now")
+			return nil
+		}
+	}
+}
+
+func (w *SourceWorker) getCurrentValidatorRevision(source string) (int64, error) {
+	_, rev, err := ha.GetValidatorStage(w.etcdClient, source, "")
+	if err != nil {
+		return 0, err
+	}
+	return rev, nil
+}
+
+func (w *SourceWorker) getValidatorOp(stage ha.Stage) string {
+	if stage.IsDeleted {
+		return "validator-delete"
+	}
+	if stage.Expect == pb.Stage_Running {
+		return pb.ValidatorOp_Validator_Start.String()
+	} else if stage.Expect == pb.Stage_Stopped{
+		return pb.ValidatorOp_Validator_Stop.String()
+	}
+	return ""
+}
+
+func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
+	// if the key it's deleted, the subtask is deleted too, let subtask clean it up.
+	if stage.IsDeleted {
+		return nil
+	}
+
+	subtask := w.subTaskHolder.findSubTask(stage.Task)
+	if subtask == nil {
+		return terror.ErrWorkerSubTaskNotFound.Generate(stage.Task)
+	}
+
+	// stage of validator can only be Running or Stopped
+	switch stage.Expect {
+	case pb.Stage_Stopped:
+		subtask.StopValidator()
+	case pb.Stage_Running:
+		// validator's config is stored with subtask config, we need to update subtask config as validator may start
+		// on the fly.
+		subTaskCfg, _, err := ha.GetSubTaskCfg(w.etcdClient, stage.Source, stage.Task, stage.Revision)
+		if err != nil {
+			return err
+		}
+		if _, ok := subTaskCfg[stage.Task]; !ok {
+			log.L().Error("failed to get subtask config", zap.Reflect("stage", stage))
+			return errors.New("failed to get subtask config")
+		}
+
+		subtask.SetCfg(subTaskCfg[stage.Task])
+		subtask.StartValidator()
+	default:
+		// should not happen
+		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
+	}
+	return nil
 }
