@@ -341,15 +341,6 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-<<<<<<< HEAD
-	maxKafkaMessageSize int
-	maxBatchSize        int
-}
-
-// GetMaxKafkaMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
-	return d.maxKafkaMessageSize
-=======
 	maxMessageBytes int
 	maxBatchSize    int
 }
@@ -357,7 +348,6 @@ func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
 // GetMaxMessageSize is only for unit testing.
 func (d *JSONEventBatchEncoder) GetMaxMessageSize() int {
 	return d.maxMessageBytes
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -436,25 +426,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-<<<<<<< HEAD
-		if length > d.maxKafkaMessageSize {
-			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
-=======
 		if length > d.maxMessageBytes {
 			log.Warn("Single message too large",
 				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-<<<<<<< HEAD
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
-=======
 			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -472,17 +452,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
 
-<<<<<<< HEAD
-		if message.Length() > d.maxKafkaMessageSize {
-			// `len(d.messageBuf) == 1` is implied
-			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
-=======
 		if message.Length() > d.maxMessageBytes {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
 				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 		}
 		d.curBatchSize++
 	}
@@ -600,29 +573,18 @@ func (d *JSONEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
-<<<<<<< HEAD
-	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
-=======
 
 	d.maxMessageBytes = config.DefaultMaxMessageBytes
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
 		d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 		if err != nil {
 			return cerror.ErrSinkInvalidConfig.Wrap(err)
 		}
 	} else {
 		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
-<<<<<<< HEAD
-
-	if d.maxKafkaMessageSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
-=======
 	if d.maxMessageBytes <= 0 {
 		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
->>>>>>> 166fff003 (sink(ticdc): set max-message-bytes default to 10m (#4036))
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
