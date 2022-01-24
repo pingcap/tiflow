@@ -498,6 +498,11 @@ func (b *RowChangedEventBuffer) Size() int {
 	return b.estimatedSize
 }
 
+// RowsCount return Number of rows batched in this buffer
+func (b *RowChangedEventBuffer) RowsCount() int {
+	return b.eventsCount
+}
+
 // GetHeaders returns headers of buffer
 func (b *RowChangedEventBuffer) GetHeaders() *Headers {
 	return b.headers
