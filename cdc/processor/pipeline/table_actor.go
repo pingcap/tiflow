@@ -201,7 +201,7 @@ func (t *tableActor) start(ctx context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.info.ID)
 	pCtx := NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
 	if err := pullerNode.Init(pCtx); err != nil {
 		log.Error("puller fails to start",

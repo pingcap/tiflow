@@ -14,17 +14,15 @@
 package dispatcher
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type IndexValueDispatcherSuite struct{}
+func TestIndexValueDispatcher(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&IndexValueDispatcherSuite{})
-
-func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
-	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -151,6 +149,6 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 	}
 	p := newIndexValueDispatcher(16)
 	for _, tc := range testCases {
-		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
+		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
 	}
 }

@@ -168,10 +168,9 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 					// this separate goroutine to prevent blocking
 					// the whole pipeline.
 					msg.SetUpFinishedChan()
-					select {
-					case <-ctx.Done():
-						return nil
-					case n.mounter.Input() <- msg:
+					err := n.mounter.AddEntry(ctx, msg)
+					if err != nil {
+						return errors.Trace(err)
 					}
 
 					commitTs := msg.CRTs
@@ -190,7 +189,7 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 					}
 
 					// Must wait before accessing msg.Row
-					err := msg.WaitPrepare(ctx)
+					err = msg.WaitPrepare(ctx)
 					if err != nil {
 						if errors.Cause(err) != context.Canceled {
 							ctx.Throw(err)
@@ -311,6 +310,10 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
+	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
+	// the flowController will be blocked in a background goroutine,
+	// We need to abort the flowController manually in the nodeRunner
+	n.flowController.Abort()
 	return n.eg.Wait()
 }
 
