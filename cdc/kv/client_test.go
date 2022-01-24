@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/testutils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -353,18 +354,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool)
 	defer cdcClient.Close() //nolint:errcheck
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
-	// Take care of the eventCh, it's used to output resolvedTs event or kv event
-	// It will stuck the normal routine
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -428,12 +420,8 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cancel()
 }
 
-<<<<<<< HEAD
-func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
-=======
 // [NOTICE]: I concern this ut may cost too much time when resource limit
 func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -464,15 +452,8 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -569,15 +550,8 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -733,15 +707,8 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
@@ -771,9 +738,6 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cancel()
 }
 
-<<<<<<< HEAD
-func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
-=======
 // TestClusterIDMismatch tests kv client returns an error when TiKV returns
 // the cluster ID mismatch error.
 func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
@@ -846,7 +810,6 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 }
 
 func (s *clientSuite) testHandleFeedEvent(c *check.C) {
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -877,15 +840,8 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1340,15 +1296,8 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1457,15 +1406,8 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 40)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1593,15 +1535,8 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1885,16 +1820,8 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
-
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1969,15 +1896,8 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2085,15 +2005,8 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2192,15 +2105,8 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
@@ -2353,15 +2259,8 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2538,15 +2437,8 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2759,15 +2651,8 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2860,15 +2745,8 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2948,15 +2826,8 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3021,15 +2892,8 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3102,15 +2966,8 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3375,15 +3232,8 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3458,12 +3308,8 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 
 // TestRegionWorkerExitWhenIsIdle tests region worker can exit, and cancel gRPC
 // stream automatically when it is idle.
-<<<<<<< HEAD
-func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
-=======
 // Idle means having no any effective region state
 func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
@@ -3507,15 +3353,8 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -3605,15 +3444,8 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	lockResolver := txnutil.NewLockerResolver(kvStorage)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
-=======
-	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test())
 	eventCh := make(chan model.RegionFeedEvent, 50)
->>>>>>> 36fdd53ba (test(ticdc): Fix kv ut meet `panic: close of closed channel in cdc/kv` (#4318))
 	baseAllocatedID := currentRequestID()
 
 	wg.Add(1)
