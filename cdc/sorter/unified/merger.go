@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -405,8 +404,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
-	resolvedTsNotifier := &notify.Notifier{}
-	defer resolvedTsNotifier.Close()
+	resolvedTsNotifierChan := make(chan struct{}, 1)
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -443,40 +441,46 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 			if minTemp > minResolvedTs {
 				atomic.StoreUint64(&minResolvedTs, minTemp)
-				resolvedTsNotifier.Notify()
+				select {
+				case resolvedTsNotifierChan <- struct{}{}:
+				default:
+				}
 			}
 		}
 	})
 
 	errg.Go(func() error {
-		resolvedTsReceiver, err := resolvedTsNotifier.NewReceiver(time.Second * 1)
-		if err != nil {
-			if cerrors.ErrOperateOnClosedNotifier.Equal(err) {
-				// This won't happen unless `resolvedTsNotifier` has been closed, which is
-				// impossible at this point.
-				log.Panic("unexpected error", zap.Error(err))
-			}
-			return errors.Trace(err)
-		}
+		resolvedTsTicker := time.NewTicker(time.Second * 1)
 
-		defer resolvedTsReceiver.Stop()
+		defer resolvedTsTicker.Stop()
 
 		var lastResolvedTs uint64
+		resolvedTsTickFunc := func() error {
+			curResolvedTs := atomic.LoadUint64(&minResolvedTs)
+			if curResolvedTs > lastResolvedTs {
+				err := onMinResolvedTsUpdate(curResolvedTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else if curResolvedTs < lastResolvedTs {
+				log.Panic("resolved-ts regressed in sorter",
+					zap.Uint64("curResolvedTs", curResolvedTs),
+					zap.Uint64("lastResolvedTs", lastResolvedTs))
+			}
+			return nil
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-resolvedTsReceiver.C:
-				curResolvedTs := atomic.LoadUint64(&minResolvedTs)
-				if curResolvedTs > lastResolvedTs {
-					err := onMinResolvedTsUpdate(curResolvedTs)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				} else if curResolvedTs < lastResolvedTs {
-					log.Panic("resolved-ts regressed in sorter",
-						zap.Uint64("curResolved-ts", curResolvedTs),
-						zap.Uint64("lastResolved-ts", lastResolvedTs))
+			case <-resolvedTsTicker.C:
+				if err := resolvedTsTickFunc(); err != nil {
+					return err
+				}
+			case <-resolvedTsNotifierChan:
+				if err := resolvedTsTickFunc(); err != nil {
+					return err
 				}
 			}
 		}
