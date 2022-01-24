@@ -3716,12 +3716,12 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"} - ON(instance) dm_syncer_binlog_file{instance=~\"$instance\", task=~\"$task\", node=\"syncer\"}",
+          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"} - ON(instance) group_right dm_syncer_binlog_file{instance=~\"$instance\", task=~\"$task\", node=\"syncer\"}",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
           "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}} - {{ task }}",
           "refId": "B"
         }
       ],
