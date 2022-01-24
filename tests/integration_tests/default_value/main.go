@@ -86,7 +86,7 @@ func testGetDefaultValue(srcs []*sql.DB) {
 		log.S().Info("running ddl test: ", i, " ", testName)
 
 		var wg sync.WaitGroup
-		ctx, _ := context.WithTimeout(context.Background(), runTime)
+		ctx, cancel := context.WithTimeout(context.Background(), runTime) //nolint:unused
 
 		for idx, src := range srcs {
 			wg.Add(1)
@@ -644,7 +644,7 @@ func testGetZeroValue(srcs []*sql.DB) {
 
 	for i, unit := range addColumnUnits {
 		var wg sync.WaitGroup
-		ctx, _ := context.WithTimeout(context.Background(), runTime)
+		ctx, cancel := context.WithTimeout(context.Background(), runTime) //nolint:unused
 
 		for idx, src := range srcs {
 			wg.Add(1)
@@ -703,10 +703,4 @@ func mustCreateTable(db *sql.DB, tableName string) {
 	util.MustExec(db, createDatabaseSQL)
 	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExec(db, sql)
-}
-
-func mustCreateTableWithConn(ctx context.Context, conn *sql.Conn, tableName string) {
-	util.MustExecWithConn(ctx, conn, createDatabaseSQL)
-	sql := fmt.Sprintf(createTableSQL, tableName)
-	util.MustExecWithConn(ctx, conn, sql)
 }
