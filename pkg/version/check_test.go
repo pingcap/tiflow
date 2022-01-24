@@ -372,7 +372,7 @@ func TestCheckPDVersionError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	resp = func(w http.ResponseWriter, r *http.Request) {
+	resp = func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	require.Contains(t, CheckPDVersion(context.TODO(), ts.URL, nil).Error(),
