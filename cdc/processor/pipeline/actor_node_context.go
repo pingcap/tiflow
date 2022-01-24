@@ -80,7 +80,9 @@ func (c *actorNodeContext) Throw(err error) {
 	if err == nil {
 		return
 	}
-	log.Error("error occurred during message processing, stop table actor", zap.String("tableName", c.tableName), zap.Error(err))
+	log.Error("error occurred during message processing, stop table actor",
+		zap.String("changefeed", c.changefeedVars.ID),
+		zap.String("tableName", c.tableName), zap.Error(err))
 	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopMessage())
 }
 
