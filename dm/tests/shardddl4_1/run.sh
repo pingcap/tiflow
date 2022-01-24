@@ -739,7 +739,8 @@ function DM_151_CASE {
 		# but changing the int column to a double column is not allowed, so task is paused
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'"stage": "Paused"' 1 \
+			'ALTER TABLE `shardddl`.`tb` MODIFY COLUMN `a` DOUBLE' 1 \
+			"\"${SOURCE_ID1}-\`${shardddl1}\`.\`${tb1}\`\"" 1 \
 			"incompatible mysql type" 1
 	fi
 
@@ -906,7 +907,7 @@ function DM_154 {
 function run() {
 	init_cluster
 	init_database
-	start=131
+	start=151
 	end=154
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
