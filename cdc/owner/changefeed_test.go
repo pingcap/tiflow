@@ -215,8 +215,49 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	c.Assert(state.Info.Error.Message, check.Equals, "fake error")
 	c.Assert(cf.runningStatus, check.Equals, changeFeedClosing)
 
-	cf.tick(ctx, state, captures)
+	cf.Tick(ctx, state, captures)
 	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
+}
+
+func (s *changefeedSuite) TestHandleAdminJob(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	defer cf.Close(ctx)
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	c.Assert(cf.runningStatus, check.Equals, changeFeedRunning)
+
+	// pause the changefeed
+	cf.feedStateManager.PushAdminJob(&model.AdminJob{
+		CfID: cf.id,
+		Type: model.AdminStop,
+	})
+	// changefeed tick will release resources
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosing)
+	// one more tick to make sure fully closed.
+	cf.Tick(ctx, state, captures)
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosed)
+	tester.MustApplyPatches()
+
+	// resume a fully closed changefeed
+	cf.feedStateManager.pushAdminJob(&model.AdminJob{
+		CfID: cf.id,
+		Type: model.AdminResume,
+	})
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	cf.Tick(ctx, state, captures)
+	c.Assert(cf.runningStatus, check.Equals, changeFeedRunning)
 }
 
 func (s *changefeedSuite) TestExecDDL(c *check.C) {
