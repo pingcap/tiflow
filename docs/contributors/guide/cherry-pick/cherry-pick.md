@@ -1,3 +1,5 @@
+<!-- Lots of ideas references from https://github.com/kubernetes/community/blob/master/contributors/devel/sig-release/cherry-picks.md, Thank!-->
+
 # Overview
 
 This document explains how cherry picks are managed on release branches within the `pingcap/tiflow` repository. A common
@@ -83,8 +85,7 @@ they:
   `do-not-merge/cherry-pick-not-approved` label and triggers a merge into the target branch.
 
   If you are concerned about the status of your cherry pick, err on the side of overcommunicating and reach out to the
-  [nongfushanquan](https://github.com/nongfushanquan). We should
-  contact [nongfushanquan](https://github.com/nongfushanquan) as early as possible for approval.
+  [nongfushanquan](https://github.com/nongfushanquan). We should contact [nongfushanquan](https://github.com/nongfushanquan) as early as possible for approval.
 
 ## Searching for Cherry Picks
 
