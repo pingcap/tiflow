@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 )
@@ -551,6 +552,92 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	w.Close()
 	cancel2()
 	wg.Wait()
+}
+
+func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+		startRev     = int64(1)
+	)
+
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:            GetJoinURLs(cfg.Join),
+		DialTimeout:          dialTimeout,
+		DialKeepAliveTime:    keepaliveTime,
+		DialKeepAliveTimeout: keepaliveTimeout,
+	})
+	c.Assert(err, IsNil)
+	sourceCfg := loadSourceConfigWithoutPassword(c)
+	sourceCfg.From = config.GetDBConfigForTest()
+	sourceCfg.EnableRelay = false
+
+	//
+	// step 1: start worker
+	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer w.Close()
+	go func() {
+		w.Start()
+	}()
+	c.Assert(utils.WaitSomething(50, 100*time.Millisecond, func() bool {
+		return !w.closed.Load()
+	}), IsTrue)
+
+	//
+	// step 2: Put a subtask config and subtask stage to this source, then delete it
+	subtaskCfg := config.SubTaskConfig{}
+	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	c.Assert(err, IsNil)
+	subtaskCfg.MydumperPath = mydumperPath
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
+
+	// increase revision
+	_, err = etcdCli.Put(context.Background(), "/dummy-key", "value")
+	c.Assert(err, IsNil)
+	rev, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
+		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	c.Assert(err, IsNil)
+
+	//
+	// step 2.1: start a subtask manually
+	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+
+	//
+	// step 3: trigger etcd compaction and check whether we can receive it through watcher
+	_, err = etcdCli.Compact(ctx, rev)
+	c.Assert(err, IsNil)
+	subTaskStageCh := make(chan ha.Stage, 10)
+	subTaskErrCh := make(chan error, 10)
+	ha.WatchValidatorStage(ctx, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
+	select {
+	case err = <-subTaskErrCh:
+		c.Assert(err, Equals, etcdErrCompacted)
+	case <-time.After(300 * time.Millisecond):
+		c.Fatal("fail to get etcd error compacted")
+	}
+
+	// test operate validator
+	err = w.operateValidatorStage(ha.Stage{IsDeleted: true})
+	c.Assert(err, IsNil)
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Task: "not-exist"})
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Task: subtaskCfg.Name})
+	c.Assert(err, ErrorMatches, ".*failed to get subtask config.*")
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Source: subtaskCfg.SourceID, Task: subtaskCfg.Name})
+	c.Assert(err, IsNil)
 }
 
 func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
