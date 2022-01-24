@@ -755,7 +755,7 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
 	c.Assert(err, check.IsNil)
 
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
