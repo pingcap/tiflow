@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -277,8 +276,8 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 				return
 			}
 			rows++
-			require.Equal(t, row.Table.Table, tc.tableName)
-			require.Equal(t, row.Table.Schema, "test")
+			c.Assert(row.Table.Table, check.Equals, tc.tableName)
+			c.Assert(row.Table.Schema, check.Equals, "test")
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(c, tc.tableName, row.Columns)
@@ -906,7 +905,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 func testGetDefaultZeroValue(t *testing.T, colAndRess []columnInfoAndResult) {
 	for _, colAndRes := range colAndRess {
-		val, _, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
+		val, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
 		require.Equal(t, colAndRes.Res, val)
 	}
 }
