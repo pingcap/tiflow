@@ -447,7 +447,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	for i := 0; i < concurrency; i++ {
 		c.checkWg.Add(1)
-		go c.CheckShardingTable(checkCtx, r)
+		go c.checkShardingTable(checkCtx, r)
 	}
 
 outer:
@@ -483,7 +483,7 @@ outer2:
 	return r
 }
 
-func (c *ShardingTablesChecker) CheckShardingTable(ctx context.Context, r *Result) {
+func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Result) {
 	var (
 		sourceID = c.firstSourceID
 		p        *parser.Parser
@@ -493,6 +493,8 @@ func (c *ShardingTablesChecker) CheckShardingTable(ctx context.Context, r *Resul
 	}()
 	p, err := dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 	if err != nil {
+		c.errCh <- err
+		c.cancel()
 		return
 	}
 	for {
