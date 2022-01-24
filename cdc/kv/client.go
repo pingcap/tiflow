@@ -528,15 +528,14 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
-		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
-		defer timer.Stop()
+		checkRegionRateLimitTicker := time.NewTicker(defaultCheckRegionRateLimitInterval)
+		defer checkRegionRateLimitTicker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-timer.C:
+			case <-checkRegionRateLimitTicker.C:
 				s.handleRateLimit(ctx)
-				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
 				// divideAndSendEventFeedToRegions could be block for some time,
