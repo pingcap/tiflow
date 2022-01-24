@@ -172,7 +172,7 @@ func TestCheckClusterVersion(t *testing.T) {
 		}
 
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
-		require.Regexp(t, ".*response status: .*", err)
+		require.Regexp(t, ".*400 Bad Request.*", err)
 	}
 }
 
