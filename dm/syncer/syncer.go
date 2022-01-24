@@ -557,7 +557,7 @@ func (s *Syncer) IsFreshTask(ctx context.Context) (bool, error) {
 
 func (s *Syncer) reset() {
 	if s.streamerController != nil {
-		s.streamerController.Close(s.tctx)
+		s.streamerController.Close()
 	}
 	// create new job chans
 	s.newJobChans()
@@ -1522,7 +1522,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	failpoint.Inject("AdjustGTIDExit", func() {
 		tctx.L().Warn("exit triggered", zap.String("failpoint", "AdjustGTIDExit"))
-		s.streamerController.Close(tctx)
+		s.streamerController.Close()
 		utils.OsExit(1)
 	})
 
@@ -3390,7 +3390,7 @@ func (s *Syncer) stopSync() {
 	// when resuming, re-create s.syncer
 
 	if s.streamerController != nil {
-		s.streamerController.Close(s.tctx)
+		s.streamerController.Close()
 	}
 }
 
@@ -3656,7 +3656,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer streamerController.Close(tctx)
+	defer streamerController.Close()
 
 	gs, err := reader.GetGTIDsForPosFromStreamer(tctx.Context(), streamerController.streamer, endPos)
 	if err != nil {

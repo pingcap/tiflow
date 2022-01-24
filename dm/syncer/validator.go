@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -43,7 +44,7 @@ type DataValidator struct {
 	cancel  context.CancelFunc
 
 	L                  log.Logger
-	fromDB             *dbconn.UpStreamConn
+	fromDB             *conn.BaseDB
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -68,17 +69,16 @@ func (v *DataValidator) initialize() error {
 	var err error
 	defer func() {
 		if err != nil && v.fromDB != nil {
-			v.fromDB.BaseDB.Close()
+			v.fromDB.Close()
 		}
 	}()
 
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, err := dbconn.CreateBaseDB(&dbCfg)
+	v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
-	v.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
 
 	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
@@ -90,7 +90,7 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.streamerController = NewStreamerController(v.syncCfg, v.cfg.EnableGTID, v.fromDB, v.cfg.RelayDir, v.timezone, nil)
+	v.streamerController = NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
 
 	return nil
 }
@@ -163,6 +163,9 @@ func (v *DataValidator) Stop() {
 		v.L.Warn("not started")
 		return
 	}
+
+	v.streamerController.Close()
+	v.fromDB.Close()
 
 	if v.cancel != nil {
 		v.cancel()
