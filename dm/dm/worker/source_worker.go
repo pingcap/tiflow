@@ -486,6 +486,8 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 	w.subTaskWg.Add(1)
 	go func() {
 		defer w.subTaskWg.Add(1)
+		// TODO: handle fatal error from observeValidatorStage
+		//nolint:errcheck
 		w.observeValidatorStage(w.subTaskCtx, revSubTask)
 	}()
 
@@ -1206,7 +1208,7 @@ func (w *SourceWorker) getValidatorOp(stage ha.Stage) string {
 	}
 	if stage.Expect == pb.Stage_Running {
 		return pb.ValidatorOp_Validator_Start.String()
-	} else if stage.Expect == pb.Stage_Stopped{
+	} else if stage.Expect == pb.Stage_Stopped {
 		return pb.ValidatorOp_Validator_Stop.String()
 	}
 	return ""

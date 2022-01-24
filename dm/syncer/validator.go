@@ -143,7 +143,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	}
 }
 
-// doValidate: runs in a goroutine
+// doValidate: runs in a goroutine.
 func (v *DataValidator) doValidate() {
 	tctx := tcontext.NewContext(v.ctx, v.L)
 	if v.streamerController.IsClosed() {

@@ -282,10 +282,10 @@ func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
 
 func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
 	source string, rev int64, outCh chan<- Stage, errCh chan<- error) {
-    wCtx, cancel := context.WithCancel(ctx)
-    defer cancel()
-    ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
-    watchStage(ctx, ch, validatorStageFromKey, outCh, errCh)
+	wCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
+	watchStage(ctx, ch, validatorStageFromKey, outCh, errCh)
 }
 
 // DeleteSubTaskStage deletes the subtask stage.
@@ -319,14 +319,14 @@ func subTaskStageFromKey(key string) (Stage, error) {
 }
 
 func validatorStageFromKey(key string) (Stage, error) {
-    var stage Stage
-    ks, err := common.StageValidatorKeyAdapter.Decode(key)
-    if err != nil {
-        return stage, err
-    }
-    stage.Source = ks[0]
-    stage.Task = ks[1]
-    return stage, nil
+	var stage Stage
+	ks, err := common.StageValidatorKeyAdapter.Decode(key)
+	if err != nil {
+		return stage, err
+	}
+	stage.Source = ks[0]
+	stage.Task = ks[1]
+	return stage, nil
 }
 
 func getStagesFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]Stage, error) {

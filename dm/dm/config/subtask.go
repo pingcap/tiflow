@@ -270,10 +270,10 @@ type SubTaskConfig struct {
 	BWList *filter.Rules `toml:"black-white-list" json:"black-white-list"`
 	BAList *filter.Rules `toml:"block-allow-list" json:"block-allow-list"`
 
-	MydumperConfig         // Mydumper configuration
-	LoaderConfig           // Loader configuration
-	SyncerConfig           // Syncer configuration
-	ValidatorCfg ValidatorConfig
+	MydumperConfig // Mydumper configuration
+	LoaderConfig   // Loader configuration
+	SyncerConfig   // Syncer configuration
+	ValidatorCfg   ValidatorConfig
 
 	// compatible with standalone dm unit
 	LogLevel  string `toml:"log-level" json:"log-level"`
