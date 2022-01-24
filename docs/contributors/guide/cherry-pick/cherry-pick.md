@@ -27,7 +27,12 @@ The emphasis is on critical bug fixes, e.g.,
 - Memory corruption
 - Panic, crash, hang
 - Security
-- Tests、Metrics、Logging
+
+Some not so critical but important matters, e.g.,
+
+- Tests
+- Metrics And Logging
+- CI Improvements
 
 A bugfix for a functional issue (not a data loss or security issue) does not qualify as a critical bug fix.
 
@@ -85,7 +90,8 @@ they:
   `do-not-merge/cherry-pick-not-approved` label and triggers a merge into the target branch.
 
   If you are concerned about the status of your cherry pick, err on the side of overcommunicating and reach out to the
-  [nongfushanquan](https://github.com/nongfushanquan). We should contact [nongfushanquan](https://github.com/nongfushanquan) as early as possible for approval.
+  [nongfushanquan](https://github.com/nongfushanquan). We should
+  contact [nongfushanquan](https://github.com/nongfushanquan) as early as possible for approval.
 
 ## Searching for Cherry Picks
 
@@ -114,7 +120,7 @@ in batches.
   Please use the title of the original cherry pick PR as the commit message for the new PR. For example, if you merge 5
   PRs, use the titles of these 5 PRs as the 5 commit messages for this new PR.
 
-  Please use `<subsystem>(ticdc|dm|both): rollup cherryp picks` as the title of the PR.
+  Please use `<subsystem>(ticdc|dm|both): rollup cherry picks` as the title of the PR.
 
   Please make it clear in the first line of your PR description what PRs this PR merges with, and what links GitHub
   recognizes. For example, `Cherrypick #8586, #8623, #8638 and #8655`.
