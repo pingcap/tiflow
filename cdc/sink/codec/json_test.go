@@ -242,7 +242,7 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 }
 
 func (s *batchSuite) TestSetParams(c *check.C) {
-	defer testleak.AfterTest(c)
+	defer testleak.AfterTest(c)()
 
 	opts := make(map[string]string)
 	encoder := NewJSONEventBatchEncoder()
