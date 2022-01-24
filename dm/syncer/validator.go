@@ -145,14 +145,15 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 // doValidate: runs in a goroutine.
 func (v *DataValidator) doValidate() {
+	defer v.wg.Done()
+
 	tctx := tcontext.NewContext(v.ctx, v.L)
-	if v.streamerController.IsClosed() {
-		err := v.streamerController.Start(tctx, lastLocation)
-		if err != nil {
-			v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
-			return
-		}
+	err := v.streamerController.Start(tctx, lastLocation)
+	if err != nil {
+		v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
+		return
 	}
+
 	v.L.Info("start continuous validation")
 }
 
