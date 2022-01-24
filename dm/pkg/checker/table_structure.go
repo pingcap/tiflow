@@ -211,7 +211,13 @@ func (c *TablesChecker) checkTable(ctx context.Context, r *Result) {
 				break
 			}
 
-			opts := c.checkCreateSQL(p, statement)
+			ctStmt, err := getCreateTableStmt(p, statement)
+			if err != nil {
+				c.errCh <- err
+				c.cancel()
+				return
+			}
+			opts := c.checkAST(ctStmt)
 			for _, opt := range opts {
 				opt.tableID = table.String()
 				tableMsg := "table " + opt.tableID + " "
@@ -237,31 +243,7 @@ func (c *TablesChecker) checkTable(ctx context.Context, r *Result) {
 	}
 }
 
-func (c *TablesChecker) checkCreateSQL(p *parser.Parser, statement string) []*incompatibilityOption {
-	stmt, err := p.ParseOneStmt(statement, "", "")
-	if err != nil {
-		return []*incompatibilityOption{
-			{
-				state:      StateFailure,
-				errMessage: errors.Annotatef(err, "statement: %s", statement).Error(),
-			},
-		}
-	}
-	// Analyze ast
-	return c.checkAST(stmt)
-}
-
-func (c *TablesChecker) checkAST(stmt ast.StmtNode) []*incompatibilityOption {
-	st, ok := stmt.(*ast.CreateTableStmt)
-	if !ok {
-		return []*incompatibilityOption{
-			{
-				state:      StateFailure,
-				errMessage: fmt.Sprintf("Expect CreateTableStmt but got %T", stmt),
-			},
-		}
-	}
-
+func (c *TablesChecker) checkAST(st *ast.CreateTableStmt) []*incompatibilityOption {
 	var options []*incompatibilityOption
 
 	// check columns
@@ -402,7 +384,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 
-	parser2, err := dbutil.GetParserForDB(ctx, db)
+	p, err := dbutil.GetParserForDB(ctx, db)
 	if err != nil {
 		r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", c.firstSourceID, c.targetTableID)
 		markCheckError(r, err)
@@ -415,15 +397,9 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 
-	stmt, err := parser2.ParseOneStmt(statement, "", "")
+	c.firstCreateTableStmtNode, err = getCreateTableStmt(p, statement)
 	if err != nil {
-		markCheckError(r, errors.Annotatef(err, "statement %s", statement))
-		return r
-	}
-
-	c.firstCreateTableStmtNode, ok = stmt.(*ast.CreateTableStmt)
-	if !ok {
-		markCheckError(r, errors.Errorf("Expect CreateTableStmt but got %T", stmt))
+		markCheckError(r, err)
 		return r
 	}
 
@@ -530,22 +506,16 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				return
 			}
 
-			info, err2 := dbutil.GetTableInfoBySQL(statement, p)
-			if err2 != nil {
-				c.errCh <- errors.Annotatef(err2, "statement: %s", statement)
-				c.cancel()
-				return
-			}
-			stmt, err2 := p.ParseOneStmt(statement, "", "")
-			if err2 != nil {
-				c.errCh <- errors.Annotatef(err2, "statement: %s", statement)
+			info, err := dbutil.GetTableInfoBySQL(statement, p)
+			if err != nil {
+				c.errCh <- errors.Annotatef(err, "statement: %s", statement)
 				c.cancel()
 				return
 			}
 
-			ctStmt, ok := stmt.(*ast.CreateTableStmt)
-			if !ok {
-				c.errCh <- errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+			ctStmt, err := getCreateTableStmt(p, statement)
+			if err != nil {
+				c.errCh <- err
 				c.cancel()
 				return
 			}
