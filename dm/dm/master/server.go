@@ -1210,8 +1210,7 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 	cliArgs := config.TaskCliArgs{
 		StartTime: req.StartTime,
 	}
-	err := cliArgs.Verify()
-	if err != nil {
+	if err := cliArgs.Verify(); err != nil {
 		// nolint:nilerr
 		return &pb.CheckTaskResponse{
 			Result: false,
