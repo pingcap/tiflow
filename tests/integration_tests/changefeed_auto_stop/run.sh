@@ -58,7 +58,7 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-  # We should ensure 30 times here because the error handle mechanism of changefeed need at least 10s to restart a it.
+	# We should ensure 30 times here because the error handle mechanism of changefeed need at least 10s to restart a it.
 	ensure 30 check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "processor sync resolved injected error"
 
 	for i in $(seq $DB_COUNT); do
