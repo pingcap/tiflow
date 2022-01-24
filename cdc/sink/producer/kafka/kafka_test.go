@@ -351,6 +351,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
 	opts := make(map[string]string)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
