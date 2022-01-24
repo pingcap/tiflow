@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/benbjohnson/clock"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/errors"
@@ -282,7 +282,7 @@ type WorkerInfo struct {
 
 	// fields for internal use by the Master.
 	lastHeartbeatReceiveTime time.Time
-	lastHeartbeatSendTime    monotonicTime
+	lastHeartbeatSendTime    clock.MonotonicTime
 	hasPendingHeartbeat      bool
 	justOnlined              bool
 

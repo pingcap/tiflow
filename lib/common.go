@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -16,8 +17,6 @@ type (
 
 	Epoch        = int64
 	WorkerConfig = interface{}
-
-	monotonicTime = time.Duration
 )
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
@@ -70,16 +69,16 @@ func StatusUpdateTopic(masterID MasterID) p2p.Topic {
 }
 
 type HeartbeatPingMessage struct {
-	SendTime     monotonicTime `json:"send-time"`
-	FromWorkerID WorkerID      `json:"from-worker-id"`
-	Epoch        Epoch         `json:"epoch"`
+	SendTime     clock.MonotonicTime `json:"send-time"`
+	FromWorkerID WorkerID            `json:"from-worker-id"`
+	Epoch        Epoch               `json:"epoch"`
 }
 
 type HeartbeatPongMessage struct {
-	SendTime   monotonicTime `json:"send-time"`
-	ReplyTime  time.Time     `json:"reply-time"`
-	ToWorkerID WorkerID      `json:"to-worker-id"`
-	Epoch      Epoch         `json:"epoch"`
+	SendTime   clock.MonotonicTime `json:"send-time"`
+	ReplyTime  time.Time           `json:"reply-time"`
+	ToWorkerID WorkerID            `json:"to-worker-id"`
+	Epoch      Epoch               `json:"epoch"`
 }
 
 type StatusUpdateMessage struct {

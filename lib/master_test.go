@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gavv/monotime"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/stretchr/testify/mock"
@@ -193,7 +193,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
 	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName), executorNodeID1, &HeartbeatPingMessage{
-		SendTime:     monotime.Now(),
+		SendTime:     clock.MonoNow(),
 		FromWorkerID: workerID1,
 		Epoch:        master.BaseMaster.currentEpoch.Load(),
 	})

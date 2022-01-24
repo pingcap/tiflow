@@ -5,8 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benbjohnson/clock"
-	"github.com/gavv/monotime"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusCreated)
 	require.NoError(t, err)
 
-	sendTime := monotime.Now()
+	sendTime := clock.MonoNow()
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: workerID1,
@@ -62,7 +61,7 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	sendTime := monotime.Now()
+	sendTime := clock.MonoNow()
 	err := manager.HandleHeartbeat(&HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: workerID1,
@@ -109,7 +108,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Empty(t, onlined)
 
-	sendTime1 := monotime.Now()
+	sendTime1 := clock.MonoNow()
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
 		SendTime:     sendTime1,
 		FromWorkerID: workerID1,
@@ -117,7 +116,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	}, executorNodeID1)
 	require.NoError(t, err)
 
-	sendTime2 := monotime.Now()
+	sendTime2 := clock.MonoNow()
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
 		SendTime:     sendTime2,
 		FromWorkerID: workerID2,
@@ -152,7 +151,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	_, ok = msgSender.TryPop(executorNodeID3, HeartbeatPongTopic(masterName))
 	require.False(t, ok)
 
-	sendTime3 := monotime.Now()
+	sendTime3 := clock.MonoNow()
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
 		SendTime:     sendTime3,
 		FromWorkerID: workerID3,
@@ -197,7 +196,7 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	require.False(t, ok)
 
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
-		SendTime:     monotime.Now(),
+		SendTime:     clock.MonoNow(),
 		FromWorkerID: workerID1,
 		Epoch:        1,
 	}, executorNodeID1)
