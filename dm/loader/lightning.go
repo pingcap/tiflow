@@ -15,7 +15,6 @@ package loader
 
 import (
 	"context"
-	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
+	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	log2 "github.com/pingcap/tidb/br/pkg/lightning/log"
 	"go.etcd.io/etcd/clientv3"
