@@ -52,7 +52,7 @@ type mqSink struct {
 		resolvedTs uint64
 	}
 	partitionResolvedTs []uint64
-	checkpointTs        uint64
+	tableCheckpointTs   map[model.TableID]uint64
 	resolvedNotifier    *notify.Notifier
 	resolvedReceiver    *notify.Receiver
 
@@ -143,6 +143,7 @@ func newMqSink(
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
+		tableCheckpointTs:   make(map[model.TableID]uint64),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
@@ -185,9 +186,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	if resolvedTs <= k.checkpointTs {
-		return k.checkpointTs, nil
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+		return checkpointTs, nil
 	}
 
 	for i := 0; i < int(k.partitionNum); i++ {
@@ -220,9 +221,9 @@ flushLoop:
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	k.checkpointTs = resolvedTs
+	k.tableCheckpointTs[tableID] = resolvedTs
 	k.statistics.PrintStatus(ctx)
-	return k.checkpointTs, nil
+	return resolvedTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -264,18 +265,12 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-// Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// No longer need it for now
-	return nil
-}
-
 func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
 }
 
-func (k *mqSink) Barrier(cxt context.Context) error {
+func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
 	// all buffered events forcedlly.
 	return nil
