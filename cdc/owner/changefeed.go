@@ -174,11 +174,27 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
+func (c *changefeed) handleError() error {
+	select {
+	case err := <-c.errCh:
+		return err
+	default:
+	}
+	return nil
+}
+
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	// it could be in `changeFeedClosing`, changefeed should not continue,
-	// should not handle admin job such as `pause` and `removing`, because it's already `Closing`
-	// also should not `resume` a closing changefeed, which would cause changefeed chaotic.
+	// it could be in `changeFeedClosing`, changefeed should not continue.
+	// for `AdminJob`, it would be useless to `pause` or `remove` a `closing` changefeed.
+	// since it's closing, also should not handle `resume`.
 	if c.runningStatus == changeFeedClosing {
+		if err := c.handleError(); err != nil {
+			c.runningStatus = changeFeedClosed
+			log.Info("changefeed try to be fully closed failed",
+				zap.String("changefeed", c.state.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		}
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
 		// no matter fully closed or not, just skip the tick.
@@ -216,10 +232,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 
-	select {
-	case err := <-c.errCh:
+	if err := c.handleError(); err != nil {
 		return errors.Trace(err)
-	default:
 	}
 
 	c.sink.emitCheckpointTs(ctx, checkpointTs)

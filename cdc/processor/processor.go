@@ -369,7 +369,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if p.runningStatus == processorClosing {
 		if err := p.handleErrorCh(ctx); err != nil {
 			p.runningStatus = processorClosed
-			log.Info("processor not fully closed",
+			log.Info("processor try to be fully closed failed",
 				zap.String("changefeed", p.changefeedID),
 				zap.Error(err))
 			return errors.Trace(err)
