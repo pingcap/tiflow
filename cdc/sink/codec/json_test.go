@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"math"
 	"strconv"
 	"testing"
@@ -269,10 +268,8 @@ func (s *batchSuite) TestSetParams(c *check.C) {
 	defer testleak.AfterTest(c)
 
 	opts := make(map[string]string)
-	encoderBuilder := newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(encoder, check.IsNil)
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(opts)
 	c.Assert(
 		errors.Cause(err),
 		check.ErrorMatches,
@@ -280,12 +277,10 @@ func (s *batchSuite) TestSetParams(c *check.C) {
 	)
 
 	opts["max-message-bytes"] = "1"
-	encoderBuilder = newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err = encoderBuilder.Build(context.Background())
+	encoder = NewJSONEventBatchEncoder()
+	err = encoder.SetParams(opts)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder, check.NotNil)
-
 	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1)
@@ -335,12 +330,14 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoderBuilder := newJSONEventBatchEncoderBuilder(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(err, check.IsNil)
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
 	c.Assert(encoder, check.NotNil)
+	c.Assert(err, check.IsNil)
 
+	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1048576)
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
