@@ -323,6 +323,11 @@ function test_expression_filter() {
 function test_regexpr_router() {
 	echo "[$(date)] <<<<<< start test_regexpr_router >>>>>>"
 	cleanup_process
+	cleanup_data all_mode
+	cleanup_data test3gd8917777
+	cleanup_data test4s_2022
+	cleanup_data_upstream test3gd8917777
+	cleanup_data_upstream test4s_2022
 	run_sql_file $cur/data/db1.regexpr.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.regexpr.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	run_sql_tidb 'drop database if exists dtest3;'
@@ -362,11 +367,11 @@ function test_regexpr_router() {
 
 	check_sync_diff $WORK_DIR $cur/conf/regexpr_diff_config.toml
 
+	cleanup_process
 	cleanup_data test3gd8917777
 	cleanup_data test4s_2022
 	cleanup_data_upstream test3gd8917777
 	cleanup_data_upstream test4s_2022
-	cleanup_process
 	echo "[$(date)] <<<<<< finish test_regexpr_router >>>>>>"
 }
 
@@ -582,11 +587,6 @@ function run() {
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
 }
 
-cleanup_data all_mode
-cleanup_data test3gd8917777
-cleanup_data test4s_2022
-cleanup_data_upstream test3gd8917777
-cleanup_data_upstream test4s_2022
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
