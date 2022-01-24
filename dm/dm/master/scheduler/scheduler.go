@@ -357,13 +357,11 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return terror.ErrSchedulerWorkerNotFree.Generate(workerName)
 	}
 
-	err := s.addSource(cfg)
-	if err != nil {
+	if err := s.addSource(cfg); err != nil {
 		return err
 	}
 
-	_, err = s.tryBoundSourceToWorker(cfg.SourceID, w)
-	return err
+	return s.boundSourceToWorker(cfg.SourceID, w)
 }
 
 // addSource adds the upstream source config to the cluster.
@@ -2228,25 +2226,6 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// tryBoundSourceToWorker tries to bound a source to the specified worker.
-// returns (true, nil) after bounded.
-func (s *Scheduler) tryBoundSourceToWorker(source string, w *Worker) (bool, error) {
-	boundedSource := ""
-	for s, worker := range s.bounds {
-		if worker.baseInfo.Name == w.baseInfo.Name {
-			boundedSource = s
-			break
-		}
-	}
-
-	if boundedSource != "" {
-		return false, nil
-	}
-
-	err := s.boundSourceToWorker(source, w)
-	return err == nil, err
 }
 
 // boundSourceToWorker bounds the source and worker together.
