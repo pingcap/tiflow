@@ -328,7 +328,6 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
-		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colName,
 			Type:  colInfo.Tp,
@@ -477,7 +476,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, string, error)
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		d = types.NewDatum(col.GetOriginDefaultValue())
-		return d.GetValue(), sizeOfDatum(d), "", nil
+		return d.GetValue(), "", nil
 	}
 
 	if !mysql.HasNotNullFlag(col.Flag) {
@@ -493,7 +492,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, string, error)
 			// the default value is the first element of the enum list
 			d = types.NewDatum(col.FieldType.Elems[0])
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-			return emptyBytes, sizeOfEmptyBytes, "", nil
+			return emptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
