@@ -119,14 +119,15 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		arg := fmt.Sprintf("response status: %s", resp.Status)
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
-	}
-
 	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var arg string
+		if err != nil {
+			arg = fmt.Sprintf("%s %s %s", resp.Status, content, err)
+		} else {
+			arg = fmt.Sprintf("%s %s", resp.Status, content)
+		}
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
 
 	err = json.Unmarshal(content, &pdVer)
