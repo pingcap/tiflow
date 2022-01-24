@@ -361,7 +361,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// file header with FormatDescriptionEvent and PreviousGTIDsEvent
-	events, data, err := g.GenFileHeader()
+	events, data, err := g.GenFileHeader(0)
 	c.Assert(err, check.IsNil)
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
@@ -369,7 +369,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	// CREATE DATABASE/TABLE
 	queries := []string{"CRATE DATABASE `db`", "CREATE TABLE `db`.`tbl` (c1 INT)"}
 	for _, query := range queries {
-		events, data, err = g.GenDDLEvents("db", query)
+		events, data, err = g.GenDDLEvents("db", query, 0)
 		c.Assert(err, check.IsNil)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
@@ -384,7 +384,7 @@ func (t *testFileWriterSuite) TestWriteMultiEvents(c *check.C) {
 	insertRows[0] = []interface{}{int32(1)}
 	events, data, err = g.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, []*event.DMLData{
 		{TableID: tableID, Schema: "db", Table: "tbl", ColumnType: columnType, Rows: insertRows},
-	})
+	}, 0)
 	c.Assert(err, check.IsNil)
 	allEvents = append(allEvents, events...)
 	allData.Write(data)

@@ -437,7 +437,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				return err
 			}
 		case task = <-in:
-
 			if task == nil {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Merger input channel closed, exiting",

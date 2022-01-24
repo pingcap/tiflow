@@ -385,7 +385,7 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 // checkDataDirSatisfied check if the data-dir meet the requirement during server running
 // the caller should guarantee that dir exist
 func checkDataDirSatisfied() error {
-	const dataDirAvailLowThreshold = 10 // percentage
+	const dataDirAvailLowThreshold = 1 // percentage
 
 	conf := config.GetGlobalServerConfig()
 	diskInfo, err := fsutil.GetDiskInfo(conf.DataDir)
