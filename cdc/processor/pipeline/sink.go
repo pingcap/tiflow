@@ -379,5 +379,11 @@ func (n *sinkNode) UpdateBarrierTs(ctx context.Context, ts model.Ts) error {
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
+	return n.ReleaseResource(ctx)
+}
+
+func (n *sinkNode) ReleaseResource(ctx context.Context) error {
+	n.status.Store(TableStatusStopped)
+	n.flowController.Abort()
 	return n.sink.Close(ctx)
 }

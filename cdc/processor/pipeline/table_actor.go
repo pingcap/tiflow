@@ -125,7 +125,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
-		table.stop(err)
+		table.stop(ctx, err)
 		return nil, errors.Trace(err)
 	}
 	err := vars.TableActorSystem.System().Spawn(mb, table)
@@ -151,12 +151,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		case message.TypeBarrier:
 			t.sortNode.UpdateBarrierTs(msgs[i].BarrierTs)
 			if err := t.sinkNode.UpdateBarrierTs(ctx, msgs[i].BarrierTs); err != nil {
-				t.stop(err)
+				t.stop(ctx, err)
 			}
 		case message.TypeTick:
 			_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
 			if err != nil {
-				t.stop(err)
+				t.stop(ctx, err)
 			}
 		case message.TypeStopSink:
 			// async stop the sink
@@ -165,11 +165,11 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 					pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
 				)
 				if err != nil {
-					t.stop(err)
+					t.stop(ctx, err)
 				}
 			}()
 		case message.TypeStop:
-			t.stop(nil)
+			t.stop(ctx, nil)
 			return false
 		}
 		// process message for each node
@@ -178,7 +178,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
 					zap.Int64("tableID", t.tableID), zap.Error(err))
-				t.stop(err)
+				t.stop(ctx, err)
 				break
 			}
 		}
@@ -283,15 +283,26 @@ func (t *tableActor) start(ctx context.Context) error {
 	return nil
 }
 
-func (t *tableActor) stop(err error) {
+func (t *tableActor) stop(ctx context.Context, err error) {
 	if t.stopped {
 		return
 	}
 	t.stopped = true
 	t.err = err
 	t.cancel()
+	t.sortNode.ReleaseResource(ctx, t.changefeedID, t.vars.CaptureInfo.AdvertiseAddr)
+	if err := t.sinkNode.ReleaseResource(ctx); err != nil {
+		log.Warn("close sink failed",
+			zap.String("changefeed", t.changefeedID),
+			zap.String("tableName", t.tableName),
+			zap.Error(err), zap.Error(t.err))
+		t.err = err
+	}
 	log.Info("table actor will be stopped",
-		zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
+		zap.String("changefeed", t.changefeedID),
+		zap.String("tableName", t.tableName),
+		zap.Int64("tableID", t.tableID),
+		zap.Error(err))
 }
 
 func (t *tableActor) checkError() {
