@@ -453,6 +453,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				// `resolvedTs` should be monotonically increasing, it's allowed to receive redandunt one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
@@ -621,7 +622,6 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			return err
 		}
 		if flushedResolvedTs {
-			log.Info("flush Row changed Events", zap.Int("partitionNo", sink.partitionNo), zap.Uint64("resolvedTs", resolvedTs))
 			return nil
 		}
 	}
