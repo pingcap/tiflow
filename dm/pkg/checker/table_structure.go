@@ -194,7 +194,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 			markCheckError(r, err)
 			return r
 		}
-		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
+		concurrency = int(math.Min(float64(concurrency), float64((maxConnections+1)/2)))
 	}
 
 	for i := 0; i < concurrency; i++ {
@@ -515,7 +515,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 			markCheckError(r, err)
 			return r
 		}
-		concurrency = int(math.Min(float64(concurrency), float64(maxConnections/2)))
+		concurrency = int(math.Min(float64(concurrency), float64((maxConnections+1)/2)))
 	}
 
 	for i := 0; i < concurrency; i++ {
