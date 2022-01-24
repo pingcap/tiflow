@@ -116,7 +116,7 @@ func (m *mockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.L().Info("OnWorkerOnline", zap.String("worker-id", string(worker.ID())))
+	log.L().Info("OnWorkerOnline", zap.Any("worker-id", worker.ID()))
 	m.onlineWorkerCount.Add(1)
 
 	args := m.Called(worker)

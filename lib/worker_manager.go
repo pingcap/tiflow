@@ -109,7 +109,7 @@ func (m *workerManagerImpl) Tick(
 		}
 		workerNodeID := workerInfo.NodeID
 		log.L().Debug("Sending heartbeat response to worker",
-			zap.String("worker-id", string(workerInfo.ID)),
+			zap.Any("worker-id", workerInfo.ID),
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
@@ -233,13 +233,13 @@ func (m *workerManagerImpl) addWorker(id WorkerID, exeuctorNodeID p2p.NodeID, st
 		// The worker with the ID already exists, so we just update the statusCode.
 		info, ok := m.getWorkerInfo(id)
 		if !ok {
-			log.L().Panic("unreachable", zap.String("worker-id", string(id)))
+			log.L().Panic("unreachable", zap.Any("worker-id", id))
 		}
 		if info.NodeID != exeuctorNodeID {
 			// We expect the worker ID to be globally unique, and the worker ID should
 			// change if a worker is recreated. So two workers with the same name on
 			// different executors are NOT POSSIBLE.
-			log.L().Panic("unreachable", zap.String("worker-id", string(id)))
+			log.L().Panic("unreachable", zap.Any("worker-id", id))
 		}
 		info.status.Code = statusCode
 	}

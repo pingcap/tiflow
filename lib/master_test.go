@@ -13,6 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
@@ -138,6 +139,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master := newMockMasterImpl("my-master")
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
+	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -148,7 +150,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		Task: &pb.TaskRequest{
 			Id: 0,
 		},
-		Cost: 10,
+		Cost: 100,
 	}}}
 	master.serverMasterClient.On(
 		"ScheduleTask",
@@ -178,14 +180,16 @@ func TestMasterCreateWorker(t *testing.T) {
 				TaskTypeId: int64(workerTypePlaceholder),
 				TaskConfig: configBytes,
 				MasterId:   "my-master",
+				WorkerId:   string(workerID1),
 			},
 		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
 		ErrorCode: 1,
-		WorkerId:  string(workerID1),
 	}}, nil)
 
-	err = master.CreateWorker(ctx, workerTypePlaceholder, &dummyConfig{param: 1})
+	master.uuidGen.(*uuid.MockGenerator).Push(string(workerID1))
+	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
 	require.NoError(t, err)
+	require.Equal(t, workerID1, workerID)
 
 	master.On("OnWorkerDispatched", mock.AnythingOfType("*lib.workerHandleImpl"), nil).Return(nil)
 	<-master.dispatchedWorkers
@@ -194,7 +198,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName), executorNodeID1, &HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
-		FromWorkerID: workerID1,
+		FromWorkerID: workerID,
 		Epoch:        master.BaseMaster.currentEpoch.Load(),
 	})
 	require.NoError(t, err)
@@ -209,5 +213,5 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	workerList := master.GetWorkers()
 	require.Len(t, workerList, 1)
-	require.Contains(t, workerList, workerID1)
+	require.Contains(t, workerList, workerID)
 }

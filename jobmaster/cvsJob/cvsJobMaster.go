@@ -62,7 +62,7 @@ func (jm *CVSJobMaster) InitImpl(ctx context.Context) error {
 		if err != nil {
 		}
 		// todo:createworker should return worker id
-		err = jm.CreateWorker(ctx, 2, bytes)
+		_, err = jm.CreateWorker(2, bytes, 10 /* TODO add cost */)
 		if err != nil {
 			// todo : handle the error case
 		}
