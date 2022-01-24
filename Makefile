@@ -142,7 +142,7 @@ integration_test_kafka: check_third_party_binary
 
 fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "gofmt (simplify)"
-	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	tools/bin/gofumports -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
 
@@ -222,7 +222,7 @@ tools/bin/errdoc-gen: tools/check/go.mod
 
 tools/bin/golangci-lint:
 	cd tools/check; test -e ../bin/golangci-lint || \
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.43.0
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b ../bin v1.30.0
 
 tools/bin/shfmt: tools/check/go.mod
 	cd tools/check; test -e ../bin/shfmt || \
