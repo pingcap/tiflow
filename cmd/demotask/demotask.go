@@ -15,7 +15,7 @@ import (
 
 const (
 	ADDRESS    = "127.0.0.1:1234"
-	BUFFERSIZE = 2
+	BUFFERSIZE = 20
 )
 
 type kv struct {
@@ -34,7 +34,6 @@ func NewDemoclient(serverAddr string) (*democlient, error) {
 		fmt.Printf("init the client  failed %v", err)
 		return &democlient{nil, nil}, err
 	}
-	// defer conn.Close()
 	buf := make(chan kv, BUFFERSIZE)
 	client := pb.NewDataRWServiceClient(conn)
 	demo := &democlient{cli: client, buffer: buf}
@@ -73,6 +72,7 @@ func (c *democlient) Receive(ctx context.Context, sources string) error {
 		linestr, err := reader.Recv()
 		if err != nil {
 			if err == io.EOF {
+				fmt.Printf("reach the end of the file %v \n", linestr.Linestr)
 				break
 			}
 			log.Fatal(err)
@@ -132,11 +132,12 @@ func main() {
 		fmt.Printf("no file found %v", err)
 		return
 	}
-	firstfile := strings.Split(files[0], "/")
-	fileName := destFolder + "/" + firstfile[len(firstfile)-1]
+	fmt.Println(files)
+
+	fileName := destFolder + "/" + files[0]
 	fmt.Printf("write the file  %v\n", fileName)
 	go func() {
-		err = client.Receive(ctx, files[0])
+		err = client.Receive(ctx, sourceFolder+"/"+files[0])
 		if err != nil {
 			fmt.Printf("error happened when receive data from upstream %v", err)
 		}

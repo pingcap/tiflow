@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -25,17 +25,20 @@ type strPair struct {
 
 type cvsTask struct {
 	*lib.BaseWorker
-	srcAddr strPair
-	dstAddr strPair
-	counter int64
-	status  lib.WorkerStatusCode
-	buffer  chan strPair
+	srcAddr  strPair
+	dstAddr  strPair
+	counter  int64
+	index    int64
+	status   lib.WorkerStatusCode
+	cancelFn func()
+	buffer   chan strPair
 }
 
-func NewCvsTask(src strPair, dst strPair) lib.WorkerImpl {
+func NewCvsTask(src strPair, dst strPair, startLoc int64) lib.WorkerImpl {
 	task := &cvsTask{}
 	task.Impl = task
 	task.srcAddr = src
+	task.index = startLoc
 	task.dstAddr = dst
 	task.counter = 0
 	task.buffer = make(chan strPair, BUFFERSIZE)
@@ -43,6 +46,7 @@ func NewCvsTask(src strPair, dst strPair) lib.WorkerImpl {
 }
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
+	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
@@ -82,6 +86,7 @@ func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
 func (task *cvsTask) CloseImpl() {
+	task.cancelFn()
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {
@@ -92,7 +97,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcAddr.secondStr})
+	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcAddr.secondStr, LineNo: task.index})
 	if err != nil {
 		log.L().Info("read data from file failed ", zap.Any("message", task.srcAddr.secondStr))
 		return err
