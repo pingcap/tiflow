@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -97,10 +98,6 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.Psw = cfg.To.Password
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
-	// tidb backend currently don't need following configs
-	// lightningCfg.TiDB.StatusPort = cfg.TiDB.StatusPort
-	// lightningCfg.TiDB.PdAddr = cfg.TiDB.PdAddr
-	// lightningCfg.TiDB.LogLevel = cfg.LogLevel
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
@@ -169,16 +166,40 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	return nil
 }
 
+func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.Config) error {
+	status, err := l.checkPointList.taskStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if status != lightningStatusRunning {
+		return nil
+	}
+	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = cpdb.Close()
+	}()
+	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
+}
+
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
+
+	// always try to skill all checkpoint errors so we can resume this phase.
+	err := l.ignoreCheckpointError(ctx, cfg)
+	if err != nil {
+		l.logger.Warn("check lightning checkpoint status failed, skip this error", log.ShortError(err))
+	}
 	if err := l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
 	log2.SetAppLogger(l.logger.Logger)
-	err := l.core.RunOnce(taskCtx, cfg, nil)
+	err = l.core.RunOnce(taskCtx, cfg, nil)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
