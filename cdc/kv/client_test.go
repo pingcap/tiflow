@@ -47,7 +47,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/testutils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
