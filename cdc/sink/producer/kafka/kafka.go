@@ -39,7 +39,7 @@ import (
 
 const defaultPartitionNum = 3
 
-// Config stores the Kafka configuration
+// Config stores user specified Kafka producer configuration
 type Config struct {
 	BrokerEndpoints []string
 	PartitionNum    int32
@@ -606,6 +606,11 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	// Time out in five minutes(600 * 500ms).
+	config.Producer.Retry.Max = 600
+	config.Producer.Retry.Backoff = 500 * time.Millisecond
+
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -621,10 +626,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
-
-	// Time out in five minutes(600 * 500ms).
-	config.Producer.Retry.Max = 600
-	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
 	// Time out in one minute(120 * 500ms).
 	config.Admin.Retry.Max = 120

@@ -20,6 +20,7 @@ function run() {
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
 		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 beacuse we inject BlockDDLJob(ddl) to sleep(1)
+		"github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -53,6 +54,11 @@ function run() {
 
 	check_metric $WORKER1_PORT 'dm_worker_task_state{source_id="mysql-replica-01",task="test",worker="worker1"}' 10 1 3
 	check_metric $WORKER2_PORT 'dm_worker_task_state{source_id="mysql-replica-02",task="test",worker="worker2"}' 10 1 3
+
+	# check dm_syncer_binlog_file is updated timely
+	run_sql_source1 "flush logs;"
+	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="syncer",source_id="mysql-replica-01",task="test"}' 10 1 3
+	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="master",source_id="mysql-replica-01",task="test"}' 10 1 3
 
 	# check ddl job lag
 	run_sql_source1 "alter table metrics.t1 add column new_col1 int;"

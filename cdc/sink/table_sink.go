@@ -39,6 +39,8 @@ func (t *tableSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTab
 	return nil
 }
 
+var _ Sink = (*tableSink)(nil)
+
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
@@ -56,7 +58,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	// Log abnormal checkpoint that is large than resolved ts.
 	logAbnormalCheckpoint := func(ckpt uint64) {
 		if ckpt > resolvedTs {
@@ -76,7 +78,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		if err != nil {
 			return ckpt, err
 		}
-		ckpt, err = t.manager.flushBackendSink(ctx)
+		ckpt, err = t.manager.flushBackendSink(ctx, tableID)
 		if err != nil {
 			return ckpt, err
 		}
@@ -88,14 +90,14 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(), errors.Trace(err)
+		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
 	ckpt, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
 		return ckpt, err
 	}
-	ckpt, err = t.manager.flushBackendSink(ctx)
+	ckpt, err = t.manager.flushBackendSink(ctx, tableID)
 	if err != nil {
 		return ckpt, err
 	}
@@ -107,7 +109,7 @@ func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint6
 	if t.redoManager.Enabled() {
 		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
 		if err != nil {
-			return t.manager.getCheckpointTs(), err
+			return t.manager.getCheckpointTs(t.tableID), err
 		}
 	}
 	return 0, nil
@@ -132,12 +134,12 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-// Note once the Close is called, no more events can be written to this table sink
+// Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }
 
 // Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context) error {
+func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

@@ -500,6 +500,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			release()
 		}
 
+		go s.scheduler.TryResolveLoadTask(sources)
+
 		resp.Result = true
 		if cfg.RemoveMeta {
 			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"

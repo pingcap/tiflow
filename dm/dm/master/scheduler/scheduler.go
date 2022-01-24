@@ -2269,14 +2269,54 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 	return "", ""
 }
 
-// hasLoadTaskByWorkerAndSource check whether there is a load subtask for the worker and source.
+// hasLoadTaskByWorkerAndSource check whether there is an existing load subtask for the worker and source.
 func (s *Scheduler) hasLoadTaskByWorkerAndSource(worker, source string) bool {
-	for _, sourceWorkerMap := range s.loadTasks {
-		if workerName, ok := sourceWorkerMap[source]; ok && workerName == worker {
+	for taskName, sourceWorkerMap := range s.loadTasks {
+		// don't consider removed subtask
+		subtasksV, ok := s.subTaskCfgs.Load(taskName)
+		if !ok {
+			continue
+		}
+		subtasks := subtasksV.(map[string]config.SubTaskConfig)
+		if _, ok2 := subtasks[source]; !ok2 {
+			continue
+		}
+
+		if workerName, ok2 := sourceWorkerMap[source]; ok2 && workerName == worker {
 			return true
 		}
 	}
 	return false
+}
+
+// TryResolveLoadTask checks if there are sources whose load task has local files and not bound to the worker which is
+// accessible to the local files. If so, trigger a transfer source.
+func (s *Scheduler) TryResolveLoadTask(sources []string) {
+	for _, source := range sources {
+		s.mu.Lock()
+		worker, ok := s.bounds[source]
+		if !ok {
+			s.mu.Unlock()
+			continue
+		}
+		if err := s.tryResolveLoadTask(worker.baseInfo.Name, source); err != nil {
+			s.logger.Error("tryResolveLoadTask failed", zap.Error(err))
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (s *Scheduler) tryResolveLoadTask(originWorker, originSource string) error {
+	if s.hasLoadTaskByWorkerAndSource(originWorker, originSource) {
+		return nil
+	}
+
+	worker, source := s.getNextLoadTaskTransfer(originWorker, originSource)
+	if worker == "" && source == "" {
+		return nil
+	}
+
+	return s.transferWorkerAndSource(originWorker, originSource, worker, source)
 }
 
 func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
@@ -2296,16 +2336,7 @@ func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
 		delete(s.loadTasks, loadTask.Task)
 	}
 
-	if s.hasLoadTaskByWorkerAndSource(originWorker, loadTask.Source) {
-		return nil
-	}
-
-	worker, source := s.getNextLoadTaskTransfer(originWorker, loadTask.Source)
-	if worker == "" && source == "" {
-		return nil
-	}
-
-	return s.transferWorkerAndSource(originWorker, loadTask.Source, worker, source)
+	return s.tryResolveLoadTask(originWorker, loadTask.Source)
 }
 
 func (s *Scheduler) handleLoadTaskPut(loadTask ha.LoadTask) {
