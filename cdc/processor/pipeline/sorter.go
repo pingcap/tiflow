@@ -141,14 +141,6 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 		return nil
 	})
 	n.eg.Go(func() error {
-		// Since the flowController is implemented by `Cond`, it is not cancelable
-		// by a context. We need to listen on cancellation and aborts the flowController
-		// manually.
-		<-stdCtx.Done()
-		n.flowController.Abort()
-		return nil
-	})
-	n.eg.Go(func() error {
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
@@ -314,6 +306,10 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
+	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
+	// the flowController will be blocked in a background goroutine,
+	// We need to abort the flowController manually in the nodeRunner
+	n.flowController.Abort()
 	return n.eg.Wait()
 }
 
