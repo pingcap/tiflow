@@ -420,7 +420,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 }
 
 // [NOTICE]: I concern this ut may cost too much time when resource limit
-func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
+func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -737,76 +737,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cancel()
 }
 
-// TestClusterIDMismatch tests kv client returns an error when TiKV returns
-// the cluster ID mismatch error.
-func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := &sync.WaitGroup{}
-
-	changeDataCh := make(chan *cdcpb.ChangeDataEvent, 10)
-	changeDataService := newMockChangeDataService(c, changeDataCh)
-	mockService, addr := newMockService(ctx, c, changeDataService, wg)
-	defer func() {
-		close(changeDataCh)
-		mockService.Stop()
-		wg.Wait()
-	}()
-
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", mockcopr.NewCoprRPCHandler())
-	c.Assert(err, check.IsNil)
-
-	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
-	c.Assert(err, check.IsNil)
-	defer kvStorage.Close() //nolint:errcheck
-
-	cluster.AddStore(1, addr)
-	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
-
-	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
-	isPullInit := &mockPullerInit{}
-
-	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, "")
-	eventCh := make(chan model.RegionFeedEvent, 50)
-
-	var wg2 sync.WaitGroup
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
-		c.Assert(cerror.ErrClusterIDMismatch.Equal(err), check.IsTrue)
-	}()
-
-	// wait request id allocated with: new session, new request
-	waitRequestID(c, baseAllocatedID+1)
-	clusterIDMismatchEvent := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
-		{
-			RegionId:  3,
-			RequestId: currentRequestID(),
-			Event: &cdcpb.Event_Error{
-				Error: &cdcpb.Error{
-					ClusterIdMismatch: &cdcpb.ClusterIDMismatch{
-						Current: 0,
-						Request: 1,
-					},
-				},
-			},
-		},
-	}}
-
-	changeDataCh <- clusterIDMismatchEvent
-
-	wg2.Wait()
-	cancel()
-}
-
-func (s *clientSuite) testHandleFeedEvent(c *check.C) {
+func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -3306,7 +3237,7 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 // TestRegionWorkerExitWhenIsIdle tests region worker can exit, and cancel gRPC
 // stream automatically when it is idle.
 // Idle means having no any effective region state
-func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
+func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 
