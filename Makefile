@@ -146,7 +146,6 @@ fmt: tools/bin/gofumports tools/bin/shfmt
 	@echo "run shfmt"
 	tools/bin/shfmt -d -w .
 
-
 lint: tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
@@ -197,7 +196,7 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs tests
+	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
