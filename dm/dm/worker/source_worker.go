@@ -1163,9 +1163,6 @@ func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha
 				closed = true
 				break
 			}
-			// TODO right now stage = start/stop has same meaning as subtask, but we are refactoring stage logic
-			// to make it nearly same as resume/pause.
-			// We are implementing using old meaning, so need to change here to support new stage state after the refactor.
 			log.L().Info("receive validator stage change", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted))
 			err := w.operateValidatorStage(stage)
 			if err != nil {
