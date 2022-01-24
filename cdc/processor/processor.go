@@ -52,13 +52,36 @@ const (
 	maxTries             = 3
 )
 
+// ┌───────────────┐          ┌─────────────────────┐          ┌────────────────┐          ┌────────────────┐
+// │processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
+// └───────┬───────┘          └──────────┬──────────┘          └───────┬────────┘          └───────┬────────┘
+// 		   │                             │                             │                           │
+// 		   │ ─ ─ ─ ─ new sink ─  ─ ─ ─ ─>│                             │                           │
+// 		   │                             │                             │                           │
+// 		   │                             │                             │                           │
+// 		   │                             │─ sink fully initialized ───>│                           │
+// 		   │                             │                             │                           │
+// 		   │                             │                             │                           │
+// 		   │                             │                             │ ───── close the sink ─────>
+// 		   │                             │                             │                           │
+// 		   │                             │                             │                           │
+// 		   │<────────────────────────────── sink fully closed ─────────────────────────────────────│
+// ┌───────┴───────┐          ┌──────────┴──────────┐          ┌───────┴────────┐          ┌───────┴────────┐
+// │processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
+// └───────────────┘          └─────────────────────┘          └────────────────┘          └────────────────┘
+
+// processorRunningStatus indicate the LifeCycle of the current processor.
 type processorRunningStatus int
 
 const (
+	// `processorClosed` if the sink is fully closed.
 	processorClosed processorRunningStatus = iota
-	processorRunning
-	processorClosing
+	// `processorInitializing` if try to initialize the sink.
 	processorInitializing
+	// `processorRunning` if the sink is fully initialized.
+	processorRunning
+	// `processorClosing` if the sink is closing
+	processorClosing
 )
 
 type processor struct {
