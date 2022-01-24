@@ -151,7 +151,7 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 	c.Assert(state.Status, check.NotNil)
 	c.Assert(state.TaskStatuses, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
 
-	// test clean the meta data of offline capture
+	// test clean the metadata of offline capture
 	offlineCaputreID := "offline-capture"
 	state.PatchTaskStatus(offlineCaputreID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return new(model.TaskStatus), true, nil
@@ -173,19 +173,24 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 	c.Assert(state.Workloads, check.Not(check.HasKey), offlineCaputreID)
 }
 
-func (s *changefeedSuite) TestInitialize(c *check.C) {
+func (s *changefeedSuite) TestRunningStatusLifeCycle(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, state, captures, tester := createChangefeed4Test(ctx, c)
-	defer cf.Close(ctx)
+
 	// pre check
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 
-	// initialize
+	// initialize the changefeed
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
+	c.Assert(cf.runningStatus, check.Equals, changeFeedRunning)
+
+	// close the changefeed
+	cf.Close(ctx)
+	c.Assert(cf.runningStatus, check.Equals, changeFeedClosing)
 }
 
 func (s *changefeedSuite) TestHandleError(c *check.C) {

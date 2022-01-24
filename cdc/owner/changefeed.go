@@ -177,6 +177,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	// it could be in `changeFeedClosing`, we would not continue the changefeed.
+	// todo: `changeFeedClosing` 如果耗时太长，遇到了 gcttl，如何处理？
 	if c.runningStatus == changeFeedClosing {
 		// since the sink is close in an asynchronous way,
 		// we have to check whether the sink is fully closed or not.
