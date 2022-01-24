@@ -77,7 +77,7 @@ func (o *incompatibilityOption) String() string {
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
 	dbs      map[string]*sql.DB
-	tableMap map[string][]*filter.Table
+	tableMap map[string][]*filter.Table //
 }
 
 // NewTablesChecker returns a RealChecker.
@@ -102,11 +102,11 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		inCh          = make(chan *checkItem, maxThreadNum)
 		checkWg       sync.WaitGroup
 		reMu          sync.Mutex
-		firstInstance string
+		firstSourceID string
 	)
 
-	for instance := range c.tableMap {
-		firstInstance = instance
+	for sourceID := range c.tableMap {
+		firstSourceID = sourceID
 		break
 	}
 
@@ -115,8 +115,8 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	checkFunc := func() {
 		defer checkWg.Done()
-		instance := firstInstance
-		p, err := dbutil.GetParserForDB(ctx, c.dbs[instance])
+		sourceID := firstSourceID
+		p, err := dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 		if err != nil {
 			reMu.Lock()
 			markCheckError(r, err)
@@ -132,9 +132,9 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 					return
 				}
 				table := checkItem.table
-				if instance != checkItem.sourceID {
-					instance = checkItem.sourceID
-					p, err = dbutil.GetParserForDB(ctx, c.dbs[instance])
+				if sourceID != checkItem.sourceID {
+					sourceID = checkItem.sourceID
+					p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 					if err != nil {
 						reMu.Lock()
 						markCheckError(r, err)
@@ -183,10 +183,10 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	concurrency := maxThreadNum
-	for instance := range c.tableMap {
-		db, ok := c.dbs[instance]
+	for sourceID := range c.tableMap {
+		db, ok := c.dbs[sourceID]
 		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			markCheckError(r, errors.NotFoundf("client for sourceID %s", sourceID))
 			return r
 		}
 		maxConnections, err := utils.GetMaxConnections(ctx, db)
@@ -339,7 +339,7 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 type ShardingTablesChecker struct {
 	targetTableID                string
 	dbs                          map[string]*sql.DB
-	tableMap                     map[string][]*filter.Table // instance => {[table1, table2, ...]}
+	tableMap                     map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
 	mapping                      map[string]*column.Mapping
 	checkAutoIncrementPrimaryKey bool
 }
@@ -369,30 +369,30 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	var (
 		stmtNode      *ast.CreateTableStmt
 		firstTable    *filter.Table
-		firstInstance string
+		firstSourceID string
 		inCh          = make(chan *checkItem, maxThreadNum)
 		checkWg       sync.WaitGroup
 		reMu          sync.Mutex
 	)
 
-	for instance, tables := range c.tableMap {
-		firstInstance = instance
+	for sourceID, tables := range c.tableMap {
+		firstSourceID = sourceID
 		firstTable = tables[0]
 		break
 	}
-	db, ok := c.dbs[firstInstance]
+	db, ok := c.dbs[firstSourceID]
 	if !ok {
-		markCheckError(r, errors.NotFoundf("client for instance %s", firstInstance))
+		markCheckError(r, errors.NotFoundf("client for sourceID %s", firstSourceID))
 		return r
 	}
 
 	parser2, err := dbutil.GetParserForDB(ctx, db)
 	if err != nil {
-		r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", firstInstance, c.targetTableID)
+		r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", firstSourceID, c.targetTableID)
 		markCheckError(r, err)
 		return r
 	}
-	r.Extra = fmt.Sprintf("instance %s on sharding %s", firstInstance, c.targetTableID)
+	r.Extra = fmt.Sprintf("sourceID %s on sharding %s", firstSourceID, c.targetTableID)
 	statement, err := dbutil.GetCreateTableSQL(ctx, db, firstTable.Schema, firstTable.Name)
 	if err != nil {
 		markCheckError(r, err)
@@ -416,7 +416,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	checkFunc := func() {
 		var (
-			instance = firstInstance
+			sourceID = firstSourceID
 			p        *parser.Parser
 			err      error
 		)
@@ -429,7 +429,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				reMu.Unlock()
 			}
 		}()
-		p, err = dbutil.GetParserForDB(ctx, c.dbs[instance])
+		p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 		if err != nil {
 			return
 		}
@@ -443,19 +443,19 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				}
 				table := checkItem.table
 				var err2 error
-				if instance != checkItem.sourceID {
-					instance = checkItem.sourceID
-					p, err2 = dbutil.GetParserForDB(ctx, c.dbs[instance])
+				if sourceID != checkItem.sourceID {
+					sourceID = checkItem.sourceID
+					p, err2 = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 					if err2 != nil {
 						reMu.Lock()
-						r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+						r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
 						reMu.Unlock()
 						err = err2
 						return
 					}
 				}
 
-				statement, err2 := dbutil.GetCreateTableSQL(ctx, c.dbs[instance], table.Schema, table.Name)
+				statement, err2 := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
 				if err2 != nil {
 					// continue if table was deleted when checking
 					if isMySQLError(err2, mysql.ErrNoSuchTable) {
@@ -483,13 +483,13 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				}
 
 				if c.checkAutoIncrementPrimaryKey {
-					passed := c.checkAutoIncrementKey(instance, table.Schema, table.Name, ctStmt, info, r)
+					passed := c.checkAutoIncrementKey(sourceID, table.Schema, table.Name, ctStmt, info, r)
 					if !passed {
 						return
 					}
 				}
 
-				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable.String(), table.String(), firstInstance, instance)
+				checkErr := c.checkConsistency(stmtNode, ctStmt, firstTable.String(), table.String(), firstSourceID, sourceID)
 				if checkErr != nil {
 					reMu.Lock()
 					r.State = StateFailure
@@ -504,10 +504,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	concurrency := maxThreadNum
-	for instance := range c.tableMap {
-		db, ok := c.dbs[instance]
+	for sourceID := range c.tableMap {
+		db, ok := c.dbs[sourceID]
 		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			markCheckError(r, errors.NotFoundf("client for sourceID %s", sourceID))
 			return r
 		}
 		maxConnections, err := utils.GetMaxConnections(ctx, db)
@@ -524,10 +524,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 outer:
-	for instance, tables := range c.tableMap {
+	for sourceID, tables := range c.tableMap {
 		for _, table := range tables {
 			select {
-			case inCh <- &checkItem{table, instance}:
+			case inCh <- &checkItem{table, sourceID}:
 			case <-checkCtx.Done():
 				log.L().Logger.Warn("ctx canceled before input tables completely")
 				break outer
@@ -541,11 +541,11 @@ outer:
 	return r
 }
 
-func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {
+func (c *ShardingTablesChecker) checkAutoIncrementKey(sourceID, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {
 	autoIncrementKeys := c.findAutoIncrementKey(ctStmt, info)
 	for columnName, isBigInt := range autoIncrementKeys {
 		hasMatchedRule := false
-		if cm, ok1 := c.mapping[instance]; ok1 {
+		if cm, ok1 := c.mapping[sourceID]; ok1 {
 			ruleSet := cm.Selector.Match(schema, table)
 			for _, rule := range ruleSet {
 				r, ok2 := rule.(*column.Rule)
@@ -561,7 +561,7 @@ func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table st
 
 			if hasMatchedRule && !isBigInt {
 				r.State = StateFailure
-				r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.targetTableID, columnName, columnName))
+				r.Errors = append(r.Errors, NewError("sourceID %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", sourceID, schema, table, c.targetTableID, columnName, columnName))
 				r.Instruction = "please set auto-increment key type to bigint"
 				r.Extra = AutoIncrementKeyChecking
 				return false
@@ -570,7 +570,7 @@ func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table st
 
 		if !hasMatchedRule {
 			r.State = StateFailure
-			r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.targetTableID, columnName, columnName))
+			r.Errors = append(r.Errors, NewError("sourceID %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", sourceID, schema, table, c.targetTableID, columnName, columnName))
 			r.Instruction = "please handle it by yourself"
 			r.Extra = AutoIncrementKeyChecking
 			return false
@@ -650,7 +650,7 @@ func (cs briefColumnInfos) String() string {
 	return strings.Join(colStrs, "\n")
 }
 
-func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStmt, selfTable, otherTable, selfInstance, otherInstance string) *Error {
+func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStmt, selfTable, otherTable, selfsourceID, othersourceID string) *Error {
 	selfColumnList := getBriefColumnList(self)
 	otherColumnList := getBriefColumnList(other)
 
@@ -663,16 +663,16 @@ func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStm
 			}
 			return ret
 		}
-		e.Self = fmt.Sprintf("instance %s table %s columns %v", selfInstance, selfTable, getColumnNames(selfColumnList))
-		e.Other = fmt.Sprintf("instance %s table %s columns %v", otherInstance, otherTable, getColumnNames(otherColumnList))
+		e.Self = fmt.Sprintf("sourceID %s table %s columns %v", selfsourceID, selfTable, getColumnNames(selfColumnList))
+		e.Other = fmt.Sprintf("sourceID %s table %s columns %v", othersourceID, otherTable, getColumnNames(otherColumnList))
 		return e
 	}
 
 	for i := range selfColumnList {
 		if *selfColumnList[i] != *otherColumnList[i] {
 			e := NewError("different column definition")
-			e.Self = fmt.Sprintf("instance %s table %s column %s", selfInstance, selfTable, selfColumnList[i])
-			e.Other = fmt.Sprintf("instance %s table %s column %s", otherInstance, otherTable, otherColumnList[i])
+			e.Self = fmt.Sprintf("sourceID %s table %s column %s", selfsourceID, selfTable, selfColumnList[i])
+			e.Other = fmt.Sprintf("sourceID %s table %s column %s", othersourceID, otherTable, otherColumnList[i])
 			return e
 		}
 	}
