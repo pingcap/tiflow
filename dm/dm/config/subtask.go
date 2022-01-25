@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
@@ -174,37 +173,6 @@ func GetDBConfigForTest() DBConfig {
 	return DBConfig{Host: "localhost", User: "root", Password: "not a real password", Port: 3306}
 }
 
-// TiDBExtraConfig is the extra DB configuration only for TiDB.
-type TiDBExtraConfig struct {
-	StatusPort int    `toml:"status-port" json:"status-port" yaml:"status-port"`
-	PdAddr     string `toml:"pd-addr" json:"pd-addr" yaml:"pd-addr"`
-	Backend    string `toml:"backend" json:"backend" yaml:"backend"`
-}
-
-func (db *TiDBExtraConfig) String() string {
-	cfg, err := json.Marshal(db)
-	if err != nil {
-		log.L().Error("fail to marshal config to json", log.ShortError(err))
-	}
-	return string(cfg)
-}
-
-// Toml returns TOML format representation of config.
-func (db *TiDBExtraConfig) Toml() (string, error) {
-	var b bytes.Buffer
-	enc := toml.NewEncoder(&b)
-	if err := enc.Encode(db); err != nil {
-		return "", terror.ErrConfigTomlTransform.Delegate(err, "encode db config to toml")
-	}
-	return b.String(), nil
-}
-
-// Decode loads config from file data.
-func (db *TiDBExtraConfig) Decode(data string) error {
-	_, err := toml.Decode(data, db)
-	return terror.ErrConfigTomlTransform.Delegate(err, "decode db config")
-}
-
 // SubTaskConfig is the configuration for SubTask.
 type SubTaskConfig struct {
 	// BurntSushi/toml seems have a bug for flag "-"
@@ -256,10 +224,9 @@ type SubTaskConfig struct {
 	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// UseRelay get value from dm-worker's relayEnabled
-	UseRelay bool            `toml:"use-relay" json:"use-relay"`
-	From     DBConfig        `toml:"from" json:"from"`
-	To       DBConfig        `toml:"to" json:"to"`
-	TiDB     TiDBExtraConfig `toml:"tidb" json:"tidb"`
+	UseRelay bool     `toml:"use-relay" json:"use-relay"`
+	From     DBConfig `toml:"from" json:"from"`
+	To       DBConfig `toml:"to" json:"to"`
 
 	RouteRules         []*router.TableRule   `toml:"route-rules" json:"route-rules"`
 	FilterRules        []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
@@ -469,11 +436,11 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigInvalidChunkFileSize.Generate(c.MydumperConfig.ChunkFilesize)
 	}
 
-	if c.TiDB.Backend != "" && c.TiDB.Backend != lcfg.BackendLocal && c.TiDB.Backend != lcfg.BackendTiDB {
-		return terror.ErrLoadBackendNotSupport.Generate(c.TiDB.Backend)
-	}
 	if _, err := bf.NewBinlogEvent(c.CaseSensitive, c.FilterRules); err != nil {
 		return terror.ErrConfigBinlogEventFilter.Delegate(err)
+	}
+	if err := c.LoaderConfig.adjust(); err != nil {
+		return err
 	}
 
 	// TODO: check every member
@@ -558,5 +525,5 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 
 // NeedUseLightning returns whether need to use lightning loader.
 func (c *SubTaskConfig) NeedUseLightning() bool {
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.TiDB.Backend != ""
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode == LoadModeSQL
 }
