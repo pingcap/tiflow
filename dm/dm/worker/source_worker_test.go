@@ -397,8 +397,7 @@ func (t *testWorkerFunctionalities) testEnableHandleSubtasks(c *C, w *SourceWork
 	c.Assert(w.EnableHandleSubtasks(), IsNil)
 	c.Assert(w.subTaskEnabled.Load(), IsTrue)
 
-	_, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	_, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return w.subTaskHolder.findSubTask(subtaskCfg.Name) != nil
@@ -481,11 +480,10 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
-	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 	rev, err := ha.DeleteSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name)})
+		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 	// step 2.1: start a subtask manually
 	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
@@ -516,8 +514,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 		return w.subTaskHolder.findSubTask(subtaskCfg.Name) == nil
 	}), IsTrue)
 	// step 4.2: add a new subtask stage, worker should receive and start it
-	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return w.subTaskHolder.findSubTask(subtaskCfg.Name) != nil
@@ -602,13 +599,12 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
-	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
 
 	// increase revision
 	_, err = etcdCli.Put(context.Background(), "/dummy-key", "value")
 	c.Assert(err, IsNil)
-	rev, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	rev, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 
 	//

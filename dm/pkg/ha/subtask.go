@@ -17,11 +17,9 @@ import (
 	"context"
 
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -100,28 +98,26 @@ func deleteSubTaskCfgOp(cfgs ...config.SubTaskConfig) []clientv3.Op {
 	return ops
 }
 
-func genSubtaskValidatorOps(cfgs []config.SubTaskConfig, evType mvccpb.Event_EventType) ([]clientv3.Op, error) {
-	ops := make([]clientv3.Op, 0, len(cfgs))
-	for _, cfg := range cfgs {
-		key := common.StageValidatorKeyAdapter.Encode(cfg.SourceID, cfg.Name)
-
-		switch evType {
-		case mvccpb.PUT:
-			// no need to put validator stage if it's not None
-			if cfg.ValidatorCfg.Mode == config.ValidationNone {
-				continue
-			}
-			stage := NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name)
-			value, err := stage.toJSON()
-			if err != nil {
-				return nil, err
-			}
-			ops = append(ops, clientv3.OpPut(key, value))
-		case mvccpb.DELETE:
-			ops = append(ops, clientv3.OpDelete(key))
+func putValidatorStageOps(stages ...Stage) ([]clientv3.Op, error) {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		value, err := stage.toJSON()
+		if err != nil {
+			return nil, err
 		}
+		ops = append(ops, clientv3.OpPut(key, value))
 	}
 	return ops, nil
+}
+
+func deleteValidatorStageOps(stages ...Stage) []clientv3.Op {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		ops = append(ops, clientv3.OpDelete(key))
+	}
+	return ops
 }
 
 func subTaskCfgFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]config.SubTaskConfig, error) {

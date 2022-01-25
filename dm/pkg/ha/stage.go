@@ -214,10 +214,14 @@ func GetValidatorStage(cli *clientv3.Client, source, task string) (map[string]St
 // GetAllSubTaskStage gets all subtask stages.
 // k/v: source ID -> task name -> subtask stage.
 func GetAllSubTaskStage(cli *clientv3.Client) (map[string]map[string]Stage, int64, error) {
+	return getAllStagesInner(cli, common.StageSubTaskKeyAdapter)
+}
+
+func getAllStagesInner(cli *clientv3.Client, key common.KeyAdapter) (map[string]map[string]Stage, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Get(ctx, common.StageSubTaskKeyAdapter.Path(), clientv3.WithPrefix())
+	resp, err := cli.Get(ctx, key.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -228,6 +232,10 @@ func GetAllSubTaskStage(cli *clientv3.Client) (map[string]map[string]Stage, int6
 	}
 
 	return stages, resp.Header.Revision, nil
+}
+
+func GetAllValidatorStage(cli *clientv3.Client) (map[string]map[string]Stage, int64, error) {
+	return getAllStagesInner(cli, common.StageValidatorKeyAdapter)
 }
 
 // GetSubTaskStageConfig gets source's subtask stages and configs at the same time

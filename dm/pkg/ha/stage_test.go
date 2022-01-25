@@ -231,7 +231,7 @@ func (t *testForEtcd) TestGetSubTaskStageConfigEtcd(c *C) {
 	c.Assert(scm, HasLen, 0)
 
 	// put subtask config and stage at the same time
-	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg}, []Stage{stage})
+	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg}, []Stage{stage}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 
