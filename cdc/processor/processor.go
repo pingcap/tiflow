@@ -503,6 +503,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	case processorRunning, processorClosing:
 		return nil
 	case processorInitializing:
+		if err := p.handleErrorCh(ctx); err != nil {
+			log.Info("processor initializing failed",
+				zap.String("changefeed", p.changefeedID),
+				zap.Error(err))
+			return errors.Trace(err)
+		}
 		select {
 		case <-p.sinkRunningCh:
 			p.runningStatus = processorRunning
