@@ -335,3 +335,11 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedArgs, args)
 	}
 }
+
+func TestValuesHolder(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "()", valuesHolder(0))
+	require.Equal(t, "(?)", valuesHolder(1))
+	require.Equal(t, "(?,?)", valuesHolder(2))
+}

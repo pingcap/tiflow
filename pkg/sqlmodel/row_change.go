@@ -247,7 +247,6 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 }
 
 // valuesHolder gens values holder like (?,?,?).
-// n must be greater or equal than 1, or the function will panic.
 func valuesHolder(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 3)
