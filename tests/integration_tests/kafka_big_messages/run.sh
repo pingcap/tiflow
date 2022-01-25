@@ -34,7 +34,7 @@ function run() {
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/big-message-test?protocol=open-protocol&partition-num=1&version=${KAFKA_VERSION}"
 
 	echo "Starting generate kafka big messages..."
-	cd $CUR/../../utils/gen_kafka_big_messages
+	cd $CUR/../../../testing_utils/gen_kafka_big_messages
 	if [ ! -f ./gen_kafka_big_messages ]; then
 		GO111MODULE=on go build
 	fi
