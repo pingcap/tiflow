@@ -255,8 +255,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func isRetryableError(err error) bool {
-	return cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) ||
-		errors.Cause(err) == context.DeadlineExceeded
+	err = errors.Cause(err)
+	return cerrors.ErrEtcdTryAgain.Equal(err) ||
+		cerrors.ErrReachMaxTry.Equal(err) ||
+		context.DeadlineExceeded == err
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
