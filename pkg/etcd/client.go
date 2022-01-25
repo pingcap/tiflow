@@ -193,7 +193,10 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	lastRevision := getRevisionFromWatchOpts(opts...)
 
 	watchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	defer func() {
+		// Using closures to handle changes to the cancel function
+		cancel()
+	}()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
@@ -203,7 +206,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	for {
 		select {
 		case <-ctx.Done():
-			cancel()
 			return
 		case response := <-watchCh:
 			lastReceivedResponseTime = c.clock.Now()
@@ -217,7 +219,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			for {
 				select {
 				case <-ctx.Done():
-					cancel()
 					return
 				case outCh <- response: // it may block here
 					break Loop
@@ -243,6 +244,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 					zap.String("role", role))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
+				// to avoid possible context leak warning from govet
+				_ = cancel
 				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()

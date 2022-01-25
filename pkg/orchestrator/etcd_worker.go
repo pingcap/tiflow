@@ -206,6 +206,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// Here we have some patches yet to be uploaded to Etcd.
 			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
 			if err != nil {
+				// etcd client 报错为 ErrTimeoutDueToLeaderFail 时也应该 continue 重试
 				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
 					continue
 				}
