@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -38,10 +37,10 @@ type DataValidator struct {
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
 
-	started atomic.Bool
-	wg      sync.WaitGroup
-	ctx     context.Context
-	cancel  context.CancelFunc
+	stage  pb.Stage
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	L                  log.Logger
 	fromDB             *conn.BaseDB
@@ -56,6 +55,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	c := &DataValidator{
 		cfg:    cfg,
 		syncer: syncerObj,
+		stage:  pb.Stage_Stopped,
 	}
 	c.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 	return c
@@ -95,11 +95,11 @@ func (v *DataValidator) initialize() error {
 	return nil
 }
 
-func (v *DataValidator) Start() {
+func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 
-	if v.started.Load() {
+	if v.stage == pb.Stage_Running {
 		v.L.Info("already started")
 		return
 	}
@@ -111,10 +111,14 @@ func (v *DataValidator) Start() {
 		return
 	}
 
+	if expect != pb.Stage_Running {
+		return
+	}
+
 	v.wg.Add(1)
 	go v.doValidate()
 
-	v.started.Store(true)
+	v.stage = pb.Stage_Running
 }
 
 func (v *DataValidator) fillResult(err error, needLock bool) {
@@ -160,7 +164,7 @@ func (v *DataValidator) doValidate() {
 func (v *DataValidator) Stop() {
 	v.Lock()
 	defer v.Unlock()
-	if !v.started.Load() {
+	if v.stage != pb.Stage_Running {
 		v.L.Warn("not started")
 		return
 	}
@@ -172,9 +176,17 @@ func (v *DataValidator) Stop() {
 		v.cancel()
 	}
 	v.wg.Wait()
-	v.started.Store(false)
+	v.stage = pb.Stage_Stopped
 }
 
 func (v *DataValidator) Started() bool {
-	return v.started.Load()
+	v.Lock()
+	defer v.Unlock()
+	return v.stage == pb.Stage_Running
+}
+
+func (v *DataValidator) Stage() pb.Stage {
+	v.Lock()
+	defer v.Unlock()
+	return v.stage
 }

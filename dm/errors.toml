@@ -1102,6 +1102,18 @@ description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 tags = ["internal", "medium"]
 
+[error.DM-config-20053]
+message = "invalid validation mode"
+description = ""
+workaround = "Please check `validation-mode` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20054]
+message = "mysql-instance(%d)'s continuous validator config %s not exist"
+description = ""
+workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

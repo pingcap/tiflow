@@ -101,7 +101,7 @@ func (t *testServer) testWorker(c *C) {
 
 	c.Assert(w.StartSubTask(&config.SubTaskConfig{
 		Name: "testStartTask",
-	}, pb.Stage_Running, true), IsNil)
+	}, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
 	task := w.subTaskHolder.findSubTask("testStartTask")
 	c.Assert(task, NotNil)
 	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
@@ -199,7 +199,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
 	subtaskCfg.Timezone = "UTC"
-	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
 
 	// check task in paused state
 	c.Assert(utils.WaitSomething(100, 100*time.Millisecond, func() bool {
@@ -487,7 +487,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 	// step 2.1: start a subtask manually
-	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
 	// step 3: trigger etcd compaction and check whether we can receive it through watcher
 	_, err = etcdCli.Compact(ctx, rev)
 	c.Assert(err, IsNil)
@@ -610,7 +610,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 
 	//
 	// step 2.1: start a subtask manually
-	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
 
 	//
 	// step 3: trigger etcd compaction and check whether we can receive it through watcher

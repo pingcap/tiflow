@@ -208,7 +208,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 
 // Run runs the sub task.
 // TODO: check concurrent problems.
-func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
+func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, relay relay.Process) {
 	if st.Stage() == pb.Stage_Finished || st.Stage() == pb.Stage_Running {
 		st.l.Warn("prepare to run a subtask with invalid stage",
 			zap.Stringer("current stage", st.Stage()),
@@ -222,7 +222,7 @@ func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
 		return
 	}
 
-	st.StartValidator()
+	st.StartValidator(expectValidatorStage)
 
 	if expectStage == pb.Stage_Running {
 		st.run()
@@ -254,7 +254,7 @@ func (st *SubTask) run() {
 	go cu.Process(ctx, pr)
 }
 
-func (st *SubTask) StartValidator() {
+func (st *SubTask) StartValidator(expect pb.Stage) {
 	st.Lock()
 	defer st.Unlock()
 	if st.cfg.ValidatorCfg.Mode == config.ValidationNone {
@@ -275,7 +275,7 @@ func (st *SubTask) StartValidator() {
 	if st.validator == nil {
 		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
 	}
-	st.validator.Start()
+	st.validator.Start(expect)
 }
 
 func (st *SubTask) StopValidator() {
@@ -548,7 +548,7 @@ func (st *SubTask) Pause() error {
 // TODO: similar to Run, refactor later.
 func (st *SubTask) Resume(relay relay.Process) error {
 	if !st.initialized.Load() {
-		st.Run(pb.Stage_Running, relay)
+		st.Run(pb.Stage_Running, pb.Stage_Running, relay)
 		return nil
 	}
 
@@ -777,6 +777,16 @@ func (st *SubTask) SetCfg(taskConfig config.SubTaskConfig) {
 	st.Lock()
 	st.cfg = &taskConfig
 	st.Unlock()
+}
+
+func (st *SubTask) getValidatorStage() pb.Stage {
+	st.Lock()
+	defer st.Unlock()
+
+	if st.validator != nil {
+		return st.validator.Stage()
+	}
+	return pb.Stage_Stopped
 }
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {

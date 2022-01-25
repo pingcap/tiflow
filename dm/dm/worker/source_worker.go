@@ -321,7 +321,8 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	w.relayCtx, w.relayCancel = context.WithCancel(w.ctx)
 	// 1. adjust relay starting position, to the earliest of subtasks
 	var subTaskCfgs map[string]config.SubTaskConfig
-	_, subTaskCfgs, _, err = w.fetchSubTasksAndAdjust()
+	//nolint:dogsled
+	_, _, subTaskCfgs, _, err = w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return err
 	}
@@ -455,7 +456,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 
 	// we get the newest subtask stages directly which will omit the subtask stage PUT/DELETE event
 	// because triggering these events is useless now
-	subTaskStages, subTaskCfgM, revSubTask, err := w.fetchSubTasksAndAdjust()
+	subTaskStages, validatorStages, subTaskCfgM, revSubTask, err := w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return err
 	}
@@ -467,10 +468,15 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		if expectStage.IsDeleted {
 			continue
 		}
+		// if there's no validator stage, validator mode should be none, set expect stage to 'Running', it'll be ignored inside
+		validatorStage := pb.Stage_Running
+		if s, ok := validatorStages[subTaskCfg.Name]; ok {
+			validatorStage = s.Expect
+		}
 		w.l.Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 		// "for range" of a map will use same value address, so we'd better not pass value address to other function
 		clone := subTaskCfg
-		if err2 := w.StartSubTask(&clone, expectStage.Expect, false); err2 != nil {
+		if err2 := w.StartSubTask(&clone, expectStage.Expect, validatorStage, false); err2 != nil {
 			w.subTaskHolder.closeAllSubTasks()
 			return err2
 		}
@@ -517,23 +523,23 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 
 // fetchSubTasksAndAdjust gets source's subtask stages and configs, adjust some values by worker's config and status
 // source **must not be empty**
-// return map{task name -> subtask stage}, map{task name -> subtask config}, revision, error.
-func (w *SourceWorker) fetchSubTasksAndAdjust() (map[string]ha.Stage, map[string]config.SubTaskConfig, int64, error) {
+// return map{task name -> subtask stage}, map{task name -> validator stage}, map{task name -> subtask config}, revision, error.
+func (w *SourceWorker) fetchSubTasksAndAdjust() (map[string]ha.Stage, map[string]ha.Stage, map[string]config.SubTaskConfig, int64, error) {
 	// we get the newest subtask stages directly which will omit the subtask stage PUT/DELETE event
 	// because triggering these events is useless now
-	subTaskStages, subTaskCfgM, revSubTask, err := ha.GetSubTaskStageConfig(w.etcdClient, w.cfg.SourceID)
+	subTaskStages, validatorStages, subTaskCfgM, revSubTask, err := ha.GetSubTaskStageConfig(w.etcdClient, w.cfg.SourceID)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	if err = copyConfigFromSourceForEach(subTaskCfgM, w.cfg, w.relayEnabled.Load()); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
-	return subTaskStages, subTaskCfgM, revSubTask, nil
+	return subTaskStages, validatorStages, subTaskCfgM, revSubTask, nil
 }
 
 // StartSubTask creates a subtask and run it.
-func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.Stage, needLock bool) error {
+func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, validatorStage pb.Stage, needLock bool) error {
 	if needLock {
 		w.Lock()
 		defer w.Unlock()
@@ -570,7 +576,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	st.Run(expectStage, w.getRelayWithoutLock())
+	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }
 
@@ -669,7 +675,7 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 }
 
 func (w *SourceWorker) resetSubtaskStage() (int64, error) {
-	subTaskStages, subTaskCfgm, revSubTask, err := w.fetchSubTasksAndAdjust()
+	subTaskStages, _, subTaskCfgm, revSubTask, err := w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return 0, err
 	}
@@ -794,7 +800,9 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 			// create the subtask for expected running and paused stage.
 			log.L().Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
-			err := w.StartSubTask(&subTaskCfg, stage.Expect, true)
+			// new subtask, pass Running to validator stage, let internal logic determines it.
+			// as there's no new subtask with a stopped validator, either it has a Running one or none
+			err := w.StartSubTask(&subTaskCfg, stage.Expect, pb.Stage_Running, true)
 			return opErrTypeBeforeOp, err
 		}
 		if stage.Expect == pb.Stage_Running {
@@ -964,7 +972,7 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 
 		uuid := w.relayHolder.Status(nil).RelaySubDir
 
-		_, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
+		_, _, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
 		if err != nil {
 			return err
 		}
@@ -1240,7 +1248,7 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		}
 
 		subtask.SetCfg(subTaskCfg[stage.Task])
-		subtask.StartValidator()
+		subtask.StartValidator(stage.Expect)
 	default:
 		// should not happen
 		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))

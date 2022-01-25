@@ -240,32 +240,42 @@ func GetAllValidatorStage(cli *clientv3.Client) (map[string]map[string]Stage, in
 
 // GetSubTaskStageConfig gets source's subtask stages and configs at the same time
 // source **must not be empty**
-// return map{task name -> subtask stage}, map{task name -> subtask config}, revision, error.
-func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stage, map[string]config.SubTaskConfig, int64, error) {
+// return map{task name -> subtask stage}, map{task name -> validator stage}, map{task name -> subtask config}, revision, error.
+func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stage, map[string]Stage, map[string]config.SubTaskConfig, int64, error) {
 	var (
-		stm = make(map[string]Stage)
-		scm = make(map[string]config.SubTaskConfig)
+		stm               = make(map[string]Stage)
+		validatorStageMap = make(map[string]Stage)
+		scm               = make(map[string]config.SubTaskConfig)
 	)
-	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
+	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+		clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
+		clientv3.OpGet(common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix()),
 		clientv3.OpGet(common.UpstreamSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	stageResp := txnResp.Responses[0].GetResponseRange()
 	stages, err := getStagesFromResp(source, "", (*clientv3.GetResponse)(stageResp))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	stm = stages[source]
 
-	cfgResp := txnResp.Responses[1].GetResponseRange()
+	validatorStageResp := txnResp.Responses[1].GetResponseRange()
+	validatorStages, err := getStagesFromResp(source, "", (*clientv3.GetResponse)(validatorStageResp))
+	if err != nil {
+		return stm, validatorStageMap, scm, 0, err
+	}
+	validatorStageMap = validatorStages[source]
+
+	cfgResp := txnResp.Responses[2].GetResponseRange()
 	cfgs, err := subTaskCfgFromResp(source, "", (*clientv3.GetResponse)(cfgResp))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	scm = cfgs[source]
 
-	return stm, scm, rev, err
+	return stm, validatorStageMap, scm, rev, err
 }
 
 // WatchRelayStage watches PUT & DELETE operations for the relay stage.
