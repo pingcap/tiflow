@@ -268,7 +268,7 @@ func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts, isMoveTable bool) (
 	return table, true
 }
 
-// AddTable add the table in TableInfos and add a add table operation.
+// AddTable add the table in TableInfos and add an `add table` operation.
 func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs Ts) {
 	if ts.Tables == nil {
 		ts.Tables = make(map[TableID]*TableReplicaInfo)
