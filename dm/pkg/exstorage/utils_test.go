@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package exstorage
 
 import (
 	"testing"
@@ -69,6 +69,12 @@ func (s *testS3UtilsSuite) TestAdjustS3Path(c *C) {
 
 	// special character in access keys
 	isS3, newURL, err = AdjustS3Path(`s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw`, "mysql-replica-01")
+	c.Assert(err, IsNil)
+	c.Assert(isS3, IsTrue)
+	c.Assert(newURL, Equals, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw")
+
+	// duplicate uniqueID
+	isS3, newURL, err = AdjustS3Path(`s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw`, "mysql-replica-01")
 	c.Assert(err, IsNil)
 	c.Assert(isS3, IsTrue)
 	c.Assert(newURL, Equals, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw")

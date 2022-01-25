@@ -30,8 +30,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/s3"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -424,10 +424,23 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	dirSuffix := "." + c.Name
-	if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) { // check to support multiple times calling
-		// if not ends with the task name, we append the task name to the tail
-		c.LoaderConfig.Dir += dirSuffix
+	// adjust dir
+	if c.Mode == ModeAll || c.Mode == ModeFull {
+		isS3, newDir, err := exstorage.AdjustS3Path(c.LoaderConfig.Dir, c.Name+"."+c.SourceID)
+		if err != nil {
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+		}
+
+		if isS3 && !c.NeedUseLightning() {
+			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
+		}
+
+		// compatible with other storage and dirSuffix like older
+		dirSuffix := "." + c.Name
+		if !isS3 && !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) {
+			newDir = c.LoaderConfig.Dir + dirSuffix
+		}
+		c.LoaderConfig.Dir = newDir
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {
@@ -471,18 +484,6 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 	if _, err := bf.NewBinlogEvent(c.CaseSensitive, c.FilterRules); err != nil {
 		return terror.ErrConfigBinlogEventFilter.Delegate(err)
-	}
-
-	// adjust s3 dir
-	if c.Mode == ModeAll || c.Mode == ModeFull {
-		isS3, newDir, err := s3.AdjustS3Path(c.LoaderConfig.Dir, c.SourceID)
-		if err != nil {
-			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
-		}
-		if isS3 && !c.NeedUseLightning() {
-			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
-		}
-		c.LoaderConfig.Dir = newDir
 	}
 
 	// TODO: check every member

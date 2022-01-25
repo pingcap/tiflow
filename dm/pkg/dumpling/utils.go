@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/spf13/pflag"
 
@@ -40,12 +42,30 @@ var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
 func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	invalidErr := fmt.Errorf("file %s invalid format", filename)
 	fd, err := os.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer fd.Close()
+	return parseMetaDataByReader(filename, flavor, fd)
+}
+
+// ParseMetaDataByExternalStore parses mydumper's output meta file by `ExternalStorage` which supports s3 and returns binlog location.
+// since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
+// we return this location as well.
+func ParseMetaDataByExternalStore(ctx context.Context, filename, flavor string, externalStore storage.ExternalStorage) (*binlog.Location, *binlog.Location, error) {
+	fd, err := externalStore.Open(ctx, filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer fd.Close()
+
+	return parseMetaDataByReader(filename, flavor, fd)
+}
+
+// ParseMetaData parses mydumper's output meta file by created reader and returns binlog location.
+func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
+	invalidErr := fmt.Errorf("file %s invalid format", filename)
 
 	var (
 		pos          mysql.Position
@@ -58,7 +78,7 @@ func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location,
 		locPtr2 *binlog.Location
 	)
 
-	br := bufio.NewReader(fd)
+	br := bufio.NewReader(rd)
 
 	parsePosAndGTID := func(pos *mysql.Position, gtid *string) error {
 		for {

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -183,7 +184,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	pos1.Pos = 2044
 	s.cfg.Mode = config.ModeIncrement
 	s.cfg.Meta = &config.Meta{BinLogName: pos1.Name, BinLogPos: pos1.Pos}
-	err = cp.LoadMeta()
+	err = cp.LoadMeta(tctx.Ctx)
 	c.Assert(err, IsNil)
 	c.Assert(cp.GlobalPoint().Position, Equals, pos1)
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, pos1)
@@ -269,7 +270,9 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(err, IsNil)
 	s.cfg.Mode = config.ModeAll
 	s.cfg.Dir = dir
-	c.Assert(cp.LoadMeta(), IsNil)
+	cp.(*RemoteCheckPoint).externalStore, err = exstorage.CreateExternalStore(tctx.Ctx, s.cfg.Dir)
+	c.Assert(err, IsNil)
+	c.Assert(cp.LoadMeta(tctx.Ctx), IsNil)
 
 	// should flush because checkpoint hasn't been updated before (cp.globalPointCheckOrSaveTime.IsZero() == true).
 	snapshot := cp.Snapshot(true)
@@ -306,7 +309,7 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 	GTID:
 `, pos1.Name, pos1.Pos, "slave_host", pos1.Name, pos1.Pos+1000, pos2.Name, pos2.Pos)), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(cp.LoadMeta(), IsNil)
+	c.Assert(cp.LoadMeta(tctx.Ctx), IsNil)
 
 	// should flush because exitSafeModeLocation is true
 	snapshot = cp.Snapshot(true)
@@ -324,7 +327,7 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 	c.Assert(cp.SafeModeExitPoint().Position, Equals, pos2)
 
 	// when use async flush, even exitSafeModeLocation is true we won't flush
-	c.Assert(cp.LoadMeta(), IsNil)
+	c.Assert(cp.LoadMeta(tctx.Ctx), IsNil)
 	snapshot = cp.Snapshot(false)
 	c.Assert(snapshot, IsNil)
 }

@@ -95,11 +95,12 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
-		if err := cfg.Adjust(true); err != nil {
-			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
-		}
 		if c.TiDB != nil {
 			cfg.TiDB = *c.TiDB
+		}
+
+		if err := cfg.Adjust(true); err != nil {
+			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
 		}
 		cfgs[i] = cfg
 	}

@@ -19,8 +19,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"math"
-	"os"
-	"path"
 	"reflect"
 	"strconv"
 	"strings"
@@ -37,6 +35,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
@@ -47,7 +46,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	common2 "github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -56,6 +54,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -235,6 +234,8 @@ type Syncer struct {
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
+
+	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewSyncer creates a new Syncer.
@@ -414,6 +415,16 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
+	// init externalStore
+	if s.cfg.Mode == config.ModeAll {
+		s.externalStore, err = exstorage.CreateExternalStore(tctx.Ctx, s.cfg.LoaderConfig.Dir)
+		if err != nil {
+			return err
+		}
+		s.checkpoint.(*RemoteCheckPoint).externalStore = s.externalStore
+	}
+
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-checkpoint", Fn: s.checkpoint.Close})
 
 	err = s.checkpoint.Load(tctx)
@@ -1461,7 +1472,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return err
 	} else if fresh {
 		// for fresh task, we try to load checkpoints from meta (file or config item)
-		err = s.checkpoint.LoadMeta()
+		err = s.checkpoint.LoadMeta(runCtx)
 		if err != nil {
 			return err
 		}
@@ -1508,8 +1519,21 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if cleanDumpFile {
 		tctx.L().Info("try to remove all dump files")
-		if err = os.RemoveAll(s.cfg.Dir); err != nil {
-			tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+		// if err = os.RemoveAll(s.cfg.Dir); err != nil {
+		// 	tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+		// }
+		// if err = s.externalStore.DeleteFile(ctx, ""); err != nil {
+		// 	tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+		// }
+		doNotClean := false
+		failpoint.Inject("S3GetDumpFilesCheck", func() {
+			doNotClean = true
+		})
+
+		if !doNotClean {
+			if err = exstorage.RemoveAll(ctx, s.externalStore); err != nil {
+				tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+			}
 		}
 	}
 
@@ -3142,9 +3166,13 @@ func (s *Syncer) genRouter() error {
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
 
-	files, err := utils.CollectDirFiles(s.cfg.Dir)
+	// files, err := utils.CollectDirFiles(s.cfg.Dir)
+	files, err := exstorage.CollectDirFiles(ctx, s.externalStore)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
+		failpoint.Inject("S3GetDumpFilesCheck", func() {
+			panic(errors.Annotate(err, "fail to get dump files"))
+		})
 		return err
 	}
 	var dbs, tables []string
@@ -3182,12 +3210,14 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		filepath := path.Join(s.cfg.Dir, file)
-		content, err2 := common2.GetFileContent(filepath)
+		// filepath := path.Join(s.cfg.Dir, file)
+		// content, err2 := common2.GetFileContent(filepath)
+		content, err2 := s.externalStore.ReadFile(ctx, file)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("file", filepath),
+				zap.String("path", s.cfg.Dir),
+				zap.String("file", file),
 				zap.Error(err))
 			setFirstErr(err2)
 			continue
@@ -3201,7 +3231,8 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			err = s.schemaTracker.Exec(ctx, db, string(stmt))
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
-					zap.Any("file", filepath),
+					zap.Any("path", s.cfg.Dir),
+					zap.Any("file", file),
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)

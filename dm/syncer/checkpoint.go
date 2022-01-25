@@ -19,11 +19,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -216,7 +215,7 @@ type CheckPoint interface {
 	Load(tctx *tcontext.Context) error
 
 	// LoadMeta loads checkpoints from meta config item or file
-	LoadMeta() error
+	LoadMeta(ctx context.Context) error
 
 	// SaveTablePoint saves checkpoint for specified table in memory
 	SaveTablePoint(table *filter.Table, point binlog.Location, ti *model.TableInfo)
@@ -341,6 +340,8 @@ type RemoteCheckPoint struct {
 	// these fields are used for async flush checkpoint
 	snapshots   []*remoteCheckpointSnapshot
 	snapshotSeq int
+
+	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewRemoteCheckPoint creates a new RemoteCheckPoint.
@@ -1064,7 +1065,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 }
 
 // LoadMeta implements CheckPoint.LoadMeta.
-func (cp *RemoteCheckPoint) LoadMeta() error {
+func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -1077,7 +1078,7 @@ func (cp *RemoteCheckPoint) LoadMeta() error {
 	case config.ModeAll:
 		// NOTE: syncer must continue the syncing follow loader's tail, so we parse mydumper's output
 		// refine when master / slave switching added and checkpoint mechanism refactored
-		location, safeModeExitLoc, err = cp.parseMetaData()
+		location, safeModeExitLoc, err = cp.parseMetaData(ctx)
 		if err != nil {
 			return err
 		}
@@ -1165,13 +1166,13 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 	return sql2, args
 }
 
-func (cp *RemoteCheckPoint) parseMetaData() (*binlog.Location, *binlog.Location, error) {
+func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
-	filename := path.Join(cp.cfg.Dir, "metadata")
+	filename := "metadata"
+	loc, loc2, err := dumpling.ParseMetaDataByExternalStore(ctx, filename, cp.cfg.Flavor, cp.externalStore)
 
-	loc, loc2, err := dumpling.ParseMetaData(filename, cp.cfg.Flavor)
 	if err != nil {
-		toPrint, err2 := os.ReadFile(filename)
+		toPrint, err2 := cp.externalStore.ReadFile(context.Background(), filename)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

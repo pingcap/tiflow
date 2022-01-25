@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"context"
 	"crypto/sha1"
 	"fmt"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
@@ -131,6 +133,37 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 		}
 
 		toPrint, err2 := os.ReadFile(metafile)
+		if err2 != nil {
+			toPrint = []byte(err2.Error())
+		}
+		log.L().Error("fail to parse dump metadata", log.ShortError(err))
+		return "", "", terror.ErrParseMydumperMeta.Generate(err, toPrint)
+	}
+
+	return loc.Position.String(), loc.GTIDSetStr(), nil
+}
+
+// getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
+func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string, externalStore storage.ExternalStorage) (string, string, error) {
+
+	metafile := "metadata"
+	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, metafile, cfg.Flavor, externalStore)
+	if err != nil {
+		if os.IsNotExist(err) {
+			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
+			if err2 != nil {
+				log.L().Warn("get load task", log.ShortError(err2))
+			}
+			if worker != "" && worker != workerName {
+				return "", "", terror.ErrLoadTaskWorkerNotMatch.Generate(worker, workerName)
+			}
+		}
+		if terror.ErrMetadataNoBinlogLoc.Equal(err) {
+			log.L().Warn("dumped metadata doesn't have binlog location, it's OK if DM doesn't enter incremental mode")
+			return "", "", nil
+		}
+
+		toPrint, err2 := externalStore.ReadFile(context.Background(), metafile)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

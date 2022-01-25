@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -66,6 +68,8 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+
+	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -148,6 +152,11 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		}
 	}
 	l.timeZone = timeZone
+
+	l.externalStore, err = exstorage.CreateExternalStore(ctx, l.cfg.LoaderConfig.Dir)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -193,10 +202,17 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
-		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
-		cfg.Checkpoint.DSN = cpPath
-		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
+		// TODO lightning checkpoint will support s3 in other pr
+		if exstorage.IsS3Path(l.cfg.LoaderConfig.Dir) {
+			cfg.Checkpoint.Enable = false
+		} else {
+			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+			cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+			cfg.Checkpoint.DSN = cpPath
+			cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+		}
+
 		cfg.TiDB.Vars = make(map[string]string)
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
@@ -221,7 +237,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 	}
 	if l.finish.Load() {
-		if l.cfg.CleanDumpFile {
+		if l.cfg.CleanDumpFile && !exstorage.IsS3Path(l.cfg.Dir) {
 			cleanDumpFiles(l.cfg)
 		}
 	}
@@ -239,7 +255,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		}
 		failpoint.Return()
 	})
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+
+	binlog, gtid, err := getMydumpMetadataByExternalStorage(ctx, l.cli, l.cfg, l.workerName, l.externalStore)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{

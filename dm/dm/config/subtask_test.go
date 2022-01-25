@@ -206,13 +206,21 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"."+cfg.Name+"."+cfg.SourceID)
 
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize: defaultPoolSize,
+		Dir:      "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket3/prefix/path"+"."+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
+
 	// invaild dir
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize: defaultPoolSize,
 		Dir:      "1invalid:",
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir "+"1invalid:"+"."+cfg.Name+" is invalid.*")
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir 1invalid: is invalid.*")
 
 	// use loader and not s3
 	cfg.TiDB.Backend = ""
@@ -231,7 +239,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		Dir:      "s3://bucket2/prefix",
 	}
 	err = cfg.Adjust(false)
-	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir "+"s3://bucket2/prefix"+"."+cfg.Name+" is s3 dir, but s3 is not supported.*")
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir s3://bucket2/prefix is s3 dir, but s3 is not supported.*")
 
 	// not all or full mode
 	cfg.Mode = ModeIncrement
@@ -241,7 +249,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "1invalid:"+"."+cfg.Name)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "1invalid:")
 }
 
 func (t *testConfig) TestDBConfigClone(c *C) {

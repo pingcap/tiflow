@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -1224,11 +1225,14 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *C) {
 	filename := filepath.Join(s.cfg.Dir, "metadata")
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: BAD METADATA"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), NotNil)
+
+	syncer.checkpoint.(*RemoteCheckPoint).externalStore, err = exstorage.CreateExternalStore(context.Background(), s.cfg.Dir)
+	c.Assert(err, IsNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), NotNil)
 
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: mysql-bin.000003\n\tPos: 1234\n\tGTID:\n\n"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), IsNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), IsNil)
 
 	c.Assert(os.Remove(filename), IsNil)
 
