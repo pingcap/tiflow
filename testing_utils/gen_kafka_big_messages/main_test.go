@@ -90,7 +90,7 @@ func TestValidateOptions(t *testing.T) {
 func TestGenDatabaseSql(t *testing.T) {
 	database := "test"
 
-	sql := genDatabaseSql(database)
+	sql := genDatabaseSQL(database)
 
 	require.Equal(t, "DROP DATABASE IF EXISTS test;\nCREATE DATABASE test;\nUSE test;\n\n", sql)
 }
@@ -99,7 +99,7 @@ func TestGenCreateTableSql(t *testing.T) {
 	rawBytes := varcharColumnMaxLen
 	tableName := "test"
 
-	sql := genCreateTableSql(rawBytes, tableName)
+	sql := genCreateTableSQL(rawBytes, tableName)
 	require.Equal(t, "CREATE TABLE test(id int primary key , a0 VARCHAR(16383));\n", sql)
 }
 
@@ -115,7 +115,7 @@ func TestGenInsertSql(t *testing.T) {
 	tableName := "test"
 	id := 1
 
-	sql := genInsertSql(rawBytes, tableName, id)
+	sql := genInsertSQL(rawBytes, tableName, id)
 	println(sql)
 	require.Equal(t, "INSERT INTO test VALUES (1, 'a');\n", sql)
 }
