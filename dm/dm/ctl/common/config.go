@@ -20,9 +20,12 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
+
+	"github.com/google/shlex"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/BurntSushi/toml"
@@ -219,32 +222,10 @@ func validateAddr(addr string) error {
 
 // SplitArgsRespectQuote splits args by space, but won't split space inside single or double quotes.
 func SplitArgsRespectQuote(line string) []string {
-	lastQuote := rune(0)
-	quoted := false
-	prevIsSpace := true
-
-	splitRespectQuote := func(r rune) bool {
-		if quoted {
-			if r == lastQuote {
-				quoted = false
-				// handle two adjacent quoted strings
-				prevIsSpace = true
-				// we want to exclude the quote, so split at the point of quote
-				return true
-			}
-		} else {
-			if prevIsSpace && (r == '"' || r == '\'') {
-				quoted = true
-				lastQuote = r
-				// we want to exclude the quote, so split at the point of quote
-				return true
-			} else if unicode.IsSpace(r) {
-				prevIsSpace = true
-				return true
-			}
-			prevIsSpace = false
-		}
-		return false
+	ret, err := shlex.Split(line)
+	if err != nil {
+		log.L().Error("split args error", zap.Error(err))
+		return []string{line}
 	}
-	return strings.FieldsFunc(line, splitRespectQuote)
+	return ret
 }

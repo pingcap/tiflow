@@ -40,9 +40,10 @@ func (t *testConfigSuite) TestInteractiveQuotes(c *C) {
 		{`"123 456"`, []string{`123 456`}},
 		{`"123 456" 789`, []string{`123 456`, `789`}},
 		{`0 '123"456 789'`, []string{`0`, `123"456 789`}},
-		{`0'123"456 789'`, []string{`0'123"456`, `789'`}},
-		// note: below behaviour is not same as bash
-		{`"123""456" 7 "89"`, []string{`123`, `456`, `7`, `89`}},
+		{`0'123"456 789'`, []string{`0123"456 789`}},
+		{`"123""456" 7 "89"`, []string{`123456`, `7`, `89`}},
+		// return original string when failed to split
+		{`123"456`, []string{`123"456`}},
 	}
 
 	for _, ca := range cases {
