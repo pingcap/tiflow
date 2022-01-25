@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 )
@@ -51,6 +51,15 @@ const (
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
+	// etcdTxnTimeoutDuration represents the timeout duration for committing a
+	// transaction to Etcd
+	etcdTxnTimeoutDuration = 30 * time.Second
+)
+
+var (
+	TxnEmptyCmps    = []clientv3.Cmp{}
+	TxnEmptyOpsThen = []clientv3.Op{}
+	TxnEmptyOpsElse = []clientv3.Op{}
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -121,19 +130,14 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOpti
 	return c.cli.Delete(ctx, key, opts...)
 }
 
-// Txn delegates request to clientv3.KV.Txn
-func (c *Client) Txn(ctx context.Context) clientv3.Txn {
-	if metric, ok := c.metrics[EtcdTxn]; ok {
-		metric.Inc()
-	}
-	return c.cli.Txn(ctx)
-}
-
-// Txn delegates request to clientv3.KV.Txn
-func (c *Client) Txn1(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+// Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
+// such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
+func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
 		var inErr error
-		resp, inErr = c.cli.Txn(ctx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
 		return inErr
 	})
 	return
@@ -155,8 +159,27 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 			return false
 		}
 		if rpcName == EtcdRevoke {
-			if etcdErr, ok := err.(rpctypes.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
 				// it means the etcd lease is already expired or revoked
+				return false
+			}
+		}
+
+		if rpcName == EtcdTxn {
+			switch err {
+			// Etcd ResourceExhausted errors, may recover after some time
+			case v3rpc.ErrNoSpace, v3rpc.ErrTooManyRequests:
+				return true
+			// Etcd Unavailable errors, may be available after some time
+			// https://github.com/etcd-io/etcd/pull/9934/files#diff-6d8785d0c9eaf96bc3e2b29c36493c04R162-R167
+			// ErrStopped:
+			// one of the etcd nodes stopped from failure injection
+			// ErrNotCapable:
+			// capability check has not been done (in the beginning)
+			case v3rpc.ErrNoLeader, v3rpc.ErrLeaderChanged, v3rpc.ErrNotCapable, v3rpc.ErrStopped, v3rpc.ErrTimeout,
+				v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
+				return true
+			default:
 				return false
 			}
 		}

@@ -312,9 +312,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	opsThen := []clientv3.Op{
 		clientv3.OpPut(infoKey, value),
 	}
-	opsElse := make([]clientv3.Op, 0)
-	resp, err := c.Client.Txn1(ctx, cmps, opsThen, opsElse)
-
+	resp, err := c.Client.Txn(ctx, cmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
@@ -513,11 +511,10 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
 		clientv3.Compare(clientv3.Value(key), "=", data),
 	}
-	opsThen := make([]clientv3.Op, 0)
 	opsElse := []clientv3.Op{
 		clientv3.OpPut(key, data),
 	}
-	resp, err := c.Client.Txn1(ctx, cmps, opsThen, opsElse)
+	resp, err := c.Client.Txn(ctx, cmps, TxnEmptyOpsThen, opsElse)
 	if err != nil {
 		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

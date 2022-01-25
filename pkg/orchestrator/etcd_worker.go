@@ -36,9 +36,6 @@ import (
 )
 
 const (
-	// etcdTxnTimeoutDuration represents the timeout duration for committing a
-	// transaction to Etcd
-	etcdTxnTimeoutDuration = 30 * time.Second
 	// When EtcdWorker commits a txn to etcd or ticks its reactor
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
@@ -258,7 +255,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 }
 
 func isRetryableError(err error) bool {
-	return cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err))
+	return cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) ||
+		errors.Cause(err) == context.DeadlineExceeded
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
@@ -356,7 +354,6 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	cmps := make([]clientv3.Cmp, 0, len(changedState))
 	opsThen := make([]clientv3.Op, 0, len(changedState))
-	opsElse := make([]clientv3.Op, 0)
 	hasDelete := false
 
 	for key, value := range changedState {
@@ -394,11 +391,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
 	startTime := time.Now()
-
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
-	resp, err := worker.client.Txn1(txnCtx, cmps, opsThen, opsElse)
-	// resp, err = worker.client.Txn(txnCtx).If(cmps...).Then(opsThen...).Commit()
-	cancel()
+	resp, err := worker.client.Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
 
 	// For testing the situation where we have a progress notification that
 	// has the same revision as the committed Etcd transaction.
