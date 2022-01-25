@@ -248,7 +248,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// only `CreateTopic` for cdc now. Just use default values.
 	config.Admin.Retry.Max = 5
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
-	config.Admin.Timeout = 10 * time.Second
+	config.Admin.Timeout = 3 * time.Second
 
 	// Producer.Retry take effect when the producer try to send message to kafka
 	// brokers. If kafka cluster is healthy, just the default value should be enough.
