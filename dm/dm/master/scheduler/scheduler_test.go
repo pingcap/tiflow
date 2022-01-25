@@ -1002,7 +1002,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx2, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx2, startRev), IsNil)
 	}()
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
 	time.Sleep(time.Second)
@@ -1024,7 +1024,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx3, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx3, startRev), IsNil)
 	}()
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		bounds := s.BoundSources()
@@ -1738,7 +1738,7 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeLoadTask(ctx1, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeLoadTask(ctx1, startRev), IsNil)
 	}()
 
 	// put task2, source1, worker1
@@ -1829,9 +1829,9 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
 
 	// bootstrap
-	c.Assert(s.recoverSources(etcdTestCli), IsNil)
-	c.Assert(s.recoverRelayConfigs(etcdTestCli), IsNil)
-	_, err = s.recoverWorkersBounds(etcdTestCli)
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
 	c.Assert(err, IsNil)
 
 	// check
@@ -1892,9 +1892,9 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	go ha.KeepAlive(ctx, etcdTestCli, workerName2, keepAlive)
 
 	// bootstrap
-	c.Assert(s.recoverSources(etcdTestCli), IsNil)
-	c.Assert(s.recoverRelayConfigs(etcdTestCli), IsNil)
-	_, err = s.recoverWorkersBounds(etcdTestCli)
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
 	c.Assert(err, IsNil)
 
 	// check when the relay config is conflicting with source config, relay config should be deleted
