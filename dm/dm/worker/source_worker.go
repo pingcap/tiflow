@@ -485,7 +485,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 	}()
 	w.subTaskWg.Add(1)
 	go func() {
-		defer w.subTaskWg.Add(1)
+		defer w.subTaskWg.Done()
 		// TODO: handle fatal error from observeValidatorStage
 		//nolint:errcheck
 		w.observeValidatorStage(w.subTaskCtx, revSubTask)
