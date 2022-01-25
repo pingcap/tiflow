@@ -31,6 +31,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -229,7 +230,7 @@ type CheckPoint interface {
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
 	// IsOlderThanTablePoint checks whether job's checkpoint is older than previous saved checkpoint
-	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, useLE bool) bool
+	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, isDDL bool) bool
 
 	// SaveGlobalPoint saves the global binlog stream's checkpoint
 	// corresponding to Meta.Save
@@ -412,17 +413,30 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 }
 
 // Init implements CheckPoint.Init.
-func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) error {
+func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) (err error) {
+	var db *conn.BaseDB
+	var dbConns []*dbconn.DBConn
+
+	rollbackHolder := fr.NewRollbackHolder("syncer")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	checkPointDB := cp.cfg.To
 	checkPointDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
+	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
 	if err != nil {
-		return err
+		return
 	}
 	cp.db = db
 	cp.dbConn = dbConns[0]
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseRemoteCheckPoint", Fn: cp.Close})
 
-	return cp.prepare(tctx)
+	err = cp.prepare(tctx)
+
+	return
 }
 
 // Close implements CheckPoint.Close.
@@ -562,14 +576,12 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 }
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
-// For GTID replication, go-mysql will only update GTID set in a XID event after the rows event, for example, the binlog events are:
-//   - Query event e1, location is gset1
-//   - Rows event e2, location is gset1
-//   - XID event, location is gset2
-// We should note that e1 is not older than e2
-// For binlog position replication, currently DM will split rows changes of an event to jobs, so some job may has save position.
-// if useLE is true, we use less than or equal.
-func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, useLE bool) bool {
+// This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
+// - For GTID based and position based replication, DML handling is different. When using position based, each event has
+//   unique position so we have confident to skip event which is <= table checkpoint. When using GTID based, there may
+//   be more than one event with same GTID, so we can only skip event which is < table checkpoint.
+// - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
+func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, isDDL bool) bool {
 	cp.RLock()
 	defer cp.RUnlock()
 	sourceSchema, sourceTable := table.Schema, table.Name
@@ -584,7 +596,7 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 	oldLocation := point.MySQLLocation()
 	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
 
-	if useLE {
+	if isDDL || !cp.cfg.EnableGTID {
 		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
 	}
 	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) < 0
@@ -689,7 +701,9 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 
 	if snapshotCp.globalPoint != nil {
 		cp.globalPoint.flushBy(*snapshotCp.globalPoint)
+		cp.Lock()
 		cp.globalPointSaveTime = snapshotCp.globalPointSaveTime
+		cp.Unlock()
 	}
 
 	for _, point := range points {
@@ -732,7 +746,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			}
 			// create new point
 			if point == nil {
-				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), nil)
+				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
 				point = cp.points[sourceSchema][sourceTable]
 			}
 			tiBytes, err := json.Marshal(ti)
@@ -753,11 +767,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			return err
 		}
 
-		for idx, point := range points {
-			err = point.save(point.savedPoint.location, tis[i+idx])
-			if err != nil {
-				return err
-			}
+		for _, point := range points {
 			point.flush()
 		}
 	}

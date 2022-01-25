@@ -391,7 +391,6 @@ function DM_UPDATE_BA_ROUTE_CASE() {
 		"stop-task test" \
 		"\"result\": true" 3
 
-	cp $cur/conf/double-source-optimistic.yaml $WORK_DIR/task.yaml
 	sed 's/do-dbs: \["shardddl1","shardddl2"\]/do-dbs: \["shardddl1"\]/g' $cur/conf/double-source-optimistic.yaml >$WORK_DIR/task.yaml
 
 	# source1: db1.tb1(id,new_col1,new_col3)

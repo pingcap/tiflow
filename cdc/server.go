@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -218,16 +217,9 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
-
 	router := gin.New()
-
-	router.Use(logMiddleware())
-	// request will timeout after 10 second
-	router.Use(timeoutMiddleware(time.Second * 10))
-	router.Use(errorHandleMiddleware())
-
 	// Register APIs.
-	api.RegisterRoutes(router, s.capture, registry)
+	RegisterRoutes(router, s.capture, registry)
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
 	s.statusServer = &http.Server{Handler: router}
