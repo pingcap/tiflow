@@ -41,9 +41,6 @@ routes:
     schema-pattern: s3_dumpling_lightning*
     target-schema: s3_dumpling_lightning
 
-tidb:
-  backend: "tidb"
-
 mydumpers:
   global:
     threads: 4
@@ -55,6 +52,7 @@ loaders:
   global:
     pool-size: 16
     dir: "s3://dmbucket/dump?region=us-west-2&endpoint=http://127.0.0.1:8688&access_key=s3accesskey&secret_access_key=s3secretkey&force_path_style=true"
+    import-mode: "sql"
 
 syncers:
   global:

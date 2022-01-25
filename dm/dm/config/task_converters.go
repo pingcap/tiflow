@@ -53,6 +53,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
 		cfg.CollationCompatible = c.CollationCompatible
+		cfg.Experimental = c.Experimental
 
 		fromClone := dbCfg.Clone()
 		if fromClone == nil {
@@ -95,10 +96,6 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
-		if c.TiDB != nil {
-			cfg.TiDB = *c.TiDB
-		}
-
 		if err := cfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
 		}
@@ -112,7 +109,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 // OpenAPITaskToSubTaskConfigs generates sub task configs by openapi.Task.
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCfgMap map[string]*SourceConfig) (
-	[]SubTaskConfig, error) {
+	[]*SubTaskConfig, error) {
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {
@@ -137,7 +134,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		}
 	}
 	// start to generate sub task configs
-	subTaskCfgList := make([]SubTaskConfig, len(task.SourceConfig.SourceConf))
+	subTaskCfgList := make([]*SubTaskConfig, len(task.SourceConfig.SourceConf))
 	for i, sourceCfg := range task.SourceConfig.SourceConf {
 		// precheck source config
 		_, exist := sourceCfgMap[sourceCfg.SourceName]
@@ -246,7 +243,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)
 		}
-		subTaskCfgList[i] = *subTaskCfg
+		subTaskCfgList[i] = subTaskCfg
 	}
 	return subTaskCfgList, nil
 }
@@ -304,6 +301,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.Loaders = make(map[string]*LoaderConfig)
 	c.Syncers = make(map[string]*SyncerConfig)
 	c.ExprFilter = make(map[string]*ExpressionFilter)
+	c.Experimental = stCfg0.Experimental
 
 	baListMap := make(map[string]string, len(stCfgs))
 	routeMap := make(map[string]string, len(stCfgs))

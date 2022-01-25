@@ -73,6 +73,7 @@ func NewPuller(
 	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
 	pdClock pdtime.Clock,
+	changefeed string,
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	enableOldValue bool,
@@ -89,7 +90,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache, pdClock)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache, pdClock, changefeed)
 	p := &pullerImpl{
 		kvCli:          kvCli,
 		kvStorage:      tikvStorage,
@@ -138,21 +139,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
 	}()
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(15 * time.Second):
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			}
-		}
-	})
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
+		metricsTicker := time.NewTicker(15 * time.Second)
+		defer metricsTicker.Stop()
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
@@ -180,6 +171,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			var e model.RegionFeedEvent
 			select {
+			case <-metricsTicker.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				continue
 			case e = <-eventCh:
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())

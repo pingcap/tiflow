@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 )
 
 func (t *testConfig) TestSubTask(c *C) {
@@ -177,9 +176,6 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 		Name:     "test",
 		SourceID: "source-1",
 		Mode:     ModeAll,
-		TiDB: TiDBExtraConfig{
-			Backend: lcfg.BackendLocal,
-		},
 	}
 
 	// default loader
@@ -190,8 +186,9 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 
 	// file
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "file:///tmp/storage",
+		PoolSize:   defaultPoolSize,
+		Dir:        "file:///tmp/storage",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
@@ -223,7 +220,6 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir 1invalid: is invalid.*")
 
 	// use loader and not s3
-	cfg.TiDB.Backend = ""
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize: defaultPoolSize,
 		Dir:      "file:///tmp/storage",
@@ -233,7 +229,6 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
 
 	// use loader and s3
-	cfg.TiDB.Backend = ""
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize: defaultPoolSize,
 		Dir:      "s3://bucket2/prefix",
