@@ -196,16 +196,18 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 
 	// s3
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "s3://bucket2/prefix",
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket2/prefix",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"."+cfg.Name+"."+cfg.SourceID)
 
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
@@ -213,16 +215,18 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 
 	// invaild dir
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "1invalid:",
+		PoolSize:   defaultPoolSize,
+		Dir:        "1invalid:",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir 1invalid: is invalid.*")
 
 	// use loader and not s3
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "file:///tmp/storage",
+		PoolSize:   defaultPoolSize,
+		Dir:        "file:///tmp/storage",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
@@ -239,8 +243,9 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	// not all or full mode
 	cfg.Mode = ModeIncrement
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "1invalid:",
+		PoolSize:   defaultPoolSize,
+		Dir:        "1invalid:",
+		ImportMode: LoadModeSQL,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
