@@ -109,8 +109,10 @@ Here is a simple prototype demo:
 ### Milestone 1 - Implementation of the modified task state machine according to the design documentation
 
 This phase is mainly about implementing the DM-Master/DM-Worker internal logic.
+
 For tasks, the DM-Master's internal scheduling module needs to support the creation of a subtask in a stopped state, in addition to adapting additional parameters like `-start-time`,`--time-out` and so on.
-And for Sources, when the DM-Master receives a ·disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing DMCTL.
+
+And for Sources, when the DM-Master receives a `disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing DMCTL.
 
 ### Milestone 2 - Defining the new OpenAPI Spec and implementing specific features
 
