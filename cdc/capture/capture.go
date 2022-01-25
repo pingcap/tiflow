@@ -107,10 +107,14 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 	}
 }
 
-func NewCapture4Test() *Capture {
-	return &Capture{
+func NewCapture4Test(isOwner bool) *Capture {
+	res := &Capture{
 		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
 	}
+	if isOwner {
+		res.owner = &owner.Owner{}
+	}
+	return res
 }
 
 func (c *Capture) reset(ctx context.Context) error {
