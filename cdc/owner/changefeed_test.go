@@ -76,6 +76,10 @@ type mockDDLSink struct {
 	wg sync.WaitGroup
 }
 
+func (m *mockDDLSink) Initialized() bool {
+	return true
+}
+
 func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
 	m.wg.Add(1)
 	go func() {

@@ -51,6 +51,9 @@ type DDLSink interface {
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
+
+	// Initialized return true if the sink is fully initialized.
+	Initialized() bool
 }
 
 type ddlSinkImpl struct {
@@ -71,6 +74,8 @@ type ddlSinkImpl struct {
 	// cancel would be used to cancel the goroutine start by `run`
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	initialized int32
 }
 
 func newDDLSink() DDLSink {
@@ -79,6 +84,7 @@ func newDDLSink() DDLSink {
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: ddlSinkInitializer,
 		cancel:          func() {},
+		initialized:     0,
 	}
 }
 
@@ -130,6 +136,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		}
 		log.Info("ddl sink initialized, start processing...",
 			zap.Duration("duration", time.Since(start)))
+
+		atomic.StoreInt32(&s.initialized, 1)
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
@@ -219,4 +227,9 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	}
 	s.wg.Wait()
 	return err
+}
+
+// Initialized return true if the sink is fully initialized.
+func (s *ddlSinkImpl) Initialized() bool {
+	return atomic.LoadInt32(&s.initialized) == 1
 }
