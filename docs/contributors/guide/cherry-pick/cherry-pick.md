@@ -51,8 +51,8 @@ reflection you wish to continue, bolster your case by supplementing your PR with
 
 ## Initiate a Cherry Pick
 
-- Add `needs-cherry-pick-release-{version}` label to the PR, the robot will then automatically create a new PR for the
-  cherry pick.
+- Add the tag `needs-cherry-pick-release-{version}` to the PR or use `/cherry-pick release-{version}` in the comments,
+  and the robot will automatically create a new PR for the cherry pick.
 - Your cherry pick PR will immediately get the `do-not-merge/cherry-pick-not-approved` label.
 
 ## Cherry Pick Review
@@ -71,8 +71,8 @@ they:
 
 - Are by default expected to be `type/bug-fix`.
 
-- The original change to the `master` branch is expected to be merged for some time and no related CI failures or test
-  flakiness must be discovered.
+- The original change to the `master` branch is expected to be merged and no related CI failures or test flakiness must
+  be discovered.
 
 - Milestones must be set on the PR reflecting the milestone for the target release branch (for example, milestone v5.3.2
   for a cherry pick onto branch
@@ -106,6 +106,10 @@ Contributors may encounter some of the following difficulties when initiating a 
 
 - A cherry pick PR does not apply cleanly against an old release branch. In that case, you will need to manually fix
   conflicts.
+
+- If you have several related PRs at the same time, by successive cherry picking, then it is very likely that your PR
+  will also conflict with the previous PRs, because of the order in which the previous PRs were not merged. Please
+  check [Batch Merging Cherry Picks](#batch-merging-cherry-picks).
 
 - The cherry pick PR includes code that does not pass CI tests. Please re-trigger the test and submit an unstable test
   report [in this issue](https://github.com/pingcap/tiflow/issues/2246).
