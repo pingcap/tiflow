@@ -174,3 +174,7 @@ func (v *DataValidator) Stop() {
 	v.wg.Wait()
 	v.started.Store(false)
 }
+
+func (v *DataValidator) Started() bool {
+	return v.started.Load()
+}

@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer"
 )
 
 var emptyWorkerStatusInfoJSONLength = 25
@@ -617,13 +618,50 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	subTaskStageCh := make(chan ha.Stage, 10)
 	subTaskErrCh := make(chan error, 10)
-	ha.WatchValidatorStage(ctx, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
+	ctxForWatch, cancelFunc := context.WithCancel(ctx)
+	ha.WatchValidatorStage(ctxForWatch, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
 		c.Assert(err, Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
+	cancelFunc()
+
+	//
+	// step 4: watch subtask stage from startRev
+	subTask := w.subTaskHolder.findSubTask(subtaskCfg.Name)
+	getValidator := func() *syncer.DataValidator {
+		subTask.Lock()
+		defer subTask.Unlock()
+		return subTask.validator
+	}
+	c.Assert(subTask, NotNil)
+	c.Assert(getValidator(), IsNil)
+	var wg sync.WaitGroup
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.Assert(w.observeValidatorStage(ctx1, startRev), IsNil)
+	}()
+	time.Sleep(time.Second)
+
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
+	unitBakup := subTask.units[len(subTask.units)-1]
+	subTask.units[len(subTask.units)-1] = &syncer.Syncer{} // validator need a Syncer, not a mocked unit
+	validatorStage := ha.NewValidatorStage(pb.Stage_Running, subtaskCfg.SourceID, subtaskCfg.Name)
+	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, nil, []ha.Stage{validatorStage})
+	c.Assert(err, IsNil)
+
+	// validator created
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return getValidator() != nil
+	}), IsTrue)
+
+	subTask.units[len(subTask.units)-1] = unitBakup // restore unit
+	cancel1()
+	wg.Wait()
 
 	// test operate validator
 	err = w.operateValidatorStage(ha.Stage{IsDeleted: true})
