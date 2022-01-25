@@ -38,26 +38,34 @@ import (
 	"go.uber.org/zap"
 )
 
-// ┌────────────────┐          ┌─────────────────┐          ┌─────────────────┐
-// │changeFeedClosed│          │changeFeedRunning│          │changeFeedClosing│
-// └───────┬────────┘          └────────┬────────┘          └────────┬────────┘
-//         │                            │                            │
-//         │─ ─ ─ ─  new ddl sink ─ ─ ─>│                            │
-//         │                            │                            │
-//         │                            │                            │
-//         │                            │───── close ddl sink ──────>│
-//         │                            │                            │
-//         │                            │                            │
-//         │ <────────────────── ddl sink fully closed ──────────────│
-// ┌───────┴────────┐          ┌────────┴────────┐          ┌────────┴────────┐
-// │changeFeedClosed│          │changeFeedRunning│          │changeFeedClosing│
-// └────────────────┘          └─────────────────┘          └─────────────────┘
+//┌────────────────┐          ┌──────────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+//│changeFeedClosed│          │changeFeedInitializing│          │changeFeedRunning│          │changeFeedClosing│
+//└───────┬────────┘          └──────────┬───────────┘          └────────┬────────┘          └────────┬────────┘
+//        │                              │                               │                            │
+//        │ ─────── new ddl sink ─  ─────>                               │                            │
+//        │                              │                               │                            │
+//        │                              │                               │                            │
+//        │                              │ ─ ddl sink fully initialized─>│                            │
+//        │                              │                               │                            │
+//        │                              │                               │                            │
+//        │                              │                               │──── close ddl sink ───────>│
+//        │                              │                               │                            │
+//        │                              │                               │                            │
+//        │                              │ ─────────── ddl sink initializing meet error ─────────────>│
+//        │                              │                               │                            │
+//        │                              │                               │                            │
+//        │ <─────────────────────────────── ddl sink fully closed ───────────────────────────────────│
+//┌───────┴────────┐          ┌──────────┴───────────┐          ┌────────┴────────┐          ┌────────┴────────┐
+//│changeFeedClosed│          │changeFeedInitializing│          │changeFeedRunning│          │changeFeedClosing│
+//└────────────────┘          └──────────────────────┘          └─────────────────┘          └─────────────────┘
 
 type changeFeedRunningStatus int
 
 const (
 	// `changeFeedClosed` if the ddl sink fully closed.
 	changeFeedClosed changeFeedRunningStatus = iota
+	// `changeFeedInitializing` if the ddl sink is initializing
+	changeFeedInitializing
 	// `changeFeedRunning` if the ddl sink running
 	changeFeedRunning
 	// `changeFeedClosing` if the ddl sink closing
@@ -267,10 +275,23 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if c.runningStatus != changeFeedClosed {
+	switch c.runningStatus {
+	case changeFeedRunning, changeFeedClosing:
 		return nil
+	case changeFeedInitializing:
+		if c.sink.Initialized() {
+			c.runningStatus = changeFeedRunning
+			log.Info("changefeed is running",
+				zap.String("changefeed", c.state.ID))
+		}
+		if err := c.handleErrorCh(); err != nil {
+			log.Info("changefeed initializing m")
+			return errors.Trace(err)
+		}
+	default:
+		// changefeed is closed
 	}
-	// clean the errCh
+
 	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
 	// So we should make sure that the errCh is empty when the changefeed is restarting
 LOOP:

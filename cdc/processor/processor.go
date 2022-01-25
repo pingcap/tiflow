@@ -52,23 +52,23 @@ const (
 	maxTries             = 3
 )
 
-// ┌───────────────┐          ┌─────────────────────┐          ┌────────────────┐          ┌────────────────┐
-// │processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
-// └───────┬───────┘          └──────────┬──────────┘          └───────┬────────┘          └───────┬────────┘
-// 		   │                             │                             │                           │
-// 		   │ ─ ─ ─ ─ new sink ─  ─ ─ ─ ─>│                             │                           │
-// 		   │                             │                             │                           │
-// 		   │                             │                             │                           │
-// 		   │                             │─ sink fully initialized ───>│                           │
-// 		   │                             │                             │                           │
-// 		   │                             │                             │                           │
-// 		   │                             │                             │ ───── close the sink ─────>
-// 		   │                             │                             │                           │
-// 		   │                             │                             │                           │
-// 		   │<────────────────────────────── sink fully closed ─────────────────────────────────────│
-// ┌───────┴───────┐          ┌──────────┴──────────┐          ┌───────┴────────┐          ┌───────┴────────┐
-// │processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
-// └───────────────┘          └─────────────────────┘          └────────────────┘          └────────────────┘
+//┌───────────────┐          ┌─────────────────────┐          ┌────────────────┐          ┌────────────────┐
+//│processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
+//└───────┬───────┘          └──────────┬──────────┘          └───────┬────────┘          └───────┬────────┘
+//        │                             │                             │                           │
+//        │───────── new sink ─────────>│                             │                           │
+//  	  │                             │                             │                           │
+//		  │                             │─── sink fully initialized ─>│                           │
+//		  │                             │                             │                           │
+//		  │                             │                             │ ───────close the sink ────>
+//		  │                             │                             │                           │
+//	  	  │                             │─────── sink initializing meet error ───────────────────>│
+//		  │                             │                             │                           │
+//        │                             │                             │                           │
+//        │<─────────────────────────────── sink fully closed ────────────────────────────────────│
+//┌───────┴───────┐          ┌──────────┴──────────┐          ┌───────┴────────┐          ┌───────┴────────┐
+//│processorClosed│          │processorInitializing│          │processorRunning│          │processorClosing│
+//└───────────────┘          └─────────────────────┘          └────────────────┘          └────────────────┘
 
 // processorRunningStatus indicate the LifeCycle of the current processor.
 type processorRunningStatus int
