@@ -1097,15 +1097,15 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-config-20052]
-message = "invalid load mode '%s'"
-description = ""
-workaround = "Please choose a valid value in ['sql', 'loader']"
-tags = ["internal", "medium"]
-
-[error.DM-config-20053]
 message = "collation compatible %s not supported"
 description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
+[error.DM-config-20053]
+message = "invalid load mode '%s'"
+description = ""
+workaround = "Please choose a valid value in ['sql', 'loader']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]
