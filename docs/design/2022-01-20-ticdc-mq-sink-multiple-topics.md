@@ -1,7 +1,7 @@
 # TiCDC supports multi-topic dispatch
 
 - Author(s): [hi-rustin](https://github.com/hi-rustin)
-- Tracking Issue: TODO: ADD IT BEFORE MERGE
+- Tracking Issue: https://github.com/pingcap/tiflow/issues/4423
 
 ## Table of Contents
 
@@ -137,7 +137,7 @@ N/A
 
 ## Investigation & Alternatives
 
-TODO: Investigate whether the style of the theme scheduling configuration is uniform and adaptable with other products.
+N/A
 
 ## Unresolved Questions
 
