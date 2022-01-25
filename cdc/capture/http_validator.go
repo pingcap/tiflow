@@ -99,7 +99,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, err
 	}
 	// set sortEngine and EnableOldValue
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return nil, err
 	}

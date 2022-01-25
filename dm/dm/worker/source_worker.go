@@ -181,6 +181,9 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
