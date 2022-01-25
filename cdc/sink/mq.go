@@ -238,12 +238,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-// Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// No longer need it for now
-	return nil
-}
-
 func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
@@ -281,8 +275,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			messages := encoder.Build()
-			thisBatchSize := len(messages)
-			if thisBatchSize == 0 {
+			thisBatchSize := 0
+			if len(messages) == 0 {
 				return 0, nil
 			}
 
@@ -291,6 +285,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
+				thisBatchSize += msg.GetRowsCount()
 			}
 
 			if op == codec.EncoderNeedSyncWrite {
@@ -387,7 +382,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -417,8 +416,8 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		opts["max-batch-size"] = s
 	}
-	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
-	// and it may needs credential.
+	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
+	// and it may need credential.
 	credential := &security.Credential{}
 	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
