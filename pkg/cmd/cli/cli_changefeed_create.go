@@ -163,17 +163,18 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 		}
 		o.startTs = oracle.ComposeTS(ts, logical)
 	}
-
-	return o.completeCfg(ctx, cmd)
-}
-
-// completeCfg complete the replica config from file and cmd flags.
-func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Command) error {
 	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return err
 	}
 
+	return o.completeCfg(ctx, cmd, captureInfos)
+}
+
+// completeCfg complete the replica config from file and cmd flags.
+func (o *createChangefeedOptions) completeCfg(
+	ctx context.Context, cmd *cobra.Command, captureInfos []*model.CaptureInfo,
+) error {
 	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return errors.Trace(err)
@@ -225,6 +226,14 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
 			}
 		}
+	}
+
+	if o.commonChangefeedOptions.sortEngine != model.SortInMemory &&
+		o.commonChangefeedOptions.sortEngine != model.SortInFile &&
+		o.commonChangefeedOptions.sortEngine != model.SortUnified {
+		log.Warn("invalid sort-engine, use Unified Sorter by default",
+			zap.String("invalid", o.commonChangefeedOptions.sortEngine))
+		o.commonChangefeedOptions.sortEngine = model.SortUnified
 	}
 
 	if o.commonChangefeedOptions.sortEngine == model.SortUnified && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {

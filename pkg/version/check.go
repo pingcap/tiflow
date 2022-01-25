@@ -35,7 +35,6 @@ import (
 
 var (
 	// minPDVersion is the version of the minimal compatible PD.
-	// TODO bump 5.2.0-alpha once PD releases.
 	minPDVersion *semver.Version = semver.New("5.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
@@ -43,16 +42,14 @@ var (
 	maxPDVersion *semver.Version = semver.New("9999.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
-	// TODO bump 5.2.0-alpha once TiKV releases.
 	MinTiKVVersion *semver.Version = semver.New("5.1.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiKVVersion *semver.Version = semver.New("9999.0.0")
 
-	// minTiCDCVersion is the version of the minimal compatible TiCDC.
-	// TODO bump 5.2.0-alpha once TiCDC releases.
-	minTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
+	// MinTiCDCVersion is the version of the minimal compatible TiCDC.
+	MinTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
 	// Compatible versions are in [MinTiCDCVersion, MaxTiCDCVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiCDCVersion *semver.Version = semver.New("9999.0.0")
@@ -266,11 +263,11 @@ func CheckTiCDCClusterVersion(cdcClusterVer TiCDCClusterVersion) (unknown bool, 
 		return true, nil
 	}
 	ver := cdcClusterVer.Version
-	minOrd := ver.Compare(*minTiCDCVersion)
+	minOrd := ver.Compare(*MinTiCDCVersion)
 	if minOrd < 0 {
 		arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s"+
 			"try tiup ctl:%s cdc [COMMAND]",
-			ver, minTiCDCVersion, ver)
+			ver, MinTiCDCVersion, ver)
 		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	maxOrd := ver.Compare(*maxTiCDCVersion)
