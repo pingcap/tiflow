@@ -64,21 +64,9 @@ function check_print_status() {
 	echo "checking print status"
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
-	grep -oP "\[unit=load\] \[finished_bytes=[0-9]+\] \[total_bytes=59637\] \[total_file_count=3\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
-	#grep -oP "loader.*\Kfinished_bytes = [0-9]+, total_bytes = [0-9]+, total_file_count = [0-9]+, progress = .*" $WORK_DIR/worker1/log/dm-worker.log > $status_file
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59637\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
-	[ $status_count -ge 2 ]
-	count=0
-	cat $status_file | while read -r line; do
-		total_file_count=$(echo "$line" | awk '{print $(NF-2)}' | tr -d "[total_file_count=" | tr -d "]")
-		[ $total_file_count -eq 3 ]
-		count=$((count + 1))
-		if [ $count -eq $status_count ]; then
-			finished_bytes=$(echo "$line" | awk '{print $2}' | tr -d "[finished_bytes=" | tr -d "]")
-			total_bytes=$(echo "$line" | awk '{print $3}' | tr -d "[total_file_count" | tr -d "]")
-			[[ "$finished_bytes" -eq "$total_bytes" ]]
-		fi
-	done
+	[ $status_count -eq 1 ]
 	echo "check load unit print status success"
 
 	# check sync unit print status
