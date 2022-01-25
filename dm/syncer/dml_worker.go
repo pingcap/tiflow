@@ -196,17 +196,28 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 // executeBatchJobs execute jobs with batch size.
 func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	var (
-		affect int
-		db     = w.toDBConns[queueID]
-		err    error
-		dmls   = make([]*DML, 0, len(jobs))
+		affect  int
+		queries []string
+		args    [][]interface{}
+		db      = w.toDBConns[queueID]
+		err     error
+		dmls    = make([]*DML, 0, len(jobs))
 	)
 
 	defer func() {
 		if err == nil {
 			w.successFunc(queueID, len(dmls), jobs)
 		} else {
-			w.fatalFunc(jobs[affect], err)
+			if len(queries) == len(jobs) {
+				w.fatalFunc(jobs[affect], err)
+			} else {
+				w.logger.Warn("length of queries not equals length of jobs, cannot determine which job failed", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
+				newJob := job{
+					startLocation:   jobs[0].startLocation,
+					currentLocation: jobs[len(jobs)-1].currentLocation,
+				}
+				w.fatalFunc(&newJob, err)
+			}
 		}
 	}()
 
@@ -230,7 +241,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	for _, j := range jobs {
 		dmls = append(dmls, j.dml)
 	}
-	queries, args := w.genSQLs(dmls)
+	queries, args = w.genSQLs(dmls)
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
@@ -243,6 +254,13 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		if intVal, ok := val.(int); ok && intVal == 4 && len(jobs) > 0 {
 			w.logger.Warn("fail to exec DML", zap.String("failpoint", "SafeModeExit"))
 			affect, err = 0, terror.ErrDBExecuteFailed.Delegate(errors.New("SafeModeExit"), "mock")
+		}
+	})
+
+	failpoint.Inject("ErrorOnLastDML", func(_ failpoint.Value) {
+		if len(queries) > len(jobs) {
+			w.logger.Error("error on last queries", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
+			affect, err = len(queries)-1, terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
 		}
 	})
 }

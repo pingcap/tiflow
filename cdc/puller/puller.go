@@ -139,21 +139,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
 		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
 	}()
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(15 * time.Second):
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			}
-		}
-	})
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
+		metricsTicker := time.NewTicker(15 * time.Second)
+		defer metricsTicker.Stop()
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
@@ -181,6 +171,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			var e model.RegionFeedEvent
 			select {
+			case <-metricsTicker.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				continue
 			case e = <-eventCh:
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())

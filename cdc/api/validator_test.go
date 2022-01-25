@@ -23,6 +23,7 @@ import (
 )
 
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
