@@ -205,11 +205,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
 			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
+			if isRetryableError(err) {
+				continue
+			}
 			if err != nil {
-				// etcd client 报错为 ErrTimeoutDueToLeaderFail 时也应该 continue 重试
-				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
-					continue
-				}
 				return errors.Trace(err)
 			}
 		} else {
@@ -256,6 +255,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			pendingPatches = append(pendingPatches, nextState.GetPatches()...)
 		}
 	}
+}
+
+func isRetryableError(err error) bool {
+	return cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err))
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
@@ -352,7 +355,8 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 
 	cmps := make([]clientv3.Cmp, 0, len(changedState))
-	ops := make([]clientv3.Op, 0, len(changedState))
+	opsThen := make([]clientv3.Op, 0, len(changedState))
+	opsElse := make([]clientv3.Op, 0)
 	hasDelete := false
 
 	for key, value := range changedState {
@@ -374,11 +378,11 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 			op = clientv3.OpDelete(key.String())
 			hasDelete = true
 		}
-		ops = append(ops, op)
+		opsThen = append(opsThen, op)
 	}
 
 	if hasDelete {
-		ops = append(ops, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
 	}
 	if worker.deleteCounter > 0 {
 		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
@@ -392,7 +396,8 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	startTime := time.Now()
 
 	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
-	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
+	resp, err := worker.client.Txn1(txnCtx, cmps, opsThen, opsElse)
+	// resp, err = worker.client.Txn(txnCtx).If(cmps...).Then(opsThen...).Commit()
 	cancel()
 
 	// For testing the situation where we have a progress notification that
@@ -412,7 +417,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 		return errors.Trace(err)
 	}
 
-	logEtcdOps(ops, resp.Succeeded)
+	logEtcdOps(opsThen, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil

@@ -129,6 +129,16 @@ func (c *Client) Txn(ctx context.Context) clientv3.Txn {
 	return c.cli.Txn(ctx)
 }
 
+// Txn delegates request to clientv3.KV.Txn
+func (c *Client) Txn1(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
+		var inErr error
+		resp, inErr = c.cli.Txn(ctx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		return inErr
+	})
+	return
+}
+
 // Grant delegates request to clientv3.Lease.Grant
 func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGrantResponse, err error) {
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
