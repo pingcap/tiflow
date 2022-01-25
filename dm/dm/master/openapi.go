@@ -951,7 +951,7 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 			continue
 		}
 		openapiSubTaskStatus.Stage = subTaskStatus.GetStage().String()
-		openapiSubTaskStatus.Unit = sourceStatus.GetSource()
+		openapiSubTaskStatus.Unit = sourceStatus.GetUnit().String()
 		openapiSubTaskStatus.UnresolvedDdlLockId = &subTaskStatus.UnresolvedDDLLockID
 		// add load status
 		if loadS := subTaskStatus.GetLoad(); loadS != nil {
