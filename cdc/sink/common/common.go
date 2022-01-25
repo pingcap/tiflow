@@ -16,7 +16,6 @@ package common
 import (
 	"sort"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -55,7 +54,6 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 type UnresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
 	unresolvedTxns   map[model.TableID][]*txnsWithTheSameCommitTs
-	checkpointTs     uint64
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
@@ -103,32 +101,27 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 
 // Resolved returns resolved txns according to resolvedTs
 // The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
-func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
-	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
-		return nil
-	}
-
+func (c *UnresolvedTxnCache) Resolved(resolvedTsMap *sync.Map) (map[model.TableID]uint64, map[model.TableID][]*model.SingleTableTxn) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 	if len(c.unresolvedTxns) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, c.unresolvedTxns)
-	return resolvedTxnsMap
-}
-
-// UpdateCheckpoint updates the checkpoint ts
-func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
-	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
+	return splitResolvedTxn(resolvedTsMap, c.unresolvedTxns)
 }
 
 func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
+) (flushedResolvedTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
-	minTs = resolvedTs
+	flushedResolvedTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	for tableID, txns := range unresolvedTxns {
+		v, ok := resolvedTsMap.Load(tableID)
+		if !ok {
+			continue
+		}
+		resolvedTs := v.(uint64)
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
@@ -154,9 +147,7 @@ func splitResolvedTxn(
 			}
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
-		if len(resolvedTxnsWithTheSameCommitTs) > 0 && resolvedTxnsWithTheSameCommitTs[0].commitTs < minTs {
-			minTs = resolvedTxnsWithTheSameCommitTs[0].commitTs
-		}
+		flushedResolvedTsMap[tableID] = resolvedTs
 	}
 	return
 }
