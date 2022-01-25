@@ -130,8 +130,8 @@ type Syncer struct {
 	runCtx    *tcontext.Context
 	runCancel context.CancelFunc
 	// this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop
-	runSyncTCtx   *tcontext.Context
-	runSyncCancel context.CancelFunc
+	syncTCtx   *tcontext.Context
+	syncCancel context.CancelFunc
 	// control all goroutines that started in S.Run
 	runWg sync.WaitGroup
 
@@ -1286,9 +1286,9 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(s.runSyncTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(s.syncTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
-				err = s.handleSpecialDDLError(s.runSyncTCtx, err, ddlJob.ddls, affected, db)
+				err = s.handleSpecialDDLError(s.syncTCtx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
@@ -1488,7 +1488,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
-	s.runSyncTCtx, s.runSyncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
+	s.syncTCtx, s.syncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
 	s.checkpointFlushWorker = &checkpointFlushWorker{
 		input:        make(chan *checkpointFlushTask, 16),
 		cp:           s.checkpoint,
@@ -3383,7 +3383,7 @@ func (s *Syncer) Close() {
 func (s *Syncer) Kill() {
 	s.tctx.L().Warn("kill syncer without graceful")
 	s.runCancel()
-	s.runSyncCancel()
+	s.syncCancel()
 	s.Close()
 }
 
