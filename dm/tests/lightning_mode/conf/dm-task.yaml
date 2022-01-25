@@ -37,9 +37,6 @@ black-white-list: # compatible with deprecated config
     do-dbs: ["lightning_mode"]
     ignore-dbs: ["ignore_db"]
 
-tidb:
-  backend: "tidb"
-
 filters:                     # filter rules, mysql instance can ref rules in it
   user-filter-1:
     schema-pattern: "*"    # pattern of the upstream schema name, wildcard characters (*?) are supported
@@ -58,6 +55,7 @@ loaders:
   global:
     pool-size: 16
     dir: "./dumped_data"
+    import-mode: "sql"
 
 syncers:
   global:
