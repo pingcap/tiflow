@@ -458,7 +458,7 @@ func (s *Server) doClose() {
 
 // Close close the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
-	s.doClose() // we should stop current sync first, other wise master may scheduler task on new worker while we are closing
+	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
 	s.etcdClient.Close()
 }
@@ -520,18 +520,18 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 		s.Lock()
 		defer s.Unlock()
 	}
-	sw := s.getSourceWorker(false)
-	if sw == nil {
+	w := s.getSourceWorker(false)
+	if w == nil {
 		log.L().Warn("worker has not been started, no need to stop", zap.String("source", sourceID))
 		return nil // no need to stop because not started yet
 	}
-	if sourceID != "" && sw.cfg.SourceID != sourceID {
+	if sourceID != "" && w.cfg.SourceID != sourceID {
 		return terror.ErrWorkerSourceNotMatch
 	}
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	sw.Stop(graceful)
+	w.Stop(graceful)
 	return nil
 }
 

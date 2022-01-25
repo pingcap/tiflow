@@ -125,15 +125,15 @@ type Syncer struct {
 
 	tctx *tcontext.Context // this ctx only used for logger.
 
-	// this ctx is a background ctx and was initialized in s.Run, it is used for some background tasks in s.Run
+	// this ctx derives from a background ctx and was initialized in s.Run, it is used for some background tasks in s.Run
 	// when this ctx cancelled, syncer will shutdown all background running jobs and not wait transaction end
-	runCtx context.Context
-	// this is used for some background tasks s.Run that need logger it share same lifecycle with runCtx.
-	runTCtx       *tcontext.Context
-	runCancel     context.CancelFunc
-	runSyncTCtx   *tcontext.Context // this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop
+	runCtx    *tcontext.Context
+	runCancel context.CancelFunc
+	// this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop
+	runSyncTCtx   *tcontext.Context
 	runSyncCancel context.CancelFunc
-	runWg         sync.WaitGroup // control all goroutines started in S.Run
+	// control all goroutines that started in S.Run
+	runWg sync.WaitGroup
 
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
@@ -1429,13 +1429,13 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.waitXIDJob.Store(int64(waiting))
 		s.waitTransactionLock.Unlock()
 		select {
-		case <-s.runCtx.Done():
+		case <-s.runCtx.Ctx.Done():
 			s.tctx.L().Info("syncer run exit so runCtx done")
 		case <-time.After(maxPauseOrStopWaitTime):
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
 		}
-	case <-s.runCtx.Done(): // when no graceful stop, run ctx will canceled first.
+	case <-s.runCtx.Ctx.Done(): // when no graceful stop, run ctx will canceled first.
 		s.tctx.L().Info("received ungraceful exit ctx, exit now")
 	}
 }
@@ -1485,8 +1485,8 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.Lock()
-	s.runCtx, s.runCancel = context.WithCancel(context.Background())
-	s.runTCtx = tcontext.NewContext(s.runCtx, s.tctx.L())
+	runCtx, runCancel := context.WithCancel(context.Background())
+	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
 	s.runSyncTCtx, s.runSyncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
 	s.checkpointFlushWorker = &checkpointFlushWorker{
@@ -1516,7 +1516,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	// some initialization that can't be put in Syncer.Init
-	fresh, err := s.IsFreshTask(s.runCtx)
+	fresh, err := s.IsFreshTask(s.runCtx.Ctx)
 	if err != nil {
 		return err
 	} else if fresh {
@@ -1532,7 +1532,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		delLoadTask     bool
 		cleanDumpFile   = s.cfg.CleanDumpFile
 	)
-	flushCheckpoint, err = s.adjustGlobalPointGTID(s.runTCtx)
+	flushCheckpoint, err = s.adjustGlobalPointGTID(s.runCtx)
 	if err != nil {
 		return err
 	}
@@ -1552,18 +1552,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// start syncDML worker first because if there is no dml worker checkpointFlushWorker will blocked forever
 	go s.syncDML()
 	s.runWg.Add(1)
-	// start flush checkpoints worker. this worker mast start before s.flushCheckPoints()
+	// start flush checkpoints worker. this worker must start before s.flushCheckPoints()
 	go func() {
 		defer s.runWg.Done()
-		// also need to use a ctx different s.runCtx, checkpointFlushWorker worker will closed in the first defer
+		// also need to use a ctx different s.runCtx, checkpointFlushWorker worker will be closed in the first defer
 		s.checkpointFlushWorker.Run(s.tctx)
 	}()
 	s.runWg.Add(1)
 	go s.syncDDL(adminQueueName, s.ddlDBConn, s.ddlJobCh)
 	s.runWg.Add(1)
-	go s.updateLagCronJob(s.runCtx)
+	go s.updateLagCronJob(s.runCtx.Ctx)
 	s.runWg.Add(1)
-	go s.updateTSOffsetCronJob(s.runCtx)
+	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			s.tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1605,7 +1605,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if s.streamerController.IsClosed() {
 		s.locations.reset(lastLocation)
-		err = s.streamerController.Start(s.runTCtx, lastLocation)
+		err = s.streamerController.Start(s.runCtx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
 		}
@@ -1676,7 +1676,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// if we start syncer at an early position, database must bear a period of inconsistent state,
 	// it's eventual consistency.
 	s.safeMode = sm.NewSafeMode()
-	s.enableSafeModeInitializationPhase(s.runTCtx)
+	s.enableSafeModeInitializationPhase(s.runCtx)
 
 	closeShardingResync := func() error {
 		if shardingReSync == nil {
@@ -1715,7 +1715,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		for i := 0; i < n; {
-			e, err1 := s.getEvent(s.runTCtx, currentLocation)
+			e, err1 := s.getEvent(s.runCtx, currentLocation)
 			if err1 != nil {
 				return err
 			}
@@ -1766,7 +1766,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// if suffix>0, we are replacing error
 			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 			s.locations.reset(shardingReSync.currLocation)
-			err = s.streamerController.RedirectStreamer(s.runTCtx, shardingReSync.currLocation)
+			err = s.streamerController.RedirectStreamer(s.runCtx, shardingReSync.currLocation)
 			if err != nil {
 				return err
 			}
@@ -1780,7 +1780,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var e *replication.BinlogEvent
 
 		startTime := time.Now()
-		e, err = s.getEvent(s.runTCtx, currentLocation)
+		e, err = s.getEvent(s.runCtx, currentLocation)
 		s.tctx.L().Debug("location refactor",
 			zap.Stringer("current", currentLocation),
 			zap.Stringer("start", startLocation),
@@ -1847,7 +1847,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// try to re-sync in gtid mode
 			if tryReSync && s.cfg.EnableGTID && utils.IsErrBinlogPurged(err) && s.cfg.AutoFixGTID {
 				time.Sleep(retryTimeout)
-				err = s.reSyncBinlog(*s.runTCtx, lastLocation)
+				err = s.reSyncBinlog(*s.runCtx, lastLocation)
 				if err != nil {
 					return err
 				}
@@ -1968,9 +1968,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					s.errOperatorHolder.SetHasAllInjected(startLocation)
 					// reset event as startLocation, avoid to be marked in checkpoint
 					currentLocation.Position.Pos = startLocation.Position.Pos
-					err = s.streamerController.RedirectStreamer(s.runTCtx, startLocation)
+					err = s.streamerController.RedirectStreamer(s.runCtx, startLocation)
 				} else {
-					err = s.streamerController.RedirectStreamer(s.runTCtx, currentLocation)
+					err = s.streamerController.RedirectStreamer(s.runCtx, currentLocation)
 				}
 				if err != nil {
 					return err
@@ -1990,17 +1990,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				// 2. push forward and replicate some sqls after safeModeExitPoint to downstream
 				// 3. quit because of network error, fail to flush global checkpoint and new safeModeExitPoint to downstream
 				// 4. restart again, quit safe mode at safeModeExitPoint, but some sqls after this location have already been replicated to the downstream
-				if err = s.checkpoint.FlushSafeModeExitPoint(s.runTCtx); err != nil {
+				if err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx); err != nil {
 					return err
 				}
-				if err = s.safeMode.Add(s.runTCtx, -1); err != nil {
+				if err = s.safeMode.Add(s.runCtx, -1); err != nil {
 					return err
 				}
 			}
 		}
 
 		ec := eventContext{
-			tctx:                s.runTCtx,
+			tctx:                s.runCtx,
 			header:              e.Header,
 			startLocation:       &startLocation,
 			currentLocation:     &currentLocation,
