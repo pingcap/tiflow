@@ -1204,10 +1204,11 @@ func (w *SourceWorker) getValidatorOp(stage ha.Stage) string {
 		return "validator-delete"
 	}
 	if stage.Expect == pb.Stage_Running {
-		return pb.ValidatorOp_Validator_Start.String()
+		return pb.ValidatorOp_StartValidator.String()
 	} else if stage.Expect == pb.Stage_Stopped {
-		return pb.ValidatorOp_Validator_Stop.String()
+		return pb.ValidatorOp_StopValidator.String()
 	}
+	// should not happen
 	return ""
 }
 

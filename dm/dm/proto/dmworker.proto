@@ -387,6 +387,6 @@ message GetWorkerCfgResponse {
 
 enum ValidatorOp {
     InvalidValidatorOp = 0;
-    Validator_Start = 1;
-    Validator_Stop = 2;
+    StartValidator = 1;
+    StopValidator = 2;
 }
