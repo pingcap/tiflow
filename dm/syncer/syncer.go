@@ -2787,13 +2787,12 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 	}
 	var err error
 	qec := &queryEventContext{
-		eventContext:    &ec,
-		ddlSchema:       string(ev.Schema),
-		originSQL:       utils.TrimCtrlChars(originSQL),
-		splitDDLs:       make([]string, 0),
-		appliedDDLs:     make([]string, 0),
-		sourceTbls:      make(map[string]map[string]struct{}),
-		eventStatusVars: ev.StatusVars,
+		eventContext: &ec,
+		ddlSchema:    string(ev.Schema),
+		originSQL:    utils.TrimCtrlChars(originSQL),
+		splitDDLs:    make([]string, 0),
+		appliedDDLs:  make([]string, 0),
+		sourceTbls:   make(map[string]map[string]struct{}),
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
@@ -2818,7 +2817,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 
 	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
-		ddlInfo, err := s.genDDLInfo(qec, sql)
+		ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
 		if err != nil {
 			return nil, err
 		}
