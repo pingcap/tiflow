@@ -102,7 +102,7 @@ func genKeyString(
 		// one column key looks like:`column_val.column_name.`
 		buf.WriteString(columnValue2String(data))
 		buf.WriteString(".")
-		buf.WriteString(columns[i].Name.O)
+		buf.WriteString(columns[i].Name.L)
 		buf.WriteString(".")
 	}
 	if buf.Len() == 0 {
