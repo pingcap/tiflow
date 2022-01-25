@@ -23,35 +23,47 @@ func init() {
 	}
 }
 
-func TestStartGrpcSrv(t *testing.T) {
-	t.Parallel()
-
-	dir, err := ioutil.TempDir("", "test-start-grpc-srv")
+func prepareServerEnv(t *testing.T, name string) (string, *Config, func()) {
+	dir, err := ioutil.TempDir("", name)
 	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
 	cfgTpl := `
 master-addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [etcd]
-name = "server-master-1"
+name = "%s"
 data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
-initial-cluster = "server-master-1=http://127.0.0.1:%d"`
-	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], dir, ports[1], ports[1])
+initial-cluster = "%s=http://127.0.0.1:%d"`
+	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], name, dir, ports[1], name, ports[1])
 	cfg := NewConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
 	err = cfg.adjust()
 	require.Nil(t, err)
 
+	cleanupFn := func() {
+		os.RemoveAll(dir)
+	}
+	masterAddr := fmt.Sprintf("127.0.0.1:%d", ports[0])
+
+	return masterAddr, cfg, cleanupFn
+}
+
+func TestStartGrpcSrv(t *testing.T) {
+	t.Parallel()
+
+	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-start-grpc-srv")
+	defer cleanup()
+
 	s := &Server{cfg: cfg}
 	ctx := context.Background()
-	err = s.startGrpcSrv(ctx)
+	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	testPprof(t, fmt.Sprintf("http://127.0.0.1:%d", ports[0]))
+	testPprof(t, fmt.Sprintf("http://%s", masterAddr))
 	s.Stop()
 }
 
@@ -156,5 +168,46 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 	s.leaderClient.cli = &client.MasterClientImpl{}
 	s.leaderClient.Unlock()
 	s.leader.Store(&Member{Name: etcdName})
+	wg.Wait()
+}
+
+// Server master requires etcd/gRPC service as the minimum running environment,
+// this case
+// - starts an embed etcd with gRPC service, including message service and
+//   server master pb service.
+// - campaigns to be leader and then runs leader service.
+func TestRunLeaderService(t *testing.T) {
+	t.Parallel()
+
+	_, cfg, cleanup := prepareServerEnv(t, "test-run-leader-service")
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, err := NewServer(cfg, nil)
+	require.Nil(t, err)
+
+	err = s.startGrpcSrv(ctx)
+	require.Nil(t, err)
+
+	err = s.reset(ctx)
+	require.Nil(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.msgService.GetMessageServer().Run(ctx)
+	}()
+
+	err = s.campaign(ctx, time.Second)
+	require.Nil(t, err)
+
+	ctx1, cancel1 := context.WithTimeout(ctx, time.Second)
+	defer cancel1()
+	err = s.runLeaderService(ctx1)
+	require.EqualError(t, err, context.DeadlineExceeded.Error())
+
+	cancel()
 	wg.Wait()
 }

@@ -9,8 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type ExecutorClientManager interface {
+// ClientsManager defines interface to manage all clients, including master client
+// and executor clients.
+type ClientsManager interface {
+	MasterClient() MasterClient
 	ExecutorClient(id model.ExecutorID) ExecutorClient
+	AddExecutor(id model.ExecutorID, addr string) error
 }
 
 func NewClientManager() *Manager {
@@ -27,7 +31,7 @@ type Manager struct {
 	executors map[model.ExecutorID]ExecutorClient
 }
 
-func (c *Manager) MasterClient() *MasterClientImpl {
+func (c *Manager) MasterClient() MasterClient {
 	return c.master
 }
 

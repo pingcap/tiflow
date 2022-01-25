@@ -14,7 +14,7 @@ import (
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *MasterMetaKVData) {
-	masterKey := adapter.MasterInfoKey.Encode(masterName)
+	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
 	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))

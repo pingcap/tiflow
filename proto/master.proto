@@ -80,16 +80,19 @@ message SubmitJobRequest {
 }
 
 message CancelJobRequest {
-    int32 job_id = 1;
+    int32 job_id = 1 [deprecated=true];
+    string job_id_str = 2;
 }
 
 message PauseJobRequest {
-    int32 job_id = 1;
+    int32 job_id = 1 [deprecated=true];
+    string job_id_str = 2;
 }
 
 message SubmitJobResponse {
     Error err = 1;
-    int32 job_id = 2;
+    int32 job_id = 2 [deprecated=true];
+    string job_id_str = 3;
 }
 
 message PauseJobResponse {

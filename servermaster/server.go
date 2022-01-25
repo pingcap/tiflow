@@ -12,16 +12,19 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
@@ -58,6 +61,8 @@ type Server struct {
 	//
 	cfg *Config
 
+	msgService *p2p.MessageRPCService
+
 	initialized atomic.Bool
 
 	// mocked server for test
@@ -78,14 +83,10 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	for _, u := range urls {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
-	jobManager := NewJobManagerImpl(masterAddrs)
-
-	// messageServer := p2p.NewMessageServer(cfg.)
 
 	server := &Server{
 		cfg:             cfg,
 		executorManager: executorManager,
-		jobManager:      jobManager,
 		initialized:     *atomic.NewBool(false),
 		testCtx:         ctx,
 		leader:          atomic.Value{},
@@ -277,6 +278,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
+	s.jobManager = NewJobManagerImpl([]string{s.cfg.MasterAddr})
 	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
 	if err != nil {
 		return
@@ -324,6 +326,10 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	wg, ctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() error {
+		return s.msgService.GetMessageServer().Run(ctx)
+	})
+
+	wg.Go(func() error {
 		return s.leaderLoop(ctx)
 	})
 
@@ -357,7 +363,8 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
-		// TODO: register msg server
+		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
+		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
 	}
 
 	httpHandlers := map[string]http.Handler{
@@ -432,7 +439,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
-	err = s.jobManager.Start(ctx, metadata.NewMetaEtcd(s.etcdClient))
+
+	clients := client.NewClientManager()
+	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	if err != nil {
+		return
+	}
+	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
+		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}

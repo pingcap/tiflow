@@ -36,7 +36,7 @@ type dummyConfig struct {
 }
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
-	masterKey := adapter.MasterInfoKey.Encode(masterName)
+	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfo := &MasterMetaKVData{
 		ID:     masterName,
 		NodeID: masterNodeName,
@@ -53,7 +53,7 @@ func TestMasterInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -63,7 +63,7 @@ func TestMasterInit(t *testing.T) {
 	master.messageHandlerManager.AssertHasHandler(t, HeartbeatPingTopic(masterName), &HeartbeatPingMessage{})
 	master.messageHandlerManager.AssertHasHandler(t, StatusUpdateTopic(masterName), &StatusUpdateMessage{})
 
-	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterInfoKey.Encode(masterName))
+	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
 	require.NoError(t, err)
 	resp := rawResp.(*clientv3.GetResponse)
 	require.Len(t, resp.Kvs, 1)
@@ -97,7 +97,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -137,7 +137,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := newMockMasterImpl("my-master")
+	master := NewMockMasterImpl("my-master")
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)

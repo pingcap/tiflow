@@ -49,6 +49,43 @@ type MessageRPCService struct {
 	grpcServer    *grpc.Server
 }
 
+// NewMessageServer creates a new message server from given configs
+func NewMessageServer(
+	selfID NodeID,
+	_credential *security.Credential,
+	opts ...MessageServerOpt,
+) *p2pImpl.MessageServer {
+	// Deep copy
+	config := defaultServerConfig
+	// Apply opts
+	for _, opt := range opts {
+		opt(&config)
+	}
+	return p2pImpl.NewMessageServer(selfID, &config)
+}
+
+// NewMessageRPCServiceWithRPCServer creates a new MessageRPCService with an
+// existing gRPC server.
+func NewMessageRPCServiceWithRPCServer(
+	selfID NodeID,
+	_credential *security.Credential,
+	grpcSvr *grpc.Server,
+	opts ...MessageServerOpt,
+) *MessageRPCService {
+	// Deep copy
+	config := defaultServerConfig
+	// Apply opts
+	for _, opt := range opts {
+		opt(&config)
+	}
+	messageServer := p2pImpl.NewMessageServer(selfID, &config)
+	// TODO: support accepting TLS connections.
+	return &MessageRPCService{
+		messageServer: messageServer,
+		grpcServer:    grpcSvr,
+	}
+}
+
 // NewMessageRPCService creates a new MessageRPCService.
 // Note: TLS is not supported for now.
 func NewMessageRPCService(
@@ -56,21 +93,10 @@ func NewMessageRPCService(
 	_credential *security.Credential,
 	opts ...MessageServerOpt,
 ) (*MessageRPCService, error) {
-	// Deep copy
-	config := defaultServerConfig
-	// Apply opts
-	for _, opt := range opts {
-		opt(&config)
-	}
-
-	messageServer := p2pImpl.NewMessageServer(selfID, &config)
-	// TODO zixiong: support accepting TLS connections.
 	grpcSvr := grpc.NewServer()
-	p2p.RegisterCDCPeerToPeerServer(grpcSvr, messageServer)
-	return &MessageRPCService{
-		messageServer: messageServer,
-		grpcServer:    grpcSvr,
-	}, nil
+	service := NewMessageRPCServiceWithRPCServer(selfID, _credential, grpcSvr, opts...)
+	p2p.RegisterCDCPeerToPeerServer(grpcSvr, service.messageServer)
+	return service, nil
 }
 
 // Serve listens on `l` and creates the background goroutine for the message server.
@@ -109,6 +135,10 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	})
 
 	return wg.Wait()
+}
+
+func (s *MessageRPCService) GetMessageServer() *p2pImpl.MessageServer {
+	return s.messageServer
 }
 
 // MakeHandlerManager returns a MessageHandlerManager
