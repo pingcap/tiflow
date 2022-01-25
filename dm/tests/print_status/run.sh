@@ -64,14 +64,9 @@ function check_print_status() {
 	echo "checking print status"
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
-	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=[0-9]+\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
-	#grep -oP "loader.*\Kfinished_bytes = [0-9]+, total_bytes = [0-9]+, total_file_count = [0-9]+, progress = .*" $WORK_DIR/worker1/log/dm-worker.log > $status_file
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59637\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
-	echo status_count, $status_count
 	[ $status_count -eq 1 ]
-	finished_bytes=$(cat $status_file | awk '{print $3}' | tr -d "[finished_bytes=" | tr -d "]")
-	total_bytes=$(cat $status_file | awk '{print $4}' | tr -d "[total_file_count" | tr -d "]")
-	[[ "$finished_bytes" -eq "$total_bytes" ]]
 	echo "check load unit print status success"
 
 	# check sync unit print status

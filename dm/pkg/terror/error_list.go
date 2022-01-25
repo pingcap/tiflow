@@ -246,8 +246,8 @@ const (
 	codeConfigOnlineDDLMistakeRegex
 	codeConfigOpenAPITaskConfigExist
 	codeConfigOpenAPITaskConfigNotExist
-	codeConfigInvalidLoadMode
 	codeCollationCompatibleNotSupport
+	codeConfigInvalidLoadMode
 	codeConfigInvalidLoadDuplicateResolution
 )
 
