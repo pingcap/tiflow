@@ -35,7 +35,7 @@ where command, `resource type` , `command` , and `flags` are:
 
 - `flags`: Specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server. note that we **not allow** any non-keyword arguments, all arguments must be specified as this: `--flag value`.
 
-### New DMCTL commands for Task
+### DMCTL commands for Task
 
 | command | Full Syntax Example                                                                                                                           | Flags                                                                          | Description                                                              |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
@@ -108,7 +108,9 @@ Here is a simple prototype demo:
 
 ### Milestone 1 - Implementation of the modified task state machine according to the design documentation
 
-For Task, the DM-Master's internal scheduling module needs to support the creation of a SubTask in the Stopped state, and for Source, the DM-Master will **synchronously** notify the DM-Worker when it receives a `disable source` request from the user and tell the DM-Worker to stop processing the SubTask. Note that all changes to the internal logic at this stage will not have any impact on the existing DMCTL commands.
+This phase is mainly about implementing the DM-Master/DM-Worker internal logic.
+For tasks, the DM-Master's internal scheduling module needs to support the creation of a subtask in a stopped state, in addition to adapting additional parameters like `-start-time`,`--time-out` and so on.
+And for Sources, when the DM-Master receives a ·disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing DMCTL.
 
 ### Milestone 2 - Defining the new OpenAPI Spec and implementing specific features
 
