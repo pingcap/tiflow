@@ -145,7 +145,6 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 
 // getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
 func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string, externalStore storage.ExternalStorage) (string, string, error) {
-
 	metafile := "metadata"
 	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, metafile, cfg.Flavor, externalStore)
 	if err != nil {

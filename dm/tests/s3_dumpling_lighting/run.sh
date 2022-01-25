@@ -21,7 +21,7 @@ s3_bucket="dmbucket"
 dumpPath="dmbucket/dump"
 
 # start s3 server
-function start_s3(){
+function start_s3() {
 	export MINIO_ACCESS_KEY=$s3_ACCESS_KEY
 	export MINIO_SECRET_KEY=$s3_SECRET_KEY
 	export MINIO_BROWSER=on
@@ -31,21 +31,21 @@ function start_s3(){
 
 	i=0
 	while ! curl -o /dev/null -v -s "http://$S3_ENDPOINT/"; do
-	i=$(($i+1))
-	if [ $i -gt 7 ]; then
-		echo 'Failed to start minio'
-		exit 1
-	fi
-	sleep 2
+		i=$(($i + 1))
+		if [ $i -gt 7 ]; then
+			echo 'Failed to start minio'
+			exit 1
+		fi
+		sleep 2
 	done
 	# create bucket dbpath
 	mkdir -p "${s3_DBPATH}/${s3_bucket}"
 }
 
 # clean s3 server
-cleanup_s3(){
-    pkill -hup minio 2>/dev/null || true
-    wait_process_exit minio
+cleanup_s3() {
+	pkill -hup minio 2>/dev/null || true
+	wait_process_exit minio
 	rm -rf $s3_DBPATH
 }
 
@@ -63,15 +63,15 @@ function check_dump_s3_exist() {
 	file_should_exist "${s3_DBPATH}/${dumpPath}.${3}.${4}/${table_schema}"
 }
 
-function file_should_exist(){
+function file_should_exist() {
 	if [ ! -f "$1" ]; then
-  		echo "[$(date)] File $1 not found." && exit 1
+		echo "[$(date)] File $1 not found." && exit 1
 	fi
 }
 
-function dir_should_not_exist(){
+function dir_should_not_exist() {
 	if [ -d "$1" ]; then
-  		echo "[$(date)] Dir $1 should not found." && exit 1
+		echo "[$(date)] Dir $1 should not found." && exit 1
 	fi
 }
 
@@ -79,7 +79,7 @@ function dir_should_not_exist(){
 # $1 == false will not
 function run_test() {
 
-    cleanup_data
+	cleanup_data
 	cleanup_s3
 	# start s3 server
 	start_s3
@@ -126,7 +126,7 @@ function run_test() {
 	echo "check task result"
 	# wait
 	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
-	
+
 	# check table data
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 
@@ -137,12 +137,11 @@ function run_test() {
 	else
 		dir_should_not_exist "${s3_DBPATH}/${dumpPath}.${TASK_NAME}.${SOURCE_ID1}"
 	fi
-	
+
 	cleanup_s3
 }
 
-
-function run(){
+function run() {
 	run_test true
 	echo "run s3 test with check dump files success"
 	run_test false

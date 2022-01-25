@@ -1170,7 +1170,6 @@ func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
 	loc, loc2, err := dumpling.ParseMetaDataByExternalStore(ctx, filename, cp.cfg.Flavor, cp.externalStore)
-
 	if err != nil {
 		toPrint, err2 := cp.externalStore.ReadFile(context.Background(), filename)
 		if err2 != nil {

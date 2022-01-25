@@ -46,7 +46,6 @@ func AdjustS3Path(rawURL string, uniqueID string) (bool, string, error) {
 
 // isS3Path judges if rawURL is s3 path.
 func IsS3Path(rawURL string) bool {
-
 	if rawURL == "" {
 		return false
 	}
@@ -83,7 +82,6 @@ func CollectDirFiles(ctx context.Context, externalStore storage.ExternalStorage)
 }
 
 func RemoveAll(ctx context.Context, externalStore storage.ExternalStorage) error {
-
 	err := externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
 		return externalStore.DeleteFile(ctx, filePath)
 	})
