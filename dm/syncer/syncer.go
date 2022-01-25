@@ -1480,15 +1480,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if fresh {
-		if s.cfg.Mode == config.ModeAll {
-			delLoadTask = true
-			flushCheckpoint = true
-			err = s.loadTableStructureFromDump(ctx)
-			if err != nil {
-				tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
-				cleanDumpFile = false
-			}
+	if fresh && s.cfg.Mode == config.ModeAll {
+		delLoadTask = true
+		flushCheckpoint = true
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
 		}
 		if s.cfg.ShardMode == config.ShardOptimistic {
 			s.flushOptimisticTableInfos(tctx)
