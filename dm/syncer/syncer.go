@@ -1528,12 +1528,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if cleanDumpFile {
 		tctx.L().Info("try to remove all dump files")
-		// if err = os.RemoveAll(s.cfg.Dir); err != nil {
-		// 	tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
-		// }
-		// if err = s.externalStore.DeleteFile(ctx, ""); err != nil {
-		// 	tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
-		// }
 		doNotClean := false
 		failpoint.Inject("S3GetDumpFilesCheck", func() {
 			doNotClean = true
@@ -3173,8 +3167,6 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-
-	// files, err := utils.CollectDirFiles(s.cfg.Dir)
 	files, err := exstorage.CollectDirFiles(ctx, s.externalStore)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
@@ -3218,8 +3210,6 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		// filepath := path.Join(s.cfg.Dir, file)
-		// content, err2 := common2.GetFileContent(filepath)
 		content, err2 := s.externalStore.ReadFile(ctx, file)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
