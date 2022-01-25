@@ -33,7 +33,7 @@ function test_worker_restart() {
 		"Please check if the previous worker is online." 1
 
 	# worker1 online
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LightningLoadDataSlowDownByTask=return(\"load_task1\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $CONF_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
@@ -82,7 +82,7 @@ function test_transfer_two_sources() {
 		"\"unit\": \"Load\"" 1
 
 	# worker2 online
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LightningLoadDataSlowDown=sleep(15000)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(15000)"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $CONF_DIR/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
@@ -184,7 +184,7 @@ function run() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
 
 	# worker1 loading load_task1
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LightningLoadDataSlowDownByTask=return(\"load_task1\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $CONF_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	cp $CONF_DIR/source1.yaml $WORK_DIR/source1.yaml
@@ -192,7 +192,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	# worker2 loading load_task2
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LightningLoadDataSlowDownByTask=return(\"load_task2\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task2\")"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $CONF_DIR/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	cp $CONF_DIR/source2.yaml $WORK_DIR/source2.yaml
@@ -200,7 +200,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# worker3 loading load_task3
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LightningLoadDataSlowDownByTask=return(\"load_task3\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task3\")"
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $CONF_DIR/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 
@@ -208,8 +208,8 @@ function run() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	dmctl_start_task "$cur/conf/dm-task2.yaml" "--remove-meta"
 
-	check_log_contain_with_retry 'inject failpoint LightningLoadDataSlowDownByTask' $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry 'inject failpoint LightningLoadDataSlowDownByTask' $WORK_DIR/worker2/log/dm-worker.log
+	check_log_contain_with_retry 'inject failpoint LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry 'inject failpoint LoadDataSlowDownByTask in lightning loader' $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status load_task1" \
 		"\"unit\": \"Load\"" 1 \
