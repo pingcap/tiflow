@@ -110,28 +110,29 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		arg := fmt.Sprintf("response status: %s", resp.Status)
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
-	}
-
 	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var arg string
+		if err != nil {
+			arg = fmt.Sprintf("%s %s %s", resp.Status, content, err)
+		} else {
+			arg = fmt.Sprintf("%s %s", resp.Status, content)
+		}
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
 
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
