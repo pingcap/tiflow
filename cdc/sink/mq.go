@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/producer"
 	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/producer/pulsar"
@@ -63,7 +63,7 @@ type mqSink struct {
 	// FIXME: for test
 	topic          string
 	mqProducer     producer.Producer
-	dispatcher     dispatcher.Dispatcher
+	dispatcher     partition.Dispatcher
 	encoderBuilder codec.EncoderBuilder
 	filter         *filter.Filter
 	protocol       config.Protocol
@@ -98,7 +98,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum(topic)
-	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
+	d, err := partition.NewDispatcher(replicaConfig, partitionNum)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
