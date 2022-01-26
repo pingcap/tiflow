@@ -3059,7 +3059,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dm_syncer_binlog_file{source_id=~\"$source\", task=~\"$task\", node=\"master\"} - ON( task,source_id) dm_syncer_binlog_file{source_id=~\"$source\", task=~\"$task\", node=\"syncer\"}",
+          "expr": "dm_syncer_binlog_file{source_id=~\"$source\", task=~\"$task\", node=\"master\"} - ON(task,source_id) dm_syncer_binlog_file{source_id=~\"$source\", task=~\"$task\", node=\"syncer\"}",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
@@ -3716,12 +3716,12 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"} - ON(instance, task) dm_syncer_binlog_file{instance=~\"$instance\", task=~\"$task\", node=\"syncer\"}",
+          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"} - ON(instance) group_right dm_syncer_binlog_file{instance=~\"$instance\", task=~\"$task\", node=\"syncer\"}",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
           "intervalFactor": 2,
-          "legendFormat": "{{task}} - {{instance}}",
+          "legendFormat": "{{instance}} - {{task}}",
           "refId": "B"
         }
       ],
@@ -5088,7 +5088,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"master\"} - ON(instance, job) dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"}",
+          "expr": "dm_relay_binlog_file{instance=~\"$instance\", node=\"master\"} - ON(instance) dm_relay_binlog_file{instance=~\"$instance\", node=\"relay\"}",
           "format": "time_series",
           "hide": false,
           "interval": "$interval",
