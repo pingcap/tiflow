@@ -443,6 +443,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if err := c.LoaderConfig.adjust(); err != nil {
 		return err
 	}
+	if err := c.ValidatorCfg.adjust(); err != nil {
+		return err
+	}
 
 	// TODO: check every member
 	// TODO: since we checked here, we could remove other terror like ErrSyncerUnitGenBAList
