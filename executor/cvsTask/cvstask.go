@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -23,10 +25,20 @@ type strPair struct {
 	secondStr string
 }
 
+type config struct {
+	SrcHost  string `json:"SrcHost"`
+	SrcDir   string `json:"SrcDir"`
+	DstHost  string `json:"DstHost"`
+	DstDir   string `json:"DstDir"`
+	StartLoc int64  `json:"StartLoc"`
+}
+
 type cvsTask struct {
 	*lib.BaseWorker
-	srcAddr  strPair
-	dstAddr  strPair
+	srcHost  string
+	srcDir   string
+	dstHost  string
+	dstDir   string
 	counter  int64
 	index    int64
 	status   lib.WorkerStatusCode
@@ -34,14 +46,34 @@ type cvsTask struct {
 	buffer   chan strPair
 }
 
-func NewCvsTask(src strPair, dst strPair, startLoc int64) lib.WorkerImpl {
-	task := &cvsTask{}
-	task.Impl = task
-	task.srcAddr = src
-	task.index = startLoc
-	task.dstAddr = dst
-	task.counter = 0
-	task.buffer = make(chan strPair, BUFFERSIZE)
+func init() {
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+		return NewCvsTask(ctx, id, masterID, config)
+	}
+	factory := registry.NewSimpleWorkerFactory(constructor, &config{})
+	registry.NewRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
+}
+
+func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
+	cfg := conf.(*config)
+	task := &cvsTask{
+		srcHost: cfg.SrcHost,
+		srcDir:  cfg.SrcDir,
+		dstHost: cfg.DstHost,
+		dstDir:  cfg.DstDir,
+		index:   cfg.StartLoc,
+		buffer:  make(chan strPair, BUFFERSIZE),
+	}
+	deps := ctx.Dependencies
+	base := lib.NewBaseWorker(
+		task,
+		deps.MessageHandlerManager,
+		deps.MessageRouter,
+		deps.MetaKVClient,
+		_workerID,
+		masterID,
+	)
+	base.Impl = task
 	return task
 }
 
@@ -91,16 +123,16 @@ func (task *cvsTask) CloseImpl(ctx context.Context) error {
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {
-	conn, err := grpc.Dial(task.srcAddr.firstStr, grpc.WithInsecure())
+	conn, err := grpc.Dial(task.srcHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the source address ", zap.Any("message", task.srcAddr.firstStr))
+		log.L().Info("cann't connect with the source address ", zap.Any("message", task.srcHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcAddr.secondStr, LineNo: task.index})
+	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcDir, LineNo: task.index})
 	if err != nil {
-		log.L().Info("read data from file failed ", zap.Any("message", task.srcAddr.secondStr))
+		log.L().Info("read data from file failed ", zap.Any("message", task.srcDir))
 		return err
 	}
 	for {
@@ -110,6 +142,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 				break
 			}
 			log.L().Info("read data failed")
+			continue
 		}
 		strs := strings.Split(linestr.Linestr, ",")
 		if len(strs) < 2 {
@@ -125,9 +158,9 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 }
 
 func (task *cvsTask) Send(ctx context.Context) error {
-	conn, err := grpc.Dial(task.dstAddr.firstStr, grpc.WithInsecure())
+	conn, err := grpc.Dial(task.dstHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the destination address ", zap.Any("message", task.srcAddr.firstStr))
+		log.L().Info("cann't connect with the destination address ", zap.Any("message", task.dstHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
@@ -143,7 +176,7 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case kv := <-task.buffer:
-			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstAddr.secondStr, Key: kv.firstStr, Value: kv.secondStr})
+			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter++
 			if err != nil {
 				log.L().Info("call write data rpc failed ")

@@ -31,6 +31,16 @@ const (
 	WorkerStatusFinished
 )
 
+const (
+	JobManager = WorkerType(iota + 1)
+	CvsJobMaster
+	DmJobMaster
+	CdcJobMaster
+	CvsTask
+	DmTask
+	CdcTask
+)
+
 type TimeoutConfig struct {
 	workerTimeoutDuration            time.Duration
 	workerTimeoutGracefulDuration    time.Duration
