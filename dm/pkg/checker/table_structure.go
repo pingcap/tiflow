@@ -343,7 +343,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 						return r
 					}
 					encodeTi := schemacmp.Encode(ti)
-					log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined))
+					log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined), zap.Bool("pk is handle", ti.PKIsHandle))
 					if joined == nil {
 						joined = &encodeTi
 						continue
@@ -360,15 +360,9 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 			}
 		}
 		targetTable := utils.UnpackTableID(c.targetTableID)
-		createTableSQL := strings.ReplaceAll(joined.String(), "`tbl`", c.targetTableID)
-		pkStr := ", PRIMARY KEY USING  "
-		if strings.Contains(createTableSQL, pkStr) {
-			// begin := strings.Index(pkStr)
-			// end := begin + len(pkStr)
-
-		}
 		createSQLs := []string{
 			fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", utils.GenSchemaID(targetTable)),
+			strings.ReplaceAll(joined.String(), "`tbl`", c.targetTableID),
 		}
 		for _, sql := range createSQLs {
 			log.L().Logger.Debug("execute sql", zap.String("sql", sql))

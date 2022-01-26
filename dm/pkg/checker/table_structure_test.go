@@ -131,6 +131,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 	checker = NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
+		nil,
 		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}},
 		nil,
 		false,
