@@ -488,7 +488,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 			b text not null,
 			d datetime,
 			e varchar(5),
-		) character set ascii collate ascii_bin;
+		);
 		`,
 		`
 		create table foo3(
@@ -500,7 +500,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	tiInfos := make([]*model.TableInfo, len(tables))
 	for i := range tables {
 		ctx := context.Background()
-		err := tracker.Exec(ctx, tables[i].Schema, execStmt[i])
+		err = tracker.Exec(ctx, tables[i].Schema, execStmt[i])
 		c.Assert(err, IsNil)
 		tiInfos[i], err = tracker.GetTableInfo(tables[i])
 		c.Assert(err, IsNil)
@@ -518,7 +518,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		c.Assert(err, ErrorMatches, `.*Table 'testdb.*\.foo.*' doesn't exist`) // drop table success
 	}
 	// 2. recover
-	var tablesToCreate map[string]map[string]*model.TableInfo
+	tablesToCreate := map[string]map[string]*model.TableInfo{}
 	tablesToCreate["testdb"] = map[string]*model.TableInfo{}
 	tablesToCreate["testdb2"] = map[string]*model.TableInfo{}
 	for i := range tables {
@@ -528,7 +528,8 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	c.Assert(err, IsNil)
 	// 3. check all create success
 	for i := range tables {
-		ti, err := tracker.GetTableInfo(tables[i])
+		var ti *model.TableInfo
+		ti, err = tracker.GetTableInfo(tables[i])
 		c.Assert(err, IsNil)
 		c.Assert(ti, DeepEquals, tiInfos[i])
 	}
