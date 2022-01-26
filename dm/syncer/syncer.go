@@ -126,11 +126,11 @@ type Syncer struct {
 	tctx *tcontext.Context // this ctx only used for logger.
 
 	// this ctx derives from a background ctx and was initialized in s.Run, it is used for some background tasks in s.Run
-	// when this ctx cancelled, syncer will shutdown all background running jobs and not wait transaction end
+	// when this ctx cancelled, syncer will shutdown all background running jobs (except the syncDML and syncDDL) and not wait transaction end.
 	runCtx    *tcontext.Context
 	runCancel context.CancelFunc
-	// this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop
-	syncTCtx   *tcontext.Context
+	// this ctx only used for syncDML and syncDDL and only cancelled when ungraceful stop.
+	syncCtx    *tcontext.Context
 	syncCancel context.CancelFunc
 	// control all goroutines that started in S.Run
 	runWg sync.WaitGroup
@@ -1286,9 +1286,9 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(s.syncTCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
-				err = s.handleSpecialDDLError(s.syncTCtx, err, ddlJob.ddls, affected, db)
+				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
@@ -1488,7 +1488,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
-	s.syncTCtx, s.syncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
+	s.syncCtx, s.syncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
 	s.checkpointFlushWorker = &checkpointFlushWorker{
 		input:        make(chan *checkpointFlushTask, 16),
 		cp:           s.checkpoint,
@@ -1549,7 +1549,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	s.runWg.Add(1)
-	// start syncDML worker first because if there is no dml worker checkpointFlushWorker will blocked forever
 	go s.syncDML()
 	s.runWg.Add(1)
 	// start flush checkpoints worker. this worker must start before s.flushCheckPoints()
@@ -3363,7 +3362,7 @@ func (s *Syncer) Close() {
 	if s.isClosed() {
 		return
 	}
-	s.stopStreamAndRollbackCheckpoint()
+	s.stopSync()
 	s.closeDBs()
 	s.checkpoint.Close()
 	if err := s.schemaTracker.Close(); err != nil {
@@ -3387,8 +3386,8 @@ func (s *Syncer) Kill() {
 	s.Close()
 }
 
-// stopStreamAndRollbackCheckpoint stop stream and rollback checkpoint now it used by Close() and Pause().
-func (s *Syncer) stopStreamAndRollbackCheckpoint() {
+// stopSync stops stream and rollbacks checkpoint now it used by Close() and Pause().
+func (s *Syncer) stopSync() {
 	// before re-write workflow for s.syncer, simply close it
 	// when resuming, re-create s.syncer
 
@@ -3418,7 +3417,7 @@ func (s *Syncer) Pause() {
 		s.tctx.L().Warn("try to pause, but already closed")
 		return
 	}
-	s.stopStreamAndRollbackCheckpoint()
+	s.stopSync()
 }
 
 // Resume resumes the paused process.
