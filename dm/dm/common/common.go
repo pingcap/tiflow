@@ -26,6 +26,9 @@ var (
 	useOfClosedErrMsg = "use of closed network connection"
 	// ClusterVersionKey is used to store the version of the cluster.
 	ClusterVersionKey = "/dm-cluster/version"
+	// ClusterIDKey is used to store the cluster id of the whole dm cluster. Cluster id is the unique identification of dm cluster
+	// After leader of dm master bootstraped, the leader will get the id from etcd or generate fresh one, and backfill to etcd.
+	ClusterIDKey = "/dm-cluster/id"
 	// WorkerRegisterKeyAdapter is used to encode and decode register key.
 	// k/v: Encode(worker-name) -> the information of the DM-worker node.
 	WorkerRegisterKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-worker/r/")

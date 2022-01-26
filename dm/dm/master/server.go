@@ -15,7 +15,9 @@ package master
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -23,6 +25,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,11 +35,12 @@ import (
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
-	"go.uber.org/atomic"
+	atomic2 "go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/checker"
+	"github.com/pingcap/tiflow/dm/dm/common"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
@@ -76,7 +80,7 @@ var (
 	// the retry interval for dm-master to confirm the dm-workers status is expected.
 	retryInterval = time.Second
 
-	useTLS atomic.Bool
+	useTLS atomic2.Bool
 
 	// typically there's only one server running in one process, but testMaster.TestOfflineMember starts 3 servers,
 	// so we need sync.Once to prevent data race.
@@ -100,7 +104,7 @@ type Server struct {
 
 	// below three leader related variables should be protected by a lock (currently Server's lock) to provide integrity
 	// except for leader == oneselfStartingLeader which is a intermedia state, which means caller may retry sometime later
-	leader         atomic.String
+	leader         atomic2.String
 	leaderClient   pb.MasterClient
 	leaderGrpcConn *grpc.ClientConn
 
@@ -118,9 +122,11 @@ type Server struct {
 	// WaitGroup for background functions.
 	bgFunWg sync.WaitGroup
 
-	closed atomic.Bool
+	closed atomic2.Bool
 
 	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
+
+	clusterID uint64
 }
 
 // NewServer creates a new Server.
@@ -403,6 +409,45 @@ func subtaskCfgPointersToInstances(stCfgPointers ...*config.SubTaskConfig) []con
 		stCfgs = append(stCfgs, *stCfg)
 	}
 	return stCfgs
+}
+
+func (s *Server) initClusterID(ctx context.Context) error {
+	log.L().Info("init cluster id begin")
+	ctx1, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	resp, err := s.etcdClient.Get(ctx1, common.ClusterIDKey)
+	if err != nil {
+		return err
+	}
+
+	// New cluster, generate a cluster id and backfill it to etcd
+	if len(resp.Kvs) == 0 {
+		ts := uint64(time.Now().Unix())
+		clusterID := (ts << 32) + uint64(rand.Uint32())
+		clusterIDBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(clusterIDBytes, clusterID)
+		_, err = s.etcdClient.Put(ctx1, common.ClusterIDKey, string(clusterIDBytes))
+		if err != nil {
+			return err
+		}
+		atomic.StoreUint64(&s.clusterID, clusterID)
+		log.L().Info("generate and init cluster id success")
+		return nil
+	}
+
+	if len(resp.Kvs[0].Value) != 8 {
+		return terror.ErrMasterInvalidClusterID.Generate(resp.Kvs[0].Value)
+	}
+
+	s.clusterID = binary.BigEndian.Uint64(resp.Kvs[0].Value)
+	log.L().Info("init cluster id success")
+	return nil
+}
+
+// Only leader is able to return correct cluster id
+func (s *Server) ClusterID() uint64 {
+	return atomic.LoadUint64(&s.clusterID)
 }
 
 // StartTask implements MasterServer.StartTask.
