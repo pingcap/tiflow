@@ -29,7 +29,4 @@ create table tb_2(a INT, c INT);
 create table precheck_optimistic_tb_1(a INT, b INT, primary key a(a));
 create table precheck_optimistic_tb_2(a INT, c INT, primary key a(a));
 
-insert into precheck_optimistic_tb_1(a, b) values (1, 2);
-insert into precheck_optimistic_tb_2(a, c) values (3, 4);
-
 CREATE TABLE only_warning (id bigint, b int, primary key id(id), FOREIGN KEY (b) REFERENCES t_1(b));

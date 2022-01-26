@@ -270,8 +270,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				if shardingCounter[targetTableID] <= 1 {
 					continue
 				}
-
-				c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, instance.targetDB.DB, shardingSet, columnMapping, checkingShardID, instance.cfg.ShardMode))
+				if instance.cfg.ShardMode == config.ShardPessimistic {
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID))
+				} else {
+					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet))
+				}
 			}
 		}
 	}

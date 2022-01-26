@@ -28,9 +28,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -278,23 +276,19 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 type ShardingTablesChecker struct {
 	targetTableID                string
 	dbs                          map[string]*sql.DB
-	targetDB                     *sql.DB
 	tables                       map[string]map[string][]string // instance => {schema: [table1, table2, ...]}
 	mapping                      map[string]*column.Mapping
 	checkAutoIncrementPrimaryKey bool
-	shardMode                    string
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, targetDB *sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, shardMode string) RealChecker {
+func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool) RealChecker {
 	return &ShardingTablesChecker{
 		targetTableID:                targetTableID,
 		dbs:                          dbs,
-		targetDB:                     targetDB,
 		tables:                       tables,
 		mapping:                      mapping,
 		checkAutoIncrementPrimaryKey: checkAutoIncrementPrimaryKey,
-		shardMode:                    shardMode,
 	}
 }
 
@@ -305,75 +299,6 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		Desc:  "check consistency of sharding table structures",
 		State: StateSuccess,
 		Extra: fmt.Sprintf("sharding %s", c.targetTableID),
-	}
-
-	if c.shardMode == config.ShardOptimistic {
-		var joined *schemacmp.Table
-		for instance, schemas := range c.tables {
-			db, ok := c.dbs[instance]
-			if !ok {
-				markCheckError(r, errors.NotFoundf("client for instance %s", instance))
-				return r
-			}
-
-			parser2, err := dbutil.GetParserForDB(ctx, db)
-			if err != nil {
-				markCheckError(r, err)
-				r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-				return r
-			}
-
-			for schema, tables := range schemas {
-				for _, table := range tables {
-					statement, err := dbutil.GetCreateTableSQL(ctx, db, schema, table)
-					if err != nil {
-						// continue if table was deleted when checking
-						if isMySQLError(err, mysql.ErrNoSuchTable) {
-							continue
-						}
-						markCheckError(r, err)
-						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-						return r
-					}
-
-					ti, err := dbutil.GetTableInfoBySQL(statement, parser2)
-					if err != nil {
-						markCheckError(r, err)
-						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-						return r
-					}
-					encodeTi := schemacmp.Encode(ti)
-					log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined), zap.Bool("pk is handle", ti.PKIsHandle))
-					if joined == nil {
-						joined = &encodeTi
-						continue
-					}
-					newJoined, err2 := joined.Join(encodeTi)
-					if err2 != nil {
-						// NOTE: conflict detected.
-						markCheckError(r, err2)
-						r.Extra = fmt.Sprintf("fail to join table info %s with %s", joined, encodeTi)
-						return r
-					}
-					joined = &newJoined
-				}
-			}
-		}
-		targetTable := utils.UnpackTableID(c.targetTableID)
-		createSQLs := []string{
-			fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", utils.GenSchemaID(targetTable)),
-			strings.ReplaceAll(joined.String(), "`tbl`", c.targetTableID),
-		}
-		for _, sql := range createSQLs {
-			log.L().Logger.Debug("execute sql", zap.String("sql", sql))
-			_, err := c.targetDB.QueryContext(ctx, sql)
-			if err != nil {
-				markCheckError(r, err)
-				return r
-			}
-		}
-		r.State = StateSuccess
-		return r
 	}
 
 	var (
@@ -624,4 +549,91 @@ func getBriefColumnList(stmt *ast.CreateTableStmt) briefColumnInfos {
 // Name implements Checker interface.
 func (c *ShardingTablesChecker) Name() string {
 	return fmt.Sprintf("sharding table %s consistency checking", c.targetTableID)
+}
+
+// ShardingTablesChecker checks consistency of table structures of one sharding group
+// * check whether they have same column list
+// * check whether they have auto_increment key.
+type OptimisticShardingTablesChecker struct {
+	targetTableID string
+	dbs           map[string]*sql.DB
+	tables        map[string]map[string][]string // instance => {schema: [table1, table2, ...]}
+}
+
+// NewShardingTablesChecker returns a RealChecker.
+func NewOptimisticShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tables map[string]map[string][]string) RealChecker {
+	return &OptimisticShardingTablesChecker{
+		targetTableID: targetTableID,
+		dbs:           dbs,
+		tables:        tables,
+	}
+}
+
+// Name implements Checker interface.
+func (c *OptimisticShardingTablesChecker) Name() string {
+	return fmt.Sprintf("sharding table %s consistency checking", c.targetTableID)
+}
+
+// Check implements RealChecker interface.
+func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
+	r := &Result{
+		Name:  c.Name(),
+		Desc:  "check consistency of sharding table structures",
+		State: StateFailure,
+		Extra: fmt.Sprintf("sharding %s", c.targetTableID),
+	}
+
+	var joined *schemacmp.Table
+	for instance, schemas := range c.tables {
+		db, ok := c.dbs[instance]
+		if !ok {
+			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
+			return r
+		}
+
+		parser2, err := dbutil.GetParserForDB(ctx, db)
+		if err != nil {
+			markCheckError(r, err)
+			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
+			return r
+		}
+
+		for schema, tables := range schemas {
+			for _, table := range tables {
+				statement, err := dbutil.GetCreateTableSQL(ctx, db, schema, table)
+				if err != nil {
+					// continue if table was deleted when checking
+					if isMySQLError(err, mysql.ErrNoSuchTable) {
+						continue
+					}
+					markCheckError(r, err)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
+					return r
+				}
+
+				ti, err := dbutil.GetTableInfoBySQL(statement, parser2)
+				if err != nil {
+					markCheckError(r, err)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
+					return r
+				}
+				encodeTi := schemacmp.Encode(ti)
+				log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined), zap.Bool("pk is handle", ti.PKIsHandle))
+				if joined == nil {
+					joined = &encodeTi
+					continue
+				}
+				newJoined, err2 := joined.Join(encodeTi)
+				if err2 != nil {
+					// NOTE: conflict detected.
+					markCheckError(r, err2)
+					r.Extra = fmt.Sprintf("fail to join table info %s with %s", joined, encodeTi)
+					return r
+				}
+				joined = &newJoined
+			}
+		}
+	}
+	r.State = StateSuccess
+	return r
 }
