@@ -50,5 +50,6 @@ func (d *dummyWorker) Workload() model.RescUnit {
 	return model.RescUnit(1)
 }
 
-func (d *dummyWorker) Close() {
+func (d *dummyWorker) Close(ctx context.Context) error {
+	return nil
 }

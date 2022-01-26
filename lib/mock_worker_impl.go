@@ -59,12 +59,12 @@ func (w *mockWorkerImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) Status() (WorkerStatus, error) {
+func (w *mockWorkerImpl) Status() WorkerStatus {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	args := w.Called()
-	return args.Get(0).(WorkerStatus), args.Error(1)
+	return args.Get(0).(WorkerStatus)
 }
 
 func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
@@ -77,9 +77,10 @@ func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) CloseImpl() {
+func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.Called()
+	args := w.Called()
+	return args.Error(0)
 }

@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -50,6 +51,10 @@ type WorkerStatus struct {
 	Code         WorkerStatusCode `json:"code"`
 	ErrorMessage string           `json:"error-message"`
 	Ext          interface{}      `json:"ext"`
+}
+
+type Closer interface {
+	Close(ctx context.Context) error
 }
 
 func HeartbeatPingTopic(masterID MasterID) p2p.Topic {

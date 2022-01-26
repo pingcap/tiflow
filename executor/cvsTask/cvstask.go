@@ -70,8 +70,8 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 }
 
 // Status returns a short worker status to be periodically sent to the master.
-func (task *cvsTask) Status() (lib.WorkerStatus, error) {
-	return lib.WorkerStatus{Code: lib.WorkerStatusNormal, ErrorMessage: "", Ext: task.counter}, nil
+func (task *cvsTask) Status() lib.WorkerStatus {
+	return lib.WorkerStatus{Code: lib.WorkerStatusNormal, ErrorMessage: "", Ext: task.counter}
 }
 
 // Workload returns the current workload of the worker.
@@ -85,8 +85,9 @@ func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 }
 
 // CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-func (task *cvsTask) CloseImpl() {
+func (task *cvsTask) CloseImpl(ctx context.Context) error {
 	task.cancelFn()
+	return nil
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {

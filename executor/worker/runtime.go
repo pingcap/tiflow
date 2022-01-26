@@ -87,7 +87,8 @@ func (r *Runtime) onWorkerFinish(worker lib.Worker, err error) {
 
 func (r *Runtime) closeWorker() {
 	for worker := range r.closingWorker {
-		worker.Close()
+		// TODO handle error
+		_ = worker.Close(context.TODO())
 		r.workerList.Delete(worker.WorkerID())
 	}
 }

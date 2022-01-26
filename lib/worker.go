@@ -21,7 +21,8 @@ type Worker interface {
 	Poll(ctx context.Context) error
 	WorkerID() WorkerID
 	Workload() model.RescUnit
-	Close()
+
+	Closer
 }
 
 type WorkerImpl interface {
@@ -32,7 +33,7 @@ type WorkerImpl interface {
 	Tick(ctx context.Context) error
 
 	// Status returns a short worker status to be periodically sent to the master.
-	Status() (WorkerStatus, error)
+	Status() WorkerStatus
 
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
@@ -41,7 +42,7 @@ type WorkerImpl interface {
 	OnMasterFailover(reason MasterFailoverReason) error
 
 	// CloseImpl tells the WorkerImpl to quitrunStatusWorker and release resources.
-	CloseImpl()
+	CloseImpl(ctx context.Context) error
 }
 
 type BaseWorker struct {
@@ -146,9 +147,7 @@ func (w *BaseWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (w *BaseWorker) Close() {
-	w.Impl.CloseImpl()
-
+func (w *BaseWorker) Close(ctx context.Context) error {
 	w.cancelMu.Lock()
 	w.cancelBgTasks()
 	w.cancelMu.Unlock()
@@ -162,6 +161,12 @@ func (w *BaseWorker) Close() {
 	}
 
 	w.wg.Wait()
+
+	if err := w.Impl.CloseImpl(ctx); err != nil {
+		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (w *BaseWorker) WorkerID() WorkerID {
@@ -227,10 +232,7 @@ func (w *BaseWorker) runStatusWorker(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		status, err := w.Impl.Status()
-		if err != nil {
-			return errors.Trace(err)
-		}
+		status := w.Impl.Status()
 		if err := w.masterClient.SendStatus(ctx, status); err != nil {
 			return errors.Trace(err)
 		}
