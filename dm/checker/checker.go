@@ -238,8 +238,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 	}
 
+	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
 	if checkSchema {
-		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap))
+		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
 	}
 
 	if checkingShard {
@@ -248,7 +249,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				continue
 			}
 
-			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID))
+			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
 		}
 	}
 

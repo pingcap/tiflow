@@ -41,7 +41,6 @@ import (
 const (
 	// AutoIncrementKeyChecking is an identification for auto increment key checking.
 	AutoIncrementKeyChecking = "auto-increment key checking"
-	maxThreadNum             = 32
 )
 
 type checkItem struct {
@@ -84,16 +83,18 @@ type TablesChecker struct {
 	inCh          chan *checkItem
 	errCh         chan error
 	cancel        context.CancelFunc
+	dumpThreads   int
 }
 
 // NewTablesChecker returns a RealChecker.
-func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Table) RealChecker {
+func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, dumpThreads int) RealChecker {
 	c := &TablesChecker{
-		dbs:      dbs,
-		tableMap: tableMap,
+		dbs:         dbs,
+		tableMap:    tableMap,
+		dumpThreads: dumpThreads,
 	}
-	c.inCh = make(chan *checkItem, maxThreadNum)
-	c.errCh = make(chan error, maxThreadNum)
+	c.inCh = make(chan *checkItem, dumpThreads)
+	c.errCh = make(chan error, dumpThreads)
 	return c
 }
 
@@ -116,7 +117,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	defer cancel()
 	c.cancel = cancel
 
-	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs)
+	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -315,19 +316,21 @@ type ShardingTablesChecker struct {
 	checkWg                      sync.WaitGroup
 	reMu                         sync.Mutex
 	cancel                       context.CancelFunc
+	dumpThreads                  int
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool) RealChecker {
+func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, dumpThreads int) RealChecker {
 	c := &ShardingTablesChecker{
 		targetTableID:                targetTableID,
 		dbs:                          dbs,
 		tableMap:                     tableMap,
 		mapping:                      mapping,
 		checkAutoIncrementPrimaryKey: checkAutoIncrementPrimaryKey,
+		dumpThreads:                  dumpThreads,
 	}
-	c.inCh = make(chan *checkItem, maxThreadNum)
-	c.errCh = make(chan error, maxThreadNum)
+	c.inCh = make(chan *checkItem, dumpThreads)
+	c.errCh = make(chan error, dumpThreads)
 
 	return c
 }
@@ -378,7 +381,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	defer cancel()
 	c.cancel = cancel
 
-	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs)
+	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -679,8 +682,8 @@ func handleErr(ctx context.Context, errCh chan error, mu *sync.Mutex, r *Result)
 	}
 }
 
-func getConcurrency(ctx context.Context, tableMap map[string][]*filter.Table, dbs map[string]*sql.DB) (int, error) {
-	concurrency := maxThreadNum
+func getConcurrency(ctx context.Context, tableMap map[string][]*filter.Table, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
+	concurrency := dumpThreads
 	for sourceID := range tableMap {
 		db, ok := dbs[sourceID]
 		if !ok {
