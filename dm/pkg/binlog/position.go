@@ -408,8 +408,10 @@ func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
 		flavor = gmysql.MySQLFlavor
 	case *gmysql.MariadbGTIDSet:
 		flavor = gmysql.MariaDBFlavor
-	default:
+	case nil:
 		return nil
+	default:
+		return fmt.Errorf("unknown GTIDSet type: %T", gset)
 	}
 
 	newGTID := gtid.MinGTIDSet(flavor)
