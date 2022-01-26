@@ -722,7 +722,7 @@ func (t *testScheduler) subTaskStageMatch(c *C, s *Scheduler, task, source strin
 	}
 }
 
-func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, source, task string, expectStage pb.Stage) {
+func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source string, expectStage pb.Stage) {
 	stage := ha.NewValidatorStage(expectStage, source, task)
 	var m map[string]ha.Stage
 	if v, ok := s.expectValidatorStages.Load(task); ok {
