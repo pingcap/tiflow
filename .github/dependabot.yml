@@ -7,5 +7,6 @@ updates:
       - "dependencies"
       - "javascript"
       - "release-note-none"
+      - "skip-issue-check"
     # We use this option to make these configurations valid only for PRs with security issues.
     open-pull-requests-limit: 0
