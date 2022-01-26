@@ -335,11 +335,11 @@ func (st *SubTask) fetchResultAndUpdateStage(pr chan pb.ProcessResult) {
 }
 
 // setCurrUnit set current dm unit to ut.
-func (st *SubTask) setCurrUnit(ut unit.Unit) {
+func (st *SubTask) setCurrUnit(cu unit.Unit) {
 	st.Lock()
 	defer st.Unlock()
 	pu := st.currUnit
-	st.currUnit = ut
+	st.currUnit = cu
 	st.prevUnit = pu
 }
 

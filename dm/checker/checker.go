@@ -266,12 +266,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 		if !existCheckpoint {
-			for name, shardingSet := range sharding {
-				if shardingCounter[name] <= 1 {
+			for targetTableID, shardingSet := range sharding {
+				if shardingCounter[targetTableID] <= 1 {
 					continue
 				}
 
-				c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID, instance.cfg.ShardMode))
+				c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, instance.targetDB.DB, shardingSet, columnMapping, checkingShardID, instance.cfg.ShardMode))
 			}
 		}
 	}

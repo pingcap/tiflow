@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -275,9 +276,9 @@ func (c *TablesChecker) checkTableOption(opt *ast.TableOption) *incompatibilityO
 // * check whether they have same column list
 // * check whether they have auto_increment key.
 type ShardingTablesChecker struct {
-	name string
-
+	targetTableID                string
 	dbs                          map[string]*sql.DB
+	targetDB                     *sql.DB
 	tables                       map[string]map[string][]string // instance => {schema: [table1, table2, ...]}
 	mapping                      map[string]*column.Mapping
 	checkAutoIncrementPrimaryKey bool
@@ -285,10 +286,11 @@ type ShardingTablesChecker struct {
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(name string, dbs map[string]*sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, shardMode string) RealChecker {
+func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, targetDB *sql.DB, tables map[string]map[string][]string, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, shardMode string) RealChecker {
 	return &ShardingTablesChecker{
-		name:                         name,
+		targetTableID:                targetTableID,
 		dbs:                          dbs,
+		targetDB:                     targetDB,
 		tables:                       tables,
 		mapping:                      mapping,
 		checkAutoIncrementPrimaryKey: checkAutoIncrementPrimaryKey,
@@ -302,7 +304,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		Name:  c.Name(),
 		Desc:  "check consistency of sharding table structures",
 		State: StateSuccess,
-		Extra: fmt.Sprintf("sharding %s", c.name),
+		Extra: fmt.Sprintf("sharding %s", c.targetTableID),
 	}
 
 	if c.shardMode == config.ShardOptimistic {
@@ -317,7 +319,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 			parser2, err := dbutil.GetParserForDB(ctx, db)
 			if err != nil {
 				markCheckError(r, err)
-				r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.name)
+				r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
 				return r
 			}
 
@@ -330,18 +332,18 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 							continue
 						}
 						markCheckError(r, err)
-						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 						return r
 					}
 
 					ti, err := dbutil.GetTableInfoBySQL(statement, parser2)
 					if err != nil {
 						markCheckError(r, err)
-						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+						r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 						return r
 					}
 					encodeTi := schemacmp.Encode(ti)
-					log.L().Logger.Info("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined))
+					log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined))
 					if joined == nil {
 						joined = &encodeTi
 						continue
@@ -355,6 +357,25 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 					}
 					joined = &newJoined
 				}
+			}
+		}
+		targetTable := utils.UnpackTableID(c.targetTableID)
+		createTableSQL := strings.ReplaceAll(joined.String(), "`tbl`", c.targetTableID)
+		pkStr := ", PRIMARY KEY USING  "
+		if strings.Contains(createTableSQL, pkStr) {
+			// begin := strings.Index(pkStr)
+			// end := begin + len(pkStr)
+
+		}
+		createSQLs := []string{
+			fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", utils.GenSchemaID(targetTable)),
+		}
+		for _, sql := range createSQLs {
+			log.L().Logger.Debug("execute sql", zap.String("sql", sql))
+			_, err := c.targetDB.QueryContext(ctx, sql)
+			if err != nil {
+				markCheckError(r, err)
+				return r
 			}
 		}
 		r.State = StateSuccess
@@ -377,7 +398,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		parser2, err := dbutil.GetParserForDB(ctx, db)
 		if err != nil {
 			markCheckError(r, err)
-			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.name)
+			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
 			return r
 		}
 
@@ -390,27 +411,27 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 						continue
 					}
 					markCheckError(r, err)
-					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 					return r
 				}
 
 				info, err := dbutil.GetTableInfoBySQL(statement, parser2)
 				if err != nil {
 					markCheckError(r, err)
-					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 					return r
 				}
 				stmt, err := parser2.ParseOneStmt(statement, "", "")
 				if err != nil {
 					markCheckError(r, errors.Annotatef(err, "statement %s", statement))
-					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 					return r
 				}
 
 				ctStmt, ok := stmt.(*ast.CreateTableStmt)
 				if !ok {
 					markCheckError(r, errors.Errorf("Expect CreateTableStmt but got %T", stmt))
-					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.name)
+					r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
 					return r
 				}
 
@@ -432,7 +453,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 				if checkErr != nil {
 					r.State = StateFailure
 					r.Errors = append(r.Errors, checkErr)
-					r.Extra = fmt.Sprintf("error on sharding %s", c.name)
+					r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
 					r.Instruction = "please set same table structure for sharding tables"
 					return r
 				}
@@ -463,7 +484,7 @@ func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table st
 
 			if hasMatchedRule && !isBigInt {
 				r.State = StateFailure
-				r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.name, columnName, columnName))
+				r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.targetTableID, columnName, columnName))
 				r.Instruction = "please set auto-increment key type to bigint"
 				r.Extra = AutoIncrementKeyChecking
 				return false
@@ -472,7 +493,7 @@ func (c *ShardingTablesChecker) checkAutoIncrementKey(instance, schema, table st
 
 		if !hasMatchedRule {
 			r.State = StateFailure
-			r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.name, columnName, columnName))
+			r.Errors = append(r.Errors, NewError("instance %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", instance, schema, table, c.targetTableID, columnName, columnName))
 			r.Instruction = "please handle it by yourself"
 			r.Extra = AutoIncrementKeyChecking
 			return false
@@ -608,5 +629,5 @@ func getBriefColumnList(stmt *ast.CreateTableStmt) briefColumnInfos {
 
 // Name implements Checker interface.
 func (c *ShardingTablesChecker) Name() string {
-	return fmt.Sprintf("sharding table %s consistency checking", c.name)
+	return fmt.Sprintf("sharding table %s consistency checking", c.targetTableID)
 }

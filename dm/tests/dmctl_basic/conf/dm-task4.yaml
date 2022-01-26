@@ -2,7 +2,7 @@
 name: pre_check_optimistic
 task-mode: all
 shard-mode: "optimistic"
-meta-schema: "dm_meta_pre_check_optimistic"
+meta-schema: "dm_meta"
 enable-heartbeat: false
 
 target-database:

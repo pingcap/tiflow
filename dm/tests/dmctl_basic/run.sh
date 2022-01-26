@@ -294,6 +294,8 @@ function run() {
 		"stop-task $cur/conf/dm-task4.yaml" \
 		"\"result\": true" 3
 
+	exit 1
+
 	echo "check_task_only_warning"
 	check_task_only_warning $cur/conf/only_warning.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
