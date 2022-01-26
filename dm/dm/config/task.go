@@ -297,6 +297,9 @@ type ValidatorConfig struct {
 }
 
 func (v *ValidatorConfig) adjust() error {
+	if v.Mode == "" {
+		v.Mode = ValidationNone
+	}
 	if v.Mode != ValidationNone && v.Mode != ValidationFast && v.Mode != ValidationFull {
 		return terror.ErrConfigValidationMode
 	}
