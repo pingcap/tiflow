@@ -428,11 +428,22 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 
 	resp := &pb.StartTaskResponse{}
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
-	if err != nil {
-		resp.Msg = err.Error()
+	respWithErr := func(err error) (*pb.StartTaskResponse, error) {
+		resp.Msg += err.Error()
 		// nolint:nilerr
 		return resp, nil
+	}
+
+	cliArgs := config.TaskCliArgs{
+		StartTime: req.StartTime,
+	}
+	if err := cliArgs.Verify(); err != nil {
+		return respWithErr(err)
+	}
+
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
+	if err != nil {
+		return respWithErr(err)
 	}
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
@@ -481,29 +492,35 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			// use same latch for remove-meta and start-task
 			release, err3 = s.scheduler.AcquireSubtaskLatch(cfg.Name)
 			if err3 != nil {
-				resp.Msg += terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name).Error()
-				// nolint:nilerr
-				return resp, nil
+				return respWithErr(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name))
 			}
 			defer release()
 			latched = true
 
 			if scm := s.scheduler.GetSubTaskCfgsByTask(cfg.Name); len(scm) > 0 {
-				resp.Msg += terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
-					"while remove-meta is true").Error()
-				return resp, nil
+				return respWithErr(terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
+					"while remove-meta is true"))
 			}
 			err = s.removeMetaData(ctx, cfg.Name, cfg.MetaSchema, cfg.TargetDB)
 			if err != nil {
-				resp.Msg += terror.Annotate(err, "while removing metadata").Error()
-				return resp, nil
+				return respWithErr(terror.Annotate(err, "while removing metadata"))
+			}
+		}
+
+		if req.StartTime == "" {
+			err = ha.DeleteAllTaskCliArgs(s.etcdClient, cfg.Name)
+			if err != nil {
+				return respWithErr(terror.Annotate(err, "while removing task command line arguments"))
+			}
+		} else {
+			err = ha.PutTaskCliArgs(s.etcdClient, cfg.Name, sources, cliArgs)
+			if err != nil {
+				return respWithErr(terror.Annotate(err, "while putting task command line arguments"))
 			}
 		}
 		err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(stCfgs...)...)
 		if err != nil {
-			resp.Msg += err.Error()
-			// nolint:nilerr
-			return resp, nil
+			return respWithErr(err)
 		}
 
 		if release != nil {
@@ -639,8 +656,8 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp2, err2
 	}
 
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
 	resp := &pb.UpdateTaskResponse{}
-	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -1202,8 +1219,18 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		return resp2, err2
 	}
 
+	cliArgs := config.TaskCliArgs{
+		StartTime: req.StartTime,
+	}
+	if err := cliArgs.Verify(); err != nil {
+		// nolint:nilerr
+		return &pb.CheckTaskResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}, nil
+	}
 	resp := &pb.CheckTaskResponse{}
-	_, stCfgs, err := s.generateSubTask(ctx, req.Task)
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -1465,8 +1492,18 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 	}, nil
 }
 
-func (s *Server) generateSubTask(ctx context.Context, task string) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+func (s *Server) generateSubTask(
+	ctx context.Context,
+	task string,
+	cliArgs *config.TaskCliArgs,
+) (*config.TaskConfig, []*config.SubTaskConfig, error) {
 	cfg := config.NewTaskConfig()
+	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
+	if cliArgs != nil && cliArgs.StartTime != "" {
+		for _, inst := range cfg.MySQLInstances {
+			inst.Meta = &config.Meta{BinLogName: cliArgs.StartTime}
+		}
+	}
 	err := cfg.Decode(task)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
