@@ -86,6 +86,15 @@ function run() {
 		"list-member --name worker1" \
 		"\"stage\": \"bound\"" 1 \
 		"\"source\": \"mysql-replica-01\"" 1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2 -w $WORKER1_NAME
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source2.yaml -w wrong-worker" \
+		"\"result\": false" 1 \
+		"not exists" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source2.yaml -w worker1" \
+		"\"result\": false" 1 \
+		"not free" 1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# check wrong do-tables
