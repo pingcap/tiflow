@@ -1355,7 +1355,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-		// TODO: loadTableStructureFromDump in future
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
 	} else {
 		cleanDumpFile = false
 	}
@@ -2159,6 +2163,29 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		appliedDDLs:  make([]string, 0),
 		sourceTbls:   make(map[string]map[string]struct{}),
 	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		// why not `skipSQLByPattern` at beginning, but at defer?
+		// it is in order to track every ddl except for the one that will cause error.
+		// if `skipSQLByPattern` at beginning, some ddl should be tracked may be skipped.
+		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
+		if err2 != nil {
+			err = err2
+			return
+		}
+		if !needSkip {
+			return
+		}
+		// don't return error if filter success
+		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
+		err = s.recordSkipSQLsLocation(&ec)
+	}()
+
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
 		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
@@ -2166,19 +2193,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
-		// return error if parse fail and filter fail
-		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
-		if err2 != nil {
-			return err2
-		}
-		if !needSkip {
-			return err
-		}
-		// don't return error if parse fail and filter success
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
-		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
-		return s.recordSkipSQLsLocation(&ec)
+		return err
 	}
 
 	if node, ok := stmt.(ast.DMLNode); ok {
@@ -2770,7 +2785,6 @@ func (s *Syncer) genRouter() error {
 	return nil
 }
 
-//nolint:unused
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
 
