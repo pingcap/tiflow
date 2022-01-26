@@ -372,7 +372,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
 	for schema, tableNameInfo := range tablesToCreate {
-		cloneTis := make([]*model.TableInfo, 0)
+		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
 			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
 			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`

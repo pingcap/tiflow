@@ -469,8 +469,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		},
 	}
 	execStmt := []string{
-		`
-		create table foo(
+		`create table foo(
 			a int primary key auto_increment,
 			b int as (c+1) not null,
 			c int comment 'some cmt',
@@ -480,22 +479,17 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 			partition x41 values less than (41),
 			partition x82 values less than (82),
 			partition rest values less than maxvalue comment 'part cmt'
-		);
-		`,
-		`
-		create table foo1(
+		);`,
+		`create table foo1(
 			a int primary key,
 			b text not null,
 			d datetime,
-			e varchar(5),
-		);
-		`,
-		`
-		create table foo3(
+			e varchar(5)
+		);`,
+		`create table foo3(
 			a int,
 			b int,
-			primary key(a));
-		`,
+			primary key(a));`,
 	}
 	tiInfos := make([]*model.TableInfo, len(tables))
 	for i := range tables {
@@ -531,7 +525,9 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		var ti *model.TableInfo
 		ti, err = tracker.GetTableInfo(tables[i])
 		c.Assert(err, IsNil)
-		c.Assert(ti, DeepEquals, tiInfos[i])
+		cloneTi := ti.Clone()
+		clearVolatileInfo(cloneTi)
+		c.Assert(cloneTi, DeepEquals, tiInfos[i])
 	}
 
 	// drop two tables and create all three
@@ -544,6 +540,14 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	// 2. batch create
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, IsNil)
+	// 3. check
+	for i := range tables {
+		var ti *model.TableInfo
+		ti, err = tracker.GetTableInfo(tables[i])
+		c.Assert(err, IsNil)
+		clearVolatileInfo(ti)
+		c.Assert(ti, DeepEquals, tiInfos[i])
+	}
 
 	// drop schema and raise error
 	ctx := context.Background()
