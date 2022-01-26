@@ -116,19 +116,10 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	defer cancel()
 	c.cancel = cancel
 
-	concurrency := maxThreadNum
-	for sourceID := range c.tableMap {
-		db, ok := c.dbs[sourceID]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for sourceID %s", sourceID))
-			return r
-		}
-		maxConnections, err := utils.GetMaxConnections(ctx, db)
-		if err != nil {
-			markCheckError(r, err)
-			return r
-		}
-		concurrency = int(math.Min(float64(concurrency), float64((maxConnections+1)/2)))
+	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs)
+	if err != nil {
+		markCheckError(r, err)
+		return r
 	}
 
 	for i := 0; i < concurrency; i++ {
@@ -136,34 +127,13 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		go c.checkTable(checkCtx, r)
 	}
 
-outer:
-	for sourceID, tables := range c.tableMap {
-		for _, table := range tables {
-			select {
-			case c.inCh <- &checkItem{table, sourceID}:
-			case <-checkCtx.Done():
-				log.L().Logger.Warn("ctx canceled before input tables completely")
-				break outer
-			}
-		}
-	}
+	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
+
 	close(c.inCh)
 	c.checkWg.Wait()
 	close(c.errCh)
-outer2:
-	for {
-		select {
-		case err, ok := <-c.errCh:
-			if !ok {
-				break outer2
-			}
-			c.reMu.Lock()
-			markCheckError(r, err)
-			c.reMu.Unlock()
-		case <-checkCtx.Done():
-			break outer2
-		}
-	}
+
+	handleErr(checkCtx, c.errCh, &c.reMu, r)
 	log.L().Logger.Info("check table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
@@ -408,19 +378,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	defer cancel()
 	c.cancel = cancel
 
-	concurrency := maxThreadNum
-	for sourceID := range c.tableMap {
-		db, ok := c.dbs[sourceID]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for sourceID %s", sourceID))
-			return r
-		}
-		maxConnections, err := utils.GetMaxConnections(ctx, db)
-		if err != nil {
-			markCheckError(r, err)
-			return r
-		}
-		concurrency = int(math.Min(float64(concurrency), float64((maxConnections+1)/2)))
+	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs)
+	if err != nil {
+		markCheckError(r, err)
+		return r
 	}
 
 	for i := 0; i < concurrency; i++ {
@@ -428,35 +389,13 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		go c.checkShardingTable(checkCtx, r)
 	}
 
-outer:
-	for sourceID, tables := range c.tableMap {
-		for _, table := range tables {
-			select {
-			case c.inCh <- &checkItem{table, sourceID}:
-			case <-checkCtx.Done():
-				log.L().Logger.Warn("ctx canceled before input tables completely")
-				break outer
-			}
-		}
-	}
+	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
+
 	close(c.inCh)
 	c.checkWg.Wait()
 	close(c.errCh)
 
-outer2:
-	for {
-		select {
-		case err, ok := <-c.errCh:
-			if !ok {
-				break outer2
-			}
-			c.reMu.Lock()
-			markCheckError(r, err)
-			c.reMu.Unlock()
-		case <-checkCtx.Done():
-			break outer2
-		}
-	}
+	handleErr(checkCtx, c.errCh, &c.reMu, r)
 	log.L().Logger.Info("check sharding table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
@@ -709,4 +648,49 @@ func getBriefColumnList(stmt *ast.CreateTableStmt) briefColumnInfos {
 // Name implements Checker interface.
 func (c *ShardingTablesChecker) Name() string {
 	return fmt.Sprintf("sharding table %s consistency checking", c.targetTableID)
+}
+
+func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table, inCh chan *checkItem) {
+	for sourceID, tables := range tableMap {
+		for _, table := range tables {
+			select {
+			case inCh <- &checkItem{table, sourceID}:
+			case <-ctx.Done():
+				log.L().Logger.Warn("ctx canceled before input tables completely")
+				return
+			}
+		}
+	}
+}
+
+func handleErr(ctx context.Context, errCh chan error, mu *sync.Mutex, r *Result) {
+	for {
+		select {
+		case err, ok := <-errCh:
+			if !ok {
+				return
+			}
+			mu.Lock()
+			markCheckError(r, err)
+			mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func getConcurrency(ctx context.Context, tableMap map[string][]*filter.Table, dbs map[string]*sql.DB) (int, error) {
+	concurrency := maxThreadNum
+	for sourceID := range tableMap {
+		db, ok := dbs[sourceID]
+		if !ok {
+			return 0, errors.NotFoundf("client for sourceID %s", sourceID)
+		}
+		maxConnections, err := utils.GetMaxConnections(ctx, db)
+		if err != nil {
+			return 0, err
+		}
+		concurrency = int(math.Min(float64(concurrency), float64((maxConnections+1)/2)))
+	}
+	return concurrency, nil
 }
