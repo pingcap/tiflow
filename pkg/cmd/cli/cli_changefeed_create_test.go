@@ -14,7 +14,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -94,7 +93,7 @@ func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
 		o.addFlags(cmd)
 		c.Assert(cmd.ParseFlags([]string{"--sort-engine=" + cs.input}), check.IsNil)
 		opt := newCreateChangefeedOptions(o)
-		err := opt.completeCfg(context.TODO(), cmd,
+		err := opt.completeCfg(cmd,
 			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
 		c.Assert(err, check.IsNil)
 		c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, cs.expect)

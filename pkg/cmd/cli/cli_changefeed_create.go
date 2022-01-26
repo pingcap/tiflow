@@ -168,12 +168,12 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 		return err
 	}
 
-	return o.completeCfg(ctx, cmd, captureInfos)
+	return o.completeCfg(cmd, captureInfos)
 }
 
 // completeCfg complete the replica config from file and cmd flags.
 func (o *createChangefeedOptions) completeCfg(
-	ctx context.Context, cmd *cobra.Command, captureInfos []*model.CaptureInfo,
+	cmd *cobra.Command, captureInfos []*model.CaptureInfo,
 ) error {
 	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
