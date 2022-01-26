@@ -118,7 +118,18 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return nil
 	})
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-	if err := c.tick(ctx, state, captures); err != nil {
+	err := c.tick(ctx, state, captures)
+
+	// The tick duration is recorded only if changefeed has completed initialization
+	if c.initialized {
+		costTime := time.Since(startTime)
+		if costTime > changefeedLogsWarnDuration {
+			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
+		}
+		c.metricChangefeedTickDuration.Observe(costTime.Seconds())
+	}
+
+	if err != nil {
 		log.Error("an error occurred in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
@@ -132,17 +143,6 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			Message: err.Error(),
 		})
 		c.releaseResources(ctx)
-	} else {
-		// c.initialize(ctx)
-		costTime := time.Since(startTime)
-		if costTime > changefeedLogsWarnDuration {
-			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
-		}
-		// TODO: fix TestStopChangefeed nil poniter bug
-		if c.metricChangefeedTickDuration == nil {
-			c.metricChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
-		}
-		c.metricChangefeedTickDuration.Observe(costTime.Seconds())
 	}
 }
 
