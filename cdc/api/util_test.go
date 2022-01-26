@@ -22,6 +22,7 @@ import (
 )
 
 func TestIsHTTPBadRequestError(t *testing.T) {
+	t.Parallel()
 	err := cerror.ErrAPIInvalidParam.GenWithStack("aa")
 	require.Equal(t, true, IsHTTPBadRequestError(err))
 	err = cerror.ErrAPIInvalidParam.Wrap(errors.New("aa"))
