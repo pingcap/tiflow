@@ -41,8 +41,8 @@ func WebUIAssetsHandler() http.FileSystem {
 	return http.FS(stripped)
 }
 
-// we need this to handel this case: user want to access /dashboard/source.html/ but webui is a single page app,
-// and it only can handel requests in index page, so we need to redirect to index page.
+// we need this to handle this case: user want to access /dashboard/source.html/ but webui is a single page app,
+// and it only can handle requests in index page, so we need to redirect to index page.
 func alwaysRedirect(path string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// note that static file like css and js under the assets folder should not be redirected.
