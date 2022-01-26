@@ -62,6 +62,7 @@ var (
 	globalCpSchema       = "" // global checkpoint's cp_schema
 	globalCpTable        = "" // global checkpoint's cp_table
 	maxCheckPointTimeout = "1m"
+	batchFlushPoints     = 100
 )
 
 type tablePoint struct {
@@ -722,16 +723,15 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 		return errors.Errorf("the length of the tables is not equal to the length of the table infos, left: %d, right: %d", len(tables), len(tis))
 	}
 
-	batch := 100
-	for i := 0; i < len(tables); i += batch {
-		end := i + batch
+	for i := 0; i < len(tables); i += batchFlushPoints {
+		end := i + batchFlushPoints
 		if end > len(tables) {
 			end = len(tables)
 		}
 
-		sqls := make([]string, 0, batch)
-		args := make([][]interface{}, 0, batch)
-		points := make([]*binlogPoint, 0, batch)
+		sqls := make([]string, 0, batchFlushPoints)
+		args := make([][]interface{}, 0, batchFlushPoints)
+		points := make([]*binlogPoint, 0, batchFlushPoints)
 		for j := i; j < end; j++ {
 			table := tables[j]
 			ti := tis[j]

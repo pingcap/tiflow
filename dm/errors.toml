@@ -1102,6 +1102,18 @@ description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 tags = ["internal", "medium"]
 
+[error.DM-config-20053]
+message = "invalid load mode '%s'"
+description = ""
+workaround = "Please choose a valid value in ['sql', 'loader']"
+tags = ["internal", "medium"]
+
+[error.DM-config-20054]
+message = "invalid load on-duplicate '%s'"
+description = ""
+workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -1622,12 +1634,6 @@ tags = ["internal", "high"]
 message = "inconsistent checkpoints between loader and target database"
 description = ""
 workaround = "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command."
-tags = ["internal", "high"]
-
-[error.DM-functional-34019]
-message = "DM do not support backend %s "
-description = ""
-workaround = "If you do not understand the configure `tidb.backend` you can just delete it."
 tags = ["internal", "high"]
 
 [error.DM-sync-unit-36001]

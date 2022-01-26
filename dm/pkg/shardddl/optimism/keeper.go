@@ -41,7 +41,7 @@ type LockKeeper struct {
 
 	downstreamMetaMap     map[string]*DownstreamMeta
 	getDownstreamMetaFunc func(string) (*config.DBConfig, string)
-	// column name -> source -> upSchema -> upTable -> int
+	// lockID -> column name -> source -> upSchema -> upTable -> int
 	dropColumns map[string]map[string]map[string]map[string]map[string]DropColumnStage
 }
 
