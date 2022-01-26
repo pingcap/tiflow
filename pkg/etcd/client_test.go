@@ -51,10 +51,16 @@ type mockWatcher struct {
 	watchCh      chan clientv3.WatchResponse
 	resetCount   *int
 	requestCount *int
+	rev          *int64
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	*m.resetCount++
+	op := &clientv3.Op{}
+	for _, opt := range opts {
+		opt(op)
+	}
+	*m.rev = op.Rev()
 	return m.watchCh
 }
 
@@ -111,14 +117,14 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 }
 
 // test no data lost when WatchCh blocked
-func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
+func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
+	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
 	cli.Watcher = watcher
 
 	sentRes := []clientv3.WatchResponse{
@@ -158,6 +164,9 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
+		if len(receivedRes) == len(sentRes) {
+			cancel()
+		}
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
@@ -170,15 +179,16 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 }
 
 // test no data lost when OutCh blocked
-func (s *etcdSuite) TestOutChBlocked(c *check.C) {
+func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
 
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
+	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -215,7 +225,56 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
+		if len(receivedRes) == len(sentRes) {
+			cancel()
+		}
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
+}
+
+func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cli := clientv3.NewCtxClient(context.TODO())
+
+	resetCount := 0
+	requestCount := 0
+	rev := int64(0)
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+	cli.Watcher = watcher
+	mockClock := clock.NewMock()
+	watchCli := Wrap(cli, nil)
+	watchCli.clock = mockClock
+
+	key := "testRevisionNotFallBack"
+	outCh := make(chan clientv3.WatchResponse, 1)
+	// watch from revision = 2
+	revision := int64(2)
+
+	sentRes := []clientv3.WatchResponse{
+		{CompactRevision: 1},
+	}
+
+	go func() {
+		for _, r := range sentRes {
+			watchCh <- r
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	go func() {
+		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+	}()
+	// wait for WatchWithChan set up
+	<-outCh
+	// move time forward
+	mockClock.Add(time.Second * 30)
+	// make sure watchCh has been reset since timeout
+	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	// make suer revision in WatchWitchChan does not fall back
+	// even if there has not any response been received from WatchCh
+	// while WatchCh was reset
+	c.Assert(*watcher.rev, check.Equals, revision)
 }
