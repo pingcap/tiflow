@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/dm/ui"
+    # Specify labels for npm pull requests.
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "release-note-none"
+      - "skip-issue-check"
+    # We use this option to make these configurations valid only for PRs with security issues.
+    open-pull-requests-limit: 0

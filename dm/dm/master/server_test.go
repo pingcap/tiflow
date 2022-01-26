@@ -857,6 +857,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	defer ctrl.Finish()
 
 	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
 	// s.generateSubTask with error
@@ -1138,6 +1139,7 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
 	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
 	// test operate-task with invalid task name
