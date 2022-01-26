@@ -119,7 +119,7 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 		}
 		if c <= 0 {
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-				fmt.Errorf("invalid worker-count %d", c))
+				fmt.Errorf("invalid worker-count %d, which must be greater than 0", c))
 		}
 		if c > maxWorkerCount {
 			log.Warn("worker-count too large",
@@ -136,7 +136,7 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 		}
 		if c <= 0 {
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-				fmt.Errorf("invalid max-txn-row %d", c))
+				fmt.Errorf("invalid max-txn-row %d, which must be greater than 0", c))
 		}
 		if c > maxMaxTxnRow {
 			log.Warn("max-txn-row too large",
