@@ -844,6 +844,7 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 	cp.RLock()
 	defer cp.RUnlock()
 	cp.globalPoint.rollback(schemaTracker, "")
+	tablesToCreate := make(map[string]map[string]*model.TableInfo)
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
 			table := &filter.Table{
@@ -864,12 +865,17 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
 						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
 					}
-					if err := schemaTracker.CreateTableIfNotExists(table, point.savedPoint.ti); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
+					if _, ok := tablesToCreate[schemaName]; !ok {
+						tablesToCreate[schemaName] = map[string]*model.TableInfo{}
 					}
+					tablesToCreate[schemaName][tableName] = point.savedPoint.ti
 				}
 			}
 		}
+	}
+	logger := cp.logCtx.L().WithFields(zap.Reflect("batch create table", tablesToCreate))
+	if err := schemaTracker.BatchCreateTableIfNotExist(tablesToCreate); err != nil {
+		logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
 	}
 
 	// drop any tables in the tracker if no corresponding checkpoint exists.
