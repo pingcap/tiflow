@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/dm/ui"
+    # Specify labels for npm pull requests.
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "release-note-none"
