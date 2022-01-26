@@ -5,7 +5,7 @@
 
 ## Background
 
-The main purpose of this change is to address the root cause of problems like [#3771](https://github.com/pingcap/tiflow/issues/3771), which are caused by the fact that DM Task itself does not distinguish between dynamic configuration and static resources, making it impossible for users to intuitively manage their tasks. For this reasons, we will attempt to redesign the state machine of DM Task and optimising the DMCTL interaction interface to provide a better user experience.
+The main purpose of this change is to address the root cause of problems like [#3771](https://github.com/pingcap/tiflow/issues/3771), which are caused by the fact that DM task itself does not distinguish between dynamic configuration and static resources, making it impossible for users to intuitively manage their tasks. For this reasons, we will attempt to redesign the state machine of DM task and optimising the dmctl interaction interface to provide a better user experience.
 
 ### Current State machine of task
 
@@ -20,14 +20,14 @@ This is mainly achieved by adding a new `create task` action to create a new tas
 ## Goals
 
 - Organize and optimize the state machine of tasks for better management
-- Unified style of commands in DMCTL, optimized DMCTL interaction experience
-- Adding/modifying OpenAPI, enhance peripheral eco-tools
+- Unified style of commands in dmctl, optimized dmctl interaction experience
+- Adding/modifying OpenAPI, enhance eco-tools
 
 ## Design and Examples
 
-New syntax of DMCTL is `dmctl [resource type] [command] [flags]`
+New syntax of dmctl is `dmctl [resource type] [command] [flags]`
 
-where command, `resource type` , `command` , and `flags` are:
+where command, `resource type`, `command` and `flags` are:
 
 - `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types.
 
@@ -35,7 +35,7 @@ where command, `resource type` , `command` , and `flags` are:
 
 - `flags`: Specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server. note that we **not allow** any non-keyword arguments, all arguments must be specified as this: `--flag value`.
 
-### DMCTL commands for Task
+### dmctl commands for Task
 
 | command | Full Syntax Example                                                                                                                           | Flags                                                                          | Description                                                              |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
@@ -49,7 +49,7 @@ where command, `resource type` , `command` , and `flags` are:
 | start   | `dmctl task start --task-name="test" --source="source1,source2" --remove-meta=false --start-time="2021-01-01 00:00:00" --safe-mode-time="1s"` | --task-name, --status, --source, --remove-meta, --start-time, --safe-mode-time | start a stopped task with many flags.                                    |
 | stop    | `dmctl task stop --task-name="test" --source="source1,source2" --timeout="60s"`                                                               | --task-name, --source, --timeout                                               | stop a running task with many flags.                                     |
 
-### DMCTL commands for Source
+### dmctl commands for Source
 
 | command  | Full Syntax Example                                                     | Flags                        | Description                                                         |
 | -------- | ----------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
@@ -63,7 +63,7 @@ where command, `resource type` , `command` , and `flags` are:
 | disable  | `dmctl source disable --source-name="source1"`                          | --source-name                | disable a source and also stop the running subtasks of this source. |
 | transfer | `dmctl source transfer --source-name="source1" --worker-name="worker1"` | --source-name, --worker-name | transfers a source to a free worker.                                |
 
-### DMCTL commands for Relay
+### dmctl commands for Relay
 
 | command | Full Syntax Example                                                                                                                     | Flags                                 | Description                                                                  |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
@@ -73,14 +73,14 @@ where command, `resource type` , `command` , and `flags` are:
 | resume  | `dmctl relay resume --source-name="source1.yaml" --worker-name="worker1"`                                                               | --source-name, --worker-name          | resume relay for a source on a worker.                                       |
 | purge   | `dmctl relay purge --source-name="source1.yaml" --file-name="mysql-bin.000006" --sub-dir="2ae76434-f79f-11e8-bde2-0242ac130008.000001"` | --source-name, --file-name, --sub-dir | purges relay log files of the DM-worker according to the specified filename. |
 
-### DMCTL commands for DDL-LOCK
+### dmctl commands for DDL-LOCK
 
 | command | Full Syntax Example                                          | Flags                    | Description                                  |
 | ------- | ------------------------------------------------------------ | ------------------------ | -------------------------------------------- |
 | list    | `dmctl ddl-lock list --task-name="test"`                     | --task-name              | show shard-ddl locks information for a task. |
 | unlock  | `dmctl ddl-lock unlock --task-name="test" --lock-id="lock1"` | --task-name, --lock-name | force unlock un-resolved DDL locks.          |
 
-### DMCTL commands for member
+### dmctl commands for member
 
 | command                    | Full Syntax Example                                                 | Flags          | Description                                       |
 | -------------------------- | ------------------------------------------------------------------- | -------------- | ------------------------------------------------- |
@@ -89,7 +89,7 @@ where command, `resource type` , `command` , and `flags` are:
 | member evict-leader        | `dmctl member evict-leader --name="master-1"`                       | --name         | evict leader for master node.                     |
 | member cancel-evict-leader | `dmctl member cancel-evict-leader --name="master-1"`                | --name         | cancel evict leader for master node.              |
 
-### Optimised DMCTL for interaction mode (optional)
+### Optimised dmctl for interaction mode (optional)
 
 The current interaction of dmctl still has room for optimization, and I hope to take this opportunity to do some optimization of the interaction experience, focusing on the user can quickly select the command they want to enter through the keyboard, instead of entering commands by their memory.
 
@@ -112,15 +112,15 @@ This phase is mainly about implementing the DM-Master/DM-Worker internal logic.
 
 For tasks, the DM-Master's internal scheduling module needs to support the creation of a subtask in a stopped state, in addition to adapting additional parameters like `-start-time`,`--time-out` and so on.
 
-And for Sources, when the DM-Master receives a `disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing DMCTL.
+And for Sources, when the DM-Master receives a `disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing dmctl.
 
 ### Milestone 2 - Defining the new OpenAPI Spec and implementing specific features
 
 This phase is used to identify and implement the new OpenAPI and to use unit and integration tests to determine whether the OpenAPI meets expectations in certain scenarios, It is important to note that changes to the code in this phase will result in the above incompatible changes to the existing OpenAPI.
 
-### Milestone 3 - Implementing commands in DMCTL with OpenAPI and optimising the interaction experience
+### Milestone 3 - Implementing commands in dmctl with OpenAPI and optimising the interaction experience
 
-This phase will focus most of the effort on implementing the commands in the DMCTL and optimising the interaction experience, and completing the corresponding unit and integration tests. It is to be expected that a lot of time will be spent in this phase on modifying and testing the CI.
+This phase will focus most of the effort on implementing the commands in the dmctl and optimising the interaction experience, and completing the corresponding unit and integration tests. It is to be expected that a lot of time will be spent in this phase on modifying and testing the CI.
 
 ### Milestone 4 - Perform corresponding testing and documentation completions
 
