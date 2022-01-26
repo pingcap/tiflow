@@ -1044,7 +1044,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, tidb, collation_compatible and experimental
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, collation_compatible, experimental, validator
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

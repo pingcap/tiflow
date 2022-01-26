@@ -116,7 +116,10 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go v.doValidate()
+	go func() {
+		defer v.wg.Done()
+		v.doValidate()
+	}()
 
 	v.stage = pb.Stage_Running
 }
@@ -147,10 +150,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	}
 }
 
-// doValidate: runs in a goroutine.
 func (v *DataValidator) doValidate() {
-	defer v.wg.Done()
-
 	tctx := tcontext.NewContext(v.ctx, v.L)
 	err := v.streamerController.Start(tctx, lastLocation)
 	if err != nil {
