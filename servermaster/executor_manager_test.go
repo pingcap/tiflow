@@ -66,11 +66,11 @@ func TestExecutorManager(t *testing.T) {
 
 	mgr.Start(ctx)
 
-	// sleep to wait executor heartbeat timeout
-	time.Sleep(time.Millisecond * 50)
-	mgr.mu.Lock()
-	require.Equal(t, 0, len(mgr.executors))
-	mgr.mu.Unlock()
+	require.Eventually(t, func() bool {
+		mgr.mu.Lock()
+		defer mgr.mu.Unlock()
+		return len(mgr.executors) == 0
+	}, time.Second*2, time.Millisecond*50)
 
 	// test late heartbeat request after executor is offline
 	resp, err = mgr.HandleHeartbeat(newHeartbeatReq())
