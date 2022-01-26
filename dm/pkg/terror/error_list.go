@@ -1277,7 +1277,6 @@ var (
 	ErrSchedulerWorkerExist                  = New(codeSchedulerWorkerExist, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s already exists", "")
 	ErrSchedulerWorkerNotExist               = New(codeSchedulerWorkerNotExist, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s not exists", "")
 	ErrSchedulerWorkerOnline                 = New(codeSchedulerWorkerOnline, ClassScheduler, ScopeInternal, LevelMedium, "dm-worker with name %s is still online", "Please shut it down first.")
-	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 	ErrSchedulerWorkerInvalidTrans           = New(codeSchedulerWorkerInvalidTrans, ClassScheduler, ScopeInternal, LevelMedium, "invalid stage transformation for dm-worker %s, from %s to %s", "")
 	ErrSchedulerSourceCfgExist               = New(codeSchedulerSourceCfgExist, ClassScheduler, ScopeInternal, LevelMedium, "source config with ID %s already exists", "")
 	ErrSchedulerSourceCfgNotExist            = New(codeSchedulerSourceCfgNotExist, ClassScheduler, ScopeInternal, LevelMedium, "source config with ID %s not exists", "")
@@ -1305,7 +1304,7 @@ var (
 	ErrSchedulerStartRelayOnBound            = New(codeSchedulerStartRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now", "Please stop relay by `stop-relay` without worker name first.")
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
-
+	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
 	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
