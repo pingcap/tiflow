@@ -213,23 +213,15 @@ func (k *kafkaSaramaProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	k.asyncClient.AsyncClose()
-	go func() {
-		start := time.Now()
-		log.Info("start drain asyncClient")
-		for range k.asyncClient.Successes() {
-
-		}
-		log.Info("drain success asyncClient", zap.Duration("duration", time.Since(start)))
-		for range k.asyncClient.Errors() {
-
-		}
-		log.Info("drain errors finished", zap.Duration("duration", time.Since(start)))
-
-	}()
-
 	start := time.Now()
-	err := k.syncClient.Close()
+	err := k.asyncClient.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
+	}
+	start = time.Now()
+	err = k.syncClient.Close()
 	if err != nil {
 		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
 	} else {
