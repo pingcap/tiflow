@@ -482,7 +482,14 @@ const (
 	exprFilterIdx
 )
 
-// adjust adjusts and verifies config.
+// Adjust adjusts and verifies config.
+func (c *TaskConfig) Adjust() error {
+	if c == nil {
+		return terror.ErrConfigYamlTransform.New("task config is nil")
+	}
+	return c.adjust()
+}
+
 func (c *TaskConfig) adjust() error {
 	if len(c.Name) == 0 {
 		return terror.ErrConfigNeedUniqueTaskName.Generate()

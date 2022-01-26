@@ -441,11 +441,13 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 
 	// when Init syncer, set active relay log info
-	err = s.setInitActiveRelayLog(ctx)
-	if err != nil {
-		return err
+	if s.cfg.Meta.BinLogName != binlog.FakeBinlogName {
+		err = s.setInitActiveRelayLog(ctx)
+		if err != nil {
+			return err
+		}
+		rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
 	}
-	rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
 
 	s.reset()
 	return nil
@@ -3809,10 +3811,12 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 	)
 
 	if s.relay != nil {
-		finder := binlog.NewLocalBinlogPosFinder(tctx, s.cfg.EnableGTID, s.cfg.Flavor, s.cfg.RelayDir)
+		subDir := s.relay.Status(nil).(*pb.RelayStatus).RelaySubDir
+		relayDir := path.Join(s.cfg.RelayDir, subDir)
+		finder := binlog.NewLocalBinlogPosFinder(tctx, s.cfg.EnableGTID, s.cfg.Flavor, relayDir)
 		loc, posTp, err = finder.FindByTimestamp(t.Unix())
 	} else {
-		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.toDB.DB, s.syncCfg, s.cfg.EnableGTID)
+		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.fromDB.BaseDB.DB, s.syncCfg, s.cfg.EnableGTID)
 		loc, posTp, err = finder.FindByTimestamp(t.Unix())
 	}
 	if err != nil {
@@ -3831,6 +3835,10 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 			zap.Stringer("failure reason", posTp))
 	}
 
-	s.checkpoint.SaveGlobalPoint(*loc)
+	err = s.checkpoint.DeleteAllTablePoint(tctx)
+	if err != nil {
+		return err
+	}
+	s.checkpoint.ResetGlobalPoint(*loc)
 	return nil
 }

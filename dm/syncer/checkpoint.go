@@ -225,6 +225,9 @@ type CheckPoint interface {
 	// DeleteTablePoint deletes checkpoint for specified table in memory and storage
 	DeleteTablePoint(tctx *tcontext.Context, table *filter.Table) error
 
+	// DeleteAllTablePoint deletes all checkpoints for table in memory and storage
+	DeleteAllTablePoint(tctx *tcontext.Context) error
+
 	// DeleteSchemaPoint deletes checkpoint for specified schema
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
@@ -235,10 +238,13 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
+	// ResetGlobalPoint saves the global binlog stream's checkpoint forcibly.
+	ResetGlobalPoint(location binlog.Location)
+
 	// Snapshot make a snapshot of current checkpoint
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
-	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
+	// FlushPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
 	// by extraSQLs and extraArgs. Currently extraSQLs contain shard meta only.
 	// @exceptTables: [[schema, table]... ]
@@ -549,6 +555,24 @@ func (cp *RemoteCheckPoint) DeleteTablePoint(tctx *tcontext.Context, table *filt
 	return nil
 }
 
+// DeleteAllTablePoint implements CheckPoint.DeleteAllTablePoint.
+func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
+	cp.Lock()
+	defer cp.Unlock()
+
+	cp.logCtx.L().Info("delete all table checkpoint")
+	_, err := cp.dbConn.ExecuteSQL(
+		tctx,
+		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
+		[]interface{}{cp.id, false},
+	)
+	if err != nil {
+		return err
+	}
+	cp.points = make(map[string]map[string]*binlogPoint)
+	return nil
+}
+
 // DeleteSchemaPoint implements CheckPoint.DeleteSchemaPoint.
 func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error {
 	cp.Lock()
@@ -612,7 +636,16 @@ func (cp *RemoteCheckPoint) SaveGlobalPoint(location binlog.Location) {
 	}
 }
 
-// FlushPointsExcept implements CheckPoint.FlushSnapshotPointsExcept.
+// ResetGlobalPoint implements CheckPoint.ResetGlobalPoint.
+func (cp *RemoteCheckPoint) ResetGlobalPoint(location binlog.Location) {
+	cp.Lock()
+	defer cp.Unlock()
+
+	cp.logCtx.L().Debug("reset global checkpoint", zap.Stringer("location", location))
+	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+}
+
+// FlushPointsExcept implements CheckPoint.FlushPointsExcept.
 func (cp *RemoteCheckPoint) FlushPointsExcept(
 	tctx *tcontext.Context,
 	snapshotID int,
