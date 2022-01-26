@@ -114,6 +114,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	c.cancel = cancel
 
 	concurrency := maxThreadNum
 	for sourceID := range c.tableMap {
@@ -405,6 +406,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	checkCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	c.cancel = cancel
 
 	concurrency := maxThreadNum
 	for sourceID := range c.tableMap {
