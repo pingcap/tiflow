@@ -228,11 +228,13 @@ func (o *createChangefeedOptions) completeCfg(
 		}
 	}
 
-	if o.commonChangefeedOptions.sortEngine != model.SortInMemory &&
-		o.commonChangefeedOptions.sortEngine != model.SortInFile &&
-		o.commonChangefeedOptions.sortEngine != model.SortUnified {
+	switch o.commonChangefeedOptions.sortEngine {
+	case model.SortInMemory:
+	case model.SortInFile:
+	case model.SortUnified:
+	default:
 		log.Warn("invalid sort-engine, use Unified Sorter by default",
-			zap.String("invalid", o.commonChangefeedOptions.sortEngine))
+			zap.String("invalidSortEngine", o.commonChangefeedOptions.sortEngine))
 		o.commonChangefeedOptions.sortEngine = model.SortUnified
 	}
 

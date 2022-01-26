@@ -71,15 +71,32 @@ func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
 
 func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
 	defer testleak.AfterTest(c)()
-	cmd := new(cobra.Command)
-	o := newChangefeedCommonOptions()
-	o.addFlags(cmd)
 
-	c.Assert(cmd.ParseFlags([]string{"--sort-engine=invalid"}), check.IsNil)
-
-	opt := newCreateChangefeedOptions(o)
-	err := opt.completeCfg(context.TODO(), cmd,
-		[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
-	c.Assert(err, check.IsNil)
-	c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, model.SortUnified)
+	cases := []struct {
+		input  string
+		expect model.SortEngine
+	}{{
+		input:  "invalid",
+		expect: model.SortUnified,
+	}, {
+		input:  "memory",
+		expect: model.SortInMemory,
+	}, {
+		input:  "file",
+		expect: model.SortInFile,
+	}, {
+		input:  "unified",
+		expect: model.SortUnified,
+	}}
+	for _, cs := range cases {
+		cmd := new(cobra.Command)
+		o := newChangefeedCommonOptions()
+		o.addFlags(cmd)
+		c.Assert(cmd.ParseFlags([]string{"--sort-engine=" + cs.input}), check.IsNil)
+		opt := newCreateChangefeedOptions(o)
+		err := opt.completeCfg(context.TODO(), cmd,
+			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
+		c.Assert(err, check.IsNil)
+		c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, cs.expect)
+	}
 }

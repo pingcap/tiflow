@@ -35,8 +35,10 @@ const (
 	// expose these two variables for redo log applier
 	DefaultWorkerCount = 16
 	DefaultMaxTxnRow   = 256
-	maxWorkerCount     = 1024
-	maxMaxTxnRow       = 2048
+	// The upper limit of max worker counts.
+	maxWorkerCount = 1024
+	// The upper limit of max txn rows.
+	maxMaxTxnRow = 2048
 
 	defaultDMLMaxRetryTime     = 8
 	defaultDDLMaxRetryTime     = 20
