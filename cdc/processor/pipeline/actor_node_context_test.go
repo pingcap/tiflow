@@ -67,7 +67,7 @@ func TestThrow(t *testing.T) {
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, "a.test", sys.Router(), actorID, nil, nil)
+	actorContext := NewContext(ctx, "a.test", sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, nil)
 	actorContext.Throw(nil)
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 0, len(ch))
@@ -107,7 +107,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, "a.test", sys.Router(), actorID, nil, nil)
+	actorContext := NewContext(ctx, "a.test", sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{})
 	actorContext.setTickMessageThreshold(2)
 	actorContext.SendToNextNode(pipeline.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)

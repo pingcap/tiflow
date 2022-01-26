@@ -62,8 +62,8 @@ type tableActor struct {
 	stopped bool
 	err     error
 
-	info             *cdcContext.ChangefeedVars
-	vars             *cdcContext.GlobalVars
+	changefeedVars   *cdcContext.ChangefeedVars
+	globalVars       *cdcContext.GlobalVars
 	replConfig       *serverConfig.ReplicaConfig
 	tableActorRouter *actor.Router
 
@@ -96,6 +96,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	// All sub-goroutines should be spawn in this wait group.
 	wg, cctx := errgroup.WithContext(ctx)
 	table := &tableActor{
+		// all errors in table actor will be reported to processor
 		reportErr: cdcCtx.Throw,
 		mb:        mb,
 		wg:        wg,
@@ -113,8 +114,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
-		info:             info,
-		vars:             vars,
+		changefeedVars:   info,
+		globalVars:       vars,
 		tableActorRouter: vars.TableActorSystem.Router(),
 		actorID:          actorID,
 	}
@@ -201,8 +202,8 @@ func (t *tableActor) start(ctx context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.info.ID)
-	pCtx := NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pCtx := NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars)
 	if err := pullerNode.Init(pCtx); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
@@ -217,7 +218,7 @@ func (t *tableActor) start(ctx context.Context) error {
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replConfig,
 	)
-	sCtx := NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars)
+	sCtx := NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars)
 	if err := sorterNode.StartActorNode(sCtx, true, t.wg); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
@@ -236,7 +237,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
 		cCtx = NewCyclicNodeContext(
-			NewContext(ctx, t.tableName, t.vars.TableActorSystem.Router(), t.actorID, t.info, t.vars))
+			NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars))
 		if err := cyclicNode.Init(cCtx); err != nil {
 			log.Error("sink fails to start",
 				zap.String("tableName", t.tableName),
@@ -290,7 +291,7 @@ func (t *tableActor) stop(ctx context.Context, err error) {
 	t.stopped = true
 	t.err = err
 	t.cancel()
-	t.sortNode.ReleaseResource(ctx, t.changefeedID, t.vars.CaptureInfo.AdvertiseAddr)
+	t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
 	if err := t.sinkNode.ReleaseResource(ctx); err != nil {
 		log.Warn("close sink failed",
 			zap.String("changefeed", t.changefeedID),
@@ -344,7 +345,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 	}
 }
 
-// AsyncStop tells the table actor to stop, and returns true if this actor is already stopped.
+// AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	msg := message.StopSinkMessage()
 	err := t.tableActorRouter.Send(t.actorID, msg)
