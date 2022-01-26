@@ -127,6 +127,7 @@ type Syncer struct {
 
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
+	cliArgs *config.TaskCliArgs
 
 	sgk       *ShardingGroupKeeper // keeper to keep all sharding (sub) group in this syncer
 	pessimist *shardddl.Pessimist  // shard DDL pessimist
@@ -1244,6 +1245,17 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 	s.lastCheckpointFlushedTime = now
 
 	s.logAndClearFilteredStatistics()
+
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+		clone := *s.cliArgs
+		clone.StartTime = ""
+		err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone)
+		if err2 != nil {
+			s.tctx.L().Error("failed to clean start-time in task cli args", zap.Error(err2))
+		} else {
+			s.cliArgs.StartTime = ""
+		}
+	}
 	return nil
 }
 
@@ -1464,11 +1476,27 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}()
 
-	// some initialization that can't be put in Syncer.Init
 	fresh, err := s.IsFreshTask(runCtx)
 	if err != nil {
 		return err
-	} else if fresh {
+	}
+
+	// task command line arguments have the highest priority
+	// dm-syncer and other usage may not have a etcdCli, so we check it first
+	skipLoadMeta := false
+	if s.cli != nil {
+		s.cliArgs, err = ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
+		if err != nil {
+			s.tctx.L().Error("failed to get task cli args", zap.Error(err))
+		}
+		if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+			err = s.setGlobalPointByTime(tctx, s.cliArgs.StartTime)
+			skipLoadMeta = err == nil
+		}
+	}
+
+	// some initialization that can't be put in Syncer.Init
+	if fresh && !skipLoadMeta {
 		// for fresh task, we try to load checkpoints from meta (file or config item)
 		err = s.checkpoint.LoadMeta()
 		if err != nil {
@@ -3763,4 +3791,46 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 		chanSize /= 2
 	}
 	return chanSize
+}
+
+func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
+	// we support two layout
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", timeStr, s.timezone)
+	if err != nil {
+		t, err = time.ParseInLocation("2006-01-02T15:04:05", timeStr, s.timezone)
+	}
+	if err != nil {
+		return err
+	}
+
+	var (
+		loc   *binlog.Location
+		posTp binlog.PosType
+	)
+
+	if s.relay != nil {
+		finder := binlog.NewLocalBinlogPosFinder(tctx, s.cfg.EnableGTID, s.cfg.Flavor, s.cfg.RelayDir)
+		loc, posTp, err = finder.FindByTimestamp(t.Unix())
+	} else {
+		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.toDB.DB, s.syncCfg, s.cfg.EnableGTID)
+		loc, posTp, err = finder.FindByTimestamp(t.Unix())
+	}
+	if err != nil {
+		s.tctx.L().Error("fail to find binlog position by timestamp",
+			zap.Time("time", t),
+			zap.Error(err))
+		return err
+	}
+
+	switch posTp {
+	case binlog.InRangeBinlogPos:
+	default:
+		s.tctx.L().Warn("fail to find binlog location by timestamp, will use the most proper location",
+			zap.String("time", timeStr),
+			zap.Any("location", loc),
+			zap.Stringer("failure reason", posTp))
+	}
+
+	s.checkpoint.SaveGlobalPoint(*loc)
+	return nil
 }
