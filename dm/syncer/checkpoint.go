@@ -22,13 +22,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -341,8 +341,6 @@ type RemoteCheckPoint struct {
 	// these fields are used for async flush checkpoint
 	snapshots   []*remoteCheckpointSnapshot
 	snapshotSeq int
-
-	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewRemoteCheckPoint creates a new RemoteCheckPoint.
@@ -1183,9 +1181,9 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
-	loc, loc2, err := dumpling.ParseMetaDataByExternalStore(ctx, filename, cp.cfg.Flavor, cp.externalStore)
+	loc, loc2, err := dumpling.ParseMetaDataByExternalStore(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
 	if err != nil {
-		toPrint, err2 := cp.externalStore.ReadFile(context.Background(), filename)
+		toPrint, err2 := exstorage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

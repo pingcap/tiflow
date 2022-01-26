@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
@@ -234,8 +233,6 @@ type Syncer struct {
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
-
-	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewSyncer creates a new Syncer.
@@ -414,15 +411,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	err = s.checkpoint.Init(tctx)
 	if err != nil {
 		return err
-	}
-
-	// init externalStore
-	if s.cfg.Mode == config.ModeAll {
-		s.externalStore, err = exstorage.CreateExternalStore(tctx.Ctx, s.cfg.LoaderConfig.Dir)
-		if err != nil {
-			return err
-		}
-		s.checkpoint.(*RemoteCheckPoint).externalStore = s.externalStore
 	}
 
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-checkpoint", Fn: s.checkpoint.Close})
@@ -1534,7 +1522,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		})
 
 		if !doNotClean {
-			if err = exstorage.RemoveAll(ctx, s.externalStore); err != nil {
+			if err = exstorage.RemoveAll(ctx, s.cfg.Dir); err != nil {
 				tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 			}
 		}
@@ -3167,7 +3155,7 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-	files, err := exstorage.CollectDirFiles(ctx, s.externalStore)
+	files, err := exstorage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
 		failpoint.Inject("S3GetDumpFilesCheck", func() {
@@ -3210,7 +3198,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := s.externalStore.ReadFile(ctx, file)
+		content, err2 := exstorage.ReadFile(ctx, s.cfg.Dir, file)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),

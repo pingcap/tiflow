@@ -69,10 +69,15 @@ func CreateExternalStore(ctx context.Context, path string) (storage.ExternalStor
 }
 
 // CollectDirFiles gets files in path.
-func CollectDirFiles(ctx context.Context, externalStore storage.ExternalStorage) (map[string]struct{}, error) {
+func CollectDirFiles(ctx context.Context, dir string) (map[string]struct{}, error) {
+	externalStore, err := CreateExternalStore(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+
 	files := make(map[string]struct{})
 
-	err := externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
 		name := path.Base(filePath)
 		files[name] = struct{}{}
 		return nil
@@ -81,12 +86,33 @@ func CollectDirFiles(ctx context.Context, externalStore storage.ExternalStorage)
 	return files, err
 }
 
-func RemoveAll(ctx context.Context, externalStore storage.ExternalStorage) error {
-	err := externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+func RemoveAll(ctx context.Context, dir string) error {
+	externalStore, err := CreateExternalStore(ctx, dir)
+	if err != nil {
+		return err
+	}
+
+	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
 		return externalStore.DeleteFile(ctx, filePath)
 	})
 	if err == nil {
 		return externalStore.DeleteFile(ctx, "")
 	}
 	return err
+}
+
+func ReadFile(ctx context.Context, dir, fileName string) ([]byte, error) {
+	externalStore, err := CreateExternalStore(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return externalStore.ReadFile(ctx, fileName)
+}
+
+func OpenFile(ctx context.Context, dir, fileName string) (storage.ExternalFileReader, error) {
+	externalStore, err := CreateExternalStore(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return externalStore.Open(ctx, fileName)
 }

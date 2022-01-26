@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -270,8 +269,6 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(err, IsNil)
 	s.cfg.Mode = config.ModeAll
 	s.cfg.Dir = dir
-	cp.(*RemoteCheckPoint).externalStore, err = exstorage.CreateExternalStore(tctx.Ctx, s.cfg.Dir)
-	c.Assert(err, IsNil)
 	c.Assert(cp.LoadMeta(tctx.Ctx), IsNil)
 
 	// should flush because checkpoint hasn't been updated before (cp.globalPointCheckOrSaveTime.IsZero() == true).

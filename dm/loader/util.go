@@ -25,9 +25,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -144,9 +144,9 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 }
 
 // getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
-func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string, externalStore storage.ExternalStorage) (string, string, error) {
+func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, dir, workerName string) (string, string, error) {
 	metafile := "metadata"
-	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, metafile, cfg.Flavor, externalStore)
+	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, dir, metafile, cfg.Flavor)
 	if err != nil {
 		if os.IsNotExist(err) {
 			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
@@ -162,7 +162,7 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 			return "", "", nil
 		}
 
-		toPrint, err2 := externalStore.ReadFile(context.Background(), metafile)
+		toPrint, err2 := exstorage.ReadFile(ctx, dir, metafile)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

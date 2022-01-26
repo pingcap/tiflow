@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -1227,9 +1226,6 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *C) {
 
 	filename := filepath.Join(s.cfg.Dir, "metadata")
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: BAD METADATA"), 0o644)
-	c.Assert(err, IsNil)
-
-	syncer.checkpoint.(*RemoteCheckPoint).externalStore, err = exstorage.CreateExternalStore(context.Background(), s.cfg.Dir)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), NotNil)
 

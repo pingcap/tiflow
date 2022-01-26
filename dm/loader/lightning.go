@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -70,8 +69,6 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
-
-	externalStore storage.ExternalStorage // externalStore supports s3 storage and local file
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -167,10 +164,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		l.sqlMode = sqlModes
 	}
 
-	l.externalStore, err = exstorage.CreateExternalStore(ctx, l.cfg.LoaderConfig.Dir)
-	if err != nil {
-		return err
-	}
+	l.logger.Info("create lightingloader", zap.Stringer("config", l.cfg))
 	return nil
 }
 
@@ -299,7 +293,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		failpoint.Return()
 	})
 
-	binlog, gtid, err := getMydumpMetadataByExternalStorage(ctx, l.cli, l.cfg, l.workerName, l.externalStore)
+	binlog, gtid, err := getMydumpMetadataByExternalStorage(ctx, l.cli, l.cfg, l.cfg.LoaderConfig.Dir, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
