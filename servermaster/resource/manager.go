@@ -17,15 +17,20 @@ type RescMgr interface {
 	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
 
 	// Update updates executor resource usage and running status
-	Update(id model.ExecutorID, use model.RescUnit, status model.ExecutorStatus) error
+	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
 }
 
 type ExecutorResource struct {
 	ID     model.ExecutorID
 	Status model.ExecutorStatus
 
+	// Capacity of the resource in this executor.
 	Capacity model.RescUnit
+	// Reserved resource in this node, meaning the max resource possible to use.
+	// It's supposed to be the total cost of running tasks in this executor.
 	Reserved model.RescUnit
-	Used     model.RescUnit
-	Addr     string
+	// Actually used resource in this node. It's supposed to be less than the reserved resource.
+	// But if the estimated reserved is not accurate, `Used` might be larger than `Reserved`.
+	Used model.RescUnit
+	Addr string
 }

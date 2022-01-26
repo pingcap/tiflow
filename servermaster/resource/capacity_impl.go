@@ -51,14 +51,15 @@ func (m *CapRescMgr) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskScheduler
 }
 
 // Update implements RescMgr.Update
-func (m *CapRescMgr) Update(id model.ExecutorID, use model.RescUnit, status model.ExecutorStatus) error {
+func (m *CapRescMgr) Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	exec, ok := m.executors[id]
 	if !ok {
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
-	exec.Used = use
+	exec.Used = used
+	exec.Reserved = reserved
 	exec.Status = status
 	return nil
 }
@@ -82,6 +83,10 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 	defer m.mu.Unlock()
 	result := make(map[int64]*pb.ScheduleResult)
 	resources := m.getAvailableResource()
+	if len(resources) == 0 {
+		// No resources in this cluster
+		return false, nil
+	}
 	var idx int = 0
 	for _, task := range tasks {
 		originalIdx := idx
@@ -97,7 +102,6 @@ func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
 					ExecutorId: string(exec.ID),
 					Addr:       exec.Addr,
 				}
-				exec.Reserved = exec.Reserved + model.RescUnit(task.GetCost())
 				break
 			}
 			idx = (idx + 1) % len(resources)

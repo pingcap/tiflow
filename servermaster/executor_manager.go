@@ -103,7 +103,8 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
 	exec.Status = model.ExecutorStatus(req.Status)
 	usage := model.RescUnit(req.GetResourceUsage())
-	err := e.rescMgr.Update(exec.ID, usage, exec.Status)
+	// TODO: update reserve resources by heartbeats.
+	err := e.rescMgr.Update(exec.ID, usage, usage, exec.Status)
 	if err != nil {
 		return nil, err
 	}
