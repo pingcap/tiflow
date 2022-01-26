@@ -5,7 +5,7 @@
 
 ## Background
 
-The main purpose of this change is to address the root cause of problems like [#3771](https://github.com/pingcap/tiflow/issues/3771), which are caused by the fact that DM task itself does not distinguish between dynamic configuration and static resources, making it impossible for users to intuitively manage their tasks. For this reasons, we will attempt to redesign the state machine of DM task and optimising the dmctl interaction interface to provide a better user experience.
+The main purpose of this change is to address the root cause of problems like [#3771](https://github.com/pingcap/tiflow/issues/3771), which are caused by the fact that DM task itself does not distinguish between dynamic configuration and static resources, making it impossible for users to intuitively manage their tasks. For this reasons, we will attempt to redesign the state machine of DM task and optimize the dmctl interaction interface to provide a better user experience.
 
 ### Current State machine of task
 
@@ -69,8 +69,6 @@ where command, `resource type`, `command` and `flags` are:
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
 | start   | `dmctl relay start --source-name="source1.yaml" --worker-name="worker1"`                                                                | --source-name, --worker-name          | start relay for a source on a worker.                                        |
 | stop    | `dmctl relay stop --source-name="source1.yaml" --worker-name="worker1"`                                                                 | --source-name, --worker-name          | stop relay for a source on a worker.                                         |
-| pause   | `dmctl relay pause --source-name="source1.yaml" --worker-name="worker1"`                                                                | --source-name, --worker-name          | pause relay for a source on a worker.                                        |
-| resume  | `dmctl relay resume --source-name="source1.yaml" --worker-name="worker1"`                                                               | --source-name, --worker-name          | resume relay for a source on a worker.                                       |
 | purge   | `dmctl relay purge --source-name="source1.yaml" --file-name="mysql-bin.000006" --sub-dir="2ae76434-f79f-11e8-bde2-0242ac130008.000001"` | --source-name, --file-name, --sub-dir | purges relay log files of the DM-worker according to the specified filename. |
 
 ### dmctl commands for DDL-LOCK
@@ -103,6 +101,8 @@ Here is a simple prototype demo:
 - `DELETE /api/v1/tasks/{task-name}` will be changed from stopping task to stopping task and delete the meta data.
 - `POST /api/v1/tasks/{task-name}/pause` will be updated to `POST /api/v1/tasks/{task-name}/stop`
 - `POST /api/v1/tasks/{task-name}/resume` will be updated to `POST /api/v1/tasks/{task-name}/start`
+- `POST /api/v1/sources/{source-name}/pause-relay` will be deleted
+- `POST /api/v1/sources/{source-name}/resume-relay` will be deleted
 
 ## Milestones
 
@@ -118,9 +118,9 @@ And for Sources, when the DM-Master receives a `disable source` request from a u
 
 This phase is used to identify and implement the new OpenAPI and to use unit and integration tests to determine whether the OpenAPI meets expectations in certain scenarios, It is important to note that changes to the code in this phase will result in the above incompatible changes to the existing OpenAPI.
 
-### Milestone 3 - Implementing commands in dmctl with OpenAPI and optimising the interaction experience
+### Milestone 3 - Implementing commands in dmctl with OpenAPI and optimize the interaction experience
 
-This phase will focus most of the effort on implementing the commands in the dmctl and optimising the interaction experience, and completing the corresponding unit and integration tests. It is to be expected that a lot of time will be spent in this phase on modifying and testing the CI.
+This phase will focus most of the effort on implementing the commands in the dmctl and optimize the interaction experience, and completing the corresponding unit and integration tests. It is to be expected that a lot of time will be spent in this phase on modifying and testing the CI.
 
 ### Milestone 4 - Perform corresponding testing and documentation completions
 
