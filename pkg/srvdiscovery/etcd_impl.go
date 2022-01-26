@@ -21,6 +21,7 @@ type EtcdSrvDiscovery struct {
 	snapshot     map[UUID]ServiceResource
 	snapshotRev  Revision
 	watchTickDur time.Duration
+	watchCancel  context.CancelFunc
 	watched      *atomic.Bool
 }
 
@@ -55,7 +56,9 @@ func (d *EtcdSrvDiscovery) Watch(ctx context.Context) <-chan WatchResp {
 		return ch
 	}
 	ch := make(chan WatchResp, defaultWatchChanSize)
-	go d.tickedWatch(ctx, ch)
+	cctx, cancel := context.WithCancel(ctx)
+	d.watchCancel = cancel
+	go d.tickedWatch(cctx, ch)
 	return ch
 }
 
@@ -72,6 +75,13 @@ func (d *EtcdSrvDiscovery) SnapshotClone() (map[UUID]ServiceResource, Revision) 
 func (d *EtcdSrvDiscovery) CopySnapshot(snapshot map[UUID]ServiceResource, revision Revision) {
 	d.snapshot = snapshot
 	d.snapshotRev = revision
+}
+
+// Close implements Discovery.Close
+func (d *EtcdSrvDiscovery) Close() {
+	if d.watchCancel != nil {
+		d.watchCancel()
+	}
 }
 
 func (d *EtcdSrvDiscovery) tickedWatch(ctx context.Context, ch chan<- WatchResp) {

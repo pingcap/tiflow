@@ -40,4 +40,7 @@ type Discovery interface {
 	// snapshot from metastore. What's more, the snapshot kept in p2p messageing
 	// system may have compacted in metastore.
 	CopySnapshot(snapshot map[UUID]ServiceResource, revision Revision)
+
+	// Close closes watcher
+	Close()
 }
