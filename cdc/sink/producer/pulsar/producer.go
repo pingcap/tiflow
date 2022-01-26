@@ -128,7 +128,7 @@ func (p *Producer) Flush(_ context.Context) error {
 }
 
 // GetPartitionNum got current topic's partition size.
-func (p *Producer) GetPartitionNum() int32 {
+func (p *Producer) GetPartitionNum(_ string) int32 {
 	return int32(p.partitionNum)
 }
 

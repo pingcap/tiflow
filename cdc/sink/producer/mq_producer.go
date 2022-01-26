@@ -29,7 +29,7 @@ type Producer interface {
 	// persisted.
 	Flush(ctx context.Context) error
 	// GetPartitionNum gets partition number of topic.
-	GetPartitionNum() int32
+	GetPartitionNum(topic string) int32
 	// Close closes the producer and client(s).
 	Close() error
 }

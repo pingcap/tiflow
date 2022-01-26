@@ -97,7 +97,7 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	partitionNum := mqProducer.GetPartitionNum()
+	partitionNum := mqProducer.GetPartitionNum(topic)
 	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
 	if err != nil {
 		return nil, errors.Trace(err)

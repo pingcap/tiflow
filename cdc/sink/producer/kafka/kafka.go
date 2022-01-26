@@ -182,7 +182,7 @@ flushLoop:
 	}
 }
 
-func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
+func (k *kafkaSaramaProducer) GetPartitionNum(_ string) int32 {
 	return k.partitionNum
 }
 

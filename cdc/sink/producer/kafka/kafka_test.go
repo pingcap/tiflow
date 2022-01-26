@@ -110,7 +110,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	opts := make(map[string]string)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(err, check.IsNil)
-	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
+	c.Assert(producer.GetPartitionNum(topic), check.Equals, int32(2))
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	for i := 0; i < 100; i++ {
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
