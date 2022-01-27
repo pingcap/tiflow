@@ -875,7 +875,7 @@ func (s *Syncer) updateReplicationLagMetric() {
 		s.workerJobTSArray[skipJobIdx].Store(0)
 	}
 
-	// reset DDL job TS in case of skip job TS is never updated
+	// reset ddl job TS in case of ddl job TS is never updated
 	if minTS == s.workerJobTSArray[ddlJobIdx].Load() {
 		s.workerJobTSArray[ddlJobIdx].Store(0)
 	}
