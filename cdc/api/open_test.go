@@ -550,7 +550,7 @@ func TestGetProcessor(t *testing.T) {
 	httpError := &model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(httpError)
 	require.Nil(t, err)
-	require.Contains(t, httpError.Error, "capture not exists, key: non-exist-capture")
+	require.Contains(t, httpError.Error, "capture not exists, non-exist-capture")
 }
 
 func TestListProcessor(t *testing.T) {
