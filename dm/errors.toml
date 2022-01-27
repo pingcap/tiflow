@@ -1273,7 +1273,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]

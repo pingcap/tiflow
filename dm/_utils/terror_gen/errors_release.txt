@@ -210,7 +210,7 @@ ErrRelayBinlogNameNotValid,[code=30004:class=relay-unit:scope=internal:level=hig
 ErrRelayNoCurrentUUID,[code=30005:class=relay-unit:scope=internal:level=high], "Message: no current UUID set"
 ErrRelayFlushLocalMeta,[code=30006:class=relay-unit:scope=internal:level=high], "Message: flush local meta"
 ErrRelayUpdateIndexFile,[code=30007:class=relay-unit:scope=internal:level=high], "Message: update UUID index file %s"
-ErrRelayLogDirpathEmpty,[code=30008:class=relay-unit:scope=internal:level=high], "Message: dirpath is empty, Workaround: Please check the `relay-dir` config in source config file."
+ErrRelayLogDirpathEmpty,[code=30008:class=relay-unit:scope=internal:level=high], "Message: dirpath is empty, Workaround: Please check the `relay-dir` config in source config file or dm-worker config file."
 ErrRelayReaderNotStateNew,[code=30009:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s, already started"
 ErrRelayReaderStateCannotClose,[code=30010:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s, can not close"
 ErrRelayReaderNeedStart,[code=30011:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s"
