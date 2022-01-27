@@ -203,7 +203,10 @@ func (t *tableActor) start(ctx context.Context) error {
 		zap.Uint64("quota", t.memoryQuota))
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
-	pCtx := NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars)
+	pCtx := NewContext(ctx,
+		t.tableName,
+		t.globalVars.TableActorSystem.Router(),
+		t.actorID, t.changefeedVars, t.globalVars)
 	if err := pullerNode.Init(pCtx); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
@@ -218,7 +221,9 @@ func (t *tableActor) start(ctx context.Context) error {
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replConfig,
 	)
-	sCtx := NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars)
+	sCtx := NewContext(ctx, t.tableName,
+		t.globalVars.TableActorSystem.Router(),
+		t.actorID, t.changefeedVars, t.globalVars)
 	if err := sorterNode.StartActorNode(sCtx, true, t.wg); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
@@ -237,7 +242,10 @@ func (t *tableActor) start(ctx context.Context) error {
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
 		cCtx = NewCyclicNodeContext(
-			NewContext(ctx, t.tableName, t.globalVars.TableActorSystem.Router(), t.actorID, t.changefeedVars, t.globalVars))
+			NewContext(ctx, t.tableName,
+				t.globalVars.TableActorSystem.Router(),
+				t.actorID, t.changefeedVars,
+				t.globalVars))
 		if err := cyclicNode.Init(cCtx); err != nil {
 			log.Error("sink fails to start",
 				zap.String("tableName", t.tableName),
@@ -254,7 +262,9 @@ func (t *tableActor) start(ctx context.Context) error {
 		t.nodes = append(t.nodes, NewActorNode(c, d))
 	}
 
-	actorSinkNode := newSinkNode(t.tableID, t.sink, t.replicaInfo.StartTs, t.targetTs, flowController)
+	actorSinkNode := newSinkNode(t.tableID, t.sink,
+		t.replicaInfo.StartTs,
+		t.targetTs, flowController)
 	if err := actorSinkNode.InitWithReplicaConfig(true, t.replConfig); err != nil {
 		log.Error("sink fails to start",
 			zap.String("tableName", t.tableName),
@@ -391,7 +401,9 @@ func (t *tableActor) Name() string {
 func (t *tableActor) Cancel() {
 	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
 		log.Warn("fails to send Stop message",
-			zap.String("tableName", t.tableName), zap.Int64("tableID", t.tableID), zap.Error(err))
+			zap.String("tableName", t.tableName),
+			zap.Int64("tableID", t.tableID),
+			zap.Error(err))
 	}
 }
 

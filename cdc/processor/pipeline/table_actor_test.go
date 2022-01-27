@@ -30,7 +30,13 @@ func TestAsyncStopFailed(t *testing.T) {
 		_ = tableActorSystem.Stop()
 	}()
 
-	tbl := &tableActor{stopped: false, tableID: 1, tableActorRouter: tableActorRouter, cancel: func() {}, reportErr: func(err error) {}}
+	tbl := &tableActor{
+		stopped:          false,
+		tableID:          1,
+		tableActorRouter: tableActorRouter,
+		cancel:           func() {},
+		reportErr:        func(err error) {},
+	}
 	require.Panics(t, func() { tbl.AsyncStop(1) })
 
 	mb := actor.NewMailbox(actor.ID(1), 0)
