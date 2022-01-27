@@ -1493,6 +1493,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 		if s.cliArgs != nil && s.cliArgs.StartTime != "" {
 			err = s.setGlobalPointByTime(tctx, s.cliArgs.StartTime)
+			if terror.ErrConfigStartTimeTooLate.Equal(err) {
+				return err
+			}
 			skipLoadMeta = err == nil
 		}
 	}
@@ -3722,7 +3725,8 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	// 1. GTID is not enabled
 	// 2. location already has GTID position
 	// 3. location is totally new, has no position info
-	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" {
+	// 4. location is too early thus not a COMMIT location, which happens when it's reset by other logic
+	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" || location.Position.Pos == 4 {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
@@ -3828,11 +3832,12 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 
 	switch posTp {
 	case binlog.InRangeBinlogPos:
-	default:
-		s.tctx.L().Warn("fail to find binlog location by timestamp, will use the most proper location",
+	case binlog.BelowLowerBoundBinlogPos:
+		s.tctx.L().Warn("fail to find binlog location by timestamp because the timestamp is too early, will use the earliest binlog location",
 			zap.String("time", timeStr),
-			zap.Any("location", loc),
-			zap.Stringer("failure reason", posTp))
+			zap.Any("location", loc))
+	case binlog.AboveUpperBoundBinlogPos:
+		return terror.ErrConfigStartTimeTooLate.Generate(timeStr)
 	}
 
 	err = s.checkpoint.DeleteAllTablePoint(tctx)
@@ -3840,5 +3845,8 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 		return err
 	}
 	s.checkpoint.ResetGlobalPoint(*loc)
+	s.tctx.L().Info("Will replicate from the specified time, the location recorded in checkpoint and config file will be ignored",
+		zap.String("time", timeStr),
+		zap.Any("locationOfTheTime", loc))
 	return nil
 }

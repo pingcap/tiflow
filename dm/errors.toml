@@ -1114,6 +1114,12 @@ description = ""
 workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
 tags = ["internal", "medium"]
 
+[error.DM-config-20055]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

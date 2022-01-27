@@ -63,6 +63,7 @@ function lazy_init_tracker() {
 }
 
 function start_task_by_time() {
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -79,6 +80,7 @@ function start_task_by_time() {
 	sleep 2
 
 	run_sql_source1 'CREATE TABLE start_task.t2 (c INT PRIMARY KEY);'
+	run_sql_source1 'INSERT INTO start_task.t2 VALUES (1), (2);INSERT INTO start_task.t2 VALUES (3), (4);'
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/task-mode: all/task-mode: incremental/g" $WORK_DIR/dm-task.yaml
@@ -97,7 +99,7 @@ function start_task_by_time() {
 		"stop-task test" \
 		"\"result\": true" 2
 
-	# test without relay
+	# test without relay and safe mode
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID1" \
@@ -115,18 +117,46 @@ function start_task_by_time() {
 	run_sql_tidb_with_retry "show tables in start_task;" "t2"
 	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 1"
 
+	# no duplicate entry error
+	check_log_contain_with_retry "enable safe-mode for safe mode exit point, will exit at" $WORK_DIR/worker1/log/dm-worker.log
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 2
 
-	read -p 666
-
 	# test too early
+
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '1995-03-07 01:02:03'" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "show tables in start_task;" "t1"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 2"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
 
 	# test too late
 
-	# test safe mode
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '2037-12-12 01:02:03'"
 
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 1 \
+		"no binlog location matches it" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	export GO_FAILPOINTS=''
 	cleanup_process
 	cleanup_data start_task
 }
