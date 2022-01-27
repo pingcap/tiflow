@@ -28,6 +28,8 @@ const (
 	TypeStop
 	TypeBarrier
 	TypeSorterTask
+	// TypeStopSink stop the sinkNode only, TypeStop will stop the table actor
+	// the processor stop the sink to release some resource and then stop the whole table pipeline
 	TypeStopSink
 	// Add a new type when adding a new message.
 )
