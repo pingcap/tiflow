@@ -632,8 +632,8 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	// step 4: watch subtask stage from startRev
 	subTask := w.subTaskHolder.findSubTask(subtaskCfg.Name)
 	getValidator := func() *syncer.DataValidator {
-		subTask.Lock()
-		defer subTask.Unlock()
+		subTask.RLock()
+		defer subTask.RUnlock()
 		return subTask.validator
 	}
 	c.Assert(subTask, NotNil)

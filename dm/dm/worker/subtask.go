@@ -787,8 +787,8 @@ func (st *SubTask) SetCfg(taskConfig config.SubTaskConfig) {
 }
 
 func (st *SubTask) getValidatorStage() pb.Stage {
-	st.Lock()
-	defer st.Unlock()
+	st.RLock()
+	defer st.RUnlock()
 
 	if st.validator != nil {
 		return st.validator.Stage()

@@ -180,13 +180,13 @@ func (v *DataValidator) Stop() {
 }
 
 func (v *DataValidator) Started() bool {
-	v.Lock()
-	defer v.Unlock()
+	v.RLock()
+	defer v.RUnlock()
 	return v.stage == pb.Stage_Running
 }
 
 func (v *DataValidator) Stage() pb.Stage {
-	v.Lock()
-	defer v.Unlock()
+	v.RLock()
+	defer v.RUnlock()
 	return v.stage
 }
