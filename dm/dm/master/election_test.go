@@ -76,8 +76,8 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	_, leaderID, _, err := s2.election.LeaderInfo(ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(leaderID, check.Equals, cfg1.Name)
-	c.Assert(s1.ClusterID(), check.Greater, 0)
-	c.Assert(s2.ClusterID(), check.Equals, 0)
+	c.Assert(s1.ClusterID(), check.Greater, uint64(0))
+	c.Assert(s2.ClusterID(), check.Equals, uint64(0))
 
 	// fail to start scheduler/pessimism/optimism
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
@@ -91,6 +91,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	_, leaderID, _, err = s2.election.LeaderInfo(ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(leaderID, check.Equals, cfg1.Name)
+	clusterID := s1.ClusterID()
 
 	//nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
@@ -101,6 +102,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	_, leaderID, _, err = s2.election.LeaderInfo(ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(leaderID, check.Equals, cfg2.Name)
+	c.Assert(clusterID, check.Equals, s2.ClusterID())
 
 	cancel()
 }
