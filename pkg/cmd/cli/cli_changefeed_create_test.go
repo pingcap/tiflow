@@ -20,8 +20,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -64,4 +66,36 @@ func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
 	err = o.strictDecodeConfig("cdc", cfg)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*CDC:ErrFilterRuleInvalid.*")
+}
+
+func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	cases := []struct {
+		input  string
+		expect model.SortEngine
+	}{{
+		input:  "invalid",
+		expect: model.SortUnified,
+	}, {
+		input:  "memory",
+		expect: model.SortInMemory,
+	}, {
+		input:  "file",
+		expect: model.SortInFile,
+	}, {
+		input:  "unified",
+		expect: model.SortUnified,
+	}}
+	for _, cs := range cases {
+		cmd := new(cobra.Command)
+		o := newChangefeedCommonOptions()
+		o.addFlags(cmd)
+		c.Assert(cmd.ParseFlags([]string{"--sort-engine=" + cs.input}), check.IsNil)
+		opt := newCreateChangefeedOptions(o)
+		err := opt.completeCfg(cmd,
+			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
+		c.Assert(err, check.IsNil)
+		c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, cs.expect)
+	}
 }

@@ -35,6 +35,10 @@ const (
 	// expose these two variables for redo log applier
 	DefaultWorkerCount = 16
 	DefaultMaxTxnRow   = 256
+	// The upper limit of max worker counts.
+	maxWorkerCount = 1024
+	// The upper limit of max txn rows.
+	maxMaxTxnRow = 2048
 
 	defaultDMLMaxRetryTime     = 8
 	defaultDDLMaxRetryTime     = 20
@@ -113,15 +117,31 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
-		if c > 0 {
-			params.workerCount = c
+		if c <= 0 {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+				fmt.Errorf("invalid worker-count %d, which must be greater than 0", c))
 		}
+		if c > maxWorkerCount {
+			log.Warn("worker-count too large",
+				zap.Int("original", c), zap.Int("override", maxWorkerCount))
+			c = maxWorkerCount
+		}
+		params.workerCount = c
 	}
 	s = sinkURI.Query().Get("max-txn-row")
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		if c <= 0 {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+				fmt.Errorf("invalid max-txn-row %d, which must be greater than 0", c))
+		}
+		if c > maxMaxTxnRow {
+			log.Warn("max-txn-row too large",
+				zap.Int("original", c), zap.Int("override", maxMaxTxnRow))
+			c = maxMaxTxnRow
 		}
 		params.maxTxnRow = c
 	}
@@ -182,6 +202,14 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 		if s == "" {
 			params.timezone = ""
 		} else {
+			value, err := url.QueryUnescape(s)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+			}
+			_, err = time.LoadLocation(value)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+			}
 			params.timezone = fmt.Sprintf(`"%s"`, s)
 		}
 	} else {
@@ -195,14 +223,26 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 	// To keep the same style with other sink parameters, we use dash as word separator.
 	s = sinkURI.Query().Get("read-timeout")
 	if s != "" {
+		_, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
 		params.readTimeout = s
 	}
 	s = sinkURI.Query().Get("write-timeout")
 	if s != "" {
+		_, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
 		params.writeTimeout = s
 	}
 	s = sinkURI.Query().Get("timeout")
 	if s != "" {
+		_, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
 		params.dialTimeout = s
 	}
 
