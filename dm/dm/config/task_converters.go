@@ -206,6 +206,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 				subTaskCfg.SyncerConfig.Batch = *incrCfg.ReplBatch
 			}
 		}
+		subTaskCfg.ValidatorCfg = defaultValidatorConfig()
 		// set route,blockAllowList,filter config
 		doCnt := len(tableMigrateRuleMap[sourceCfg.SourceName])
 		doDBs := make([]string, doCnt)
