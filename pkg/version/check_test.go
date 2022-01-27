@@ -338,7 +338,7 @@ func TestCheckTiCDCClusterVersion(t *testing.T) {
 			expectedUnknown:   true,
 		},
 		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: minTiCDCVersion},
+			cdcClusterVersion: TiCDCClusterVersion{Version: MinTiCDCVersion},
 			expectedErr:       "",
 			expectedUnknown:   false,
 		},
