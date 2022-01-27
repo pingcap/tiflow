@@ -144,9 +144,9 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 }
 
 // getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
-func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, dir, workerName string) (string, string, error) {
+func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
-	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, dir, metafile, cfg.Flavor)
+	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.Dir, metafile, cfg.Flavor)
 	if err != nil {
 		if os.IsNotExist(err) {
 			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
@@ -162,7 +162,7 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 			return "", "", nil
 		}
 
-		toPrint, err2 := exstorage.ReadFile(ctx, dir, metafile)
+		toPrint, err2 := exstorage.ReadFile(ctx, cfg.Dir, metafile)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}
@@ -174,14 +174,21 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 }
 
 // cleanDumpFiles is called when finish restoring data, to clean useless files.
-func cleanDumpFiles(cfg *config.SubTaskConfig) {
+func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	log.L().Info("clean dump files")
 	if cfg.Mode == config.ModeFull {
 		// in full-mode all files won't be need in the future
-		if err := os.RemoveAll(cfg.Dir); err != nil {
+		if err := exstorage.RemoveAll(ctx, cfg.Dir); err != nil {
 			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", cfg.Dir), zap.Error(err))
 		}
 	} else {
+		isS3, err := exstorage.IsS3Path(cfg.Dir)
+		if err != nil {
+			log.L().Warn("dump dir is invalid", zap.String("dump dir", cfg.Dir), zap.Error(err))
+		} else if isS3 {
+			// s3 no need immediately remove
+			return
+		}
 		// leave metadata file and table structure files, only delete data files
 		files, err := utils.CollectDirFiles(cfg.Dir)
 		if err != nil {

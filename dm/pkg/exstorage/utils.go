@@ -61,11 +61,11 @@ func IsS3Path(rawURL string) (bool, error) {
 
 // CreateExternalStore creates ExternalStore.
 func CreateExternalStore(ctx context.Context, path string) (storage.ExternalStorage, error) {
-	backen, err := storage.ParseBackend(path, nil)
+	backend, err := storage.ParseBackend(path, nil)
 	if err != nil {
 		return nil, err
 	}
-	return storage.New(ctx, backen, &storage.ExternalStorageOptions{})
+	return storage.New(ctx, backend, &storage.ExternalStorageOptions{})
 }
 
 // CollectDirFiles gets files in path.

@@ -27,46 +27,75 @@ var _ = Suite(&testS3UtilsSuite{})
 
 type testS3UtilsSuite struct{}
 
-func (s *testS3UtilsSuite) TestAdjustS3Path(c *C) {
-	_, err := AdjustS3Path("1invalid:", "")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), Matches, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon")
+func (s *testS3UtilsSuite) TestAdjustS3PathAndIsS3(c *C) {
+	testPaths := []string{
+		"",
+		"1invalid:",
+		"file:///tmp/storage",
+		"/tmp/storage",
+		"./tmp/storage",
+		"tmp/storage",
+		"s3:///bucket/more/prefix",
+		"s3://bucket2/prefix",
+		"s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+		"s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+		"s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+	}
 
-	newURL, err := AdjustS3Path("file:///tmp/storage", "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "file:///tmp/storage")
+	testAjustResults := []struct {
+		hasErr bool
+		res    string
+	}{
+		{false, ""},
+		{true, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
+		{false, "file:///tmp/storage"},
+		{false, "/tmp/storage"},
+		{false, "./tmp/storage"},
+		{false, "tmp/storage"},
+		{false, "s3:///bucket/more/prefix.mysql-replica-01"},
+		{false, "s3://bucket2/prefix.mysql-replica-01"},
+		{false, "s3://bucket3/prefix/path.mysql-replica-01?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc"},
+		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+	}
 
-	newURL, err = AdjustS3Path("s3:///bucket/more/prefix", "")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3:///bucket/more/prefix")
+	for i, testPath := range testPaths {
+		newDir, err := AdjustS3Path(testPath, "mysql-replica-01")
+		if testAjustResults[i].hasErr {
+			c.Assert(err, NotNil)
+			c.Assert(err.Error(), Matches, testAjustResults[i].res)
+		} else {
+			c.Assert(err, IsNil)
+			c.Assert(newDir, Equals, testAjustResults[i].res)
+		}
+	}
 
-	newURL, err = AdjustS3Path("", "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "")
+	testIsS3Results := []struct {
+		hasErr bool
+		res    bool
+		errMsg string
+	}{
+		{false, false, ""},
+		{true, false, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
+		{false, false, ""},
+		{false, false, ""},
+		{false, false, ""},
+		{false, false, ""},
+		{false, true, ""},
+		{false, true, ""},
+		{false, true, ""},
+		{false, true, ""},
+		{false, true, ""},
+	}
 
-	newURL, err = AdjustS3Path("", "")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "")
-
-	newURL, err = AdjustS3Path("s3:///bucket/more/prefix", "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3:///bucket/more/prefix.mysql-replica-01")
-
-	newURL, err = AdjustS3Path("s3://bucket2/prefix", "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3://bucket2/prefix.mysql-replica-01")
-
-	newURL, err = AdjustS3Path(`s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc`, "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3://bucket3/prefix/path.mysql-replica-01?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
-
-	// special character in access keys
-	newURL, err = AdjustS3Path(`s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw`, "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw")
-
-	// duplicate uniqueID
-	newURL, err = AdjustS3Path(`s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw`, "mysql-replica-01")
-	c.Assert(err, IsNil)
-	c.Assert(newURL, Equals, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw")
+	for i, testPath := range testPaths {
+		isS3, err := IsS3Path(testPath)
+		if testIsS3Results[i].hasErr {
+			c.Assert(err, NotNil)
+			c.Assert(err.Error(), Matches, testIsS3Results[i].errMsg)
+		} else {
+			c.Assert(err, IsNil)
+			c.Assert(isS3, Equals, testIsS3Results[i].res)
+		}
+	}
 }

@@ -194,6 +194,15 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
 
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "./dump_data",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dump_data"+"."+cfg.Name)
+
 	// s3
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize:   defaultPoolSize,
@@ -231,6 +240,15 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "./dumpdir",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dumpdir"+"."+cfg.Name)
 
 	// use loader and s3
 	cfg.LoaderConfig = LoaderConfig{

@@ -763,7 +763,7 @@ func (l *Loader) Restore(ctx context.Context) error {
 				}
 			}
 			if l.cfg.CleanDumpFile {
-				cleanDumpFiles(l.cfg)
+				cleanDumpFiles(ctx, l.cfg)
 			}
 		}
 	} else if errors.Cause(err) != context.Canceled {

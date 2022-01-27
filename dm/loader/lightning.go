@@ -274,8 +274,8 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 	}
 	if l.finish.Load() {
-		if isS3, _ := exstorage.IsS3Path(l.cfg.Dir); l.cfg.CleanDumpFile && isS3 {
-			cleanDumpFiles(l.cfg)
+		if l.cfg.CleanDumpFile {
+			cleanDumpFiles(ctx, l.cfg)
 		}
 	}
 	return err
@@ -293,7 +293,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		failpoint.Return()
 	})
 
-	binlog, gtid, err := getMydumpMetadataByExternalStorage(ctx, l.cli, l.cfg, l.cfg.LoaderConfig.Dir, l.workerName)
+	binlog, gtid, err := getMydumpMetadataByExternalStorage(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
