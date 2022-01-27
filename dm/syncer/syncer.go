@@ -874,6 +874,11 @@ func (s *Syncer) updateReplicationLagMetric() {
 	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
 		s.workerJobTSArray[skipJobIdx].Store(0)
 	}
+
+	// reset DDL job TS in case of skip job TS is never updated
+	if minTS == s.workerJobTSArray[ddlJobIdx].Load() {
+		s.workerJobTSArray[ddlJobIdx].Store(0)
+	}
 }
 
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
