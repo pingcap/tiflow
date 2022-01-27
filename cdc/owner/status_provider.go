@@ -50,19 +50,27 @@ type StatusProvider interface {
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 }
 
-type OwnerQueryType int32
+// QueryType is the type of different queries.
+type QueryType int32
 
 const (
-	OwnerQueryAllChangeFeedStatuses = iota
-	OwnerQueryAllChangeFeedInfo
-	OwnerQueryAllTaskStatuses
-	OwnerQueryTaskPositions
-	OwnerQueryProcessors
-	OwnerQueryCaptures
+	// QueryAllChangeFeedStatuses query all changefeed status.
+	QueryAllChangeFeedStatuses QueryType = iota
+	// QueryAllChangeFeedInfo is the type of query all changefeed info.
+	QueryAllChangeFeedInfo
+	// QueryAllTaskStatuses is the type of query all task statuses.
+	QueryAllTaskStatuses
+	// QueryTaskPositions is the type of query task positions.
+	QueryTaskPositions
+	// QueryProcessors is the type of query processors.
+	QueryProcessors
+	// QueryCaptures is the type of query captures info.
+	QueryCaptures
 )
 
-type OwnerQuery struct {
-	Tp           OwnerQueryType
+// Query wraps query command and return results.
+type Query struct {
+	Tp           QueryType
 	ChangeFeedID model.ChangeFeedID
 
 	Data interface{}
@@ -78,8 +86,8 @@ type ownerStatusProvider struct {
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
-	query := &OwnerQuery{
-		Tp: OwnerQueryAllChangeFeedStatuses,
+	query := &Query{
+		Tp: QueryAllChangeFeedStatuses,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
@@ -100,8 +108,8 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefee
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
-	query := &OwnerQuery{
-		Tp: OwnerQueryAllChangeFeedInfo,
+	query := &Query{
+		Tp: QueryAllChangeFeedInfo,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
@@ -122,8 +130,8 @@ func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedI
 }
 
 func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
-	query := &OwnerQuery{
-		Tp:           OwnerQueryAllTaskStatuses,
+	query := &Query{
+		Tp:           QueryAllTaskStatuses,
 		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
@@ -133,8 +141,8 @@ func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeed
 }
 
 func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	query := &OwnerQuery{
-		Tp:           OwnerQueryTaskPositions,
+	query := &Query{
+		Tp:           QueryTaskPositions,
 		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
@@ -144,8 +152,8 @@ func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID
 }
 
 func (p *ownerStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
-	query := &OwnerQuery{
-		Tp: OwnerQueryProcessors,
+	query := &Query{
+		Tp: QueryProcessors,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
@@ -154,8 +162,8 @@ func (p *ownerStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcI
 }
 
 func (p *ownerStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error) {
-	query := &OwnerQuery{
-		Tp: OwnerQueryCaptures,
+	query := &Query{
+		Tp: QueryCaptures,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
@@ -163,7 +171,7 @@ func (p *ownerStatusProvider) GetCaptures(ctx context.Context) ([]*model.Capture
 	return query.Data.([]*model.CaptureInfo), nil
 }
 
-func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *OwnerQuery) error {
+func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *Query) error {
 	doneCh := make(chan error, 1)
 	p.owner.Query(query, doneCh)
 

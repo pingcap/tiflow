@@ -67,7 +67,7 @@ type ownerJob struct {
 	debugInfoWriter io.Writer
 
 	// for status provider
-	query *OwnerQuery
+	query *Query
 
 	done chan<- error
 }
@@ -84,7 +84,7 @@ type Owner interface {
 		tableID model.TableID, done chan<- error,
 	)
 	WriteDebugInfo(w io.Writer, done chan<- error)
-	Query(query *OwnerQuery, done chan<- error)
+	Query(query *Query, done chan<- error)
 	AsyncStop()
 }
 
@@ -261,7 +261,7 @@ func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 }
 
 // Query writes debug info into the specified http writer
-func (o *ownerImpl) Query(query *OwnerQuery, done chan<- error) {
+func (o *ownerImpl) Query(query *Query, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:    ownerJobTypeQuery,
 		query: query,
@@ -386,9 +386,9 @@ func (o *ownerImpl) HandleJobs() {
 	}
 }
 
-func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
+func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
-	case OwnerQueryAllChangeFeedStatuses:
+	case QueryAllChangeFeedStatuses:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
 		for cfID, cfReactor := range o.changefeeds {
 			ret[cfID] = &model.ChangeFeedStatus{}
@@ -403,7 +403,7 @@ func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
 			ret[cfID].AdminJobType = cfReactor.state.Status.AdminJobType
 		}
 		query.Data = ret
-	case OwnerQueryAllChangeFeedInfo:
+	case QueryAllChangeFeedInfo:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
 		for cfID, cfReactor := range o.changefeeds {
 			if cfReactor.state == nil {
@@ -420,7 +420,7 @@ func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
 			}
 		}
 		query.Data = ret
-	case OwnerQueryAllTaskStatuses:
+	case QueryAllTaskStatuses:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
 			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
@@ -444,7 +444,7 @@ func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
 			}
 		}
 		query.Data = ret
-	case OwnerQueryTaskPositions:
+	case QueryTaskPositions:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
 			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
@@ -468,7 +468,7 @@ func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
 			}
 		}
 		query.Data = ret
-	case OwnerQueryProcessors:
+	case QueryProcessors:
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
 			if cfReactor.state == nil {
@@ -482,7 +482,7 @@ func (o *ownerImpl) handleQueries(query *OwnerQuery) error {
 			}
 		}
 		query.Data = ret
-	case OwnerQueryCaptures:
+	case QueryCaptures:
 		var ret []*model.CaptureInfo
 		for _, captureInfo := range o.captures {
 			ret = append(ret, &model.CaptureInfo{

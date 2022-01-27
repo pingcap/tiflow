@@ -75,7 +75,7 @@ func (mr *MockOwnerMockRecorder) ManualSchedule(cfID, toCapture, tableID, done i
 }
 
 // Query mocks base method.
-func (m *MockOwner) Query(query *owner.OwnerQuery, done chan<- error) {
+func (m *MockOwner) Query(query *owner.Query, done chan<- error) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Query", query, done)
 }

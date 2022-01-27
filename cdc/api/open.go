@@ -326,7 +326,7 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 		return nil
 	})
 	if err := waitDone(ctx, done); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)
@@ -373,7 +373,7 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 		return nil
 	})
 	if err := waitDone(ctx, done); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)
@@ -482,7 +482,7 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 		return nil
 	})
 	if err := waitDone(ctx, done); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)
@@ -525,7 +525,7 @@ func (h *openAPI) RebalanceTable(c *gin.Context) {
 		return nil
 	})
 	if err := waitDone(ctx, done); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)
@@ -584,7 +584,7 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 		return nil
 	})
 	if err := waitDone(ctx, done); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)

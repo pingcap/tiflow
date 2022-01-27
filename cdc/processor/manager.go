@@ -145,7 +145,10 @@ func (m *Manager) AsyncClose() {
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 	done := make(chan error, 1)
-	m.sendCommand(ctx, commandTpClose, nil, done)
+	err := m.sendCommand(ctx, commandTpClose, nil, done)
+	if err != nil {
+		log.Warn("async close failed", zap.Error(err))
+	}
 }
 
 // WriteDebugInfo write the debug info to Writer

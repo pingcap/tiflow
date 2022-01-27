@@ -227,7 +227,7 @@ func TestSendCommandError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
-	m.commandQueue = make(chan *command, 0)
+	m.commandQueue = make(chan *command)
 	done := make(chan error, 1)
 	err := m.sendCommand(ctx, commandTpClose, nil, done)
 	require.Error(t, err)
