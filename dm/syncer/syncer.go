@@ -858,7 +858,13 @@ func (s *Syncer) updateReplicationLagMetric() {
 	}
 	if minTS != int64(0) {
 		lag = s.calcReplicationLag(minTS)
+		// this means the syncer is blocked so no job is being processed and the lag is always equal to the last one.
+		// we just increased the lag time by 1 to make this metric looks a bit more normal.
+		if lag == s.secondsBehindMaster.Load() {
+			lag += 1
+		}
 	}
+
 	metrics.ReplicationLagHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Observe(float64(lag))
 	metrics.ReplicationLagGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(lag))
 	s.secondsBehindMaster.Store(lag)

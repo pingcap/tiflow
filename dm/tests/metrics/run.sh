@@ -100,6 +100,11 @@ function run() {
 	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker2/log/dm-worker.log
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# this updated will blocked for 10s,and during this time,dm_syncer_replication_lag_sum will continue increasing
+	# so worker 1 lag will be >= 3
+	run_sql_source1 'UPDATE metrics.t1 SET name="ehco" WHERE id = 1001'
+	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 2 999
 	echo "check dml/skip lag done!"
 
 	# check new metric: dm_syncer_replication_lag_sum,dm_syncer_replication_lag_gauge,
