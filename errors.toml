@@ -143,7 +143,7 @@ changefeed update error: %s
 
 ["CDC:ErrCheckClusterVersionFromPD"]
 error = '''
-failed to request PD
+failed to request PD %s, please try again later
 '''
 
 ["CDC:ErrCheckDataDirSatisfied"]
