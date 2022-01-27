@@ -90,7 +90,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 		return errors.Trace(err)
 	}
 
-	s, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+	s, err := sink.New(ctx, id, "owner", info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
