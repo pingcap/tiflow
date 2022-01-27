@@ -112,7 +112,7 @@ func (h *ownerAPI) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
-	err := h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	err := h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
 		owner.AsyncStop()
 		return nil
 	})
@@ -153,12 +153,17 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		Opts: opts,
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.EnqueueJob(job, done)
 		return nil
 	})
-
-	handleOwnerResp(w, err)
+	if err != nil {
+		handleOwnerResp(w, err)
+		return
+	}
+	handleOwnerResp(w, waitDone(req.Context(), done))
 }
 
 func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
@@ -180,12 +185,18 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.TriggerRebalance(changefeedID)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.TriggerRebalance(changefeedID, done)
 		return nil
 	})
 
-	handleOwnerResp(w, err)
+	if err != nil {
+		handleOwnerResp(w, err)
+		return
+	}
+	handleOwnerResp(w, waitDone(req.Context(), done))
 }
 
 func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
@@ -221,12 +232,18 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, to, tableID)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.ManualSchedule(changefeedID, to, tableID, done)
 		return nil
 	})
 
-	handleOwnerResp(w, err)
+	if err != nil {
+		handleOwnerResp(w, err)
+		return
+	}
+	handleOwnerResp(w, waitDone(req.Context(), done))
 }
 
 func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {

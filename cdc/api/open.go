@@ -319,11 +319,16 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 		Type: model.AdminStop,
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.EnqueueJob(job, done)
 		return nil
 	})
-
+	if err := waitDone(ctx, done); err != nil {
+		c.Error(err)
+		return
+	}
 	c.Status(http.StatusAccepted)
 }
 
@@ -361,11 +366,16 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 		Type: model.AdminResume,
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.EnqueueJob(job, done)
 		return nil
 	})
-
+	if err := waitDone(ctx, done); err != nil {
+		c.Error(err)
+		return
+	}
 	c.Status(http.StatusAccepted)
 }
 
@@ -465,11 +475,16 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 		Type: model.AdminRemove,
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.EnqueueJob(job, done)
 		return nil
 	})
-
+	if err := waitDone(ctx, done); err != nil {
+		c.Error(err)
+		return
+	}
 	c.Status(http.StatusAccepted)
 }
 
@@ -503,11 +518,16 @@ func (h *openAPI) RebalanceTable(c *gin.Context) {
 		return
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.TriggerRebalance(changefeedID)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.TriggerRebalance(changefeedID, done)
 		return nil
 	})
-
+	if err := waitDone(ctx, done); err != nil {
+		c.Error(err)
+		return
+	}
 	c.Status(http.StatusAccepted)
 }
 
@@ -557,11 +577,16 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, data.CaptureID, data.TableID)
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
+		owner.ManualSchedule(changefeedID, data.CaptureID, data.TableID, done)
 		return nil
 	})
-
+	if err := waitDone(ctx, done); err != nil {
+		c.Error(err)
+		return
+	}
 	c.Status(http.StatusAccepted)
 }
 
@@ -580,7 +605,7 @@ func (h *openAPI) ResignOwner(c *gin.Context) {
 		return
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
+	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
 		owner.AsyncStop()
 		return nil
 	})

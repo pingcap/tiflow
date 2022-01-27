@@ -50,37 +50,41 @@ type StatusProvider interface {
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 }
 
-type ownerQueryType int32
+type OwnerQueryType int32
 
 const (
-	ownerQueryAllChangeFeedStatuses = iota
-	ownerQueryAllChangeFeedInfo
-	ownerQueryAllTaskStatuses
-	ownerQueryTaskPositions
-	ownerQueryProcessors
-	ownerQueryCaptures
+	OwnerQueryAllChangeFeedStatuses = iota
+	OwnerQueryAllChangeFeedInfo
+	OwnerQueryAllTaskStatuses
+	OwnerQueryTaskPositions
+	OwnerQueryProcessors
+	OwnerQueryCaptures
 )
 
-type ownerQuery struct {
-	tp           ownerQueryType
-	changeFeedID model.ChangeFeedID
+type OwnerQuery struct {
+	Tp           OwnerQueryType
+	ChangeFeedID model.ChangeFeedID
 
-	data interface{}
-	err  error
+	Data interface{}
+}
+
+// NewStatusProvider returns a new StatusProvider for the owner.
+func NewStatusProvider(owner Owner) StatusProvider {
+	return &ownerStatusProvider{owner: owner}
 }
 
 type ownerStatusProvider struct {
-	owner *Owner
+	owner Owner
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
-	query := &ownerQuery{
-		tp: ownerQueryAllChangeFeedStatuses,
+	query := &OwnerQuery{
+		Tp: OwnerQueryAllChangeFeedStatuses,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
+	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
@@ -96,13 +100,13 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefee
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
-	query := &ownerQuery{
-		tp: ownerQueryAllChangeFeedInfo,
+	query := &OwnerQuery{
+		Tp: OwnerQueryAllChangeFeedInfo,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
@@ -118,64 +122,59 @@ func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedI
 }
 
 func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
-	query := &ownerQuery{
-		tp:           ownerQueryAllTaskStatuses,
-		changeFeedID: changefeedID,
+	query := &OwnerQuery{
+		Tp:           OwnerQueryAllTaskStatuses,
+		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.CaptureID]*model.TaskStatus), nil
+	return query.Data.(map[model.CaptureID]*model.TaskStatus), nil
 }
 
 func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	query := &ownerQuery{
-		tp:           ownerQueryTaskPositions,
-		changeFeedID: changefeedID,
+	query := &OwnerQuery{
+		Tp:           OwnerQueryTaskPositions,
+		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.CaptureID]*model.TaskPosition), nil
+	return query.Data.(map[model.CaptureID]*model.TaskPosition), nil
 }
 
 func (p *ownerStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
-	query := &ownerQuery{
-		tp: ownerQueryProcessors,
+	query := &OwnerQuery{
+		Tp: OwnerQueryProcessors,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.([]*model.ProcInfoSnap), nil
+	return query.Data.([]*model.ProcInfoSnap), nil
 }
 
 func (p *ownerStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error) {
-	query := &ownerQuery{
-		tp: ownerQueryCaptures,
+	query := &OwnerQuery{
+		Tp: OwnerQueryCaptures,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.([]*model.CaptureInfo), nil
+	return query.Data.([]*model.CaptureInfo), nil
 }
 
-func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *ownerQuery) error {
-	doneCh := make(chan struct{})
-	job := &ownerJob{
-		tp:    ownerJobTypeQuery,
-		query: query,
-		done:  doneCh,
-	}
-	p.owner.pushOwnerJob(job)
+func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *OwnerQuery) error {
+	doneCh := make(chan error, 1)
+	p.owner.Query(query, doneCh)
 
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-doneCh:
+	case err := <-doneCh:
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	if query.err != nil {
-		return errors.Trace(query.err)
-	}
 	return nil
 }

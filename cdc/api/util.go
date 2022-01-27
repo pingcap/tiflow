@@ -14,6 +14,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -75,4 +76,13 @@ func writeData(w http.ResponseWriter, data interface{}) {
 	if err != nil {
 		log.Error("fail to write data", zap.Error(err))
 	}
+}
+
+func waitDone(ctx context.Context, done <-chan error) (err error) {
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case err = <-done:
+	}
+	return
 }
