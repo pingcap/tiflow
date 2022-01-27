@@ -23,12 +23,8 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
-	timodel "github.com/pingcap/parser/model"
-=======
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
->>>>>>> f05d3ce57 (owner(cdc): add a warning for owner DDL puller being stuck (#4039))
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
