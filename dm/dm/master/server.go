@@ -2520,3 +2520,102 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	*errPointer = terror.ErrMasterRequestIsNotForwardToLeader
 	return true
 }
+
+func (s *Server) getSubTaskCfgs(taskName string, sources []string) (map[string]map[string]config.SubTaskConfig, error) {
+	var ret map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	if len(taskName) == 0 {
+		ret = s.scheduler.GetSubTaskCfgs()
+	} else {
+		// get subtask by name
+		tmp := s.scheduler.GetSubTaskCfgsByTask(taskName)
+		if tmp == nil {
+			// no subtask matches the `task-name`
+			return nil, errors.Errorf("no subtask matched by `task-name` %s", taskName)
+		}
+		ret = map[string]map[string]config.SubTaskConfig{}
+		ret[taskName] = map[string]config.SubTaskConfig{}
+		for source, cfg := range tmp {
+			ret[taskName][source] = *cfg
+		}
+	}
+	// filter the source that we don't want
+	if len(sources) > 0 {
+		filterSource := map[string]interface{}{}
+		for _, source := range sources {
+			filterSource[source] = true // the source we want
+		}
+		for taskName, sourceCfgs := range ret {
+			for source := range sourceCfgs {
+				if _, ok := filterSource[source]; !ok {
+					delete(ret[taskName], source)
+				}
+			}
+			if len(ret[taskName]) == 0 {
+				delete(ret, taskName)
+			}
+		}
+	}
+	if len(ret) == 0 {
+		return nil, errors.Errorf("no subtask matched by the current rule")
+	}
+	return ret, nil
+}
+
+func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
+	var (
+		resp2       *pb.StartValidationResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StartValidationResponse{}
+	if (req.IsAllTask && len(req.TaskName) > 0) || (!req.IsAllTask && len(req.TaskName) == 0) {
+		resp.Result = false
+		resp.Msg = "either `task-name` or `all-task` should be set"
+		return resp, nil
+	}
+
+	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, req.Sources)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		return resp, nil
+	}
+	// TODO: wait for #4479 and update the validator stage in etcd
+	// get the validator stage: common.StageValidatorKeyAdapter.Encode(source, task-name)
+	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
+	// if the validator stage is `RUNNING`: then report error
+	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
+	var (
+		resp2       *pb.StopValidationResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StopValidationResponse{}
+	if (req.IsAllTask && len(req.TaskName) > 0) || (!req.IsAllTask && len(req.TaskName) == 0) {
+		resp.Result = false
+		resp.Msg = "either `task-name` or `all-task` should be set"
+		return resp, nil
+	}
+	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, req.Sources)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		return resp, nil
+	}
+	// TODO: update the validator stage in etcd
+	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}

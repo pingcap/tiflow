@@ -83,6 +83,8 @@ func NewRootCmd() *cobra.Command {
 		master.NewShardDDLLockCmd(),
 		master.NewSourceTableSchemaCmd(),
 		master.NewConfigCmd(),
+		master.NewStartValidationCmd(),
+		master.NewStartValidationCmd(),
 		newDecryptCmd(),
 		newEncryptCmd(),
 	)
