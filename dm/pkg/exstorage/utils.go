@@ -24,39 +24,39 @@ import (
 )
 
 // AdjustS3Path adjust s3 rawURL, add uniqueId into s3 path.
-func AdjustS3Path(rawURL string, uniqueID string) (bool, string, error) {
+func AdjustS3Path(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" {
-		return false, "", nil
+		return "", nil
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return false, "", errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 	if u.Scheme == "s3" {
 		trimPath := strings.TrimRight(u.Path, "/")
 		// avoid duplicate add uniqueID
 		if uniqueID != "" && !strings.HasSuffix(trimPath, uniqueID) {
 			u.Path = trimPath + "." + uniqueID
-			return true, u.String(), nil
+			return u.String(), nil
 		}
-		return true, rawURL, nil
+		return rawURL, nil
 	}
-	return false, rawURL, nil
+	return rawURL, nil
 }
 
 // isS3Path judges if rawURL is s3 path.
-func IsS3Path(rawURL string) bool {
+func IsS3Path(rawURL string) (bool, error) {
 	if rawURL == "" {
-		return false
+		return false, nil
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return false
+		return false, err
 	}
 	if u.Scheme == "s3" {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // CreateExternalStore creates ExternalStore.

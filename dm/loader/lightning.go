@@ -236,7 +236,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Routes = l.cfg.RouteRules
 
 		// TODO lightning checkpoint will support s3 in other pr
-		if exstorage.IsS3Path(l.cfg.LoaderConfig.Dir) {
+		if isS3, _ := exstorage.IsS3Path(l.cfg.LoaderConfig.Dir); isS3 {
 			cfg.Checkpoint.Enable = false
 		} else {
 			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
@@ -274,7 +274,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 	}
 	if l.finish.Load() {
-		if l.cfg.CleanDumpFile && !exstorage.IsS3Path(l.cfg.Dir) {
+		if isS3, _ := exstorage.IsS3Path(l.cfg.Dir); l.cfg.CleanDumpFile && isS3 {
 			cleanDumpFiles(l.cfg)
 		}
 	}

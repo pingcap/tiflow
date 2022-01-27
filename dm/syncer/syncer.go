@@ -1514,17 +1514,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
+
+	failpoint.Inject("S3GetDumpFilesCheck", func() {
+		cleanDumpFile = false
+	})
+
 	if cleanDumpFile {
 		tctx.L().Info("try to remove all dump files")
-		doNotClean := false
-		failpoint.Inject("S3GetDumpFilesCheck", func() {
-			doNotClean = true
-		})
-
-		if !doNotClean {
-			if err = exstorage.RemoveAll(ctx, s.cfg.Dir); err != nil {
-				tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
-			}
+		if err = exstorage.RemoveAll(ctx, s.cfg.Dir); err != nil {
+			tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
 
