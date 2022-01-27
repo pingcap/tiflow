@@ -72,7 +72,7 @@ function run() {
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 0 999
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	# check the after dll query-status lag should be set to 0
+	# check the after ddl query-status lag should be set to 0
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"secondsBehindMaster\": \"0\"" 2
