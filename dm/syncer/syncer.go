@@ -441,7 +441,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 
 	// when Init syncer, set active relay log info
-	if s.cfg.Meta.BinLogName != binlog.FakeBinlogName {
+	if s.cfg.Meta == nil || s.cfg.Meta.BinLogName != binlog.FakeBinlogName {
 		err = s.setInitActiveRelayLog(ctx)
 		if err != nil {
 			return err
