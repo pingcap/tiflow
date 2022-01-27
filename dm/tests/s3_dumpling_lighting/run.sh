@@ -44,7 +44,7 @@ function start_s3() {
 
 # clean s3 server
 cleanup_s3() {
-	pkill -hup minio 2>/dev/null || true
+	pkill -9 minio 2>/dev/null || true
 	wait_process_exit minio
 	rm -rf $s3_DBPATH
 }
