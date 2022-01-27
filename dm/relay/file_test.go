@@ -287,19 +287,3 @@ func (t *testFileSuite) TestFileSizeUpdated(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 1)
 }
-
-func (t *testFileSuite) TestReadSortedBinlogFromDir(c *C) {
-	dir := c.MkDir()
-	filenames := []string{
-		"bin.000001", "bin.000002", "bin.100000", "bin.100001", "bin.1000000", "bin.1000001", "bin.999999", "relay.meta",
-	}
-	expected := []string{
-		"bin.000001", "bin.000002", "bin.100000", "bin.100001", "bin.999999", "bin.1000000", "bin.1000001",
-	}
-	for _, f := range filenames {
-		c.Assert(os.WriteFile(filepath.Join(dir, f), nil, 0o600), IsNil)
-	}
-	ret, err := readSortedBinlogFromDir(dir)
-	c.Assert(err, IsNil)
-	c.Assert(ret, DeepEquals, expected)
-}

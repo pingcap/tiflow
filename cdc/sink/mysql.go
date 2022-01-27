@@ -116,6 +116,7 @@ func newMySQLSink(
 	}
 
 	// create test db used for parameter detection
+	// Refer https://github.com/go-sql-driver/mysql#parameters
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
@@ -224,6 +225,9 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 // FlushRowChangedEvents will flush all received events, we don't allow mysql
 // sink to receive events before resolving
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	// Since CDC does not guarantee exactly once semantic, it won't cause any problem
+	// here even if the table was moved or removed.
+	// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
 	v, ok := s.tableMaxResolvedTs.Load(tableID)
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
