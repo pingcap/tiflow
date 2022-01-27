@@ -93,8 +93,8 @@ type ErrorWithMessage struct {
 	ErrorMsg string `json:"error_msg"`
 }
 
-// GetClusterIDResponse defines model for GetClusterIDResponse.
-type GetClusterIDResponse struct {
+// GetClusterInfoResponse defines model for GetClusterInfoResponse.
+type GetClusterInfoResponse struct {
 	// cluster id
 	ClusterId uint64 `json:"cluster_id"`
 }

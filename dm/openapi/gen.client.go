@@ -90,8 +90,8 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// DMAPIGetClusterID request
-	DMAPIGetClusterID(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIGetClusterInfo request
+	DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -216,8 +216,8 @@ type ClientInterface interface {
 	DMAPIGetTaskStatus(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) DMAPIGetClusterID(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIGetClusterIDRequest(c.Server)
+func (c *Client) DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetClusterInfoRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -756,8 +756,8 @@ func (c *Client) DMAPIGetTaskStatus(ctx context.Context, taskName string, params
 	return c.Client.Do(req)
 }
 
-// NewDMAPIGetClusterIDRequest generates requests for DMAPIGetClusterID
-func NewDMAPIGetClusterIDRequest(server string) (*http.Request, error) {
+// NewDMAPIGetClusterInfoRequest generates requests for DMAPIGetClusterInfo
+func NewDMAPIGetClusterInfoRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -765,7 +765,7 @@ func NewDMAPIGetClusterIDRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/cluster/id")
+	operationPath := fmt.Sprintf("/api/v1/cluster/info")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2216,8 +2216,8 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// DMAPIGetClusterID request
-	DMAPIGetClusterIDWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterIDResponse, error)
+	// DMAPIGetClusterInfo request
+	DMAPIGetClusterInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterInfoResponse, error)
 
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterMasterListResponse, error)
@@ -2342,14 +2342,14 @@ type ClientWithResponsesInterface interface {
 	DMAPIGetTaskStatusWithResponse(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskStatusResponse, error)
 }
 
-type DMAPIGetClusterIDResponse struct {
+type DMAPIGetClusterInfoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *GetClusterIDResponse
+	JSON200      *GetClusterInfoResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIGetClusterIDResponse) Status() string {
+func (r DMAPIGetClusterInfoResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2357,7 +2357,7 @@ func (r DMAPIGetClusterIDResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIGetClusterIDResponse) StatusCode() int {
+func (r DMAPIGetClusterInfoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3128,13 +3128,13 @@ func (r DMAPIGetTaskStatusResponse) StatusCode() int {
 	return 0
 }
 
-// DMAPIGetClusterIDWithResponse request returning *DMAPIGetClusterIDResponse
-func (c *ClientWithResponses) DMAPIGetClusterIDWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterIDResponse, error) {
-	rsp, err := c.DMAPIGetClusterID(ctx, reqEditors...)
+// DMAPIGetClusterInfoWithResponse request returning *DMAPIGetClusterInfoResponse
+func (c *ClientWithResponses) DMAPIGetClusterInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterInfoResponse, error) {
+	rsp, err := c.DMAPIGetClusterInfo(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIGetClusterIDResponse(rsp)
+	return ParseDMAPIGetClusterInfoResponse(rsp)
 }
 
 // DMAPIGetClusterMasterListWithResponse request returning *DMAPIGetClusterMasterListResponse
@@ -3523,22 +3523,22 @@ func (c *ClientWithResponses) DMAPIGetTaskStatusWithResponse(ctx context.Context
 	return ParseDMAPIGetTaskStatusResponse(rsp)
 }
 
-// ParseDMAPIGetClusterIDResponse parses an HTTP response from a DMAPIGetClusterIDWithResponse call
-func ParseDMAPIGetClusterIDResponse(rsp *http.Response) (*DMAPIGetClusterIDResponse, error) {
+// ParseDMAPIGetClusterInfoResponse parses an HTTP response from a DMAPIGetClusterInfoWithResponse call
+func ParseDMAPIGetClusterInfoResponse(rsp *http.Response) (*DMAPIGetClusterInfoResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIGetClusterIDResponse{
+	response := &DMAPIGetClusterInfoResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest GetClusterIDResponse
+		var dest GetClusterInfoResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

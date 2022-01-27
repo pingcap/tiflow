@@ -25,7 +25,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +34,7 @@ import (
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
-	atomic2 "go.uber.org/atomic"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -80,7 +79,7 @@ var (
 	// the retry interval for dm-master to confirm the dm-workers status is expected.
 	retryInterval = time.Second
 
-	useTLS atomic2.Bool
+	useTLS atomic.Bool
 
 	// typically there's only one server running in one process, but testMaster.TestOfflineMember starts 3 servers,
 	// so we need sync.Once to prevent data race.
@@ -104,7 +103,7 @@ type Server struct {
 
 	// below three leader related variables should be protected by a lock (currently Server's lock) to provide integrity
 	// except for leader == oneselfStartingLeader which is a intermedia state, which means caller may retry sometime later
-	leader         atomic2.String
+	leader         atomic.String
 	leaderClient   pb.MasterClient
 	leaderGrpcConn *grpc.ClientConn
 
@@ -122,11 +121,11 @@ type Server struct {
 	// WaitGroup for background functions.
 	bgFunWg sync.WaitGroup
 
-	closed atomic2.Bool
+	closed atomic.Bool
 
 	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
 
-	clusterID uint64
+	clusterID atomic.Uint64
 }
 
 // NewServer creates a new Server.
@@ -413,7 +412,7 @@ func subtaskCfgPointersToInstances(stCfgPointers ...*config.SubTaskConfig) []con
 
 func (s *Server) initClusterID(ctx context.Context) error {
 	log.L().Info("init cluster id begin")
-	ctx1, cancel := context.WithTimeout(ctx, time.Second*10)
+	ctx1, cancel := context.WithTimeout(ctx, etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
 	resp, err := s.etcdClient.Get(ctx1, common.ClusterIDKey)
@@ -431,8 +430,8 @@ func (s *Server) initClusterID(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		atomic.StoreUint64(&s.clusterID, clusterID)
-		log.L().Info("generate and init cluster id success")
+		s.clusterID.Store(clusterID)
+		log.L().Info("generate and init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
 		return nil
 	}
 
@@ -440,14 +439,14 @@ func (s *Server) initClusterID(ctx context.Context) error {
 		return terror.ErrMasterInvalidClusterID.Generate(resp.Kvs[0].Value)
 	}
 
-	s.clusterID = binary.BigEndian.Uint64(resp.Kvs[0].Value)
-	log.L().Info("init cluster id success")
+	s.clusterID.Store(binary.BigEndian.Uint64(resp.Kvs[0].Value))
+	log.L().Info("init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
 	return nil
 }
 
-// Only leader is able to return correct cluster id
+// ClusterID return correct cluster id when as leader
 func (s *Server) ClusterID() uint64 {
-	return atomic.LoadUint64(&s.clusterID)
+	return s.clusterID.Load()
 }
 
 // StartTask implements MasterServer.StartTask.

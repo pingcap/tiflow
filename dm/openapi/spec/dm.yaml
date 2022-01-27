@@ -959,19 +959,19 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/cluster/id:
+  /api/v1/cluster/info:
     get:
       tags:
         - cluster 
-      summary: "get cluster id"
-      operationId: "DMAPIGetClusterID"
+      summary: "get cluster info such as cluster id"
+      operationId: "DMAPIGetClusterInfo"
       responses:
         "200":
           description: "success"
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/GetClusterIDResponse"
+                $ref: "#/components/schemas/GetClusterInfoResponse"
 
 components:
   schemas:
@@ -1846,7 +1846,7 @@ components:
       required:
         - "success_task_list"
         - "failed_task_list"
-    GetClusterIDResponse:
+    GetClusterInfoResponse:
       type: object
       properties:
         cluster_id:

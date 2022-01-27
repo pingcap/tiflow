@@ -901,9 +901,9 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 	c.IndentedJSON(http.StatusOK, task)
 }
 
-// DMAPIGetClusterID return cluster id of dm cluster
-func (s *Server) DMAPIGetClusterID(c *gin.Context) {
-	r := &openapi.GetClusterIDResponse{}
+// DMAPIGetClusterInfo return cluster id of dm cluster
+func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
+	r := &openapi.GetClusterInfoResponse{}
 	r.ClusterId = s.ClusterID()
 	c.IndentedJSON(http.StatusOK, r)
 }
