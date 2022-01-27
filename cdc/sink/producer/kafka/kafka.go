@@ -199,6 +199,7 @@ func (k *kafkaSaramaProducer) stop() {
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
+	log.Info("stop the kafka producer")
 	k.stop()
 
 	k.clientLock.Lock()
@@ -233,6 +234,7 @@ func (k *kafkaSaramaProducer) Close() error {
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
+		log.Info("stop the kafka producer")
 		k.stop()
 	}()
 	for {
