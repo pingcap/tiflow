@@ -45,13 +45,16 @@ const (
 )
 
 type kafkaSaramaProducer struct {
-	// clientLock is used to protect concurrent access of asyncClient and syncClient.
+	// clientLock is used to protect concurrent access of asyncProducer and syncCProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock  sync.RWMutex
-	asyncClient sarama.AsyncProducer
-	syncClient  sarama.SyncProducer
-	// producersReleased records whether asyncClient and syncClient have been closed properly
+	clientLock sync.RWMutex
+
+	client        sarama.Client
+	asyncProducer sarama.AsyncProducer
+	syncCProducer sarama.SyncProducer
+
+	// producersReleased records whether asyncProducer and syncCProducer have been closed properly
 	producersReleased bool
 	topic             string
 	partitionNum      int32
@@ -108,7 +111,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	case k.asyncClient.Input() <- msg:
+	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
 }
@@ -131,7 +134,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncClient.SendMessages(msgs)
+		err := k.syncCProducer.SendMessages(msgs)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -215,14 +218,21 @@ func (k *kafkaSaramaProducer) Close() error {
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
 	start := time.Now()
-	err := k.asyncClient.Close()
+	if err := k.client.Close(); err != nil {
+		log.Error("close sarama client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)))
+	}
+
+	start = time.Now()
+	err := k.asyncProducer.Close()
 	if err != nil {
 		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
 	} else {
 		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
 	start = time.Now()
-	err = k.syncClient.Close()
+	err = k.syncCProducer.Close()
 	if err != nil {
 		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
 	} else {
@@ -246,14 +256,14 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err))
 			return err
-		case msg := <-k.asyncClient.Successes():
+		case msg := <-k.asyncProducer.Successes():
 			if msg == nil || msg.Metadata == nil {
 				continue
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
-		case err := <-k.asyncClient.Errors():
+		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
 			// which will cause the pkg/error library to malfunction.
@@ -292,14 +302,29 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+
+	asyncClient, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+
+	syncClient, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	//asyncProducer, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+	//if err != nil {
+	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	//}
+	//syncCProducer, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+	//if err != nil {
+	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	//}
 
 	notifier := new(notify.Notifier)
 	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
@@ -307,10 +332,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, err
 	}
 	k := &kafkaSaramaProducer{
-		asyncClient:  asyncClient,
-		syncClient:   syncClient,
-		topic:        topic,
-		partitionNum: config.PartitionNum,
+		client:        client,
+		asyncProducer: asyncClient,
+		syncCProducer: syncClient,
+		topic:         topic,
+		partitionNum:  config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
