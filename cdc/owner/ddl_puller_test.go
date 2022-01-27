@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -233,8 +233,12 @@ func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
 	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
 	_, r, _ := log.InitLogger(conf)
 	logger := zap.New(zapcore)
-	restoreFn := log.ReplaceGlobals(logger, r)
-	defer restoreFn()
+	log.ReplaceGlobals(logger, r)
+	defer func() {
+		logger, r, err := log.InitLogger(conf)
+		c.Assert(err, check.IsNil)
+		log.ReplaceGlobals(logger, r)
+	}()
 
 	startTs := uint64(10)
 	mockPuller := newMockPuller(c, startTs)
