@@ -75,11 +75,15 @@ type mqSink struct {
 	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
+
+	role string
+	id   model.ChangeFeedID
 }
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+	changefeedID model.ChangeFeedID, role string,
 ) (*mqSink, error) {
 	var protocol config.Protocol
 	err := protocol.FromString(replicaConfig.Sink.Protocol)
@@ -128,6 +132,9 @@ func newMqSink(
 		resolvedReceiver: resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
+
+		role: role,
+		id:   changefeedID,
 	}
 
 	go func() {
@@ -137,7 +144,8 @@ func newMqSink(
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", changefeedID), zap.String("role", s.role))
 			}
 		}
 	}()
@@ -159,7 +167,10 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored",
+				zap.Uint64("start-ts", row.StartTs),
+				zap.String("changefeed", k.id),
+				zap.String("role", k.role))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -273,6 +284,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("query", ddl.Query),
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("changefeed", k.id),
+			zap.String("role", k.role),
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
@@ -300,7 +313,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition))
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+		zap.String("changefeed", k.id), zap.String("role", k.role))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
@@ -364,7 +378,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 					return 0, err
 				}
 			}
-			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
+			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize),
+				zap.String("changefeed", k.id), zap.String("role", k.role))
 			return thisBatchSize, nil
 		})
 	}
@@ -435,11 +450,16 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	log.Warn("writeToProducer called with no-op",
 		zap.ByteString("key", message.Key),
 		zap.ByteString("value", message.Value),
-		zap.Int32("partition", partition))
+		zap.Int32("partition", partition),
+		zap.String("changefeed", k.id),
+		zap.String("role", k.role))
 	return nil
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
+	opts map[string]string, errCh chan error,
+	changefeedID model.ChangeFeedID, role string) (*mqSink, error) {
 	producerConfig := kafka.NewConfig()
 	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -457,18 +477,20 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh, changefeedID, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh, changefeedID, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return sink, nil
 }
 
-func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+	changefeedID model.ChangeFeedID, role string) (*mqSink, error) {
 	producer, err := pulsar.NewProducer(sinkURI, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -494,7 +516,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh, changefeedID, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
