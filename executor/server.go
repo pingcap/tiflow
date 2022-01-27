@@ -5,16 +5,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/registry"
-
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -55,7 +53,6 @@ type Server struct {
 	workerRtm   *worker.Runtime
 	msgServer   *p2p.MessageRPCService
 	info        *model.ExecutorInfo
-	idAllocator *autoid.UUIDAllocator
 
 	lastHearbeatTime time.Time
 
@@ -73,7 +70,6 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
-		idAllocator: autoid.NewUUIDAllocator(),
 	}
 	s.discoveryConnector = s.connectToEtcdDiscovery
 	return &s
@@ -143,25 +139,27 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
-	workerID := s.idAllocator.AllocID()
 
 	// TODO better dependency management
 	dctx := dcontext.Background()
 	dctx.Dependencies = dcontext.RuntimeDependencies{
 		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(p2p.NewMessageRouter(string(s.info.ID), s.cfg.AdvertiseAddr)),
+		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
 		MetaKVClient:          s.metastore,
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
 	}
+	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
+	dctx.Environ.Addr = s.info.Addr
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,
 		lib.WorkerType(req.GetTaskTypeId()),
-		lib.WorkerID(workerID),
+		lib.WorkerID(req.GetWorkerId()),
 		lib.MasterID(req.GetMasterId()),
 		req.GetTaskConfig())
 	if err != nil {
+		log.L().Error("Failed to create worker", zap.Error(err))
 		// TODO better error handling
 		return nil, err
 	}
@@ -169,7 +167,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	s.workerRtm.AddWorker(newWorker)
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
-		WorkerId:  workerID,
+		WorkerId:  req.GetWorkerId(),
 	}, nil
 }
 
@@ -223,12 +221,13 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 }
 
 func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err error) {
-	s.msgServer, err = p2p.NewMessageRPCService(string(s.info.ID), nil)
+	s.msgServer, err = p2p.NewDependentMessageRPCService(string(s.info.ID), nil, s.grpcSrv)
 	if err != nil {
 		return err
 	}
 	wg.Go(func() error {
-		return s.msgServer.Serve(ctx, s.tcpServer.GrpcListener())
+		// TODO refactor this
+		return s.msgServer.Serve(ctx, nil)
 	})
 	return nil
 }
@@ -240,11 +239,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 
-	err := s.startTCPService(ctx, wg)
-	if err != nil {
-		return err
-	}
-
 	s.sch = runtime.NewRuntime(nil)
 	wg.Go(func() error {
 		s.sch.Run(ctx, 10)
@@ -255,12 +249,20 @@ func (s *Server) Run(ctx context.Context) error {
 	s.workerRtm = worker.NewRuntime(ctx)
 	s.workerRtm.Start(pollCon)
 
-	err = s.selfRegister(ctx)
+	err := s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
+	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
+
+	s.grpcSrv = grpc.NewServer()
 	err = s.startMsgService(ctx, wg)
+	if err != nil {
+		return err
+	}
+
+	err = s.startTCPService(ctx, wg)
 	if err != nil {
 		return err
 	}
@@ -292,7 +294,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		return err
 	}
 	s.tcpServer = tcpServer
-	s.grpcSrv = grpc.NewServer()
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
@@ -307,7 +308,6 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	wg.Go(func() error {
 		return debugHandler(s.tcpServer.HTTP1Listener())
 	})
-
 	return nil
 }
 
@@ -409,11 +409,13 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 	}
 	for uuid, exec := range executors {
 		if s.p2pMsgRouter != nil {
+			log.L().Info("add peer",
+				zap.String("uuid", uuid),
+				zap.Any("exec", exec))
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
 	}
 	s.discoveryWatcher = s.discovery.Watch(ctx)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -433,11 +435,16 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			}
 			for uuid, add := range resp.AddSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("add peer",
+						zap.String("uuid", uuid),
+						zap.Any("exec", add))
 					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
 				}
 			}
 			for uuid := range resp.DelSet {
 				if s.p2pMsgRouter != nil {
+					log.L().Info("remove peer",
+						zap.String("uuid", uuid))
 					s.p2pMsgRouter.RemovePeer(uuid)
 				}
 			}

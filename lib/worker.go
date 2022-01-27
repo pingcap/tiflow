@@ -259,7 +259,7 @@ func (w *BaseWorker) runWatchDog(ctx context.Context) error {
 }
 
 func (w *BaseWorker) initMessageHandlers(ctx context.Context) error {
-	topic := HeartbeatPongTopic(w.masterClient.MasterID())
+	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -424,7 +424,7 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		Epoch:        m.masterEpoch,
 	}
 
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID), heartbeatMsg)
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, HeartbeatPingTopic(m.masterID, m.workerID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -442,7 +442,7 @@ func (m *masterClient) SendStatus(ctx context.Context, status WorkerStatus) erro
 		WorkerID: m.workerID,
 		Status:   status,
 	}
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, StatusUpdateTopic(m.masterID), statusUpdateMessage)
+	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, StatusUpdateTopic(m.masterID, m.workerID), statusUpdateMessage)
 	if err != nil {
 		return errors.Trace(err)
 	}

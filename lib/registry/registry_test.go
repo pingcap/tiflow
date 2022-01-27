@@ -51,3 +51,10 @@ func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val"":0}`))
 	require.Error(t, err)
 }
+
+func TestLoadFake(t *testing.T) {
+	registry := NewRegistry()
+	require.NotPanics(t, func() {
+		LoadFake(registry)
+	})
+}

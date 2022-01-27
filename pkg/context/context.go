@@ -30,6 +30,7 @@ type Context struct {
 	Ctx          context.Context
 	Logger       log.Logger
 	Dependencies RuntimeDependencies
+	Environ      Environment
 }
 
 // Background return a nop context.
@@ -89,4 +90,9 @@ type RuntimeDependencies struct {
 	MetaKVClient          metadata.MetaKV
 	ExecutorClientManager *client.Manager
 	ServerMasterClient    client.MasterClient
+}
+
+type Environment struct {
+	NodeID p2p.NodeID
+	Addr   string
 }

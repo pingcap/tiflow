@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -87,7 +89,9 @@ func NewJobManagerImplV2(
 		metaKVClient:          metaKVClient,
 		workers:               make(map[lib.WorkerID]lib.WorkerHandle),
 	}
+	dctx := dcontext.NewContext(ctx, log.L())
 	impl.BaseMaster = lib.NewBaseMaster(
+		dctx,
 		impl,
 		id,
 		impl.messageHandlerManager,

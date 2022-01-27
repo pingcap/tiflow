@@ -113,7 +113,7 @@ func (m *workerManagerImpl) Tick(
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
-		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID), reply)
+		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID, workerID), reply)
 		if err != nil {
 			log.L().Error("Failed to send heartbeat", zap.Error(err))
 		}

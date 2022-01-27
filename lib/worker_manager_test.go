@@ -39,7 +39,7 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Len(t, onlined, 1)
 
-	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName))
+	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
 	require.Equal(t, &HeartbeatPongMessage{
 		SendTime:   sendTime,
@@ -75,7 +75,7 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Len(t, onlined, 1)
 
-	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName))
+	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
 	require.Equal(t, &HeartbeatPongMessage{
 		SendTime:   sendTime,
@@ -130,7 +130,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Len(t, onlined, 2)
 
-	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName))
+	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
 	require.Equal(t, &HeartbeatPongMessage{
 		SendTime:   sendTime1,
@@ -139,7 +139,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		Epoch:      1,
 	}, msg)
 
-	msg, ok = msgSender.TryPop(executorNodeID2, HeartbeatPongTopic(masterName))
+	msg, ok = msgSender.TryPop(executorNodeID2, HeartbeatPongTopic(masterName, workerID2))
 	require.True(t, ok)
 	require.Equal(t, &HeartbeatPongMessage{
 		SendTime:   sendTime2,
@@ -148,7 +148,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		Epoch:      1,
 	}, msg)
 
-	_, ok = msgSender.TryPop(executorNodeID3, HeartbeatPongTopic(masterName))
+	_, ok = msgSender.TryPop(executorNodeID3, HeartbeatPongTopic(masterName, workerID3))
 	require.False(t, ok)
 
 	sendTime3 := clock.MonoNow()
@@ -165,13 +165,13 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Len(t, onlined, 1)
 
-	_, ok = msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName))
+	_, ok = msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.False(t, ok)
 
-	_, ok = msgSender.TryPop(executorNodeID2, HeartbeatPongTopic(masterName))
+	_, ok = msgSender.TryPop(executorNodeID2, HeartbeatPongTopic(masterName, workerID2))
 	require.False(t, ok)
 
-	msg, ok = msgSender.TryPop(executorNodeID3, HeartbeatPongTopic(masterName))
+	msg, ok = msgSender.TryPop(executorNodeID3, HeartbeatPongTopic(masterName, workerID3))
 	require.True(t, ok)
 	require.Equal(t, &HeartbeatPongMessage{
 		SendTime:   sendTime3,

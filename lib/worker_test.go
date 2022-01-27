@@ -49,7 +49,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 
 	var hbMsg *HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
 		if ok {
 			hbMsg = rawMsg.(*HeartbeatPingMessage)
 		}
@@ -61,7 +61,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 
 	var statusMsg *StatusUpdateMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName, workerID1))
 		if ok {
 			statusMsg = rawMsg.(*StatusUpdateMessage)
 		}
@@ -117,7 +117,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 		var hbMsg *HeartbeatPingMessage
 		require.Eventually(t, func() bool {
-			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
 			if ok {
 				hbMsg = rawMsg.(*HeartbeatPingMessage)
 			}
@@ -135,7 +135,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 			ToWorkerID: workerID1,
 			Epoch:      1,
 		}
-		err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName), masterNodeName, pongMsg)
+		err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 		require.NoError(t, err)
 	}
 }
@@ -165,7 +165,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 	var hbMsg *HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
 		if ok {
 			hbMsg = rawMsg.(*HeartbeatPingMessage)
 		}
@@ -178,7 +178,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}
-	err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName), masterNodeName, pongMsg)
+	err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)

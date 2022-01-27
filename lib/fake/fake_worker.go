@@ -8,6 +8,8 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 var _ lib.Worker = (*dummyWorker)(nil)
@@ -36,6 +38,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return errors.New("not yet init")
 	}
 
+	log.L().Info("FakeWorker: Tick", zap.String("worker-id", string(d.ID())))
 	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}

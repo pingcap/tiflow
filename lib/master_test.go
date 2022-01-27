@@ -60,9 +60,6 @@ func TestMasterInit(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	master.messageHandlerManager.AssertHasHandler(t, HeartbeatPingTopic(masterName), &HeartbeatPingMessage{})
-	master.messageHandlerManager.AssertHasHandler(t, StatusUpdateTopic(masterName), &StatusUpdateMessage{})
-
 	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
 	require.NoError(t, err)
 	resp := rawResp.(*clientv3.GetResponse)
@@ -76,9 +73,6 @@ func TestMasterInit(t *testing.T) {
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
 	require.NoError(t, err)
-
-	master.messageHandlerManager.AssertNoHandler(t, HeartbeatPingTopic(masterName))
-	master.messageHandlerManager.AssertNoHandler(t, StatusUpdateTopic(masterName))
 
 	// Restart the master
 	master.Reset()
@@ -196,7 +190,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
-	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName), executorNodeID1, &HeartbeatPingMessage{
+	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName, workerID1), executorNodeID1, &HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
 		FromWorkerID: workerID,
 		Epoch:        master.BaseMaster.currentEpoch.Load(),

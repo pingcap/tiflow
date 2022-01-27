@@ -8,6 +8,8 @@ import (
 	"github.com/edwingeng/deque"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type Scheduler struct {
@@ -18,7 +20,7 @@ type Scheduler struct {
 	onWorkerFinished func(lib.Worker, error)
 }
 
-const emptyRestDuration time.Duration = 50 * time.Millisecond
+const emptyRestDuration = 50 * time.Millisecond
 
 func (s *Scheduler) AddWorker(worker lib.Worker) {
 	s.Lock()
@@ -33,16 +35,17 @@ func (s *Scheduler) Run(conn int) {
 }
 
 func (s *Scheduler) runImpl() {
+	ticker := time.NewTicker(emptyRestDuration)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 		}
 		s.Lock()
 		if s.queue.Empty() {
 			s.Unlock()
-			time.Sleep(emptyRestDuration)
 			continue
 		}
 		worker := s.queue.PopFront().(lib.Worker)
@@ -82,13 +85,16 @@ type Runtime struct {
 }
 
 func (r *Runtime) onWorkerFinish(worker lib.Worker, err error) {
+	log.L().Warn("Worker has finished",
+		zap.Any("worker-id", worker.WorkerID()),
+		zap.Error(err))
 	r.closingWorker <- worker
 }
 
 func (r *Runtime) closeWorker() {
 	for worker := range r.closingWorker {
-		// TODO handle error
-		_ = worker.Close(context.TODO())
+		// TODO context and error handling
+		_ = worker.Close(context.Background())
 		r.workerList.Delete(worker.WorkerID())
 	}
 }

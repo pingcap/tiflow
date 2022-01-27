@@ -67,20 +67,21 @@ type Closer interface {
 	Close(ctx context.Context) error
 }
 
-func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s", string(masterID))
+func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
+	return fmt.Sprintf("heartbeat-ping-%s-%s", string(masterID), string(workerID))
 }
 
-func HeartbeatPongTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-pong-%s", string(masterID))
+func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
+	// TODO do we need hex-encoding here?
+	return fmt.Sprintf("heartbeat-pong-%s-%s", string(masterID), string(workerID))
 }
 
 func WorkloadReportTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("workload-report-%s", masterID)
 }
 
-func StatusUpdateTopic(masterID MasterID) p2p.Topic {
-	return fmt.Sprintf("status-update-%s", masterID)
+func StatusUpdateTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
+	return fmt.Sprintf("status-update-%s-%s", masterID, workerID)
 }
 
 type HeartbeatPingMessage struct {

@@ -43,6 +43,9 @@ func NewMockMasterImpl(id MasterID) *MockMasterImpl {
 		serverMasterClient:    &client.MockServerMasterClient{},
 	}
 	ret.BaseMaster = NewBaseMaster(
+		// ctx is nil for now
+		// TODO refine this
+		nil,
 		ret,
 		id,
 		ret.messageHandlerManager,
@@ -62,6 +65,7 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.Calls = nil
 
 	m.BaseMaster = NewBaseMaster(
+		nil,
 		m,
 		m.id,
 		m.messageHandlerManager,

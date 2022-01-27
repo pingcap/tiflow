@@ -60,6 +60,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
 	deps := ctx.Dependencies
 	base := lib.NewBaseMaster(
+		ctx,
 		jm,
 		masterID,
 		deps.MessageHandlerManager,

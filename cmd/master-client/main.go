@@ -8,10 +8,15 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
+	"github.com/hanfei1991/microcosm/lib/registry"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -25,6 +30,44 @@ func main() {
 			os.Exit(1)
 		}
 		addr = os.Args[3]
+	case "run-fake":
+		flag1 := os.Args[2]
+		if flag1 != "--executor-addr" {
+			fmt.Printf("no executor address found")
+			os.Exit(1)
+		}
+		addr = os.Args[3]
+
+		flag3 := os.Args[4]
+		if flag3 != "--executor-id" {
+			fmt.Printf("executor ID is not found")
+			os.Exit(1)
+		}
+		nodeID := os.Args[5]
+
+		cliManager := client.NewClientManager()
+		err := cliManager.AddExecutor(model.ExecutorID(nodeID), addr)
+		if err != nil {
+			log.L().Error("failed to create executor client", zap.Error(err))
+			os.Exit(1)
+		}
+
+		for i := 0; i < 1; i++ {
+			resp, err := cliManager.ExecutorClient(model.ExecutorID(nodeID)).Send(context.TODO(), &client.ExecutorRequest{
+				Cmd: client.CmdDispatchTask,
+				Req: &pb.DispatchTaskRequest{
+					TaskTypeId: registry.WorkerTypeFakeMaster,
+					TaskConfig: []byte("{}"),
+					MasterId:   fmt.Sprintf("master-%d", i),
+					WorkerId:   uuid.New().String(),
+				},
+			})
+			if err != nil {
+				log.L().Error("failed to dispatch master", zap.Error(err))
+				os.Exit(1)
+			}
+			log.L().Info("resp", zap.Any("resp", resp))
+		}
 	default:
 		fmt.Printf("submit-job --config configFile")
 		os.Exit(0)

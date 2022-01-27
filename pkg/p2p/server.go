@@ -47,6 +47,8 @@ var defaultServerConfig = Config{
 type MessageRPCService struct {
 	messageServer *p2pImpl.MessageServer
 	grpcServer    *grpc.Server
+
+	noNeedToRunGRPCServer bool
 }
 
 // NewMessageServer creates a new message server from given configs
@@ -99,9 +101,27 @@ func NewMessageRPCService(
 	return service, nil
 }
 
+// NewDependentMessageRPCService creates a new MessageRPCService
+// that DOES NOT own a `grpc.Server`.
+// TODO refactor the design.
+func NewDependentMessageRPCService(
+	selfID NodeID,
+	_credential *security.Credential,
+	grpcSvr *grpc.Server,
+	opts ...MessageServerOpt,
+) (*MessageRPCService, error) {
+	service := NewMessageRPCServiceWithRPCServer(selfID, _credential, grpcSvr, opts...)
+	p2p.RegisterCDCPeerToPeerServer(grpcSvr, service.messageServer)
+	service.noNeedToRunGRPCServer = true
+	return service, nil
+}
+
 // Serve listens on `l` and creates the background goroutine for the message server.
 func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	defer func() {
+		if l == nil {
+			return
+		}
 		err := l.Close()
 		if err != nil {
 			log.L().Warn("failed to close Listener", zap.Error(err))
@@ -114,6 +134,11 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 		defer log.L().ErrorFilterContextCanceled("message server exited", zap.Error(err))
 		return errors.Trace(s.messageServer.Run(ctx))
 	})
+
+	// TODO redesign MessageRPCService to avoid this branch
+	if s.noNeedToRunGRPCServer {
+		return wg.Wait()
+	}
 
 	wg.Go(func() (err error) {
 		defer func() {

@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -39,6 +40,7 @@ func TestStartTCPSrv(t *testing.T) {
 	cfg.WorkerAddr = addr
 	s := NewServer(cfg, nil)
 
+	s.grpcSrv = grpc.NewServer()
 	wg, ctx := errgroup.WithContext(context.Background())
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
