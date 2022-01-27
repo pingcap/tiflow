@@ -110,7 +110,7 @@ func main() {
 			fmt.Printf("err: %v", resp.Err.Message)
 			return
 		}
-		fmt.Printf("submit job successful %d", resp.JobId)
+		fmt.Printf("submit job successful JobID:%d JobIDStr:%s\n", resp.JobId, resp.JobIdStr)
 	}
 	if cmd == "cancel-job" {
 		flag1 := os.Args[4]
