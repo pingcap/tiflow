@@ -14,6 +14,7 @@
 package relay
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -233,4 +234,66 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 
 	currentDir := lm.Dir()
 	c.Assert(strings.HasSuffix(currentDir, cs.uuidWithSuffix), IsTrue)
+}
+
+func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
+	var err error
+	lm := NewLocalMeta("mysql", "/FAKE_DIR")
+	uuidStr := "85ab69d1-b21f-11e6-9c5e-64006a8978d2"
+	initGSet, _ := gtid.ParserGTID("mysql", fmt.Sprintf("%s:1", uuidStr))
+	lm.(*LocalMeta).currentUUID = uuidStr
+	err = lm.Save(
+		mysql.Position{Name: "mysql-bin.000001", Pos: 234},
+		initGSet,
+	)
+	c.Assert(err, IsNil)
+
+	ch1 := make(chan error)
+	ch2 := make(chan error)
+	pendingCh := make(chan struct{})
+	go func() {
+		<-pendingCh
+		var err error
+		defer func() {
+			ch1 <- err
+		}()
+		_, lastGTID := lm.GTID()
+		var theMGSet mysql.GTIDSet
+		for i := 2; i < 100; i++ {
+			theMGSet, err = mysql.ParseGTIDSet("mysql", fmt.Sprintf("%s:1-%d", uuidStr, i*10))
+			if err != nil {
+				return
+			}
+
+			err = lastGTID.Set(theMGSet)
+			if err != nil {
+				return
+			}
+			err = lm.Save(
+				mysql.Position{Name: fmt.Sprintf("mysql-bin.%06d", i), Pos: 123},
+				lastGTID,
+			)
+			if err != nil {
+				return
+			}
+		}
+	}()
+	var gtidString string
+	go func() {
+		<-pendingCh
+		var err error
+		defer func() {
+			ch2 <- err
+		}()
+		for i := 0; i < 100; i++ {
+			_, currentGTID := lm.GTID()
+			gtidString = currentGTID.String()
+		}
+	}()
+	close(pendingCh)
+	ch1Err := <-ch1
+	ch2Err := <-ch2
+	c.Assert(ch1Err, IsNil)
+	c.Assert(ch2Err, IsNil)
+	c.Logf("GTID string from the go routine: %s", gtidString)
 }
