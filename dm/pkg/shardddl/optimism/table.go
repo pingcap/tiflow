@@ -152,6 +152,54 @@ func (st *SourceTables) RemoveTable(upSchema, upTable, downSchema, downTable str
 	return true
 }
 
+// RouteTable represents a table in upstream/downstream.
+type RouteTable struct {
+	UpSchema   string
+	UpTable    string
+	DownSchema string
+	DownTable  string
+}
+
+func (st *SourceTables) toRouteTable() map[RouteTable]struct{} {
+	tables := make(map[RouteTable]struct{})
+	for downSchema, downTables := range st.Tables {
+		for downTable, upSchemas := range downTables {
+			for upSchema, upTables := range upSchemas {
+				for upTable := range upTables {
+					t := RouteTable{
+						UpSchema:   upSchema,
+						UpTable:    upTable,
+						DownSchema: downSchema,
+						DownTable:  downTable,
+					}
+					tables[t] = struct{}{}
+				}
+			}
+		}
+	}
+	return tables
+}
+
+func DiffSourceTables(lhs, rhs SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
+	lhsTables := lhs.toRouteTable()
+	rhsTables := rhs.toRouteTable()
+
+	droppedTables := make(map[RouteTable]struct{})
+	addedTables := make(map[RouteTable]struct{})
+	for table := range lhsTables {
+		if _, ok := rhsTables[table]; !ok {
+			droppedTables[table] = struct{}{}
+		}
+	}
+
+	for table := range rhsTables {
+		if _, ok := lhsTables[table]; !ok {
+			addedTables[table] = struct{}{}
+		}
+	}
+	return addedTables, droppedTables
+}
+
 // TargetTable returns a TargetTable instance for a specified downstream table,
 // returns an empty TargetTable instance if no tables exist.
 func (st *SourceTables) TargetTable(downSchema, downTable string) TargetTable {

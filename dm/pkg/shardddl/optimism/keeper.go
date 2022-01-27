@@ -216,26 +216,32 @@ func (tk *TableKeeper) Init(stm map[string]map[string]SourceTables) {
 
 // Update adds/updates tables into the keeper or removes tables from the keeper.
 // it returns whether added/updated or removed.
-func (tk *TableKeeper) Update(st SourceTables) bool {
+func (tk *TableKeeper) Update(st SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
+	var (
+		oldST SourceTables
+		newST SourceTables
+	)
+
 	tk.mu.Lock()
 	defer tk.mu.Unlock()
 
 	if st.IsDeleted {
-		if _, ok := tk.tables[st.Task]; !ok {
-			return false
+		if _, ok := tk.tables[st.Task]; ok {
+			delete(tk.tables[st.Task], st.Source)
 		}
-		if _, ok := tk.tables[st.Task][st.Source]; !ok {
-			return false
-		}
-		delete(tk.tables[st.Task], st.Source)
-		return true
+	} else {
+		newST = st
 	}
 
 	if _, ok := tk.tables[st.Task]; !ok {
 		tk.tables[st.Task] = make(map[string]SourceTables)
 	}
+	if _, ok := tk.tables[st.Task][st.Source]; ok {
+		oldST = tk.tables[st.Task][st.Source]
+	}
 	tk.tables[st.Task][st.Source] = st
-	return true
+
+	return DiffSourceTables(oldST, newST)
 }
 
 // AddTable adds a table into the source tables.

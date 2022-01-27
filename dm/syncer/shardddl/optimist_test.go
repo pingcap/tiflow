@@ -86,10 +86,10 @@ func (t *testOptimist) TestOptimist(c *C) {
 		info2          = o.ConstructInfo("foo-1", "bar-2", downSchema, downTable, DDLs2, tiBefore, []*model.TableInfo{tiAfter2})
 		op2            = optimism.NewOperation(ID, task, source, info2.UpSchema, info2.UpTable, DDLs2, optimism.ConflictDetected, terror.ErrShardDDLOptimismTrySyncFail.Generate(ID, "conflict").Error(), false, []string{})
 
-		infoCreate = o.ConstructInfo("foo-new", "bar-new", downSchema, downTable,
-			[]string{`CREATE TABLE bar (id INT PRIMARY KEY)`}, tiBefore, []*model.TableInfo{tiBefore}) // same table info.
-		infoDrop = o.ConstructInfo("foo-new", "bar-new", downSchema, downTable,
-			[]string{`DROP TABLE bar`}, nil, nil) // both table infos are nil.
+		//		infoCreate = o.ConstructInfo("foo-new", "bar-new", downSchema, downTable,
+		//			[]string{`CREATE TABLE bar (id INT PRIMARY KEY)`}, tiBefore, []*model.TableInfo{tiBefore}) // same table info.
+		//		infoDrop = o.ConstructInfo("foo-new", "bar-new", downSchema, downTable,
+		//			[]string{`DROP TABLE bar`}, nil, nil) // both table infos are nil.
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -169,25 +169,25 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(o.PendingOperation(), IsNil)
 
 	// handle `CREATE TABLE`.
-	rev3, err := o.PutInfoAddTable(infoCreate)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Greater, rev2)
-	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	infoCreateWithVer := infoCreate
-	infoCreateWithVer.Version = 1
-	infoCreateWithVer.Revision = rev3
-	c.Assert(ifm[task][source][infoCreate.UpSchema][infoCreate.UpTable], DeepEquals, infoCreateWithVer)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], HasKey, infoCreate.UpTable)
-
-	// handle `DROP TABLE`.
-	rev4, err := o.DeleteInfoRemoveTable(infoDrop)
-	c.Assert(err, IsNil)
-	c.Assert(rev4, Greater, rev3)
-	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm[task][source][infoDrop.UpSchema], IsNil)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], IsNil)
+	//	rev3, err := o.PutInfoAddTable(infoCreate)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(rev3, Greater, rev2)
+	//	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
+	//	c.Assert(err, IsNil)
+	//	infoCreateWithVer := infoCreate
+	//	infoCreateWithVer.Version = 1
+	//	infoCreateWithVer.Revision = rev3
+	//	c.Assert(ifm[task][source][infoCreate.UpSchema][infoCreate.UpTable], DeepEquals, infoCreateWithVer)
+	//	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], HasKey, infoCreate.UpTable)
+	//
+	//	// handle `DROP TABLE`.
+	//	rev4, err := o.DeleteInfoRemoveTable(infoDrop)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(rev4, Greater, rev3)
+	//	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
+	//	c.Assert(err, IsNil)
+	//	c.Assert(ifm[task][source][infoDrop.UpSchema], IsNil)
+	//	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], IsNil)
 
 	// put another info.
 	rev5, err := o.PutInfo(info2)

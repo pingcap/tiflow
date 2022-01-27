@@ -119,28 +119,18 @@ func (o *Optimist) PutInfo(info optimism.Info) (int64, error) {
 	return rev, nil
 }
 
-// PutInfoAddTable puts the shard DDL info into etcd and adds the table for the info into source tables,
+// AddTable adds the table for the info into source tables,
 // this is often called for `CREATE TABLE`.
-func (o *Optimist) PutInfoAddTable(info optimism.Info) (int64, error) {
+func (o *Optimist) AddTable(info optimism.Info) (int64, error) {
 	o.tables.AddTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	rev, err := optimism.PutSourceTablesInfo(o.cli, o.tables, info)
-	if err != nil {
-		return 0, err
-	}
-
-	o.mu.Lock()
-	o.pendingInfo = &info // record shard DDL info for `CREATE TABLE`.
-	o.mu.Unlock()
-
-	return rev, nil
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
-// DeleteInfoRemoveTable deletes the shard DDL info from etcd and removes the table for the info from source tables,
+// RemoveTable removes the table for the info from source tables,
 // this is often called for `DROP TABLE`.
-func (o *Optimist) DeleteInfoRemoveTable(info optimism.Info) (int64, error) {
+func (o *Optimist) RemoveTable(info optimism.Info) (int64, error) {
 	o.tables.RemoveTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	// don't record shard DDL info for `DROP TABLE` because we do not replicate it to the downstream now.
-	return optimism.PutSourceTablesDeleteInfo(o.cli, o.tables, info)
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
 // GetOperation gets the shard DDL lock operation relative to the shard DDL info.

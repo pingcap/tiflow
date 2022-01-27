@@ -102,3 +102,17 @@ func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task strin
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
 	return rev, err
 }
+
+// DeleteInfosOperationsTablesByTable deletes the shard DDL infos and operations in etcd by table
+// This function should often be called by DM-master when drop a table.
+func DeleteInfosOperationsTablesByTable(cli *clientv3.Client, task, source, upSchema, upTable, lockID string, dropCols []string) (int64, error) {
+	opsDel := make([]clientv3.Op, 0, 5)
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Encode(task, source, upSchema, upTable)))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source, upSchema, upTable)))
+	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(task, source, upSchema, upTable)))
+	for _, col := range dropCols {
+		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID, col, source, upSchema, upTable)))
+	}
+	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	return rev, err
+}

@@ -454,9 +454,31 @@ func (o *Optimist) handleSourceTables(ctx context.Context, sourceCh <-chan optim
 			if !ok {
 				return
 			}
-			updated := o.tk.Update(st)
-			o.logger.Info("receive source tables", zap.Stringer("source tables", st),
-				zap.Bool("is deleted", st.IsDeleted), zap.Bool("updated", updated))
+			o.mu.Lock()
+			addedTable, droppedTable := o.tk.Update(st)
+			// handle create table
+			for routeTable := range addedTable {
+				lock := o.lk.FindLock(utils.GenDDLLockID(st.Task, routeTable.DownSchema, routeTable.DownTable))
+				if lock != nil {
+					lock.AddTable(st.Source, routeTable.UpSchema, routeTable.UpTable)
+				}
+			}
+			// handle drop table
+			for routeTable := range droppedTable {
+				lock := o.lk.FindLock(utils.GenDDLLockID(st.Task, routeTable.DownSchema, routeTable.DownTable))
+				if lock != nil {
+					cols := lock.TryRemoveTable(st.Source, routeTable.UpSchema, routeTable.UpTable)
+					if !lock.HasTables() {
+						o.lk.RemoveLock(lock.ID)
+					}
+					_, err := optimism.DeleteInfosOperationsTablesByTable(o.cli, st.Task, st.Source, routeTable.UpSchema, routeTable.UpTable, lock.ID, cols)
+					if err != nil {
+						o.logger.Error("failed to delete etcd meta data for table", zap.String("lockID", lock.ID), zap.String("schema", routeTable.UpSchema), zap.String("table", routeTable.UpTable))
+					}
+				}
+
+			}
+			o.mu.Unlock()
 		}
 	}
 }
@@ -473,27 +495,14 @@ func (o *Optimist) handleInfoPut(ctx context.Context, infoCh <-chan optimism.Inf
 			}
 			o.logger.Info("receive a shard DDL info", zap.Stringer("info", info), zap.Bool("is deleted", info.IsDeleted))
 
-			// avoid new ddl added while previous ddl resolved and remove lock
-			// change lock granularity if needed
-			o.mu.Lock()
 			if info.IsDeleted {
-				lock := o.lk.FindLockByInfo(info)
-				if lock == nil {
-					// this often happen after the lock resolved.
-					o.logger.Debug("lock for info not found", zap.String("info", info.ShortString()))
-					o.mu.Unlock()
-					continue
-				}
-				// handle `DROP TABLE`, need to remove the table schema from the lock,
-				// and remove the table name from table keeper.
-				removed := lock.TryRemoveTable(info.Source, info.UpSchema, info.UpTable)
-				o.logger.Debug("the table name remove from the table keeper", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-				removed = o.tk.RemoveTable(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-				o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-				o.mu.Unlock()
+				// this often happen after the lock resolved.
 				continue
 			}
 
+			// avoid new ddl added while previous ddl resolved and remove lock
+			// change lock granularity if needed
+			o.mu.Lock()
 			// put operation for the table. we don't set `skipDone=true` now,
 			// because in optimism mode, one table may execute/done multiple DDLs but other tables may do nothing.
 			_ = o.handleInfo(info, false)
