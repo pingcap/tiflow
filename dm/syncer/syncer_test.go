@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/stretchr/testify/require"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -102,12 +103,16 @@ type testSyncerSuite struct {
 }
 
 type MockStreamer struct {
-	events []*replication.BinlogEvent
-	idx    uint32
+	events  []*replication.BinlogEvent
+	idx     uint32
+	pending bool
 }
 
 func (m *MockStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
 	if int(m.idx) >= len(m.events) {
+		if m.pending {
+			<-ctx.Done()
+		}
 		return nil, context.Canceled
 	}
 	e := m.events[m.idx]
@@ -121,7 +126,7 @@ type MockStreamProducer struct {
 
 func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
-		return &MockStreamer{mp.events, 0}, nil
+		return &MockStreamer{mp.events, 0, false}, nil
 	}
 	bytesLen := 0
 	idx := uint32(0)
@@ -132,32 +137,11 @@ func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader
 			break
 		}
 	}
-	return &MockStreamer{mp.events, idx}, nil
+	return &MockStreamer{mp.events, idx, false}, nil
 }
 
 func (s *testSyncerSuite) SetUpSuite(c *C) {
-	loaderDir, err := os.MkdirTemp("", "loader")
-	c.Assert(err, IsNil)
-	loaderCfg := config.LoaderConfig{
-		Dir: loaderDir,
-	}
-	s.cfg = &config.SubTaskConfig{
-		From:             config.GetDBConfigForTest(),
-		To:               config.GetDBConfigForTest(),
-		ServerID:         101,
-		MetaSchema:       "test",
-		Name:             "syncer_ut",
-		ShadowTableRules: []string{config.DefaultShadowTableRules},
-		TrashTableRules:  []string{config.DefaultTrashTableRules},
-		Mode:             config.ModeIncrement,
-		Flavor:           "mysql",
-		LoaderConfig:     loaderCfg,
-	}
-	s.cfg.Experimental.AsyncCheckpointFlush = true
-	s.cfg.From.Adjust()
-	s.cfg.To.Adjust()
-
-	s.cfg.UseRelay = false
+	s.cfg = genDefaultSubTaskConfig4Test()
 	s.resetEventsGenerator(c)
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
@@ -236,7 +220,7 @@ func (s *testSyncerSuite) TearDownSuite(c *C) {
 	os.RemoveAll(s.cfg.Dir)
 }
 
-func (s *testSyncerSuite) mockGetServerUnixTS(mock sqlmock.Sqlmock) {
+func mockGetServerUnixTS(mock sqlmock.Sqlmock) {
 	ts := time.Now().Unix()
 	rows := sqlmock.NewRows([]string{"UNIX_TIMESTAMP()"}).AddRow(strconv.FormatInt(ts, 10))
 	mock.ExpectQuery("SELECT UNIX_TIMESTAMP()").WillReturnRows(rows)
@@ -748,7 +732,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	checkPointDB, checkPointMock, err := sqlmock.New()
@@ -802,7 +786,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
@@ -1040,7 +1024,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
@@ -1702,4 +1686,73 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	c.Assert(n, Equals, 0)
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
+}
+
+func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
+	loaderDir, err := os.MkdirTemp("", "loader")
+	if err != nil {
+		panic(err) // no happen
+	}
+
+	loaderCfg := config.LoaderConfig{
+		Dir: loaderDir,
+	}
+	cfg := &config.SubTaskConfig{
+		From:             config.GetDBConfigForTest(),
+		To:               config.GetDBConfigForTest(),
+		ServerID:         101,
+		MetaSchema:       "test",
+		Name:             "syncer_ut",
+		ShadowTableRules: []string{config.DefaultShadowTableRules},
+		TrashTableRules:  []string{config.DefaultTrashTableRules},
+		Mode:             config.ModeIncrement,
+		Flavor:           "mysql",
+		LoaderConfig:     loaderCfg,
+		UseRelay:         false,
+	}
+	cfg.Experimental.AsyncCheckpointFlush = true
+	cfg.From.Adjust()
+	cfg.To.Adjust()
+	return cfg
+}
+
+func TestWaitBeforeRunExit(t *testing.T) {
+	ctx := context.Background()
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	syncer := NewSyncer(cfg, nil, nil)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mockGetServerUnixTS(mock)
+
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	syncer.reset()
+	require.NoError(t, syncer.genRouter())
+
+	mockStreamerProducer := &MockStreamProducer{}
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	require.NoError(t, err)
+	// let getEvent pending until ctx.Done()
+	mockStreamer.(*MockStreamer).pending = true
+	syncer.streamerController = &StreamerController{
+		streamerProducer: mockStreamerProducer, streamer: mockStreamer, closed: false,
+	}
+
+	wg := &sync.WaitGroup{}
+	errCh := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- syncer.Run(ctx)
+	}()
+	// wait s.Run start
+	time.Sleep(time.Second)
+	// s.Run will not exit unit we call cancel
+	require.Equal(t, 0, len(errCh))
+	require.NotNil(t, syncer.runCtx)
+	require.NotNil(t, syncer.runCancel)
+	syncer.runCancel() //this will make s.Run exit
+	wg.Wait()
+	require.Nil(t, <-errCh)
 }
