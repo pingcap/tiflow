@@ -39,7 +39,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/checker"
-	"github.com/pingcap/tiflow/dm/dm/common"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
@@ -415,7 +414,7 @@ func (s *Server) initClusterID(ctx context.Context) error {
 	ctx1, cancel := context.WithTimeout(ctx, etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := s.etcdClient.Get(ctx1, common.ClusterIDKey)
+	resp, err := s.etcdClient.Get(ctx1, dmcommon.ClusterIDKey)
 	if err != nil {
 		return err
 	}
@@ -426,7 +425,7 @@ func (s *Server) initClusterID(ctx context.Context) error {
 		clusterID := (ts << 32) + uint64(rand.Uint32())
 		clusterIDBytes := make([]byte, 8)
 		binary.BigEndian.PutUint64(clusterIDBytes, clusterID)
-		_, err = s.etcdClient.Put(ctx1, common.ClusterIDKey, string(clusterIDBytes))
+		_, err = s.etcdClient.Put(ctx1, dmcommon.ClusterIDKey, string(clusterIDBytes))
 		if err != nil {
 			return err
 		}
