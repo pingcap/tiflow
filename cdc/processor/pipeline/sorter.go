@@ -302,7 +302,6 @@ func (n *sorterNode) UpdateBarrierTs(barrierTs model.Ts) {
 
 func (n *sorterNode) ReleaseResource(ctx context.Context, changefeedID, captureAddr string) {
 	defer tableMemoryHistogram.DeleteLabelValues(changefeedID, captureAddr)
-	n.cancel()
 	if n.cleanRouter != nil {
 		// Clean up data when the table sorter is canceled.
 		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
