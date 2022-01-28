@@ -18,8 +18,7 @@ const defaultWatchChanSize = 8
 type EtcdSrvDiscovery struct {
 	keyAdapter   adapter.KeyAdapter
 	etcdCli      *clientv3.Client
-	snapshot     map[UUID]ServiceResource
-	snapshotRev  Revision
+	snapshot     Snapshot
 	watchTickDur time.Duration
 	watchCancel  context.CancelFunc
 	watched      *atomic.Bool
@@ -37,12 +36,12 @@ func NewEtcdSrvDiscovery(etcdCli *clientv3.Client, ka adapter.KeyAdapter, watchT
 }
 
 // Snapshot implements Discovery.Snapshot
-func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context) (map[UUID]ServiceResource, error) {
-	snapshot, revision, err := d.getSnapshot(ctx)
+func (d *EtcdSrvDiscovery) Snapshot(ctx context.Context) (Snapshot, error) {
+	snapshot, err := d.getSnapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.CopySnapshot(snapshot, revision)
+	d.CopySnapshot(snapshot)
 	return snapshot, nil
 }
 
@@ -62,19 +61,9 @@ func (d *EtcdSrvDiscovery) Watch(ctx context.Context) <-chan WatchResp {
 	return ch
 }
 
-// SnapshotClone implements Discovery.SnapshotClone
-func (d *EtcdSrvDiscovery) SnapshotClone() (map[UUID]ServiceResource, Revision) {
-	snapshot := make(map[UUID]ServiceResource, len(d.snapshot))
-	for k, v := range d.snapshot {
-		snapshot[k] = v
-	}
-	return snapshot, d.snapshotRev
-}
-
 // CopySnapshot implements Discovery.CopySnapshot
-func (d *EtcdSrvDiscovery) CopySnapshot(snapshot map[UUID]ServiceResource, revision Revision) {
+func (d *EtcdSrvDiscovery) CopySnapshot(snapshot Snapshot) {
 	d.snapshot = snapshot
-	d.snapshotRev = revision
 }
 
 // Close implements Discovery.Close
@@ -113,7 +102,7 @@ func (d *EtcdSrvDiscovery) tickedWatch(ctx context.Context, ch chan<- WatchResp)
 func (d *EtcdSrvDiscovery) delta(ctx context.Context) (
 	map[UUID]ServiceResource, map[UUID]ServiceResource, error,
 ) {
-	snapshot, revision, err := d.getSnapshot(ctx)
+	snapshot, err := d.getSnapshot(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -130,27 +119,26 @@ func (d *EtcdSrvDiscovery) delta(ctx context.Context) (
 		}
 	}
 	d.snapshot = snapshot
-	d.snapshotRev = revision
 	return addSet, delSet, nil
 }
 
 // getSnapshot queries etcd and get a full set of service resource
 func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
-	map[UUID]ServiceResource, Revision, error,
+	map[UUID]ServiceResource, error,
 ) {
 	resp, err := d.etcdCli.Get(ctx, d.keyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, errors.Wrap(errors.ErrEtcdAPIError, err)
+		return nil, errors.Wrap(errors.ErrEtcdAPIError, err)
 	}
 	snapshot := make(map[UUID]ServiceResource, resp.Count)
 	for _, kv := range resp.Kvs {
 		uuid, resc, err := unmarshal(d.keyAdapter, kv.Key, kv.Value)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		snapshot[uuid] = resc
 	}
-	return snapshot, resp.Header.Revision, nil
+	return snapshot, nil
 }
 
 // unmarshal wraps the unmarshal processing for key/value used in service discovery

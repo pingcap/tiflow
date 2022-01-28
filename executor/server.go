@@ -12,7 +12,6 @@ import (
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -26,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -34,12 +32,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
-
-type metaStoreSession interface {
-	Done() <-chan struct{}
-}
-
-type discoveryConnectFn func(ctx context.Context) (metaStoreSession, error)
 
 type Server struct {
 	cfg     *Config
@@ -58,11 +50,13 @@ type Server struct {
 
 	mockSrv mock.GrpcServer
 
-	metastore          metadata.MetaKV
-	discovery          srvdiscovery.Discovery
-	discoveryWatcher   <-chan srvdiscovery.WatchResp
-	discoveryConnector discoveryConnectFn
-	p2pMsgRouter       p2pImpl.MessageRouter
+	// etcdCli connects to server master embed etcd, it should be used in service
+	// discovery only.
+	etcdCli             *clientv3.Client
+	metastore           metadata.MetaKV
+	discoveryRunner     srvdiscovery.DiscoveryRunner
+	initDiscoveryRunner func() error
+	p2pMsgRouter        p2pImpl.MessageRouter
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -71,7 +65,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
 	}
-	s.discoveryConnector = s.connectToEtcdDiscovery
+	s.initDiscoveryRunner = s.initDiscoveryRunnerImpl
 	return &s
 }
 
@@ -267,6 +261,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	err = s.connectToMetaStore(ctx)
+	if err != nil {
+		return err
+	}
+
 	// connects to metastore and maintains a etcd session
 	wg.Go(func() error {
 		return s.discoveryKeepalive(ctx)
@@ -311,15 +310,16 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	return nil
 }
 
-func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, error) {
-	// query service discovery metastore, which is an embed etcd underlying
+// current the metastore is an embed etcd underlying
+func (s *Server) connectToMetaStore(ctx context.Context) error {
+	// query service discovery metastore to fetch metastore connection endpoint
 	resp, err := s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
 		s.cfg.RPCTimeout,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	log.L().Info("update service discovery metastore", zap.String("addr", resp.Address))
 
@@ -346,67 +346,44 @@ func (s *Server) connectToEtcdDiscovery(ctx context.Context) (metaStoreSession, 
 		},
 	})
 	if err != nil {
-		return nil, err
-	}
-	session, err := s.createSession(ctx, etcdCli)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// initialize a new service discovery, if old discovery exists, clones its
-	// snapshot to the new one.
-	old := s.discovery
-	s.discovery = srvdiscovery.NewEtcdSrvDiscovery(
-		etcdCli, adapter.ExecutorInfoKeyAdapter, defaultDiscoverTicker)
-	if old != nil {
-		s.discovery.CopySnapshot(old.SnapshotClone())
-		old.Close()
-	}
-
-	return session, nil
+	// TODO: we share system metastore with service discovery etcd, in the future
+	// we will separate them
+	s.metastore = metadata.NewMetaEtcd(etcdCli)
+	// TODO: after metastore is separted from server master embed etcd, this etcdCli
+	// should be another one.
+	s.etcdCli = etcdCli
+	return err
 }
 
-func (s *Server) createSession(ctx context.Context, etcdCli *clientv3.Client) (metaStoreSession, error) {
-	session, err := concurrency.NewSession(etcdCli, concurrency.WithTTL(s.cfg.SessionTTL))
-	if err != nil {
-		return nil, err
-	}
-	// TODO: we share system metastore with service discovery etcd, in the future
-	// we could separate them
-	s.metastore = metadata.NewMetaEtcd(etcdCli)
+func (s *Server) initDiscoveryRunnerImpl() error {
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, err = s.metastore.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(session.Lease()))
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
-func (s *Server) resetDiscovery(ctx context.Context) (metaStoreSession, error) {
-	session, err := s.discoveryConnector(ctx)
-	if err != nil {
-		return nil, err
-	}
-	s.discoveryWatcher = s.discovery.Watch(ctx)
-	return session, nil
+	s.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
+		s.etcdCli, s.metastore, s.cfg.SessionTTL, defaultDiscoverTicker,
+		s.info.EtcdKey(), value)
+	return nil
 }
 
 func (s *Server) discoveryKeepalive(ctx context.Context) error {
 	var (
-		session metaStoreSession
+		session srvdiscovery.Session
 		err     error
 	)
-	session, err = s.discoveryConnector(ctx)
+
+	err = s.initDiscoveryRunner()
 	if err != nil {
 		return err
 	}
-	executors, err := s.discovery.Snapshot(ctx)
+	session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
 	if err != nil {
 		return err
 	}
+	executors := s.discoveryRunner.GetSnapshot()
 	for uuid, exec := range executors {
 		if s.p2pMsgRouter != nil {
 			log.L().Info("add peer",
@@ -415,20 +392,21 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
 		}
 	}
-	s.discoveryWatcher = s.discovery.Watch(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-session.Done():
 			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
-			if session, err = s.resetDiscovery(ctx); err != nil {
+			session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
+			if err != nil {
 				return err
 			}
-		case resp := <-s.discoveryWatcher:
+		case resp := <-s.discoveryRunner.GetWatcher():
 			if resp.Err != nil {
 				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
-				if session, err = s.resetDiscovery(ctx); err != nil {
+				_, err = s.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
+				if err != nil {
 					return err
 				}
 				continue
@@ -448,6 +426,7 @@ func (s *Server) discoveryKeepalive(ctx context.Context) error {
 					s.p2pMsgRouter.RemovePeer(uuid)
 				}
 			}
+			s.discoveryRunner.ApplyWatchResult(resp)
 		}
 	}
 }

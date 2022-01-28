@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -81,6 +80,10 @@ func (ms *mockMetaStoreSession) Done() <-chan struct{} {
 	return ms.doneCh
 }
 
+func (ms *mockMetaStoreSession) Close() error {
+	return nil
+}
+
 type mockMessageRouter struct {
 	mu    sync.RWMutex
 	peers map[string]string
@@ -122,17 +125,26 @@ func TestDiscoveryKeepalive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
-	disc := mock.NewMockDiscovery(ctrl)
+	runner := mock.NewMockDiscoveryRunner(ctrl)
+	doneCh := make(chan struct{}, 1)
+	watchResp := make(chan srvdiscovery.WatchResp, 1)
 
 	snapshot := map[srvdiscovery.UUID]srvdiscovery.ServiceResource{
 		"uuid-1": {Addr: "127.0.0.1:10001"},
 		"uuid-2": {Addr: "127.0.0.1:10002"},
 	}
-	watchResp := make(chan srvdiscovery.WatchResp, 1)
-	watchRespReset := make(chan srvdiscovery.WatchResp, 1)
-	disc.EXPECT().Snapshot(ctx).Return(snapshot, nil)
-	disc.EXPECT().Watch(ctx).Return(watchResp)
-	disc.EXPECT().Watch(ctx).Return(watchRespReset).AnyTimes()
+
+	// first initialization, will return new session
+	runner.EXPECT().ResetDiscovery(ctx, true).Return(&mockMetaStoreSession{doneCh: doneCh}, nil)
+	runner.EXPECT().GetSnapshot().Return(snapshot)
+
+	// discovery watch returns an error, the discovery will be reset, but session keeps alive
+	runner.EXPECT().ResetDiscovery(ctx, false).Return(nil, nil)
+
+	// discovery session is done, reset discovery and session
+	runner.EXPECT().ResetDiscovery(ctx, true).Return(&mockMetaStoreSession{doneCh: doneCh}, nil)
+
+	runner.EXPECT().GetWatcher().Return(watchResp).AnyTimes()
 
 	router := &mockMessageRouter{peers: map[p2pImpl.NodeID]string{}}
 	s := &Server{
@@ -141,14 +153,9 @@ func TestDiscoveryKeepalive(t *testing.T) {
 		},
 		p2pMsgRouter: router,
 	}
-	var doneCh chan struct{}
-	discoveryConnectTime := atomic.NewInt64(0)
-	s.discoveryConnector = func(ctx context.Context) (metaStoreSession, error) {
-		doneCh = make(chan struct{}, 1)
-		mockSession := &mockMetaStoreSession{doneCh: doneCh}
-		s.discovery = disc
-		discoveryConnectTime.Add(1)
-		return mockSession, nil
+	s.initDiscoveryRunner = func() error {
+		s.discoveryRunner = runner
+		return nil
 	}
 
 	var wg sync.WaitGroup
@@ -167,10 +174,9 @@ func TestDiscoveryKeepalive(t *testing.T) {
 	}, time.Second, time.Millisecond*20)
 	require.Contains(t, peers, "uuid-1")
 	require.Contains(t, peers, "uuid-2")
-	require.Equal(t, int64(1), discoveryConnectTime.Load())
 
 	// check discovery watch can work as expected
-	watchResp <- srvdiscovery.WatchResp{
+	nodeUpdate := srvdiscovery.WatchResp{
 		AddSet: map[srvdiscovery.UUID]srvdiscovery.ServiceResource{
 			"uuid-3": {Addr: "127.0.0.1:10003"},
 			"uuid-4": {Addr: "127.0.0.1:10004"},
@@ -179,6 +185,8 @@ func TestDiscoveryKeepalive(t *testing.T) {
 			"uuid-2": {Addr: "127.0.0.1:10002"},
 		},
 	}
+	runner.EXPECT().ApplyWatchResult(nodeUpdate)
+	watchResp <- nodeUpdate
 	require.Eventually(t, func() bool {
 		peers = router.GetPeers()
 		return len(peers) == 3
@@ -189,22 +197,18 @@ func TestDiscoveryKeepalive(t *testing.T) {
 
 	// check will reconnect to discovery metastore when watch meets error
 	watchResp <- srvdiscovery.WatchResp{Err: stdErrors.New("mock discovery watch error")}
-	require.Eventually(t, func() bool {
-		return discoveryConnectTime.Load() == int64(2)
-	}, time.Second, time.Millisecond*20)
 
 	// check will reconnect to discovery metastore when metastore session is done
 	doneCh <- struct{}{}
-	require.Eventually(t, func() bool {
-		return discoveryConnectTime.Load() == int64(3)
-	}, time.Second, time.Millisecond*20)
 
 	// check the watch channel can be reset after error happens
-	watchRespReset <- srvdiscovery.WatchResp{
+	nodeUpdate = srvdiscovery.WatchResp{
 		AddSet: map[srvdiscovery.UUID]srvdiscovery.ServiceResource{
 			"uuid-2": {Addr: "127.0.0.1:10002"},
 		},
 	}
+	runner.EXPECT().ApplyWatchResult(nodeUpdate)
+	watchResp <- nodeUpdate
 	require.Eventually(t, func() bool {
 		peers = router.GetPeers()
 		return len(peers) == 4
