@@ -450,7 +450,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_lag_bucket{instance=~\"$instance\",task=~\"$task\"}[$interval])) by (le,instance,task))",
+          "expr": "histogram_quantile(0.90, sum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 90",
@@ -458,7 +458,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.95,\nsum(rate(dm_syncer_replication_lag_bucket{instance=~\"$instance\",task=~\"$task\"}[$interval])) by (le,instance,task))",
+          "expr": "histogram_quantile(0.95,\nsum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 95",
@@ -466,7 +466,7 @@
         },
         {
           "exemplar": true,
-          "expr": "histogram_quantile(0.99,\nsum(rate(dm_syncer_replication_lag_bucket{instance=~\"$instance\",task=~\"$task\"}[$interval])) by (le,instance,task))",
+          "expr": "histogram_quantile(0.99,\nsum(rate(dm_syncer_replication_lag_bucket{source_id=~\"$source\",task=~\"$task\"}[$interval])) by (le,task,source_id))",
           "hide": false,
           "interval": "",
           "legendFormat": "{{task}} - {{source_id}} - 99",
