@@ -53,6 +53,7 @@ var (
 	ErrMasterNotFound                 = errors.Normalize("master is not found: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterNotFound"))
 	ErrDuplicateWorkerID              = errors.Normalize("duplicate worker ID encountered: %s, report a bug", errors.RFCCodeText("DFLOW:ErrDuplicateWorkerID"))
 	ErrMasterClosed                   = errors.Normalize("master has been closed explicitly: master ID %s", errors.RFCCodeText("DFLOW:ErrMasterClosed"))
+	ErrMasterConcurrencyExceeded      = errors.Normalize("master has reached concurrency quota", errors.RFCCodeText("DFLOW:ErrMasterConcurrencyExceeded"))
 
 	ErrWorkerTypeNotFound = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound     = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
