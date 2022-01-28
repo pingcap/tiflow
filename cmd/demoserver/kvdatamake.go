@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -164,6 +165,7 @@ func DataService(ctx context.Context) {
 
 type DataRWServer struct {
 	ctx           context.Context
+	mu            sync.Mutex
 	fileWriterMap map[string]*bufio.Writer
 }
 
@@ -242,11 +244,14 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		default:
 			res, err := stream.Recv()
 			if err == nil {
+				//	fmt.Printf("write data %v ", res.FileName+res.GetKey())
 				fileName := res.FileName
 				if strings.TrimSpace(fileName) == "" {
 					continue
 				}
+				s.mu.Lock()
 				writer, ok := s.fileWriterMap[fileName]
+				s.mu.Unlock()
 				if !ok {
 					var file *os.File
 					_, err = os.Stat(fileName)
@@ -271,7 +276,6 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 							if err != nil {
 								return &ErrorInfo{info: "create the folder " + folder + " failed"}
 							}
-							fmt.Println(" append .")
 							log.L().Info("create the folder ",
 								zap.String("folder  ", folder))
 						}
@@ -284,19 +288,29 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					}
 					writer = bufio.NewWriter(file)
 					defer writer.Flush()
+					s.mu.Lock()
 					s.fileWriterMap[fileName] = writer
+					s.mu.Unlock()
 				}
 				_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
-				count++
+				fmt.Printf("writer the key %v \n", res.Key)
 
+				count++
 				if (count % FLUSHLEN) == 0 {
 					err = writer.Flush()
 				}
-				return err
+				if err != nil {
+					log.L().Info("write data failed  ",
+						zap.String("error   ", err.Error()))
+				}
+
 			} else if err == io.EOF {
+				fmt.Printf("receive the eof %v \n", res.Key)
+				s.mu.Lock()
 				for _, w := range s.fileWriterMap {
 					w.Flush()
 				}
+				s.mu.Unlock()
 				return stream.SendAndClose(&pb.WriteLinesResponse{})
 			}
 

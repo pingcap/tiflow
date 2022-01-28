@@ -9,6 +9,8 @@ import (
 	"syscall"
 
 	"github.com/hanfei1991/microcosm/executor"
+	_ "github.com/hanfei1991/microcosm/executor/cvsTask"
+	_ "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"

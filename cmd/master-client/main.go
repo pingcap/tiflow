@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/benchmark"
-	"github.com/hanfei1991/microcosm/lib/registry"
+	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -56,9 +56,9 @@ func main() {
 			resp, err := cliManager.ExecutorClient(model.ExecutorID(nodeID)).Send(context.TODO(), &client.ExecutorRequest{
 				Cmd: client.CmdDispatchTask,
 				Req: &pb.DispatchTaskRequest{
-					TaskTypeId: registry.WorkerTypeFakeMaster,
-					TaskConfig: []byte("{}"),
-					MasterId:   fmt.Sprintf("master-%d", i),
+					TaskTypeId: int64(lib.CvsJobMaster),
+					TaskConfig: []byte(`{"srcHost":"127.0.0.1:1234","srcDir":"data","dstHost":"127.0.0.1:1234","dstDir":"data1"}`),
+					MasterId:   uuid.New().String(), //  use a unique ID to force Init the master each time,
 					WorkerId:   uuid.New().String(),
 				},
 			})

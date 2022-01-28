@@ -25,7 +25,7 @@ type strPair struct {
 	secondStr string
 }
 
-type config struct {
+type Config struct {
 	SrcHost  string `json:"SrcHost"`
 	SrcDir   string `json:"SrcDir"`
 	DstHost  string `json:"DstHost"`
@@ -50,12 +50,12 @@ func init() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCvsTask(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &config{})
-	registry.NewRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
+	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
 }
 
 func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.MasterID, conf lib.WorkerConfig) *cvsTask {
-	cfg := conf.(*config)
+	cfg := conf.(*Config)
 	task := &cvsTask{
 		srcHost: cfg.SrcHost,
 		srcDir:  cfg.SrcDir,
@@ -74,6 +74,7 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		masterID,
 	)
 	base.Impl = task
+	task.BaseWorker = base
 	return task
 }
 
@@ -98,6 +99,8 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 
 // Tick is called on a fixed interval.
 func (task *cvsTask) Tick(ctx context.Context) error {
+	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
+
 	return nil
 }
 
@@ -139,9 +142,10 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 		linestr, err := reader.Recv()
 		if err != nil {
 			if err == io.EOF {
+				task.cancelFn()
 				break
 			}
-			log.L().Info("read data failed")
+			log.L().Info("read data failed", zap.Any("error:", err.Error()))
 			continue
 		}
 		strs := strings.Split(linestr.Linestr, ",")
@@ -170,21 +174,22 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		log.L().Info("call write data rpc failed ")
 		return err
 	}
-	timeout := time.NewTimer(time.Second * 100)
+
+	log.L().Info("enter the send func ", zap.Any(" id :", string(task.ID())))
 	for {
+
 		select {
-		case <-ctx.Done():
-			return nil
 		case kv := <-task.buffer:
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter++
 			if err != nil {
 				log.L().Info("call write data rpc failed ")
 			}
-		case <-timeout.C:
-			break
+		case <-ctx.Done():
+			return nil
 		default:
 			time.Sleep(time.Second)
 		}
+		time.Sleep(time.Microsecond * 10)
 	}
 }
