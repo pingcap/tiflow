@@ -90,7 +90,7 @@ function test_restart_relay_status() {
 		"relay" 1 \
 		"bound" 2
 
-	echo "》》》》》》》》》》》》》》》》》test test_restart_relay_status passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_restart_relay_status passed"
 }
 
 function test_cant_dail_upstream() {
@@ -124,7 +124,7 @@ function test_cant_dail_upstream() {
 		"query-status -s $SOURCE_ID1" \
 		"injected error" 1
 
-	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_upstream passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_upstream passed"
 }
 
 function test_cant_dail_downstream() {
@@ -164,7 +164,7 @@ function test_cant_dail_downstream() {
 	run_tidb_server 4000 $TIDB_PASSWORD
 	sleep 2
 
-	echo "》》》》》》》》》》》》》》》》》test test_cant_dail_downstream passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_downstream passed"
 }
 
 function test_kill_dump_connection() {
@@ -201,7 +201,7 @@ function test_kill_dump_connection() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"relayCatchUpMaster\": true" 1
-	echo "》》》》》》》》》》》》》》》》》test test_kill_dump_connection passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_kill_dump_connection passed"
 }
 
 function test_relay_operations() {
@@ -357,7 +357,7 @@ function test_relay_operations() {
 		"\"result\": true" 2
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	echo "》》》》》》》》》》》》》》》》》test test_relay_operations passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_relay_operations passed"
 }
 
 function run() {

@@ -447,11 +447,12 @@ func (s *Server) doClose() {
 	if s.closed.Load() {
 		return
 	}
+	// stop server in advance, stop receiving source bound and relay bound
+	s.cancel()
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
 	if w := s.getSourceWorker(false); w != nil {
 		w.Stop(true)
 	}
-	s.cancel()
 	s.wg.Wait()
 	s.closed.Store(true)
 }

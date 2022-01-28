@@ -7,8 +7,6 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function check_worker_ungraceful_stop_with_retry() {
-	all_matched=false
-
 	for ((k = 0; k < 10; k++)); do
 		sleep 1
 		echo "start check_worker_ungraceful_stop_with_retry times: $k"
@@ -25,18 +23,12 @@ function check_worker_ungraceful_stop_with_retry() {
 		if [ $num -lt 1 ]; then
 			continue
 		fi
-		all_matched=true
-		if $all_matched; then
-			echo "check_worker_ungraceful_stop_with_retry success after retry: $k"
-			break
-		fi
+		echo "check_worker_ungraceful_stop_with_retry success after retry: $k"
+		return 0
 	done
 
-	if ! $all_matched; then
-		echo "check_worker_ungraceful_stop_with_retry failed after retry"
-		exit 1
-	fi
-
+	echo "check_worker_ungraceful_stop_with_retry failed after retry"
+	exit 1
 }
 
 function run() {
