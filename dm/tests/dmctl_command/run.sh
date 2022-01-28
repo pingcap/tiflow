@@ -81,13 +81,8 @@ function run() {
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1 -w $WORKER1_NAME
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"list-member --name worker1" \
-		"\"stage\": \"bound\"" 1 \
-		"\"source\": \"mysql-replica-01\"" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-source create $WORK_DIR/source2.yaml -w $WORKER1_NAME" \
+		"operate-source create $WORK_DIR/source1.yaml -w $WORKER1_NAME" \
 		"\"result\": true" 2 \
 		"\"source\": \"mysql-replica-01\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
