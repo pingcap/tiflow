@@ -260,7 +260,7 @@ func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 	})
 }
 
-// Query writes debug info into the specified http writer
+// Query queries owner internal information.
 func (o *ownerImpl) Query(query *Query, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:    ownerJobTypeQuery,
