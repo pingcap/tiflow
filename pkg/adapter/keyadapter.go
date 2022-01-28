@@ -11,11 +11,11 @@ import (
 var (
 	MasterCampaignKey KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader")
 	// TODO: investigate whether we can merge MasterInfoKey and MasterMetaKey into one key
-	MasterInfoKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info")
-	MasterMetaKey          KeyAdapter = keyHexEncoderDecoder("/data-flow/master/meta")
-	ExecutorInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/executor/info")
-	JobKeyAdapter          KeyAdapter = keyHexEncoderDecoder("/data-flow/job")
-	TaskKeyAdapter         KeyAdapter = keyHexEncoderDecoder("/data-flow/task")
+	MasterInfoKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info")
+	MasterMetaKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/meta")
+	NodeInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/node/info")
+	JobKeyAdapter      KeyAdapter = keyHexEncoderDecoder("/data-flow/job")
+	TaskKeyAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/task")
 )
 
 type KeyAdapter interface {

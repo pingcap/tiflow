@@ -20,8 +20,8 @@ import (
 type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
 	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
-	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error)
-	RegisterExec(info *model.ExecutorInfo)
+	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
+	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
 }
 
@@ -113,10 +113,10 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 }
 
 // RegisterExec registers executor to both executor manager and resource manager
-func (e *ExecutorManagerImpl) RegisterExec(info *model.ExecutorInfo) {
+func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	log.L().Info("register executor", zap.Any("info", info))
 	exec := &Executor{
-		ExecutorInfo:   *info,
+		NodeInfo:       *info,
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
@@ -129,11 +129,11 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.ExecutorInfo) {
 
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
-func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.ExecutorInfo, error) {
+func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
 	log.L().Logger.Info("allocate new executor", zap.Stringer("req", req))
 
 	e.mu.Lock()
-	info := &model.ExecutorInfo{
+	info := &model.NodeInfo{
 		ID:         model.ExecutorID(e.idAllocator.AllocID()),
 		Addr:       req.Address,
 		Capability: int(req.Capability),
@@ -154,7 +154,7 @@ func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.Task
 
 // Executor records the status of an executor instance.
 type Executor struct {
-	model.ExecutorInfo
+	model.NodeInfo
 	Status model.ExecutorStatus
 
 	mu sync.Mutex
@@ -164,7 +164,7 @@ type Executor struct {
 }
 
 func (e *Executor) checkAlive() bool {
-	log.L().Logger.Info("check alive", zap.String("exec", string(e.ExecutorInfo.ID)))
+	log.L().Logger.Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

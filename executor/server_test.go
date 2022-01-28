@@ -148,8 +148,9 @@ func TestDiscoveryKeepalive(t *testing.T) {
 
 	router := &mockMessageRouter{peers: map[p2pImpl.NodeID]string{}}
 	s := &Server{
-		info: &model.ExecutorInfo{
-			ID: "uuid-1",
+		info: &model.NodeInfo{
+			Type: model.NodeTypeExecutor,
+			ID:   "uuid-1",
 		},
 		p2pMsgRouter: router,
 	}

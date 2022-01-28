@@ -34,7 +34,7 @@ func TestDiscoveryRunner(t *testing.T) {
 			metadata.NewMetaEtcd(client),
 			3,
 			time.Millisecond*50,
-			adapter.ExecutorInfoKeyAdapter.Encode(string(res.ID)),
+			adapter.NodeInfoKeyAdapter.Encode(string(res.ID)),
 			resStr,
 		)
 	}

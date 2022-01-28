@@ -85,7 +85,7 @@ func (dr *DiscoveryRunnerImpl) connectToEtcdDiscovery(
 	// snapshot to the new one.
 	old := dr.snapshot.Clone()
 	dr.discovery = NewEtcdSrvDiscovery(
-		dr.etcdCli, adapter.ExecutorInfoKeyAdapter, dr.watchDur)
+		dr.etcdCli, adapter.NodeInfoKeyAdapter, dr.watchDur)
 
 	if len(old) > 0 {
 		dr.discovery.CopySnapshot(old)

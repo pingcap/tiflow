@@ -24,7 +24,7 @@ func init() {
 func TestEtcdDiscoveryAPI(t *testing.T) {
 	t.Parallel()
 
-	keyAdapter := adapter.ExecutorInfoKeyAdapter
+	keyAdapter := adapter.NodeInfoKeyAdapter
 	ctx, cancel := context.WithCancel(context.Background())
 	_, _, client, cleanFn := test.PrepareEtcd(t, "discovery-test1")
 	defer cleanFn()

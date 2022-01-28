@@ -44,7 +44,7 @@ type Server struct {
 	sch         *runtime.Runtime
 	workerRtm   *worker.Runtime
 	msgServer   *p2p.MessageRPCService
-	info        *model.ExecutorInfo
+	info        *model.NodeInfo
 
 	lastHearbeatTime time.Time
 
@@ -447,7 +447,8 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	s.info = &model.ExecutorInfo{
+	s.info = &model.NodeInfo{
+		Type: model.NodeTypeExecutor,
 		ID:   model.ExecutorID(resp.ExecutorId),
 		Addr: s.cfg.WorkerAddr,
 	}

@@ -11,8 +11,8 @@ type (
 	UUID = string
 )
 
-// ServiceResource alias to ExecutorInfo
-type ServiceResource = model.ExecutorInfo
+// ServiceResource alias to NodeInfo
+type ServiceResource = model.NodeInfo
 
 // WatchResp defines the change set from a Watch API of Discovery interface
 type WatchResp struct {

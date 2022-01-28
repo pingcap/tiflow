@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
@@ -49,6 +50,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		etcd:            etcd,
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
+		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
 	err := s.reset(ctx)
 	require.Nil(t, err)
@@ -93,6 +95,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		etcd:            etcd,
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
+		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
 
 	// simulate stale campaign data
@@ -141,6 +144,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		cfg:        cfg,
 		etcd:       etcd,
 		etcdClient: client,
+		info:       &model.NodeInfo{ID: model.DeployNodeID(name)},
 	}
 
 	// Simulate another node campaigns to be leader, note we use another node

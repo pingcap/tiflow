@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -59,7 +60,8 @@ type Server struct {
 	executorManager ExecutorManager
 	jobManager      JobManager
 	//
-	cfg *Config
+	cfg  *Config
+	info *model.NodeInfo
 
 	msgService *p2p.MessageRPCService
 
@@ -84,8 +86,15 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 
+	info := &model.NodeInfo{
+		Type: model.NodeTypeServerMaster,
+		ID:   model.DeployNodeID(cfg.Etcd.Name),
+		Addr: cfg.AdvertiseAddr,
+	}
+
 	server := &Server{
 		cfg:             cfg,
+		info:            info,
 		executorManager: executorManager,
 		initialized:     *atomic.NewBool(false),
 		testCtx:         ctx,
@@ -407,8 +416,20 @@ func (s *Server) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
+
+	// TODO: server master membership can share the same key with node info
 	_, err = s.etcdClient.Put(ctx, adapter.MasterInfoKey.Encode(s.name()),
 		s.cfg.String(), clientv3.WithLease(sess.Lease()))
+	if err != nil {
+		return errors.Wrap(errors.ErrEtcdAPIError, err)
+	}
+
+	// register NodeInfo key used in service discovery
+	value, err := s.info.ToJSON()
+	if err != nil {
+		return errors.Wrap(errors.ErrMasterNewServer, err)
+	}
+	_, err = s.etcdClient.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(sess.Lease()))
 	if err != nil {
 		return errors.Wrap(errors.ErrEtcdAPIError, err)
 	}
