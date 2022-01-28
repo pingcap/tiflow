@@ -167,8 +167,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			// ProgressNotify implies no new events.
 			if response.IsProgressNotify() {
-				log.Debug("Etcd progress notification",
-					zap.Int64("revision", response.Header.GetRevision()))
+				//log.Debug("Etcd progress notification",
+				//	zap.Int64("revision", response.Header.GetRevision()))
 				// Note that we don't need to update the revision here, and we
 				// should not do so, because the revision of the progress notification
 				// may not satisfy the strict monotonicity we have expected.
@@ -438,20 +438,20 @@ func logEtcdOps(ops []clientv3.Op, committed bool) {
 	if committed && (log.GetLevel() != zapcore.DebugLevel || len(ops) == 0) {
 		return
 	}
-	logFn := log.Debug
-	if !committed {
-		logFn = log.Info
-	}
-
-	logFn("[etcd worker] ==========Update State to ETCD==========")
-	for _, op := range ops {
-		if op.IsDelete() {
-			logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
-		} else {
-			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
-		}
-	}
-	logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+	//logFn := log.Debug
+	//if !committed {
+	//	logFn = log.Info
+	//}
+	//
+	////logFn("[etcd worker] ==========Update State to ETCD==========")
+	////for _, op := range ops {
+	////	if op.IsDelete() {
+	////		logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+	////	} else {
+	////		logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+	////	}
+	////}
+	////logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
 }
 
 func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {

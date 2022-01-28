@@ -385,9 +385,9 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			client: streamClient,
 			conn:   conn,
 		}
-		log.Debug("created stream to store",
-			zap.String("addr", addr),
-			zap.String("changefeed", c.changefeed))
+		//log.Debug("created stream to store",
+		//	zap.String("addr", addr),
+		//	zap.String("changefeed", c.changefeed))
 		return nil
 	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(2), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	return
@@ -509,9 +509,9 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Debug("event feed started",
-		zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts),
-		zap.String("changefeed", s.client.changefeed))
+	//log.Debug("event feed started",
+	//	zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts),
+	//	zap.String("changefeed", s.client.changefeed))
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -672,10 +672,10 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // error handling. This function is non blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
-	log.Debug("region failed",
-		zap.Uint64("regionID", errorInfo.verID.GetID()),
-		zap.Error(errorInfo.err),
-		zap.String("changefeed", s.client.changefeed))
+	//log.Debug("region failed",
+	//	zap.Uint64("regionID", errorInfo.verID.GetID()),
+	//	zap.Error(errorInfo.err),
+	//	zap.String("changefeed", s.client.changefeed))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
@@ -865,9 +865,9 @@ func (s *eventFeedSession) dispatchRequest(
 			s.regionChSizeGauge.Dec()
 		}
 
-		log.Debug("dispatching region",
-			zap.String("changefeed", s.client.changefeed),
-			zap.Uint64("regionID", sri.verID.GetID()))
+		//log.Debug("dispatching region",
+		//	zap.String("changefeed", s.client.changefeed),
+		//	zap.Uint64("regionID", sri.verID.GetID()))
 
 		// Send a resolved ts to event channel first, for two reasons:
 		// 1. Since we have locked the region range, and have maintained correct
@@ -956,10 +956,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				)
 				return err
 			}
-			log.Debug("ScanRegions",
-				zap.Stringer("span", nextSpan),
-				zap.Reflect("regions", metas),
-				zap.String("changefeed", s.client.changefeed))
+			//log.Debug("ScanRegions",
+			//	zap.Stringer("span", nextSpan),
+			//	zap.Reflect("regions", metas),
+			//	zap.String("changefeed", s.client.changefeed))
 			return nil
 		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if retryErr != nil {
@@ -972,19 +972,19 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Debug("get partialSpan",
-				zap.Stringer("span", partialSpan),
-				zap.Uint64("regionID", region.Id),
-				zap.String("changefeed", s.client.changefeed))
+			//log.Debug("get partialSpan",
+			//	zap.Stringer("span", partialSpan),
+			//	zap.Uint64("regionID", region.Id),
+			//	zap.String("changefeed", s.client.changefeed))
 
 			nextSpan.Start = region.EndKey
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)
-			log.Debug("partialSpan scheduled",
-				zap.Stringer("span", partialSpan),
-				zap.Uint64("regionID", region.Id),
-				zap.String("changefeed", s.client.changefeed))
+			//log.Debug("partialSpan scheduled",
+			//	zap.Stringer("span", partialSpan),
+			//	zap.Uint64("regionID", region.Id),
+			//	zap.String("changefeed", s.client.changefeed))
 
 			// return if no more regions
 			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -1180,12 +1180,12 @@ func (s *eventFeedSession) receiveFromStream(
 		})
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
-				log.Debug(
-					"receive from stream canceled",
-					zap.String("changefeed", s.client.changefeed),
-					zap.String("addr", addr),
-					zap.Uint64("storeID", storeID),
-				)
+				//log.Debug(
+				//	"receive from stream canceled",
+				//	zap.String("changefeed", s.client.changefeed),
+				//	zap.String("addr", addr),
+				//	zap.Uint64("storeID", storeID),
+				// )
 			} else {
 				log.Warn(
 					"failed to receive from stream",
