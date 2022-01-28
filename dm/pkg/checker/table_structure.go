@@ -23,6 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/errors"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -32,7 +35,6 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -75,15 +77,11 @@ func (o *incompatibilityOption) String() string {
 // In generally we need to check definitions of columns, constraints and table options.
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
-	dbs           map[string]*sql.DB
-	tableMap      map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
-	checkWg       sync.WaitGroup
-	reMu          sync.Mutex
-	firstSourceID string
-	inCh          chan *checkItem
-	errCh         chan error
-	cancel        context.CancelFunc
-	dumpThreads   int
+	dbs         map[string]*sql.DB
+	tableMap    map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
+	reMu        sync.Mutex
+	inCh        chan *checkItem
+	dumpThreads int
 }
 
 // NewTablesChecker returns a RealChecker.
@@ -94,7 +92,6 @@ func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Tabl
 		dumpThreads: dumpThreads,
 	}
 	c.inCh = make(chan *checkItem, dumpThreads)
-	c.errCh = make(chan error, dumpThreads)
 	return c
 }
 
@@ -107,34 +104,26 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	startTime := time.Now()
-
-	for sourceID := range c.tableMap {
-		c.firstSourceID = sourceID
-		break
-	}
-
-	checkCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	c.cancel = cancel
-
 	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
 	}
-
+	eg, checkCtx := errgroup.WithContext(ctx)
 	for i := 0; i < concurrency; i++ {
-		c.checkWg.Add(1)
-		go c.checkTable(checkCtx, r)
+		eg.Go(func() error {
+			return c.checkTable(checkCtx, r)
+		})
 	}
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
-
 	close(c.inCh)
-	c.checkWg.Wait()
-	close(c.errCh)
+	if err := eg.Wait(); err != nil {
+		c.reMu.Lock()
+		markCheckError(r, err)
+		c.reMu.Unlock()
+	}
 
-	handleErr(checkCtx, c.errCh, &c.reMu, r)
 	log.L().Logger.Info("check table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
@@ -144,31 +133,26 @@ func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
 
-func (c *TablesChecker) checkTable(ctx context.Context, r *Result) {
-	defer c.checkWg.Done()
-	sourceID := c.firstSourceID
-	p, err := dbutil.GetParserForDB(ctx, c.dbs[sourceID])
-	if err != nil {
-		c.errCh <- err
-		c.cancel()
-		return
-	}
+func (c *TablesChecker) checkTable(ctx context.Context, r *Result) error {
+	var (
+		sourceID string
+		p        *parser.Parser
+		err      error
+	)
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case checkItem, ok := <-c.inCh:
 			if !ok {
-				return
+				return nil
 			}
 			table := checkItem.table
-			if sourceID != checkItem.sourceID {
+			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
 				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 				if err != nil {
-					c.errCh <- err
-					c.cancel()
-					return
+					return err
 				}
 			}
 			db := c.dbs[checkItem.sourceID]
@@ -178,16 +162,12 @@ func (c *TablesChecker) checkTable(ctx context.Context, r *Result) {
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				c.errCh <- err
-				c.cancel()
-				break
+				return err
 			}
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				c.errCh <- err
-				c.cancel()
-				return
+				return err
 			}
 			opts := c.checkAST(ctStmt)
 			for _, opt := range opts {
@@ -312,10 +292,7 @@ type ShardingTablesChecker struct {
 	firstTable                   *filter.Table
 	firstSourceID                string
 	inCh                         chan *checkItem
-	errCh                        chan error
-	checkWg                      sync.WaitGroup
 	reMu                         sync.Mutex
-	cancel                       context.CancelFunc
 	dumpThreads                  int
 }
 
@@ -330,7 +307,6 @@ func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tabl
 		dumpThreads:                  dumpThreads,
 	}
 	c.inCh = make(chan *checkItem, dumpThreads)
-	c.errCh = make(chan error, dumpThreads)
 
 	return c
 }
@@ -377,65 +353,53 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 
-	checkCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	c.cancel = cancel
-
 	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
 	}
-
+	eg, checkCtx := errgroup.WithContext(ctx)
 	for i := 0; i < concurrency; i++ {
-		c.checkWg.Add(1)
-		go c.checkShardingTable(checkCtx, r)
+		eg.Go(func() error {
+			return c.checkShardingTable(checkCtx, r)
+		})
 	}
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
-
 	close(c.inCh)
-	c.checkWg.Wait()
-	close(c.errCh)
+	if err := eg.Wait(); err != nil {
+		c.reMu.Lock()
+		markCheckError(r, err)
+		c.reMu.Unlock()
+	}
 
-	handleErr(checkCtx, c.errCh, &c.reMu, r)
 	log.L().Logger.Info("check sharding table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
 }
 
-func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Result) {
+func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Result) error {
 	var (
-		sourceID = c.firstSourceID
+		sourceID string
 		p        *parser.Parser
+		err      error
 	)
-	defer func() {
-		c.checkWg.Done()
-	}()
-	p, err := dbutil.GetParserForDB(ctx, c.dbs[sourceID])
-	if err != nil {
-		c.errCh <- err
-		c.cancel()
-		return
-	}
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case checkItem, ok := <-c.inCh:
 			if !ok {
-				return
+				return nil
 			}
 			table := checkItem.table
-			if sourceID != checkItem.sourceID {
+			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
 				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
 				if err != nil {
 					c.reMu.Lock()
 					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
 					c.reMu.Unlock()
-					c.errCh <- err
-					c.cancel()
-					return
+					return err
 				}
 			}
 
@@ -445,29 +409,23 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				c.errCh <- err
-				c.cancel()
-				return
+				return err
 			}
 
 			info, err := dbutil.GetTableInfoBySQL(statement, p)
 			if err != nil {
-				c.errCh <- errors.Annotatef(err, "statement: %s", statement)
-				c.cancel()
-				return
+				return errors.Annotatef(err, "statement: %s", statement)
 			}
 
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
-				c.errCh <- err
-				c.cancel()
-				return
+				return err
 			}
 
 			if c.checkAutoIncrementPrimaryKey {
 				passed := c.checkAutoIncrementKey(sourceID, table.Schema, table.Name, ctStmt, info, r)
 				if !passed {
-					return
+					return nil
 				}
 			}
 
@@ -479,7 +437,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
 				r.Instruction = "please set same table structure for sharding tables"
 				c.reMu.Unlock()
-				return
+				return nil
 			}
 		}
 	}
@@ -662,22 +620,6 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table,
 				log.L().Logger.Warn("ctx canceled before input tables completely")
 				return
 			}
-		}
-	}
-}
-
-func handleErr(ctx context.Context, errCh chan error, mu *sync.Mutex, r *Result) {
-	for {
-		select {
-		case err, ok := <-errCh:
-			if !ok {
-				return
-			}
-			mu.Lock()
-			markCheckError(r, err)
-			mu.Unlock()
-		case <-ctx.Done():
-			return
 		}
 	}
 }
