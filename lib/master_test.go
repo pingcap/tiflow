@@ -7,16 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
+
+	"github.com/hanfei1991/microcosm/pkg/adapter"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
 const (
@@ -53,7 +51,7 @@ func TestMasterInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("my-master")
+	master := NewMockMasterImpl(masterName)
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -91,7 +89,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("my-master")
+	master := NewMockMasterImpl(masterName)
 	prepareMeta(ctx, t, master.metaKVClient)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
@@ -131,7 +129,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	master := NewMockMasterImpl("my-master")
+	master := NewMockMasterImpl(masterName)
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
@@ -140,47 +138,16 @@ func TestMasterCreateWorker(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: 100,
-	}}}
-	master.serverMasterClient.On(
-		"ScheduleTask",
-		mock.Anything,
-		expectedSchedulerReq,
-		mock.Anything).Return(
-		&pb.TaskSchedulerResponse{
-			Schedule: map[int64]*pb.ScheduleResult{
-				0: {
-					ExecutorId: executorNodeID1,
-				},
-			},
-		}, nil)
+	MockBaseMasterCreateWorker(
+		t,
+		master.BaseMaster,
+		workerTypePlaceholder,
+		&dummyConfig{param: 1},
+		100,
+		masterName,
+		workerID1,
+		executorNodeID1)
 
-	mockExecutorClient := &client.MockExecutorClient{}
-	err = master.executorClientManager.AddExecutorClient(executorNodeID1, mockExecutorClient)
-	require.NoError(t, err)
-
-	configBytes, err := json.Marshal(&dummyConfig{param: 1})
-	require.NoError(t, err)
-
-	mockExecutorClient.On("Send",
-		mock.Anything,
-		&client.ExecutorRequest{
-			Cmd: client.CmdDispatchTask,
-			Req: &pb.DispatchTaskRequest{
-				TaskTypeId: int64(workerTypePlaceholder),
-				TaskConfig: configBytes,
-				MasterId:   "my-master",
-				WorkerId:   string(workerID1),
-			},
-		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
-		ErrorCode: 1,
-	}}, nil)
-
-	master.uuidGen.(*uuid.MockGenerator).Push(string(workerID1))
 	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
@@ -190,12 +157,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
-	err = master.messageHandlerManager.InvokeHandler(t, HeartbeatPingTopic(masterName, workerID1), executorNodeID1, &HeartbeatPingMessage{
-		SendTime:     clock.MonoNow(),
-		FromWorkerID: workerID,
-		Epoch:        master.BaseMaster.currentEpoch.Load(),
-	})
-	require.NoError(t, err)
+	MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterName, workerID1, executorNodeID1)
 
 	master.On("Tick", mock.Anything).Return(nil)
 	err = master.Poll(ctx)

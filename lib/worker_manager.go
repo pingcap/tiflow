@@ -6,13 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // workerManager is for private use by BaseMaster.
@@ -95,6 +96,7 @@ func (m *workerManagerImpl) Tick(
 		// has not sent the Pong yet.
 		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
 			workerInfo.justOnlined = false
+			workerInfo.status.Code = WorkerStatusInit
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
 		}
 
