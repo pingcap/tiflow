@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
@@ -256,9 +257,15 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 func isRetryableError(err error) bool {
 	err = errors.Cause(err)
-	return cerrors.ErrEtcdTryAgain.Equal(err) ||
-		cerrors.ErrReachMaxTry.Equal(err) ||
-		context.DeadlineExceeded == err
+	if cerrors.ErrEtcdTryAgain.Equal(err) ||
+		context.DeadlineExceeded == err {
+		return true
+	} else {
+		// When encountering an abnormal connection with etcd, the worker will keep retrying
+		// until the session is done.
+		_, ok := err.(rpctypes.EtcdError)
+		return ok
+	}
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
@@ -409,18 +416,18 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 	worker.metrics.metricEtcdTxnDuration.Observe(costTime.Seconds())
 	if err != nil {
-		return errors.Trace(err)
+		return cerrors.WrapError(cerrors.ErrEtcdTryAgain, err)
 	}
 
 	logEtcdOps(opsThen, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil
+	} else {
+		// Logs the conditions for the failed Etcd transaction.
+		worker.logEtcdCmps(cmps)
+		return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 	}
-
-	// Logs the conditions for the failed Etcd transaction.
-	worker.logEtcdCmps(cmps)
-	return cerrors.ErrEtcdTryAgain.GenWithStackByArgs()
 }
 
 func (worker *EtcdWorker) applyUpdates() error {
