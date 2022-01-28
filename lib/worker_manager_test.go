@@ -281,3 +281,54 @@ func TestWorkerTimedOut(t *testing.T) {
 		Code: WorkerStatusError,
 	}, handle.Status())
 }
+
+func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
+
+	msgSender := p2p.NewMockMessageSender()
+
+	manager := newWorkerManager(masterName, true, 1).(*workerManagerImpl)
+	manager.clock = clock.NewMock()
+	manager.clock.(*clock.Mock).Set(time.Now())
+
+	err := manager.AddWorker(workerID1, executorNodeID1, WorkerStatusInit)
+	require.NoError(t, err)
+
+	offlined, onlined := manager.Tick(ctx, msgSender)
+	require.Empty(t, offlined)
+	require.Empty(t, onlined)
+
+	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+		SendTime:     manager.clock.Mono(),
+		FromWorkerID: workerID1,
+		Epoch:        1,
+	}, executorNodeID1)
+	require.NoError(t, err)
+
+	info, ok := manager.GetWorkerInfo(workerID1)
+	require.True(t, ok)
+	require.True(t, info.hasPendingHeartbeat)
+
+	msgSender.SetBlocked(true)
+	offlined, onlined = manager.Tick(ctx, msgSender)
+	require.Len(t, onlined, 1)
+	require.Empty(t, offlined)
+
+	manager.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration * 2)
+	offlined, onlined = manager.Tick(ctx, msgSender)
+	require.Len(t, offlined, 1)
+	require.Empty(t, onlined)
+	require.Len(t, manager.tombstones, 1)
+
+	workers := manager.GetWorkers()
+	require.Len(t, workers, 1)
+	require.Contains(t, workers, workerID1)
+	handle := workers[workerID1]
+	require.True(t, handle.IsTombStone())
+	require.Equal(t, &WorkerStatus{
+		Code: WorkerStatusError,
+	}, handle.Status())
+}

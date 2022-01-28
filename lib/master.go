@@ -241,20 +241,22 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 		}
 
 		offlinedWorkers, onlinedWorkers := m.workerManager.Tick(ctx, m.messageRouter)
-		for _, workerInfo := range offlinedWorkers {
-			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
-			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
+		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
+		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
 			log.L().Info("worker is online", zap.Any("worker-info", workerInfo))
 
 			handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
 			err := m.Impl.OnWorkerOnline(handle)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		for _, workerInfo := range offlinedWorkers {
+			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
+			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
 			if err != nil {
 				return errors.Trace(err)
 			}

@@ -8,8 +8,9 @@ import (
 )
 
 type MockMessageSender struct {
-	mu     sync.Mutex
-	msgBox map[msgBoxIndex]deque.Deque
+	mu        sync.Mutex
+	msgBox    map[msgBoxIndex]deque.Deque
+	isBlocked bool
 }
 
 func NewMockMessageSender() *MockMessageSender {
@@ -26,6 +27,10 @@ type msgBoxIndex struct {
 func (m *MockMessageSender) SendToNode(_ context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.isBlocked {
+		return false, nil
+	}
 
 	q := m.getQueue(targetNodeID, topic)
 	q.PushBack(message)
@@ -58,4 +63,11 @@ func (m *MockMessageSender) getQueue(target NodeID, topic Topic) deque.Deque {
 	}
 
 	return q
+}
+
+func (m *MockMessageSender) SetBlocked(isBlocked bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.isBlocked = isBlocked
 }

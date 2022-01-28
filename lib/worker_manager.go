@@ -90,15 +90,25 @@ func (m *workerManagerImpl) Tick(
 
 	// respond to worker heartbeats
 	for workerID, workerInfo := range m.workerInfos {
-		if !workerInfo.hasPendingHeartbeat {
-			if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
-				offlinedWorkers = append(offlinedWorkers, workerInfo)
-				delete(m.workerInfos, workerID)
+		// `justOnlined` indicates that the online event has not been notified,
+		// and `hasPendingHeartbeat` indicates that we have received a heartbeat and
+		// has not sent the Pong yet.
+		if workerInfo.justOnlined && workerInfo.hasPendingHeartbeat {
+			workerInfo.justOnlined = false
+			onlinedWorkers = append(onlinedWorkers, workerInfo)
+		}
 
-				statusCloned := workerInfo.status
-				statusCloned.Code = WorkerStatusError
-				m.tombstones[workerID] = &statusCloned
-			}
+		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
+			offlinedWorkers = append(offlinedWorkers, workerInfo)
+			delete(m.workerInfos, workerID)
+
+			statusCloned := workerInfo.status
+			statusCloned.Code = WorkerStatusError
+			m.tombstones[workerID] = &statusCloned
+		}
+
+		if !workerInfo.hasPendingHeartbeat {
+			// No heartbeat to respond to.
 			continue
 		}
 		reply := &HeartbeatPongMessage{
@@ -122,12 +132,8 @@ func (m *workerManagerImpl) Tick(
 				zap.Any("message", reply))
 			continue
 		}
+		// We have sent the Pong, mark it as such.
 		workerInfo.hasPendingHeartbeat = false
-
-		if workerInfo.justOnlined {
-			workerInfo.justOnlined = false
-			onlinedWorkers = append(onlinedWorkers, workerInfo)
-		}
 	}
 	return
 }
