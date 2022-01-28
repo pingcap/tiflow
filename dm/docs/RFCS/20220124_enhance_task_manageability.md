@@ -15,7 +15,7 @@ The main purpose of this change is to address the root cause of problems like [#
 
 ![dm new task lifecycle](../media/dm-new-task-lifecycle.png)
 
-This is mainly achieved by adding a new `create task` action to create a new task in a stopped state, rather than directly creating and starting a task with `start-task` .
+This is mainly achieved by adding a new `create task` action to create a new task in a stopped state, rather than directly creating and starting a task with `start-task` action.
 
 ## Goals
 
@@ -27,7 +27,7 @@ This is mainly achieved by adding a new `create task` action to create a new tas
 
 New syntax of dmctl is `dmctl [resource type] [command] [flags]`
 
-where command, `resource type`, `command` and `flags` are:
+where `resource type`, `command` and `flags` are:
 
 - `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types.
 
