@@ -81,6 +81,7 @@ type TablesChecker struct {
 	tableMap    map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
 	reMu        sync.Mutex
 	inCh        chan *checkItem
+	optCh       chan *incompatibilityOption
 	dumpThreads int
 }
 
@@ -92,6 +93,7 @@ func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Tabl
 		dumpThreads: dumpThreads,
 	}
 	c.inCh = make(chan *checkItem, dumpThreads)
+	c.optCh = make(chan *incompatibilityOption, dumpThreads)
 	return c
 }
 
@@ -118,6 +120,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
 	close(c.inCh)
+	go c.handleOpts(checkCtx, r)
 	if err := eg.Wait(); err != nil {
 		c.reMu.Lock()
 		markCheckError(r, err)
@@ -131,6 +134,34 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 // Name implements RealChecker interface.
 func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
+}
+
+func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case opt := <-c.optCh:
+			tableMsg := "table " + opt.tableID + " "
+			c.reMu.Lock()
+			switch opt.state {
+			case StateWarning:
+				if r.State != StateFailure {
+					r.State = StateWarning
+				}
+				e := NewError(tableMsg + opt.errMessage)
+				e.Severity = StateWarning
+				e.Instruction = opt.instruction
+				r.Errors = append(r.Errors, e)
+			case StateFailure:
+				r.State = StateFailure
+				e := NewError(tableMsg + opt.errMessage)
+				e.Instruction = opt.instruction
+				r.Errors = append(r.Errors, e)
+			}
+			c.reMu.Unlock()
+		}
+	}
 }
 
 func (c *TablesChecker) checkTable(ctx context.Context, r *Result) error {
@@ -172,24 +203,7 @@ func (c *TablesChecker) checkTable(ctx context.Context, r *Result) error {
 			opts := c.checkAST(ctStmt)
 			for _, opt := range opts {
 				opt.tableID = table.String()
-				tableMsg := "table " + opt.tableID + " "
-				c.reMu.Lock()
-				switch opt.state {
-				case StateWarning:
-					if r.State != StateFailure {
-						r.State = StateWarning
-					}
-					e := NewError(tableMsg + opt.errMessage)
-					e.Severity = StateWarning
-					e.Instruction = opt.instruction
-					r.Errors = append(r.Errors, e)
-				case StateFailure:
-					r.State = StateFailure
-					e := NewError(tableMsg + opt.errMessage)
-					e.Instruction = opt.instruction
-					r.Errors = append(r.Errors, e)
-				}
-				c.reMu.Unlock()
+				c.optCh <- opt
 			}
 		}
 	}
