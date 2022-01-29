@@ -231,7 +231,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// errors can be quickly obtained.
 	// In the scenario that kafka cluster is down, this would cost at most around
 	// 750ms to get known that.
-	config.Metadata.Retry.Max = 3
+	config.Metadata.Retry.Max = 1
 	config.Metadata.Retry.Backoff = 250 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
 	// cluster (all brokers are unreachable or unresponsive) can take up to
@@ -260,7 +260,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	config.Net.DialTimeout = 10 * time.Second
 	config.Net.WriteTimeout = 10 * time.Second
-	config.Net.ReadTimeout = 10 * time.Second
+	config.Net.ReadTimeout = 5 * time.Second
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes

@@ -23,7 +23,6 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.10.0
-	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
 	github.com/go-mysql-org/go-mysql v1.4.1-0.20211217061939-06f932768788
@@ -79,6 +78,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	github.com/xdg/stringprep v1.0.3 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
@@ -98,6 +98,8 @@ require (
 )
 
 replace (
+	github.com/Shopify/sarama v1.27.2 => /Users/edison/go/sarama
+
 	// Fix CVE-2020-26160.
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
 	// cloud.google.com/go/storage will upgrade grpc to v1.40.0
