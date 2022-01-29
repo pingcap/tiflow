@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -27,6 +28,7 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
+		fmt.Print(err)
 		os.Exit(2)
 	}
 

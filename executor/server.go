@@ -439,7 +439,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	}
 	log.L().Logger.Info("master client init successful")
 	registerReq := &pb.RegisterExecutorRequest{
-		Address:    s.cfg.WorkerAddr,
+		Address:    s.cfg.AdvertiseAddr,
 		Capability: 100,
 	}
 

@@ -177,6 +177,11 @@ func (c *Config) Parse(arguments []string) error {
 	if c.PollConcurrency == 0 {
 		c.PollConcurrency = runtime.NumCPU()
 	}
+
+	if c.AdvertiseAddr == "" {
+		c.AdvertiseAddr = c.WorkerAddr
+	}
+
 	return nil
 }
 

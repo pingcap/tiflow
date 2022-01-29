@@ -106,7 +106,7 @@ func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string) {
 func (c *MasterClientImpl) init(ctx context.Context, urls []string) error {
 	c.UpdateClients(ctx, urls)
 	if len(c.clients) == 0 {
-		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", c.urls)
+		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
 	}
 	return nil
 }
