@@ -87,13 +87,39 @@ func TestPrepareDML(t *testing.T) {
 			values:   [][]interface{}{{1, 1}},
 			rowCount: 1,
 		},
-	}}
+	}, {
+		input: []*model.RowChangedEvent{
+			{
+				StartTs:  418658114257813516,
+				CommitTs: 418658114257813517,
+				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+				Columns: []*model.Column{nil, {
+					Name:  "a1",
+					Type:  mysql.TypeLong,
+					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				}, {
+					Name:  "a3",
+					Type:  mysql.TypeLong,
+					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				}},
+				IndexColumns: [][]int{{1, 2}},
+			},
+		},
+		expected: &preparedDMLs{
+			sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+			values:   [][]interface{}{{2, 2}},
+			rowCount: 1,
+		},
+	},
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ms := newMySQLSink4Test(ctx, t)
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		dmls := ms.prepareDMLs(tc.input, 0, 0)
-		require.Equal(t, tc.expected, dmls, tc.expected, fmt.Sprintf("%d", i))
+		require.Equal(t, tc.expected, dmls)
 	}
 }
 
