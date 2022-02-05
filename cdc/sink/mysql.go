@@ -667,8 +667,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				}
 			} else {
 				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-				sqls = append(sqls, query)
-				values = append(values, args)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
