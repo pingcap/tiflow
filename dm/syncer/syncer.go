@@ -2952,7 +2952,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist            bool
 		shouldTableExistNum          int  // tableNames[:shouldTableExistNum] should exist
 		shouldRefTableExistNum       int  // tableNames[1:shouldTableExistNum] should exist, since first one is "caller table"
-		tryFetchDownstreamTable      bool // to make sure if not exists will execute correctly
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
@@ -2978,7 +2977,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist = true
 		// for CREATE TABLE LIKE/AS, the reference tables should exist
 		shouldRefTableExistNum = len(srcTables)
-		tryFetchDownstreamTable = true
 	case *ast.DropTableStmt:
 		shouldExecDDLOnSchemaTracker = true
 		shouldReTrackDownstreamIndex = true
@@ -3038,11 +3036,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		if _, err := s.getTableInfo(ec.tctx, srcTables[i], targetTables[i]); err != nil {
 			return err
 		}
-	}
-
-	if tryFetchDownstreamTable {
-		// ignore table not exists error, just try to fetch table from downstream.
-		_, _ = s.getTableInfo(ec.tctx, srcTables[0], targetTables[0])
 	}
 
 	if shouldExecDDLOnSchemaTracker {

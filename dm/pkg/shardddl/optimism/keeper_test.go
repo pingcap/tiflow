@@ -315,41 +315,47 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	}
 
 	// adds new tables.
-	tk.Update(st21)
-	//	c.Assert(tk.Update(st21), IsTrue)
-	//	tts = tk.FindTables(task2, downSchema, downTable)
-	//	c.Assert(tts, HasLen, 1)
-	//	c.Assert(tts[0], DeepEquals, tt21)
+	addTables, dropTables := tk.Update(st21)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 0)
+	tts = tk.FindTables(task2, downSchema, downTable)
+	c.Assert(tts, HasLen, 1)
+	c.Assert(tts[0], DeepEquals, tt21)
 
 	// updates/appends new tables.
-	tk.Update(st22)
-	//	c.Assert(tk.Update(st22), IsTrue)
-	// tts = tk.FindTables(task2, downSchema, downTable)
-	// c.Assert(tts, HasLen, 1)
-	// c.Assert(tts[0], DeepEquals, tt22)
-	// for schema, tables := range tt22.UpTables {
-	// for table := range tables {
-	// c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsTrue)
-	// }
-	// }
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 0)
+	tts = tk.FindTables(task2, downSchema, downTable)
+	c.Assert(tts, HasLen, 1)
+	c.Assert(tts[0], DeepEquals, tt22)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// deletes tables.
 	st22.IsDeleted = true
-	tk.Update(st22)
-	//	c.Assert(tk.Update(st22), IsTrue)
-	//	c.Assert(tk.FindTables(task2, downSchema, downTable), IsNil)
-	//	for schema, tables := range tt22.UpTables {
-	//		for table := range tables {
-	//			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsFalse)
-	//		}
-	//	}
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 2)
+	c.Assert(tk.FindTables(task2, downSchema, downTable), IsNil)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsFalse)
+		}
+	}
 
-	tk.Update(st22)
 	// try to delete, but not exist.
-	//	c.Assert(tk.Update(st22), IsFalse)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
 	st22.Task = "not-exist"
-	tk.Update(st22)
-	// c.Assert(tk.Update(st22), IsFalse)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
 
 	// tables for task1 not affected.
 	tts = tk.FindTables(task1, downSchema, downTable)
@@ -533,4 +539,73 @@ func (t *testKeeper) TestGetDownstreamMeta(c *C) {
 
 	lk.Clear()
 	c.Assert(lk.downstreamMetaMap, HasLen, 0)
+}
+
+func (t *testKeeper) TestUpdateSourceTables(c *C) {
+	var (
+		tk         = NewTableKeeper()
+		task1      = "task-1"
+		source1    = "mysql-replica-1"
+		source2    = "mysql-replica-2"
+		downSchema = "db"
+		downTable  = "tbl"
+
+		tt11 = newTargetTable(task1, source1, downSchema, downTable, map[string]map[string]struct{}{
+			"db": {"tbl-1": struct{}{}, "tbl-2": struct{}{}},
+		})
+		tt12 = newTargetTable(task1, source2, downSchema, downTable, map[string]map[string]struct{}{
+			"db": {"tbl-1": struct{}{}, "tbl-2": struct{}{}},
+		})
+
+		st11 = NewSourceTables(task1, source1)
+		st12 = NewSourceTables(task1, source2)
+	)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			st11.AddTable(schema, table, tt11.DownSchema, tt11.DownTable)
+		}
+	}
+	for schema, tables := range tt12.UpTables {
+		for table := range tables {
+			st12.AddTable(schema, table, tt12.DownSchema, tt12.DownTable)
+		}
+	}
+
+	// put st11
+	addTables, dropTables := tk.Update(st11)
+	c.Assert(addTables, HasLen, 2)
+	c.Assert(dropTables, HasLen, 0)
+
+	// put st11 again
+	addTables, dropTables = tk.Update(st11)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
+	// put st12
+	addTables, dropTables = tk.Update(st12)
+	c.Assert(addTables, HasLen, 2)
+	c.Assert(dropTables, HasLen, 0)
+
+	// update and put st12
+	newST := NewSourceTables(task1, source2)
+	for schema, tables := range tt12.UpTables {
+		for table := range tables {
+			newST.AddTable(schema, table, tt12.DownSchema, tt12.DownTable)
+		}
+	}
+	newST.RemoveTable("db", "tbl-1", downSchema, downTable)
+	newST.AddTable("db", "tbl-3", downSchema, downTable)
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 1)
+	// put st12 again
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
+	// delete source table
+	newST.IsDeleted = true
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 2)
 }

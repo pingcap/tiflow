@@ -515,7 +515,11 @@ func (l *Lock) tryRevertDone(source, schema, table string) {
 	l.done[source][schema][table] = false
 }
 
-func (l *Lock) AddTable(source, schema, table string) {
+func (l *Lock) AddTable(source, schema, table string, needLock bool) {
+	if needLock {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 	if _, ok := l.tables[source]; !ok {
 		l.tables[source] = make(map[string]map[string]schemacmp.Table)
 		l.finalTables[source] = make(map[string]map[string]schemacmp.Table)
@@ -554,7 +558,7 @@ func (l *Lock) addTables(tts []TargetTable) {
 	for _, tt := range tts {
 		for schema, tables := range tt.UpTables {
 			for table := range tables {
-				l.AddTable(tt.Source, schema, table)
+				l.AddTable(tt.Source, schema, table, false)
 			}
 		}
 	}

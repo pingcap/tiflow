@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -225,21 +226,28 @@ func (tk *TableKeeper) Update(st SourceTables) (map[RouteTable]struct{}, map[Rou
 	tk.mu.Lock()
 	defer tk.mu.Unlock()
 
+	// delete source tables
+	// this often happened when stop task with source
 	if st.IsDeleted {
+		log.L().Info("delete source tables", zap.Stringer("source table", st))
 		if _, ok := tk.tables[st.Task]; ok {
+			oldST = tk.tables[st.Task][st.Source]
 			delete(tk.tables[st.Task], st.Source)
 		}
-	} else {
-		newST = st
+		return DiffSourceTables(oldST, newST)
 	}
 
+	// update source tables
+	// this often happen when create/drop table
 	if _, ok := tk.tables[st.Task]; !ok {
 		tk.tables[st.Task] = make(map[string]SourceTables)
 	}
 	if _, ok := tk.tables[st.Task][st.Source]; ok {
 		oldST = tk.tables[st.Task][st.Source]
 	}
+	newST = st
 	tk.tables[st.Task][st.Source] = st
+	log.L().Info("update source tables", zap.Stringer("old source table", oldST), zap.Stringer("new source table", newST))
 
 	return DiffSourceTables(oldST, newST)
 }

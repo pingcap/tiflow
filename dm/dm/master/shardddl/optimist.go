@@ -460,7 +460,7 @@ func (o *Optimist) handleSourceTables(ctx context.Context, sourceCh <-chan optim
 			for routeTable := range addedTable {
 				lock := o.lk.FindLock(utils.GenDDLLockID(st.Task, routeTable.DownSchema, routeTable.DownTable))
 				if lock != nil {
-					lock.AddTable(st.Source, routeTable.UpSchema, routeTable.UpTable)
+					lock.AddTable(st.Source, routeTable.UpSchema, routeTable.UpTable, true)
 				}
 			}
 			// handle drop table
