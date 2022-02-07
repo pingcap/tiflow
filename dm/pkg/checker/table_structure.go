@@ -448,11 +448,16 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				return err
 			}
 
-			if c.checkAutoIncrementPrimaryKey {
-				passed := c.checkAutoIncrementKey(sourceID, table.Schema, table.Name, ctStmt, info, r)
-				if !passed {
-					return nil
+			has := c.hasAutoIncrementKey(ctStmt, info)
+			if has {
+				c.reMu.Lock()
+				if r.State == StateSuccess {
+					r.State = StateWarning
+					r.Errors = append(r.Errors, NewError("sourceID %s table %v of sharding %s have auto-increment key, please make sure them don't conflict in target table!", sourceID, table, c.targetTableID))
+					r.Instruction = "If happen conflict, please handle it by yourself. You can refer to https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices/#handle-conflicts-between-primary-keys-or-unique-indexes-across-multiple-sharded-tables"
+					r.Extra = AutoIncrementKeyChecking
 				}
+				c.reMu.Unlock()
 			}
 
 			checkErr := c.checkConsistency(c.firstCreateTableStmtNode, ctStmt, c.firstTable.String(), table.String(), c.firstSourceID, sourceID)
@@ -469,83 +474,16 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 	}
 }
 
-func (c *ShardingTablesChecker) checkAutoIncrementKey(sourceID, schema, table string, ctStmt *ast.CreateTableStmt, info *model.TableInfo, r *Result) bool {
-	autoIncrementKeys := c.findAutoIncrementKey(ctStmt, info)
-	for columnName, isBigInt := range autoIncrementKeys {
-		hasMatchedRule := false
-		if cm, ok1 := c.mapping[sourceID]; ok1 {
-			ruleSet := cm.Selector.Match(schema, table)
-			for _, rule := range ruleSet {
-				r, ok2 := rule.(*column.Rule)
-				if !ok2 {
-					continue
-				}
-
-				if r.Expression == column.PartitionID && r.TargetColumn == columnName {
-					hasMatchedRule = true
-					break
-				}
-			}
-
-			if hasMatchedRule && !isBigInt {
-				r.State = StateFailure
-				r.Errors = append(r.Errors, NewError("sourceID %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", sourceID, schema, table, c.targetTableID, columnName, columnName))
-				r.Instruction = "please set auto-increment key type to bigint"
-				r.Extra = AutoIncrementKeyChecking
-				return false
-			}
-		}
-
-		if !hasMatchedRule {
-			r.State = StateFailure
-			r.Errors = append(r.Errors, NewError("sourceID %s table `%s`.`%s` of sharding %s have auto-increment key %s and column mapping, but type of %s should be bigint", sourceID, schema, table, c.targetTableID, columnName, columnName))
-			r.Instruction = "please handle it by yourself"
-			r.Extra = AutoIncrementKeyChecking
-			return false
-		}
-	}
-
-	return true
-}
-
-func (c *ShardingTablesChecker) findAutoIncrementKey(stmt *ast.CreateTableStmt, info *model.TableInfo) map[string]bool {
-	autoIncrementKeys := make(map[string]bool)
-	autoIncrementCols := make(map[string]bool)
-
+func (c *ShardingTablesChecker) hasAutoIncrementKey(stmt *ast.CreateTableStmt, info *model.TableInfo) bool {
 	for _, col := range stmt.Cols {
-		var (
-			hasAutoIncrementOpt bool
-			isUnique            bool
-		)
 		for _, opt := range col.Options {
 			switch opt.Tp {
 			case ast.ColumnOptionAutoIncrement:
-				hasAutoIncrementOpt = true
-			case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
-				isUnique = true
-			}
-		}
-
-		if hasAutoIncrementOpt {
-			if isUnique {
-				autoIncrementKeys[col.Name.Name.O] = col.Tp.Tp == mysql.TypeLonglong
-			} else {
-				autoIncrementCols[col.Name.Name.O] = col.Tp.Tp == mysql.TypeLonglong
+				return true
 			}
 		}
 	}
-
-	for _, index := range info.Indices {
-		if index.Unique || index.Primary {
-			if len(index.Columns) == 1 {
-				if isBigInt, ok := autoIncrementCols[index.Columns[0].Name.O]; ok {
-					autoIncrementKeys[index.Columns[0].Name.O] = isBigInt
-				}
-			}
-		}
-	}
-
-	return autoIncrementKeys
+	return false
 }
 
 type briefColumnInfo struct {
@@ -645,8 +583,8 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table,
 				log.L().Logger.Warn("ctx canceled before input tables completely")
 				return
 			default:
+				inCh <- &checkItem{table, sourceID}
 			}
-			inCh <- &checkItem{table, sourceID}
 		}
 	}
 	close(inCh)
