@@ -51,11 +51,10 @@ type Config struct {
 	// control whether to create topic
 	AutoCreate bool
 
-	// Timeout for sarama producer network configurations, in `ms`,
-	// and default to `10000`, equal to `10s`
-	DialTimeout  int
-	WriteTimeout int
-	ReadTimeout  int
+	// Timeout for sarama producer network configuration, default to `10s`
+	DialTimeout  time.Duration
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
 }
 
 // NewConfig returns a default Kafka configuration
@@ -69,9 +68,9 @@ func NewConfig() *Config {
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
-		DialTimeout:       10000,
-		WriteTimeout:      10000,
-		ReadTimeout:       10000,
+		DialTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadTimeout:       10 * time.Second,
 	}
 }
 
@@ -212,7 +211,7 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 
 	s = params.Get("dial-timeout")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := time.ParseDuration(s)
 		if err != nil {
 			return err
 		}
@@ -221,20 +220,20 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 
 	s = params.Get("write-timeout")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := time.ParseDuration(s)
 		if err != nil {
 			return err
 		}
-		producerConfig.DialTimeout = a
+		producerConfig.WriteTimeout = a
 	}
 
 	s = params.Get("read-timeout")
 	if s != "" {
-		a, err := strconv.Atoi(s)
+		a, err := time.ParseDuration(s)
 		if err != nil {
 			return err
 		}
-		producerConfig.DialTimeout = a
+		producerConfig.ReadTimeout = a
 	}
 
 	return nil
@@ -279,9 +278,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// and https://github.com/pingcap/tiflow/issues/3352.
 	config.Metadata.Timeout = 1 * time.Minute
 
-	config.Net.DialTimeout = time.Duration(c.DialTimeout) * time.Millisecond
-	config.Net.WriteTimeout = time.Duration(c.WriteTimeout) * time.Millisecond
-	config.Net.ReadTimeout = time.Duration(c.ReadTimeout) * time.Millisecond
+	config.Net.DialTimeout = c.DialTimeout
+	config.Net.WriteTimeout = c.WriteTimeout
+	config.Net.ReadTimeout = c.ReadTimeout
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
