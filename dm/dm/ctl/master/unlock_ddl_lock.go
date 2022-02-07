@@ -34,7 +34,7 @@ func NewUnlockDDLLockCmd() *cobra.Command {
 	}
 	cmd.Flags().StringP("owner", "o", "", "source to replace the default owner")
 	cmd.Flags().BoolP("force-remove", "f", false, "force to remove DDL lock")
-	cmd.Flags().String("action", "skip", "whether to skip or execute ddls")
+	cmd.Flags().StringP("action", "a", "skip", "accept skip/exec values which means whether to skip or execute ddls")
 	cmd.Flags().StringP("database", "d", "", "database name of the table")
 	cmd.Flags().StringP("table", "t", "", "table name")
 	return cmd

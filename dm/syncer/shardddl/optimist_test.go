@@ -151,7 +151,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(ifm[task][source][info1.UpSchema][info1.UpTable], DeepEquals, info1WithVer)
 	opc := op1c
 	opc.Done = true
-	opm, _, err := optimism.GetAllOperations(etcdTestCli, "")
+	opm, _, err := optimism.GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	c.Assert(opm[task], HasLen, 1)

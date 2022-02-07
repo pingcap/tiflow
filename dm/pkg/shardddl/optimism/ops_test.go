@@ -47,7 +47,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	// put operation.
 	rev, _, err = PutOperation(etcdTestCli, false, op, 0)
 	c.Assert(err, IsNil)
-	opm, _, err := GetAllOperations(etcdTestCli, "")
+	opm, _, err := GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	op.Revision = rev
@@ -69,7 +69,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	ifm, _, err = GetAllInfo(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm, HasLen, 1)
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
 	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)
@@ -85,7 +85,7 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	ifm, _, err = GetAllInfo(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm, HasLen, 0)
-	opm, _, err = GetAllOperations(etcdTestCli, "")
+	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
 	isc, _, err = GetInitSchema(etcdTestCli, is.Task, is.DownSchema, is.DownTable)

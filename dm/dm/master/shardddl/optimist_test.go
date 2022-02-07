@@ -394,7 +394,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	ifm, _, err := optimism.GetAllInfo(cli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm, HasLen, 0)
-	opm, _, err := optimism.GetAllOperations(cli, "")
+	opm, _, err := optimism.GetAllOperations(cli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
 

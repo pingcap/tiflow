@@ -857,7 +857,7 @@ func (s *Server) UnlockDDLLock(ctx context.Context, req *pb.UnlockDDLLockRequest
 	case config.ShardPessimistic:
 		err = s.pessimist.UnlockLock(ctx, req.ID, req.ReplaceOwner, req.ForceRemove)
 	case config.ShardOptimistic:
-		err = s.optimist.UnlockLock(ctx, req.ID, task, req.Sources[0], req.Database, req.Table, req.Op)
+		err = s.optimist.UnlockLock(ctx, req.ID, req.Sources[0], req.Database, req.Table, req.Op)
 	}
 	if err != nil {
 		resp.Msg = err.Error()

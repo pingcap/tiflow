@@ -907,7 +907,7 @@ function DM_154 {
 function run() {
 	init_cluster
 	init_database
-	start=151
+	start=131
 	end=154
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}

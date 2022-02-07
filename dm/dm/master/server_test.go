@@ -1119,7 +1119,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	ifm2, _, err := optimism.GetAllInfo(t.etcdTestCli)
 	c.Assert(err, check.IsNil)
 	c.Assert(ifm2, check.HasLen, 0)
-	opm2, _, err := optimism.GetAllOperations(t.etcdTestCli, "")
+	opm2, _, err := optimism.GetAllOperations(t.etcdTestCli)
 	c.Assert(err, check.IsNil)
 	c.Assert(opm2, check.HasLen, 0)
 	tbm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
