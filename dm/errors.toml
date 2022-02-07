@@ -2380,6 +2380,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-worker-40001]
 message = "parse dm-worker config flag set"
 description = ""
