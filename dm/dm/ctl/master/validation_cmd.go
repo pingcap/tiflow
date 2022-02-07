@@ -8,9 +8,13 @@ func NewValidationCmd() *cobra.Command {
 		Short: "operate or query validation task",
 	}
 	cmd.AddCommand(
-		NewStartStopValidationCmd(),
+		NewStartValidationCmd(),
+		NewStopValidationCmd(),
 		NewQueryValidationErrorCmd(),
 		NewQueryValidationStatusCmd(),
+		NewIgnoreValidationErrorCmd(),
+		NewResolveValidationErrorCmd(),
+		NewClearValidationErrorCmd(),
 	)
 	return cmd
 }

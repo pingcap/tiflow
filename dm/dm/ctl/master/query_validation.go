@@ -1,10 +1,14 @@
 package master
 
 import (
+	"context"
 	"errors"
-	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 func NewQueryValidationErrorCmd() *cobra.Command {
@@ -32,17 +36,38 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	if err != nil {
 		return err
 	}
-	isIgnoredError, err = cmd.Flags().GetBool("ignored-err")
+	isIgnoredError, err = cmd.Flags().GetBool("ignored-error")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("taskName: %s, all-error: %v, ignore-error: %v\n", taskName, isAllError, isIgnoredError)
+	if isAllError && isIgnoredError {
+		// conflict
+		cmd.SetOut(os.Stdout)
+		common.PrintCmdUsage(cmd)
+		return errors.New("flag `all-error` and `ignored-error` are mutually exclusive")
+	}
+	// TODO: handle the contradiction between `isAllError` and `isIgnoredError`
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resp := &pb.GetValidationErrorResponse{}
+	err = common.SendRequest(
+		ctx,
+		"GetValidationError",
+		&pb.GetValidationErrorRequest{
+			IsIgnoredError: isIgnoredError,
+			IsAllError:     isAllError,
+			TaskName:       taskName,
+		},
+		&resp,
+	)
+	common.PrettyPrintResponse(resp)
 	return nil
 }
 
 func NewQueryValidationStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "query-status <task-name>",
+		Use:   "status <task-name>",
 		Short: "query validation status of a task",
 		RunE:  queryValidationStatus,
 	}
@@ -65,6 +90,19 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("taskName: %s, status: %s\n", taskName, status)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resp := &pb.GetValidationStatusResponse{}
+	err = common.SendRequest(
+		ctx,
+		"GetValidationStatus",
+		&pb.GetValidationStatusRequest{
+			TaskName:     taskName,
+			FilterStatus: status,
+		},
+		&resp,
+	)
+	common.PrettyPrintResponse(resp)
 	return nil
 }

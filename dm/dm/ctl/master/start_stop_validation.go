@@ -11,11 +11,11 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
-func NewStartStopValidationCmd() *cobra.Command {
+func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start|stop [-s source ...] [--all-task] <task-name>",
+		Use:   "start [-s source ...] [--all-task] <task-name>",
 		Short: "start to validate the completeness of the data",
-		RunE:  startStopValidationFunc,
+		RunE:  startValidation,
 	}
 	cmd.Flags().BoolP("all-task", "", false, "whether the validator applied to all tasks")
 	cmd.Flags().String("from-time", "", "specify a starting time to validate")
@@ -23,18 +23,17 @@ func NewStartStopValidationCmd() *cobra.Command {
 	return cmd
 }
 
-func startStopValidationFunc(cmd *cobra.Command, _ []string) error {
-	op := cmd.Flags().Arg(0)
-	if op == "start" {
-		return startValidation(cmd)
-	} else if op == "stop" {
-		return stopValidation(cmd)
-	} else {
-		return errors.New("op should be either `start` or `stop`")
+func NewStopValidationCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stop [-s source ...] [--all-task] <task-name>",
+		Short: "start to validate the completeness of the data",
+		RunE:  stopValidation,
 	}
+	cmd.Flags().BoolP("all-task", "", false, "whether the validator applied to all tasks")
+	return cmd
 }
 
-func startValidation(cmd *cobra.Command) (err error) {
+func startValidation(cmd *cobra.Command, _ []string) (err error) {
 	var (
 		sources   []string
 		timeStart string
@@ -63,8 +62,8 @@ func startValidation(cmd *cobra.Command) (err error) {
 	if err != nil {
 		return err
 	}
-	if len(cmd.Flags().Args()) > 1 {
-		taskName = cmd.Flags().Arg(1)
+	if len(cmd.Flags().Args()) > 0 {
+		taskName = cmd.Flags().Arg(0)
 	}
 
 	// contradiction
@@ -94,7 +93,7 @@ func startValidation(cmd *cobra.Command) (err error) {
 	return nil
 }
 
-func stopValidation(cmd *cobra.Command) (err error) {
+func stopValidation(cmd *cobra.Command, _ []string) (err error) {
 	var (
 		sources   []string
 		isAllTask bool
@@ -108,8 +107,8 @@ func stopValidation(cmd *cobra.Command) (err error) {
 	if err != nil {
 		return err
 	}
-	if len(cmd.Flags().Args()) > 1 {
-		taskName = cmd.Flags().Arg(1)
+	if len(cmd.Flags().Args()) > 0 {
+		taskName = cmd.Flags().Arg(0)
 	}
 	// contradiction
 	if (len(taskName) > 0 && isAllTask) || (len(taskName) == 0 && !isAllTask) {

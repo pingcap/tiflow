@@ -2619,3 +2619,75 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
+
+func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	var (
+		resp2       *pb.GetValidationStatusResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		return resp, nil
+	}
+	// TODO: get validation status from worker
+	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	var (
+		resp2 *pb.GetValidationErrorResponse
+		err2, err error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationErrorResponse{
+		Result: true,
+	}
+	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		return resp, nil
+	}
+	// TODO: get validation error from worker
+	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	var (
+		resp2 *pb.OperateValidationErrorResponse
+		err2, err error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		return resp, nil
+	}
+	// TODO: operate validation error at worker
+	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
