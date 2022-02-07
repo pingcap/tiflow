@@ -578,7 +578,7 @@ func (c *OptimisticShardingTablesChecker) Name() string {
 func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
-		Desc:  "check consistency of sharding table structures",
+		Desc:  "check consistency of sharding table structures for Optimistic Sharding Merge",
 		State: StateFailure,
 		Extra: fmt.Sprintf("sharding %s", c.targetTableID),
 	}
