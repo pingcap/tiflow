@@ -36,7 +36,7 @@ var _ = Suite(&testOptimist{})
 
 // clear keys in etcd test cluster.
 func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -95,6 +95,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tables := o.Tables()
+	c.Assert(len(tables), Equals, 0)
+
 	// init with some source tables.
 	err := o.Init(sourceTables)
 	c.Assert(err, IsNil)
@@ -103,6 +106,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(stm, HasLen, 1)
 	c.Assert(stm[task], HasLen, 1)
 	c.Assert(stm[task][source], DeepEquals, o.tables)
+
+	tables = o.Tables()
+	c.Assert(len(tables), Equals, 4)
 
 	// no info and operation in pending.
 	c.Assert(o.PendingInfo(), IsNil)
@@ -209,43 +215,4 @@ func (t *testOptimist) TestOptimist(c *C) {
 	o.Reset()
 	c.Assert(o.PendingInfo(), IsNil)
 	c.Assert(o.PendingOperation(), IsNil)
-}
-
-func (t *testOptimist) TestGetTableInfo(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
-	var (
-		task   = "test-get-table-info"
-		source = "mysql-replica-1"
-		logger = log.L()
-		o      = NewOptimist(&logger, etcdTestCli, task, source)
-
-		downSchema       = "foo"
-		downTable        = "bar"
-		p                = parser.New()
-		se               = mock.NewContext()
-		tblID      int64 = 111
-		is               = optimism.NewInitSchema(task, downSchema, downTable,
-			createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`))
-	)
-
-	// no table info exist now
-	ti, err := o.GetTableInfo(downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(ti, IsNil)
-
-	// put the table schema.
-	_, putted, err := optimism.PutInitSchemaIfNotExist(etcdTestCli, is)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-
-	// can get the table info now.
-	ti, err = o.GetTableInfo(downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(ti, DeepEquals, is.TableInfo)
-
-	// no table info for database.
-	ti, err = o.GetTableInfo(downSchema, "")
-	c.Assert(err, IsNil)
-	c.Assert(ti, IsNil)
 }
