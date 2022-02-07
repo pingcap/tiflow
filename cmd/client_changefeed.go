@@ -484,7 +484,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+			cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 			if err != nil {
 				return err
 			}

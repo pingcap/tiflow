@@ -35,10 +35,11 @@ const (
 
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink
 type Manager struct {
-	backendSink  Sink
-	checkpointTs model.Ts
-	tableSinks   map[model.TableID]*tableSink
-	tableSinksMu sync.Mutex
+	backendSink            *bufferSink
+	tableCheckpointTsMap   sync.Map
+	tableSinks             map[model.TableID]*tableSink
+	tableSinksMu           sync.Mutex
+	changeFeedCheckpointTs uint64
 
 	flushMu  sync.Mutex
 	flushing int64
@@ -58,7 +59,7 @@ func NewManager(
 	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
 		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
-		checkpointTs:              checkpointTs,
+		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
 		captureAddr:               captureAddr,
@@ -87,26 +88,40 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-	return m.backendSink.Close(ctx)
+	if m.backendSink != nil {
+		log.Info("sinkManager try close bufSink",
+			zap.String("changefeed", m.changefeedID))
+		start := time.Now()
+		if err := m.backendSink.Close(ctx); err != nil {
+			log.Info("close bufSink failed",
+				zap.String("changefeed", m.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return err
+		}
+		log.Info("close bufSink success",
+			zap.String("changefeed", m.changefeedID),
+			zap.Duration("duration", time.Since(start)))
+	}
+	return nil
 }
 
-func (m *Manager) getMinEmittedTs() model.Ts {
+func (m *Manager) getMinEmittedTs(tableID model.TableID) model.Ts {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if len(m.tableSinks) == 0 {
-		return m.getCheckpointTs()
+		return m.getCheckpointTs(tableID)
 	}
 	minTs := model.Ts(math.MaxUint64)
-	for _, tableSink := range m.tableSinks {
-		emittedTs := tableSink.getEmittedTs()
-		if minTs > emittedTs {
-			minTs = emittedTs
+	for _, tblSink := range m.tableSinks {
+		resolvedTs := tblSink.getResolvedTs()
+		if minTs > resolvedTs {
+			minTs = resolvedTs
 		}
 	}
 	return minTs
 }
 
-func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
+func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID) (model.Ts, error) {
 	// NOTICE: Because all table sinks will try to flush backend sink,
 	// which will cause a lot of lock contention and blocking in high concurrency cases.
 	// So here we use flushing as a lightweight lock to improve the lock competition problem.
@@ -114,19 +129,19 @@ func (m *Manager) flushBackendSink(ctx context.Context) (model.Ts, error) {
 	// Do not skip flushing for resolving #3503.
 	// TODO uncomment the following return.
 	// if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-	// return m.getCheckpointTs(), nil
+	// return m.getCheckpointTs(tableID), nil
 	// }
 	m.flushMu.Lock()
 	defer func() {
 		m.flushMu.Unlock()
 		atomic.StoreInt64(&m.flushing, 0)
 	}()
-	minEmittedTs := m.getMinEmittedTs()
-	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, minEmittedTs)
+	minEmittedTs := m.getMinEmittedTs(tableID)
+	checkpointTs, err := m.backendSink.FlushRowChangedEvents(ctx, tableID, minEmittedTs)
 	if err != nil {
-		return m.getCheckpointTs(), errors.Trace(err)
+		return m.getCheckpointTs(tableID), errors.Trace(err)
 	}
-	atomic.StoreUint64(&m.checkpointTs, checkpointTs)
+	m.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	return checkpointTs, nil
 }
 
@@ -145,11 +160,25 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 		return ctx.Err()
 	case <-callback:
 	}
-	return m.backendSink.Barrier(ctx)
+	return m.backendSink.Barrier(ctx, tableID)
 }
 
-func (m *Manager) getCheckpointTs() uint64 {
-	return atomic.LoadUint64(&m.checkpointTs)
+func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
+	checkPoints, ok := m.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return checkPoints.(uint64)
+	}
+	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
+	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
+	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
+}
+
+// UpdateChangeFeedCheckpointTs updates changefeed and backend sink checkpoint ts.
+func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
+	if m.backendSink != nil {
+		m.backendSink.UpdateChangeFeedCheckpointTs(checkpointTs)
+	}
 }
 
 type tableSink struct {
@@ -176,7 +205,10 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return nil
 }
 
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+// FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
+// is required to be no more than global resolvedTs, table barrierTs and table
+// redo log watermarkTs.
+func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	// Log abnormal checkpoint that is large than resolved ts.
 	logAbnormalCheckpoint := func(ckpt uint64) {
 		if ckpt > resolvedTs {
@@ -192,7 +224,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	})
 	if i == 0 {
 		atomic.StoreUint64(&t.emittedTs, resolvedTs)
-		ckpt, err := t.manager.flushBackendSink(ctx)
+		ckpt, err := t.manager.flushBackendSink(ctx, tableID)
 		if err != nil {
 			return ckpt, err
 		}
@@ -204,19 +236,15 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 
 	err := t.manager.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(), errors.Trace(err)
+		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
 	}
 	atomic.StoreUint64(&t.emittedTs, resolvedTs)
-	ckpt, err := t.manager.flushBackendSink(ctx)
+	ckpt, err := t.manager.flushBackendSink(ctx, tableID)
 	if err != nil {
 		return ckpt, err
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
-}
-
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -229,8 +257,15 @@ func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }
 
+// getResolvedTs returns resolved ts, which means all events before resolved ts
+// have been sent to sink manager
+func (t *tableSink) getResolvedTs() uint64 {
+	ts := atomic.LoadUint64(&t.emittedTs)
+	return ts
+}
+
 // Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context) error {
+func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -241,11 +276,12 @@ type drawbackMsg struct {
 
 type bufferSink struct {
 	Sink
-	checkpointTs uint64
-	buffer       map[model.TableID][]*model.RowChangedEvent
-	bufferMu     sync.Mutex
-	flushTsChan  chan uint64
-	drawbackChan chan drawbackMsg
+	changeFeedCheckpointTs uint64
+	tableCheckpointTsMap   sync.Map
+	buffer                 map[model.TableID][]*model.RowChangedEvent
+	bufferMu               sync.Mutex
+	flushTsChan            chan flushMsg
+	drawbackChan           chan drawbackMsg
 }
 
 func newBufferSink(
@@ -254,14 +290,14 @@ func newBufferSink(
 	errCh chan error,
 	checkpointTs model.Ts,
 	drawbackChan chan drawbackMsg,
-) Sink {
+) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
-		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
-		checkpointTs: checkpointTs,
-		flushTsChan:  make(chan uint64, 128),
-		drawbackChan: drawbackChan,
+		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
+		changeFeedCheckpointTs: checkpointTs,
+		flushTsChan:            make(chan flushMsg, 128),
+		drawbackChan:           drawbackChan,
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -293,8 +329,9 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			delete(b.buffer, drawback.tableID)
 			b.bufferMu.Unlock()
 			close(drawback.callback)
-		case resolvedTs := <-b.flushTsChan:
+		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
+			resolvedTs := flushEvent.resolvedTs
 			// find all rows before resolvedTs and emit to backend sink
 			for tableID, rows := range b.buffer {
 				i := sort.Search(len(rows), func(i int) bool {
@@ -321,14 +358,15 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 			b.bufferMu.Unlock()
 
 			start := time.Now()
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
+			tableID := flushEvent.tableID
+			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, flushEvent.tableID, resolvedTs)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
 					errCh <- err
 				}
 				return
 			}
-			atomic.StoreUint64(&b.checkpointTs, checkpointTs)
+			b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 
 			dur := time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())
@@ -358,11 +396,32 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 	return nil
 }
 
-func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	select {
 	case <-ctx.Done():
-		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
-	case b.flushTsChan <- resolvedTs:
+		return b.getTableCheckpointTs(tableID), ctx.Err()
+	case b.flushTsChan <- flushMsg{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return b.getTableCheckpointTs(tableID), nil
+}
+
+type flushMsg struct {
+	tableID    model.TableID
+	resolvedTs uint64
+}
+
+func (b *bufferSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+	checkPoints, ok := b.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return checkPoints.(uint64)
+	}
+	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
+}
+
+// UpdateChangeFeedCheckpointTs update the changeFeedCheckpointTs every processor tick
+func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }

@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -10,28 +10,26 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package cmd
+package etcd
 
 import (
-	"os"
+	"math"
+	"math/rand"
 
-	"github.com/spf13/cobra"
+	"github.com/pingcap/check"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"go.etcd.io/etcd/clientv3"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "cdc",
-	Args:  cobra.NoArgs,
-	Short: "CDC",
-	Long:  `Change Data Capture`,
-}
+type utilSuit struct{}
 
-// Execute runs the root command
-func Execute() {
-	// Outputs cmd.Print to stdout.
-	rootCmd.SetOut(os.Stdout)
-	if err := rootCmd.Execute(); err != nil {
-		rootCmd.PrintErr(err.Error() + "\n")
-		os.Exit(1)
+var _ = check.Suite(&utilSuit{})
+
+func (s utilSuit) TestGetRevisionFromWatchOpts(c *check.C) {
+	defer testleak.AfterTest(c)()
+	for i := 0; i < 100; i++ {
+		rev := rand.Int63n(math.MaxInt64)
+		opt := clientv3.WithRev(rev)
+		c.Assert(getRevisionFromWatchOpts(opt), check.Equals, rev)
 	}
 }

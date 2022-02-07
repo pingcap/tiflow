@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,27 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cmd
+package etcd
 
-import (
-	"os"
+import "go.etcd.io/etcd/clientv3"
 
-	"github.com/spf13/cobra"
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "cdc",
-	Args:  cobra.NoArgs,
-	Short: "CDC",
-	Long:  `Change Data Capture`,
-}
-
-// Execute runs the root command
-func Execute() {
-	// Outputs cmd.Print to stdout.
-	rootCmd.SetOut(os.Stdout)
-	if err := rootCmd.Execute(); err != nil {
-		rootCmd.PrintErr(err.Error() + "\n")
-		os.Exit(1)
+func getRevisionFromWatchOpts(opts ...clientv3.OpOption) int64 {
+	op := &clientv3.Op{}
+	for _, opt := range opts {
+		opt(op)
 	}
+	return op.Rev()
 }
