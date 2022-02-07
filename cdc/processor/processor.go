@@ -1060,6 +1060,7 @@ func (p *processor) Close() error {
 		p.agent = nil
 	}
 
+	// sink close might be time-consuming, do it the last.
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
