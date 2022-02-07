@@ -293,7 +293,7 @@ func (p *backEndPool) terminate() {
 		log.Warn("Unified Sorter clean-up failed", zap.Error(err))
 	}
 	for _, file := range files {
-		//log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
+		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
 			log.Warn("Unified Sorter clean-up failed: failed to remove",
