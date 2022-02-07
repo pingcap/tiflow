@@ -248,9 +248,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	instance := c.instances[0]
 	if checkingShard && instance.cfg.Mode != config.ModeIncrement {
 		checkpointSQLs := []string{
-			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name)),
-			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name)),
-			fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name)),
+			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
+			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name))),
+			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name))),
 		}
 		var existCheckpoint bool
 		for _, sql := range checkpointSQLs {
