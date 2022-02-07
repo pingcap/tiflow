@@ -45,8 +45,6 @@ import (
 )
 
 const (
-	schemaStorageGCLag = time.Minute * 20
-
 	backoffBaseDelayInMs = 5
 	maxTries             = 3
 )
@@ -59,9 +57,11 @@ type processor struct {
 	tables map[model.TableID]tablepipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sinkManager   *sink.Manager
+	lastSchemaTs  model.Ts
+
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sinkManager *sink.Manager
 
 	initialized bool
 	errCh       chan error
@@ -78,6 +78,7 @@ type processor struct {
 	metricCheckpointTsLagGauge      prometheus.Gauge
 	metricMinCheckpointTableIDGuage prometheus.Gauge
 	metricSyncTableNumGauge         prometheus.Gauge
+	metricSchemaStorageGcTsGauge    prometheus.Gauge
 	metricProcessorErrorCounter     prometheus.Counter
 }
 
@@ -100,19 +101,10 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
-	return p
-}
-
-func newProcessor4Test(ctx cdcContext.Context,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *processor {
-	p := newProcessor(ctx)
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.createTablePipeline = createTablePipeline
-	p.sinkManager = &sink.Manager{}
 	return p
 }
 
@@ -191,7 +183,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *model.ChangefeedReactorS
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 	p.handleWorkload()
-	p.doGCSchemaStorage()
+	p.doGCSchemaStorage(ctx)
 	return p.changefeed, nil
 }
 
@@ -295,10 +287,19 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
+
+	start := time.Now()
 	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
+		log.Info("processor new sink failed",
+			zap.String("changefeed", p.changefeed.ID),
+			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
+	log.Info("processor try new sink success",
+		zap.Duration("duration", time.Since(start)))
+
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
@@ -767,19 +768,34 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage() {
+func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
 	}
-	// Delay GC to accommodate pullers starting from a startTs that's too small
-	// TODO fix startTs problem and remove GC delay, or use other mechanism that prevents the problem deterministically
-	gcTime := oracle.GetTimeFromTS(p.changefeed.Status.CheckpointTs).Add(-schemaStorageGCLag)
-	gcTs := oracle.ComposeTS(gcTime.Unix(), 0)
-	p.schemaStorage.DoGC(gcTs)
+
+	if p.changefeed.Status == nil {
+		// This could happen if Etcd data is not complete.
+		return
+	}
+
+	// Please refer to `unmarshalAndMountRowChanged` in cdc/entry/mounter.go
+	// for why we need -1.
+	lastSchemaTs := p.schemaStorage.DoGC(p.changefeed.Status.CheckpointTs - 1)
+	if p.lastSchemaTs == lastSchemaTs {
+		return
+	}
+	p.lastSchemaTs = lastSchemaTs
+
+	log.Debug("finished gc in schema storage",
+		zap.Uint64("gcTs", lastSchemaTs),
+		cdcContext.ZapFieldChangefeed(ctx))
+	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
+	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }
 
 func (p *processor) Close() error {
+	log.Info("processor closing ...", zap.String("changefeed", p.changefeedID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -796,11 +812,23 @@ func (p *processor) Close() error {
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		return p.sinkManager.Close(ctx)
+		log.Info("processor try to close the sinkManager",
+			zap.String("changefeed", p.changefeedID))
+		start := time.Now()
+		if err := p.sinkManager.Close(ctx); err != nil {
+			log.Info("processor close sinkManager failed",
+				zap.String("changefeed", p.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		log.Info("processor close sinkManager success",
+			zap.String("changefeed", p.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
