@@ -116,6 +116,7 @@ func newMySQLSink(
 	}
 
 	// create test db used for parameter detection
+	// Refer https://github.com/go-sql-driver/mysql#parameters
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
@@ -677,8 +678,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				}
 			} else {
 				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-				sqls = append(sqls, query)
-				values = append(values, args)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
