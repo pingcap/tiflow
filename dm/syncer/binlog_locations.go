@@ -135,7 +135,7 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 	err = l.curEndLocation.GetGTID().Update(gtidStr)
 	if err != nil {
 		log.L().DPanic("failed to update GTID set",
-			zap.Any("GTID", gtidStr),
+			zap.String("GTID", gtidStr),
 			zap.Error(err))
 	}
 }
