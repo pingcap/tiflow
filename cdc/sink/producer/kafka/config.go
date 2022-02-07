@@ -235,10 +235,10 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Metadata.Timeout = 1 * time.Minute
 
 	// Admin.Retry take effect on `ClusterAdmin` related operations,
-	// only `CreateTopic` for cdc now. Just use default values.
+	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
 	config.Admin.Retry.Max = 5
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
-	config.Admin.Timeout = 3 * time.Second
+	config.Admin.Timeout = 1 * time.Minute
 
 	// Producer.Retry take effect when the producer try to send message to kafka
 	// brokers. If kafka cluster is healthy, just the default value should be enough.
