@@ -22,7 +22,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
@@ -57,8 +56,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 		map[string]*sql.DB{"test-source": db},
 		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}},
 		nil,
-		false,
-		config.ShardPessimistic)
+		false)
 	result := checker.Check(ctx)
 
 	c.Assert(result.State, tc.Equals, StateSuccess)
@@ -109,35 +107,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	result = checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
-	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
-
-	// 4. optimistic check different column number
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
-  "c" int(11) NOT NULL,
-  "d" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
-	checker = NewShardingTablesChecker("test-name",
-		map[string]*sql.DB{"test-source": db},
-		nil,
-		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}},
-		nil,
-		false,
-		config.ShardOptimistic)
-	result = checker.Check(ctx)
-	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 	printJSON(result)
 }
@@ -209,5 +178,40 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+}
+
+func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, tc.IsNil)
+	ctx := context.Background()
+
+	printJSON := func(r *Result) {
+		rawResult, _ := json.MarshalIndent(r, "", "\t")
+		fmt.Println("\n" + string(rawResult))
+	}
+
+	// optimistic check different column number
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+"c" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
+"c" int(11) NOT NULL,
+"d" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+	checker := NewOptimisticShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}})
+	result := checker.Check(ctx)
 	printJSON(result)
+	c.Assert(result.State, tc.Equals, StateSuccess)
+	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 }

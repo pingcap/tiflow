@@ -313,6 +313,7 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	)
 	cfgs := []*config.SubTaskConfig{
 		{
+			ShardMode: config.ShardPessimistic,
 			RouteRules: []*router.TableRule{
 				{
 					SchemaPattern: schema,
@@ -370,6 +371,7 @@ func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
 	)
 	cfgs := []*config.SubTaskConfig{
 		{
+			ShardMode: config.ShardPessimistic,
 			RouteRules: []*router.TableRule{
 				{
 					SchemaPattern: schema,
