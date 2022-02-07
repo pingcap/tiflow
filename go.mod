@@ -53,7 +53,6 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/dumpling v0.0.0-20211105112303-05b0b48d711a
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00
 	github.com/pingcap/kvproto v0.0.0-20211207042851-78a55fb8e69c
@@ -81,6 +80,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
