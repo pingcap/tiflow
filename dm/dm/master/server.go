@@ -2587,6 +2587,7 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 	// TODO: wait for #4479 and update the validator stage in etcd
@@ -2618,6 +2619,7 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 	// TODO: update the validator stage in etcd
@@ -2642,17 +2644,18 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 	// TODO: get validation status from worker
 	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
-	return resp, nil
+	return resp, err
 }
 
 func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
 	var (
-		resp2 *pb.GetValidationErrorResponse
-		err2, err error
+		resp2       *pb.GetValidationErrorResponse
+		err2, err   error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2666,17 +2669,18 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 	// TODO: get validation error from worker
 	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
-	return resp, nil
+	return resp, err
 }
 
 func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
 	var (
-		resp2 *pb.OperateValidationErrorResponse
-		err2, err error
+		resp2       *pb.OperateValidationErrorResponse
+		err2, err   error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2690,9 +2694,10 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
+		// nolint:nilerr
 		return resp, nil
 	}
 	// TODO: operate validation error at worker
 	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
-	return resp, nil
+	return resp, err
 }
