@@ -70,7 +70,8 @@ func TestWorkerInitAndClose(t *testing.T) {
 	require.Equal(t, &StatusUpdateMessage{
 		WorkerID: workerID1,
 		Status: WorkerStatus{
-			Code: WorkerStatusNormal,
+			Code:     WorkerStatusNormal,
+			ExtBytes: []byte("null"),
 		},
 	}, statusMsg)
 
@@ -196,6 +197,47 @@ func TestWorkerMasterFailover(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
 	}, time.Second*1, time.Millisecond*10)
+}
+
+func TestWorkerStatus(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(time.Now())
+	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+		ID:          masterName,
+		NodeID:      masterNodeName,
+		Epoch:       1,
+		Initialized: true,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(WorkerStatus{
+		Code: WorkerStatusNormal,
+		Ext: &dummyStatus{
+			Val: 1,
+		},
+	}, nil)
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
+	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
+
+	status, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName, workerID1))
+	require.True(t, ok)
+	require.Equal(t, &StatusUpdateMessage{
+		WorkerID: workerID1,
+		Status: WorkerStatus{
+			Code: WorkerStatusNormal,
+			Ext: &dummyStatus{
+				Val: 1,
+			},
+			ExtBytes: []byte(`{"Val":1}`),
+		},
+	}, status)
 }
 
 func TestWorkerSuicide(t *testing.T) {

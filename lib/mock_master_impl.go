@@ -157,3 +157,11 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
 	return m.serverMasterClient
 }
+
+type dummyStatus struct {
+	Val int
+}
+
+func (m *MockMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
+	return &dummyStatus{}
+}

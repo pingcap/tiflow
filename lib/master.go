@@ -54,6 +54,10 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
+
+	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
+	// of the `Ext` field in WorkerStatus.
+	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 const (
@@ -369,6 +373,10 @@ func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID Work
 		&StatusUpdateMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			statusUpdateMessage := value.(*StatusUpdateMessage)
+			if err := statusUpdateMessage.Status.fillExt(m.Impl.GetWorkerStatusExtTypeInfo()); err != nil {
+				m.OnError(err)
+				return nil
+			}
 			m.workerManager.UpdateStatus(statusUpdateMessage)
 			return nil
 		})
@@ -480,4 +488,10 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 		return "", errors.Trace(err)
 	}
 	return workerID, nil
+}
+
+func (m *BaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
+	// This function provides a trivial default implementation of
+	// GetWorkerStatusExtTypeInfo.
+	return int64(0)
 }

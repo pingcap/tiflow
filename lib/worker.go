@@ -442,6 +442,11 @@ func (m *masterClient) SendStatus(ctx context.Context, status WorkerStatus) erro
 		WorkerID: m.workerID,
 		Status:   status,
 	}
+
+	if err := statusUpdateMessage.Status.marshalExt(); err != nil {
+		return errors.Trace(err)
+	}
+
 	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, StatusUpdateTopic(m.masterID, m.workerID), statusUpdateMessage)
 	if err != nil {
 		return errors.Trace(err)

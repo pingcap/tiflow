@@ -79,7 +79,7 @@ func TestExampleMaster(t *testing.T) {
 		online := master.worker.online
 		master.worker.mu.Unlock()
 		return online
-	}, time.Second, 100*time.Millisecond)
+	}, 2*time.Second, 100*time.Millisecond)
 
 	// will be WorkerStatusInit after one heartbeat
 	err = master.Tick(ctx)

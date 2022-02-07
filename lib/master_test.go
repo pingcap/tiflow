@@ -170,4 +170,18 @@ func TestMasterCreateWorker(t *testing.T) {
 	workerList := master.GetWorkers()
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
+
+	err = master.messageHandlerManager.InvokeHandler(t, StatusUpdateTopic(masterName, workerID1), masterName, &StatusUpdateMessage{
+		WorkerID: workerID1,
+		Status: WorkerStatus{
+			Code:     WorkerStatusNormal,
+			ExtBytes: []byte(`{"Val":4}`),
+		},
+	})
+	require.NoError(t, err)
+	status := master.GetWorkers()[workerID1].Status()
+	require.Equal(t, &WorkerStatus{
+		Code: WorkerStatusNormal,
+		Ext:  &dummyStatus{Val: 4},
+	}, status)
 }
