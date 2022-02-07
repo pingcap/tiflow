@@ -93,7 +93,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	}
 	logConfig.Level = logLevel
 
-	pdEndpoints := strings.Split(f.GetPdAddr(), ",")
+	pdAddr := f.GetPdAddr()
+	pdEndpoints := strings.Split(pdAddr, ",")
 
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Context:     ctx,
@@ -118,7 +119,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Annotatef(err,
+			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
 	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
@@ -156,7 +158,8 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 			}),
 		))
 	if err != nil {
-		return nil, errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", pdAddr)
+		return nil, errors.Annotatef(err,
+			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
 	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints, credential, true)
