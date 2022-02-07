@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package master
 
 import (
@@ -9,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-func (s *Server) generateTaskConfig(ctx context.Context, taskYamlString string, cliArgs *config.TaskCliArgs) (*config.TaskConfig, error) {
+func generateTaskConfig(ctx context.Context, taskYamlString string, cliArgs *config.TaskCliArgs) (*config.TaskConfig, error) {
 	cfg := config.NewTaskConfig()
 	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
 	if cliArgs != nil && cliArgs.StartTime != "" {
@@ -21,7 +34,6 @@ func (s *Server) generateTaskConfig(ctx context.Context, taskYamlString string, 
 	if err != nil {
 		return nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
-
 	err = adjustTargetDB(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, terror.WithClass(err, terror.ClassDMMaster)
@@ -38,7 +50,7 @@ func (s *Server) generateSubTaskConfigs(taskCfg *config.TaskConfig) ([]*config.S
 	return subtaskCfgList, nil
 }
 
-// CheckTask checks legality of task configuration.
+// checkTask checks legality of task configuration.
 func (s *Server) checkTask(ctx context.Context, taskCfg *config.TaskConfig, errCnt, warnCnt int64) (string, error) {
 	subtaskCfgList, err := s.generateSubTaskConfigs(taskCfg)
 	if err != nil {

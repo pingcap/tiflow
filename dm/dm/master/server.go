@@ -441,7 +441,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		return respWithErr(err)
 	}
 
-	taskCfg, err := s.generateTaskConfig(ctx, req.Task, nil)
+	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
 	if err != nil {
 		return respWithErr(err)
 	}
@@ -649,7 +649,7 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp2, err2
 	}
 	resp := &pb.UpdateTaskResponse{}
-	taskCfg, err := s.generateTaskConfig(ctx, req.Task, nil)
+	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -1227,7 +1227,7 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		}, nil
 	}
 	resp := &pb.CheckTaskResponse{}
-	taskCfg, err := s.generateTaskConfig(ctx, req.Task, nil)
+	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
