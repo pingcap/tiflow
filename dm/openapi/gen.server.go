@@ -71,30 +71,30 @@ type ServerInterface interface {
 	// transfer source to a free worker
 	// (POST /api/v1/sources/{source-name}/transfer)
 	DMAPITransferSource(c *gin.Context, sourceName string)
-	// get task template list
-	// (GET /api/v1/task/templates)
-	DMAPIGetTaskTemplateList(c *gin.Context)
-	// create task template
-	// (POST /api/v1/task/templates)
-	DMAPICreateTaskTemplate(c *gin.Context)
-	// import task template
-	// (POST /api/v1/task/templates/import)
-	DMAPIImportTaskTemplate(c *gin.Context)
-	// delete task template template
-	// (DELETE /api/v1/task/templates/{task-name})
-	DMAPIDeleteTaskTemplate(c *gin.Context, taskName string)
-	// get task template template
-	// (GET /api/v1/task/templates/{task-name})
-	DMAPIGetTaskTemplate(c *gin.Context, taskName string)
-	// update task template template
-	// (PUT /api/v1/task/templates/{task-name})
-	DMAPUpdateTaskTemplate(c *gin.Context, taskName string)
 	// get task list
 	// (GET /api/v1/tasks)
 	DMAPIGetTaskList(c *gin.Context, params DMAPIGetTaskListParams)
 	// create and start task
 	// (POST /api/v1/tasks)
 	DMAPIStartTask(c *gin.Context)
+	// get task template list
+	// (GET /api/v1/tasks/templates)
+	DMAPIGetTaskTemplateList(c *gin.Context)
+	// create task template
+	// (POST /api/v1/tasks/templates)
+	DMAPICreateTaskTemplate(c *gin.Context)
+	// import task template
+	// (POST /api/v1/tasks/templates/import)
+	DMAPIImportTaskTemplate(c *gin.Context)
+	// delete task template template
+	// (DELETE /api/v1/tasks/templates/{task-name})
+	DMAPIDeleteTaskTemplate(c *gin.Context, taskName string)
+	// get task template template
+	// (GET /api/v1/tasks/templates/{task-name})
+	DMAPIGetTaskTemplate(c *gin.Context, taskName string)
+	// update task template template
+	// (PUT /api/v1/tasks/templates/{task-name})
+	DMAPUpdateTaskTemplate(c *gin.Context, taskName string)
 	// delete and stop task
 	// (DELETE /api/v1/tasks/{task-name})
 	DMAPIDeleteTask(c *gin.Context, taskName string, params DMAPIDeleteTaskParams)
@@ -443,6 +443,39 @@ func (siw *ServerInterfaceWrapper) DMAPITransferSource(c *gin.Context) {
 	siw.Handler.DMAPITransferSource(c, sourceName)
 }
 
+// DMAPIGetTaskList operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DMAPIGetTaskListParams
+
+	// ------------- Optional query parameter "with_status" -------------
+	if paramValue := c.Query("with_status"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter with_status: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIGetTaskList(c, params)
+}
+
+// DMAPIStartTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIStartTask(c)
+}
+
 // DMAPIGetTaskTemplateList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplateList(c *gin.Context) {
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -528,39 +561,6 @@ func (siw *ServerInterfaceWrapper) DMAPUpdateTaskTemplate(c *gin.Context) {
 	}
 
 	siw.Handler.DMAPUpdateTaskTemplate(c, taskName)
-}
-
-// DMAPIGetTaskList operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DMAPIGetTaskListParams
-
-	// ------------- Optional query parameter "with_status" -------------
-	if paramValue := c.Query("with_status"); paramValue != "" {
-	}
-
-	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter with_status: %s", err)})
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-	}
-
-	siw.Handler.DMAPIGetTaskList(c, params)
-}
-
-// DMAPIStartTask operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-	}
-
-	siw.Handler.DMAPIStartTask(c)
 }
 
 // DMAPIDeleteTask operation middleware
@@ -929,21 +929,21 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.POST(options.BaseURL+"/api/v1/sources/:source-name/transfer", wrapper.DMAPITransferSource)
 
-	router.GET(options.BaseURL+"/api/v1/task/templates", wrapper.DMAPIGetTaskTemplateList)
-
-	router.POST(options.BaseURL+"/api/v1/task/templates", wrapper.DMAPICreateTaskTemplate)
-
-	router.POST(options.BaseURL+"/api/v1/task/templates/import", wrapper.DMAPIImportTaskTemplate)
-
-	router.DELETE(options.BaseURL+"/api/v1/task/templates/:task-name", wrapper.DMAPIDeleteTaskTemplate)
-
-	router.GET(options.BaseURL+"/api/v1/task/templates/:task-name", wrapper.DMAPIGetTaskTemplate)
-
-	router.PUT(options.BaseURL+"/api/v1/task/templates/:task-name", wrapper.DMAPUpdateTaskTemplate)
-
 	router.GET(options.BaseURL+"/api/v1/tasks", wrapper.DMAPIGetTaskList)
 
 	router.POST(options.BaseURL+"/api/v1/tasks", wrapper.DMAPIStartTask)
+
+	router.GET(options.BaseURL+"/api/v1/tasks/templates", wrapper.DMAPIGetTaskTemplateList)
+
+	router.POST(options.BaseURL+"/api/v1/tasks/templates", wrapper.DMAPICreateTaskTemplate)
+
+	router.POST(options.BaseURL+"/api/v1/tasks/templates/import", wrapper.DMAPIImportTaskTemplate)
+
+	router.DELETE(options.BaseURL+"/api/v1/tasks/templates/:task-name", wrapper.DMAPIDeleteTaskTemplate)
+
+	router.GET(options.BaseURL+"/api/v1/tasks/templates/:task-name", wrapper.DMAPIGetTaskTemplate)
+
+	router.PUT(options.BaseURL+"/api/v1/tasks/templates/:task-name", wrapper.DMAPUpdateTaskTemplate)
 
 	router.DELETE(options.BaseURL+"/api/v1/tasks/:task-name", wrapper.DMAPIDeleteTask)
 
@@ -968,6 +968,7 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
+
 	"H4sIAAAAAAAC/+w9WXPjNpp/BcvdhyQlWZLtvrw1D9220+Nd291lK5WdSvWqIRKSMCYBGgDtaLr836dw",
 	"kARJgKR8dKzEeUgcEceH775AfgtCmqSUICJ4cPAt4OEKJVD9eRhnXCB2BuW/5Q8poyliAiP1GEaR+jVC",
 	"PGQ4FZiS4ED9ijgHdAHECoEwYwwRARK1CCA0QsEgQL/DJI1RcBBMdt/sjHfGO5ODt7uvJ8EgEOtU/s4F",
@@ -1042,16 +1043,17 @@ var swaggerSpec = []string{
 	"cmtqPCW9rZfp9nAE9W3tPu7gExDXf+vrSf3C2g31LQmB84ttusDl80H7ssfom/6jdGF6MIuqCz8/Xhm0",
 	"FAE925dn77m9s0b4pFxa7cDeLibVNdL786iATPSyWOUNwm0xWE8Q9jVuUd5VKx0S2LttNJamX/4pjWVx",
 	"X6mPrSzuFD8fRmttwPouyZXay0G3RFHZr6K33+f/GCxF0566y9xC/SurrtpF3D+L5oowf2rVJRgkfGG+",
-	"w+DnsqkZtjXppyditWZnwp+F13JGKJwvCqB+3aKur3Rwl4D8apS38nSbQrtZ5ztULhtvzHZgRSUlY/PF",
-	"h+djYSq9UjVfWH9Qok/FwMb3E9UNzAcw/riqgQ+AZ1ozqFC2SVSvbI30/ZIOhX2iBn0nstc7Bjfngt0n",
-	"gmd73Elza+jeXPFN3VrZpJRUY46NLLp9MddhygtYehpy342b7WxMMBUWf5trXX33NpXbQ6bxX06tN611",
-	"G8nTzENy/Vb1F6JvB9EzRa3edK+p735+ct8uGwXE1vbYbLmLfg/PXGVcp/rlJE/hmTU/yffinff2zqH+",
-	"HKPxyLol+Z7+13PV7YM+L+B0KJfGtxbtfR/0xs6tdgU1N5nOp82YSbfZ9Gmwec789OUpexXt8ubd9nbv",
-	"3IM3dB9Ir36cF+7YVu4wzT73YI8HtvYUTT0f1pJ73pPofun/52C0XpqN/ijPuLXj6MFcvGEHUtF79MLS",
-	"Lz1RWytLzsaoRxYlOW8eow0jGvsLkC8y9cxkauB/CYkP5TkH9Ma558uuW5/Hr0get1h802T+i4S8SMgf",
-	"0GXX8gnrrTWArWLoLbCcFJ8sfhHFjTf/qwji4ycjOj+U/WdpJCu/6r2BvLZ7rf3aq613Vf+VsuobZcC+",
-	"g5XZ0k5uxa0599S5U73Wjd3k3FR9Q9OaZjsRTSAm6v1MgUSyWcD7KcH2V0JFNHzge6BG1xkOr4b6Cowu",
-	"aQ3N5nc1tgpcytZ86Oa7AGnAK54O1fZ3FfFzAJm/4KMYl/9w9+Xu3wEAAP//+FWMYRuQAAA=",
+	"w+DnsqkZtjXppyditWZnwp+F13JGKJwvCqB+3aKur3Rwl87bdVnA/M3VfYoGKkm4tSWDxju6HXRQJ4zN",
+	"Nyaej00roCoprr9c0V6aUA7kVN+1fArRa35h5I8sUZjPfWxLgQLqr8swUbzYuErZuiSP8q68fjKd9919",
+	"hyaELResou3xHhJWSsC07Jl8ClHzMfeLdLmlq0LZTYRrpO+KdThfJ2rQd6J7vft3czbYfSJ4tic0NDcA",
+	"788W39QVtE3qwjXu2Mg9t2/ZO/zyApaeXrnv+tx2dhmZcqm/Z72uwHsby+0h0/gvp9ib9rqN5GnmIbn+",
+	"RMIL0beD6JmiVm+6N/T3/bT2c+WIQZ93cDoC8sbnFu19H/TSzq02IDoCM81PmzGT7rTp02PznPnpy1O2",
+	"K9oVzrvtbeC5B2/oVpBeLTkv3LGt3GH6fe7BHg/s7in6ej6sJfe8J9H9KgDPwWi99Bv9UU50a9PRg7l4",
+	"wyakov3ohaVf2qK2VpacvVGPLEpy3jxGG0Y09kcgX2TqmcnUwP8eEh/Kcw7ojXPPx123PvtXkTxusfim",
+	"KcAXCXmRkD+g0a7lK9ZbawBbxdCblj0pvlr8Ioobb/5XEcTHT0Z0fiv7z9JLVn7YewN5bfda+3VYW6+r",
+	"/itl1TfKgH0HK7OlzdyKW3PuqXOnerMbu8m5qfqSpjXNdiKaQEzUK5oCiWSzgPdrgu1vhYpo+MBXQY2u",
+	"MxxeDfUtGN2oMjSb39XYKnApW/Otm+8CpAGveDpU299VxM8BZP6Oj2Jc/sPdl7t/BwAA//8QGZ0BHpAA",
+	"AA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

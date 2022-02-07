@@ -24,7 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -40,10 +40,12 @@ import (
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+	"github.com/pingcap/dumpling/v4/export"
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -192,15 +194,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
 		if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-
-		if !checkingShard && !checkSchema {
-			continue
 		}
 
 		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
@@ -213,6 +208,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
+		// checkTables map schema => {table1, table2, ...}
 		checkTables := make(map[string][]string)
 		checkSchemas := make(map[string]struct{}, len(mapping))
 		for name, tables := range mapping {
@@ -236,7 +232,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
-
+		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
+			exportCfg := export.DefaultConfig()
+			err := dumpling.ParseExtraArgs(&c.tctx.Logger, exportCfg, strings.Fields(instance.cfg.ExtraArgs))
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
+		}
 		if c.onlineDDL != nil {
 			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
