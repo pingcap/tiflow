@@ -225,22 +225,12 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	// TODO: make these configurations can be customized by user
 	// Producer fetch metadata from brokers frequently, if metadata cannot be
-	// refreshed easily, this would indicate the network condition between the capture
-	// server and kafka broker is not good. To avoid spend too much time on such
-	// scenarios, just retry for once is enough.
-	// In the scenario that cannot get response from Kafka server, this can save
-	// a mount of time.
+	// refreshed easily, this would indicate the network condition between the
+	// capture server and kafka broker is not good.
+	// In the scenario that cannot get response from Kafka server, this default
+	// setting can help to get response more quickly.
 	config.Metadata.Retry.Max = 1
 	config.Metadata.Retry.Backoff = 100 * time.Millisecond
-	// If it is not set, this means a metadata request against an unreachable
-	// cluster (all brokers are unreachable or unresponsive) can take up to
-	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
-	// Metadata.Retry.Backoff * Metadata.Retry.Max` to fail.
-	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/tiflow/issues/3352.
-	// In the scenario that the network connection `producer -> kafka` is ok,
-	// but the producer cannot get response from kafka, this is the upperbound
-	// time cost for fetching metadata.
 	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
 	config.Metadata.Timeout = 1 * time.Minute
 
@@ -267,7 +257,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone

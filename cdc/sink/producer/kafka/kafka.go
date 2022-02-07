@@ -325,24 +325,15 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	asyncClient, err := sarama.NewAsyncProducerFromClient(client)
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	syncClient, err := sarama.NewSyncProducerFromClient(client)
+	syncProducer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-
-	//asyncProducer, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
-	//if err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	//}
-	//syncProducer, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
-	//if err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	//}
 
 	notifier := new(notify.Notifier)
 	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
@@ -351,8 +342,8 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 	}
 	k := &kafkaSaramaProducer{
 		client:        client,
-		asyncProducer: asyncClient,
-		syncProducer:  syncClient,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
 		topic:         topic,
 		partitionNum:  config.PartitionNum,
 		partitionOffset: make([]struct {
@@ -430,7 +421,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
@@ -470,7 +461,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
