@@ -252,9 +252,9 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Net.ReadTimeout = 10 * time.Second
 
 	// make the sarama producer flush messages as soon as possible.
+	config.Producer.Flush.Bytes = 0
 	config.Producer.Flush.Messages = 0
 	config.Producer.Flush.Frequency = time.Duration(0)
-	config.Producer.Flush.Bytes = 0
 	// todo: reason about the usage of this variable.
 	config.Producer.Flush.MaxMessages = 1000
 
