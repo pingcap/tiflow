@@ -132,7 +132,7 @@ func NewServer(cfg *Config) *Server {
 		ap:        NewAgentPool(&RateLimitConfig{rate: cfg.RPCRateLimit, burst: cfg.RPCRateBurst}),
 	}
 	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskResources)
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 	server.closed.Store(true)
 	setUseTLS(&cfg.Security)
 
@@ -590,6 +590,18 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 
 	resp.Result = true
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
+
+	if expect == pb.Stage_Stopped {
+		// delete meta data for optimist
+		if len(req.Sources) == 0 {
+			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
+		} else {
+			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+		}
+		if err2 != nil {
+			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
+		}
+	}
 	return resp, nil
 }
 
@@ -1558,7 +1570,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
-	err = s.optimist.RemoveMetaData(taskName)
+	err = s.optimist.RemoveMetaDataWithTask(taskName)
 	if err != nil {
 		return err
 	}
