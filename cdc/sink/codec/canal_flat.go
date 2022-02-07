@@ -218,7 +218,9 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		ret[i] = NewMQMessage(ProtocolCanalJSON, nil, value, msg.tikvTs, model.MqMessageTypeRow, &msg.Schema, &msg.Table)
+		m := NewMQMessage(ProtocolCanalJSON, nil, value, msg.tikvTs, model.MqMessageTypeRow, &msg.Schema, &msg.Table)
+		m.IncRowsCount()
+		ret[i] = m
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
