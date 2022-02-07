@@ -306,7 +306,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	//log.Debug("get new DDL job", zap.String("detail", job.String()))
+	log.Debug("get new DDL job", zap.String("detail", job.String()))
 	if !job.IsDone() && !job.IsSynced() {
 		return nil, nil
 	}

@@ -858,7 +858,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 	if log.GetLevel() == zapcore.DebugLevel {
 		log.Debug("Do GC in schema storage")
 		for i := 0; i < startIdx; i++ {
-			//s.snaps[i].PrintStatus(log.Debug)
+			s.snaps[i].PrintStatus(log.Debug)
 		}
 	}
 
