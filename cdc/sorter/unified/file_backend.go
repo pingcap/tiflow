@@ -56,7 +56,7 @@ func newFileBackEnd(fileName string, serde encoding.SerializerDeserializer) (*fi
 		return nil, errors.Trace(wrapIOError(err))
 	}
 
-	//log.Debug("new FileSorterBackEnd created", zap.String("filename", fileName))
+	log.Debug("new FileSorterBackEnd created", zap.String("filename", fileName))
 	return &fileBackEnd{
 		fileName: fileName,
 		serde:    serde,
@@ -137,7 +137,7 @@ func (f *fileBackEnd) free() error {
 		}
 	})
 
-	//log.Debug("Removing file", zap.String("file", f.fileName))
+	log.Debug("Removing file", zap.String("file", f.fileName))
 
 	f.cleanStats()
 

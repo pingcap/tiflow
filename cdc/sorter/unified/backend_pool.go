@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -147,7 +148,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				if err != nil {
 					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.fileName), zap.Error(err))
 				} else {
-					//log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
+					log.Debug("Temporary file removed", zap.String("file", backEnd.fileName))
 					freedCount += 1
 				}
 				if freedCount >= 16 {
@@ -186,11 +187,11 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
-	//tableID, tableName := util.TableIDFromCtx(ctx)
-	//log.Debug("Unified Sorter: trying to create file backEnd",
-	//	zap.String("filename", fname),
-	//	zap.Int64("tableID", tableID),
-	//	zap.String("tableName", tableName))
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	log.Debug("Unified Sorter: trying to create file backEnd",
+		zap.String("filename", fname),
+		zap.Int64("tableID", tableID),
+		zap.String("tableName", tableName))
 
 	if err := checkDataDirSatisfied(); err != nil {
 		return nil, errors.Trace(err)
@@ -264,12 +265,12 @@ func (p *backEndPool) terminate() {
 	defer close(p.cancelCh)
 	// the background goroutine can be considered terminated here
 
-	//log.Debug("Unified Sorter terminating...")
+	log.Debug("Unified Sorter terminating...")
 	p.cancelRWLock.Lock()
 	defer p.cancelRWLock.Unlock()
 	p.isTerminating = true
 
-	//log.Debug("Unified Sorter cleaning up before exiting")
+	log.Debug("Unified Sorter cleaning up before exiting")
 	// any new allocs and deallocs will not succeed from this point
 	// accessing p.cache without atomics is safe from now
 
@@ -300,7 +301,7 @@ func (p *backEndPool) terminate() {
 		}
 	}
 
-	//log.Debug("Unified Sorter backEnd terminated")
+	log.Debug("Unified Sorter backEnd terminated")
 }
 
 func (p *backEndPool) sorterMemoryUsage() int64 {
@@ -361,7 +362,7 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 	}
 
 	for _, toRemoveFilePath := range files {
-		//log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
+		log.Debug("Removing stale sorter temporary file", zap.String("file", toRemoveFilePath))
 		err := os.Remove(toRemoveFilePath)
 		if err != nil {
 			// In production, we do not want an error here to interfere with normal operation,

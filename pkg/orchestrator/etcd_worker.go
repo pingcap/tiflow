@@ -438,20 +438,20 @@ func logEtcdOps(ops []clientv3.Op, committed bool) {
 	if committed && (log.GetLevel() != zapcore.DebugLevel || len(ops) == 0) {
 		return
 	}
-	//logFn := log.Debug
-	//if !committed {
-	//	logFn = log.Info
-	//}
-	//
-	////logFn("[etcd worker] ==========Update State to ETCD==========")
-	////for _, op := range ops {
-	////	if op.IsDelete() {
-	////		logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
-	////	} else {
-	////		logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
-	////	}
-	////}
-	////logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
+	logFn := log.Debug
+	if !committed {
+		logFn = log.Info
+	}
+
+	logFn("[etcd worker] ==========Update State to ETCD==========")
+	for _, op := range ops {
+		if op.IsDelete() {
+			logFn("[etcd worker] delete key", zap.ByteString("key", op.KeyBytes()))
+		} else {
+			logFn("[etcd worker] put key", zap.ByteString("key", op.KeyBytes()), zap.ByteString("value", op.ValueBytes()))
+		}
+	}
+	logFn("[etcd worker] ============State Commit=============", zap.Bool("committed", committed))
 }
 
 func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {
