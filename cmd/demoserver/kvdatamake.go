@@ -22,7 +22,7 @@ import (
 
 const (
 	FILENUM     = 50
-	RECORDERNUM = 10000
+	RECORDERNUM = 1000000
 	FLUSHLEN    = 10
 	PORT        = "127.0.0.1:1234"
 )
@@ -204,6 +204,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	if err != nil {
 		log.L().Info("make sure the file exist ",
 			zap.String("fileName ", fileName))
+		fmt.Printf("open file %v failed  \n", fileName)
 		return err
 	}
 	defer file.Close()
@@ -293,8 +294,6 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					s.mu.Unlock()
 				}
 				_, err = writer.WriteString(res.Key + "," + strings.TrimSpace(res.Value) + "\n")
-				fmt.Printf("writer the key %v \n", res.Key)
-
 				count++
 				if (count % FLUSHLEN) == 0 {
 					err = writer.Flush()
