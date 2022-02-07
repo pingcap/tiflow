@@ -50,6 +50,12 @@ type Config struct {
 	SaslScram       *security.SaslScram
 	// control whether to create topic
 	AutoCreate bool
+
+	// Timeout for sarama producer network configurations, in `ms`,
+	// and default to `10000`, equal to `10s`
+	DialTimeout  int
+	WriteTimeout int
+	ReadTimeout  int
 }
 
 // NewConfig returns a default Kafka configuration
@@ -63,6 +69,9 @@ func NewConfig() *Config {
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
+		DialTimeout:       10000,
+		WriteTimeout:      10000,
+		ReadTimeout:       10000,
 	}
 }
 
@@ -201,6 +210,33 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		opts["enable-tidb-extension"] = s
 	}
 
+	s = params.Get("dial-timeout")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.DialTimeout = a
+	}
+
+	s = params.Get("write-timeout")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.DialTimeout = a
+	}
+
+	s = params.Get("read-timeout")
+	if s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.DialTimeout = a
+	}
+
 	return nil
 }
 
@@ -242,6 +278,10 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// See: https://github.com/Shopify/sarama/issues/765
 	// and https://github.com/pingcap/tiflow/issues/3352.
 	config.Metadata.Timeout = 1 * time.Minute
+
+	config.Net.DialTimeout = time.Duration(c.DialTimeout) * time.Millisecond
+	config.Net.WriteTimeout = time.Duration(c.WriteTimeout) * time.Millisecond
+	config.Net.ReadTimeout = time.Duration(c.ReadTimeout) * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
