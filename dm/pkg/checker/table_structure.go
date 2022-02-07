@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
-	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -118,7 +117,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	eg, checkCtx := errgroup.WithContext(ctx)
 	for i := 0; i < concurrency; i++ {
 		eg.Go(func() error {
-			return c.checkTable(checkCtx, r)
+			return c.checkTable(checkCtx)
 		})
 	}
 
@@ -174,7 +173,7 @@ func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
 	}
 }
 
-func (c *TablesChecker) checkTable(ctx context.Context, r *Result) error {
+func (c *TablesChecker) checkTable(ctx context.Context) error {
 	var (
 		sourceID string
 		p        *parser.Parser
@@ -438,17 +437,12 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				return err
 			}
 
-			info, err := dbutil.GetTableInfoBySQL(statement, p)
-			if err != nil {
-				return errors.Annotatef(err, "statement: %s", statement)
-			}
-
 			ctStmt, err := getCreateTableStmt(p, statement)
 			if err != nil {
 				return err
 			}
 
-			has := c.hasAutoIncrementKey(ctStmt, info)
+			has := c.hasAutoIncrementKey(ctStmt)
 			if has {
 				c.reMu.Lock()
 				if r.State == StateSuccess {
@@ -474,11 +468,10 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 	}
 }
 
-func (c *ShardingTablesChecker) hasAutoIncrementKey(stmt *ast.CreateTableStmt, info *model.TableInfo) bool {
+func (c *ShardingTablesChecker) hasAutoIncrementKey(stmt *ast.CreateTableStmt) bool {
 	for _, col := range stmt.Cols {
 		for _, opt := range col.Options {
-			switch opt.Tp {
-			case ast.ColumnOptionAutoIncrement:
+			if opt.Tp == ast.ColumnOptionAutoIncrement {
 				return true
 			}
 		}
