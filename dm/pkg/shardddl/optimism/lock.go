@@ -14,16 +14,23 @@
 package optimism
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"sync"
 
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
+	"golang.org/x/net/context"
 
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -75,28 +82,92 @@ type Lock struct {
 	// record the partially dropped columns
 	// column name -> source -> upSchema -> upTable -> int
 	columns map[string]map[string]map[string]map[string]DropColumnStage
+
+	downstreamMeta *DownstreamMeta
 }
 
 // NewLock creates a new Lock instance.
-// NOTE: we MUST give the initial table info when creating the lock now.
-func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joined schemacmp.Table, tts []TargetTable) *Lock {
+func NewLock(cli *clientv3.Client, id, task, downSchema, downTable string, joined schemacmp.Table, tts []TargetTable, downstreamMeta *DownstreamMeta) *Lock {
 	l := &Lock{
-		cli:        cli,
-		ID:         id,
-		Task:       task,
-		DownSchema: downSchema,
-		DownTable:  downTable,
-		joined:     joined,
-		tables:     make(map[string]map[string]map[string]schemacmp.Table),
-		done:       make(map[string]map[string]map[string]bool),
-		synced:     true,
-		versions:   make(map[string]map[string]map[string]int64),
-		columns:    make(map[string]map[string]map[string]map[string]DropColumnStage),
+		cli:            cli,
+		ID:             id,
+		Task:           task,
+		DownSchema:     downSchema,
+		DownTable:      downTable,
+		joined:         joined,
+		tables:         make(map[string]map[string]map[string]schemacmp.Table),
+		done:           make(map[string]map[string]map[string]bool),
+		synced:         true,
+		versions:       make(map[string]map[string]map[string]int64),
+		columns:        make(map[string]map[string]map[string]map[string]DropColumnStage),
+		downstreamMeta: downstreamMeta,
 	}
 	l.addTables(tts)
 	metrics.ReportDDLPending(task, metrics.DDLPendingNone, metrics.DDLPendingSynced)
-
+	// pre join because tables may have different schema at the beginning
+	l.joinTable()
 	return l
+}
+
+// FetchTableInfos fetch all table infos for a lock.
+func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.TableInfo, error) {
+	if l.downstreamMeta == nil {
+		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
+	}
+
+	db, err := conn.DefaultDBProvider.Apply(l.downstreamMeta.dbConfig)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), dbutil.DefaultTimeout)
+	defer cancel()
+
+	query := `SELECT table_info FROM ` + dbutil.TableName(l.downstreamMeta.meta, cputil.SyncerCheckpoint(task)) + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`
+	row := db.DB.QueryRowContext(ctx, query, source, schema, table)
+	if row.Err() != nil {
+		return nil, terror.ErrDBExecuteFailed.Delegate(row.Err(), query)
+	}
+	var tiBytes []byte
+	if err := row.Scan(&tiBytes); err != nil {
+		return nil, terror.ErrDBExecuteFailed.Delegate(err, query)
+	}
+	var ti *model.TableInfo
+	if bytes.Equal(tiBytes, []byte("null")) {
+		log.L().Warn("null table info", zap.String("query", query), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
+		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
+	}
+	if err := json.Unmarshal(tiBytes, &ti); err != nil {
+		return nil, err
+	}
+	return ti, nil
+}
+
+// joinTable join tables for a lock and update l.joined.
+func (l *Lock) joinTable() {
+	var (
+		joined     = l.joined
+		firstTable = true
+	)
+	for _, schemaTables := range l.tables {
+		for _, tables := range schemaTables {
+			for _, ti := range tables {
+				if firstTable {
+					joined = ti
+					firstTable = false
+				} else {
+					newJoined, err := joined.Join(ti)
+					if err != nil {
+						log.L().Error(fmt.Sprintf("fail to join table info %s with %s", joined, ti), zap.String("lockID", l.ID), log.ShortError(err))
+						return
+					}
+					joined = newJoined
+				}
+			}
+		}
+	}
+	l.joined = joined
 }
 
 // TrySync tries to sync the lock, re-entrant.
@@ -398,6 +469,56 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 	return true
 }
 
+// TryRemoveTable tries to remove tables in the lock by sources.
+// return drop columns for later use.
+func (l *Lock) TryRemoveTableBySources(sources []string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// record drop columns for sources
+	dropColumns := make([]string, 0)
+	for col, sourceColumns := range l.columns {
+		for _, source := range sources {
+			if _, ok := sourceColumns[source]; ok {
+				dropColumns = append(dropColumns, col)
+				break
+			}
+		}
+	}
+
+	for _, source := range sources {
+		if _, ok := l.tables[source]; !ok {
+			continue
+		}
+
+		delete(l.tables, source)
+		_, remain := l.syncStatus()
+		l.synced = remain == 0
+		delete(l.done, source)
+		delete(l.versions, source)
+		for _, sourceColumns := range l.columns {
+			delete(sourceColumns, source)
+		}
+		log.L().Info("tables removed from the lock", zap.String("lock", l.ID), zap.String("source", source))
+	}
+	return dropColumns
+}
+
+// HasTables check whether a lock has tables.
+func (l *Lock) HasTables() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, schemas := range l.tables {
+		for _, tables := range schemas {
+			for range tables {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // IsSynced returns whether the lock has synced.
 // In the optimistic mode, we call it `synced` if table info of all tables are the same,
 // and we define `remain` as the table count which have different table info with the joined one,
@@ -533,6 +654,7 @@ func (l *Lock) tryRevertDone(source, schema, table string) {
 }
 
 // addTables adds any not-existing tables into the lock.
+// For a new table, try to fetch table info from downstream.
 func (l *Lock) addTables(tts []TargetTable) {
 	for _, tt := range tts {
 		if _, ok := l.tables[tt.Source]; !ok {
@@ -548,7 +670,15 @@ func (l *Lock) addTables(tts []TargetTable) {
 			}
 			for table := range tables {
 				if _, ok := l.tables[tt.Source][schema][table]; !ok {
-					l.tables[tt.Source][schema][table] = l.joined
+					ti, err := l.FetchTableInfos(tt.Task, tt.Source, schema, table)
+					if err != nil {
+						log.L().Error("source table info not found, use joined table info instead", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), log.ShortError(err))
+						l.tables[tt.Source][schema][table] = l.joined
+					} else {
+						t := schemacmp.Encode(ti)
+						log.L().Debug("get source table info", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
+						l.tables[tt.Source][schema][table] = t
+					}
 					l.done[tt.Source][schema][table] = false
 					l.versions[tt.Source][schema][table] = 0
 					log.L().Info("table added to the lock", zap.String("lock", l.ID),
