@@ -82,11 +82,15 @@ type TablesChecker struct {
 	reMu        sync.Mutex
 	inCh        chan *checkItem
 	optCh       chan *incompatibilityOption
+	wg          sync.WaitGroup
 	dumpThreads int
 }
 
 // NewTablesChecker returns a RealChecker.
 func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, dumpThreads int) RealChecker {
+	if dumpThreads == 0 {
+		dumpThreads = 1
+	}
 	c := &TablesChecker{
 		dbs:         dbs,
 		tableMap:    tableMap,
@@ -119,13 +123,15 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
-	close(c.inCh)
-	go c.handleOpts(checkCtx, r)
+	c.wg.Add(1)
+	go c.handleOpts(ctx, r)
 	if err := eg.Wait(); err != nil {
 		c.reMu.Lock()
 		markCheckError(r, err)
 		c.reMu.Unlock()
 	}
+	close(c.optCh)
+	c.wg.Wait()
 
 	log.L().Logger.Info("check table structure over", zap.String("spend time", time.Since(startTime).String()))
 	return r
@@ -137,11 +143,15 @@ func (c *TablesChecker) Name() string {
 }
 
 func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
+	defer c.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case opt := <-c.optCh:
+		case opt, ok := <-c.optCh:
+			if !ok {
+				return
+			}
 			tableMsg := "table " + opt.tableID + " "
 			c.reMu.Lock()
 			switch opt.state {
@@ -173,7 +183,7 @@ func (c *TablesChecker) checkTable(ctx context.Context, r *Result) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return context.Canceled
 		case checkItem, ok := <-c.inCh:
 			if !ok {
 				return nil
@@ -312,6 +322,9 @@ type ShardingTablesChecker struct {
 
 // NewShardingTablesChecker returns a RealChecker.
 func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, dumpThreads int) RealChecker {
+	if dumpThreads == 0 {
+		dumpThreads = 1
+	}
 	c := &ShardingTablesChecker{
 		targetTableID:                targetTableID,
 		dbs:                          dbs,
@@ -380,7 +393,6 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
-	close(c.inCh)
 	if err := eg.Wait(); err != nil {
 		c.reMu.Lock()
 		markCheckError(r, err)
@@ -637,6 +649,7 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table,
 			inCh <- &checkItem{table, sourceID}
 		}
 	}
+	close(inCh)
 }
 
 func getConcurrency(ctx context.Context, tableMap map[string][]*filter.Table, dbs map[string]*sql.DB, dumpThreads int) (int, error) {

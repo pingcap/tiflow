@@ -29,10 +29,10 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
 
-	printJSON := func(r *Result) {
-		rawResult, _ := json.MarshalIndent(r, "", "\t")
-		fmt.Println("\n" + string(rawResult))
-	}
+	// printJSON := func(r *Result) {
+	// 	rawResult, _ := json.MarshalIndent(r, "", "\t")
+	// 	fmt.Println("\n" + string(rawResult))
+	// }
 
 	// 1. test a success check
 	mock = initShardingMock(mock)
@@ -50,14 +50,22 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
 		nil,
-		false)
+		false,
+		1)
 	result := checker.Check(ctx)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 2. check different column number
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		nil,
+		false,
+		1)
 	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
@@ -68,12 +76,21 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
 	result = checker.Check(ctx)
-	printJSON(result)
+	// printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 
 	// 3. check different column def
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		nil,
+		false,
+		1)
 	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
@@ -83,7 +100,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
 	result = checker.Check(ctx)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
@@ -117,9 +133,9 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		map[string]*sql.DB{"test-source": db},
 		map[string][]*filter.Table{"test-source": {
 			{Schema: "test-db", Name: "test-table-1"},
-		}})
+		}},
+		1)
 	result := checker.Check(ctx)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
 
@@ -137,6 +153,12 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
 	result = checker.Check(ctx)
 	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
@@ -157,8 +179,13 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 ) ENGINE=InnoDB DEFAULT CHARSET=ucs2`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
 	result = checker.Check(ctx)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
