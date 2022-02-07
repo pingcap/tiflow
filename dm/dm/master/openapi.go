@@ -491,7 +491,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 			return
 		}
 	}
-	err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(needStartSubTaskList...)...)
+	err = s.scheduler.AddSubTasks(latched, pb.Stage_Running, subtaskCfgPointersToInstances(needStartSubTaskList...)...)
 	if err != nil {
 		_ = c.Error(err)
 		return

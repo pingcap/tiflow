@@ -378,7 +378,7 @@ outerLoop:
 				continue
 			}
 			// create and update subtasks one by one (this should be quick enough because only updating etcd).
-			err = s.scheduler.AddSubTasks(false, *cfg2)
+			err = s.scheduler.AddSubTasks(false, pb.Stage_Running, *cfg2)
 			if err != nil {
 				if terror.ErrSchedulerSubTaskExist.Equal(err) {
 					err = nil // reset error

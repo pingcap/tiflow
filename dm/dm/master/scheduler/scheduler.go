@@ -836,7 +836,7 @@ func (s *Scheduler) AcquireSubtaskLatch(name string) (ReleaseFunc, error) {
 // AddSubTasks adds the information of one or more subtasks for one task.
 // use s.mu.RLock() to protect s.bound, and s.subtaskLatch to protect subtask related members.
 // setting `latched` to true means caller has acquired latch.
-func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) error {
+func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...config.SubTaskConfig) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -903,7 +903,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 			continue
 		}
 		newCfgs = append(newCfgs, cfg)
-		newStages = append(newStages, ha.NewSubTaskStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		newStages = append(newStages, ha.NewSubTaskStage(expectStage, cfg.SourceID, cfg.Name))
 		if _, ok := s.bounds[cfg.SourceID]; !ok {
 			unbounds = append(unbounds, cfg.SourceID)
 		}

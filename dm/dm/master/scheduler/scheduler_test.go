@@ -138,7 +138,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfgWithWorker(sourceCfg1, workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSourceCfg(sourceID1)), IsTrue)
-	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSubTasks(taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddWorker(workerName1, workerAddr1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)), IsTrue)
@@ -251,12 +251,12 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 		return len(bounds) == 1 && bounds[0] == sourceID1
 	}), IsTrue)
 	// no subtask config exists before start.
-	c.Assert(s.AddSubTasks(false), IsNil) // can call without configs, return without error, but take no effect.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running), IsNil) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(c, s, taskName1, sourceID1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_InvalidStage)
 	// start the task.
-	c.Assert(s.AddSubTasks(false, subtaskCfg1), IsNil)
-	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue) // add again.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1), IsNil)
+	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue) // add again.
 	// subtask config and stage exist.
 	t.subTaskCfgExist(c, s, subtaskCfg1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_Running)
@@ -265,7 +265,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	// try start a task with two sources, some sources not bound.
-	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22)), IsTrue)
+	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)), IsTrue)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
@@ -409,14 +409,14 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 
 	// CASE 4.4.1: start a task with two sources.
 	// can't add more than one tasks at a time now.
-	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, subtaskCfg1, subtaskCfg21)), IsTrue)
+	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1, subtaskCfg21)), IsTrue)
 	// task2' config and stage not exists before.
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	// start task2.
-	c.Assert(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22), IsNil)
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22), IsNil)
 	// config added, stage become Running.
 	t.subTaskCfgExist(c, s, subtaskCfg21)
 	t.subTaskCfgExist(c, s, subtaskCfg22)
