@@ -417,13 +417,6 @@ func (s *Server) reset(ctx context.Context) error {
 		return errors.Wrap(errors.ErrMasterNewServer, err)
 	}
 
-	// TODO: server master membership can share the same key with node info
-	_, err = s.etcdClient.Put(ctx, adapter.MasterInfoKey.Encode(s.name()),
-		s.cfg.String(), clientv3.WithLease(sess.Lease()))
-	if err != nil {
-		return errors.Wrap(errors.ErrEtcdAPIError, err)
-	}
-
 	// register NodeInfo key used in service discovery
 	value, err := s.info.ToJSON()
 	if err != nil {

@@ -2,9 +2,9 @@ package servermaster
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -26,29 +26,36 @@ func TestMembershipIface(t *testing.T) {
 	addr, etcd, client, cleanFn := test.PrepareEtcd(t, name)
 	defer cleanFn()
 
-	// prepare master info config
-	ctx := context.Background()
-	cfg := NewConfig()
-	cfg.Etcd.Name = name
-	cfg.AdvertiseAddr = addr
-	cfgBytes, err := json.Marshal(cfg)
-	require.Nil(t, err)
-	_, err = client.Put(ctx, adapter.MasterInfoKey.Encode(name), string(cfgBytes))
-	require.Nil(t, err)
+	testCases := []struct {
+		name string
+		addr string
+		tp   model.NodeType
+	}{
+		{name, addr, model.NodeTypeServerMaster},
+		{"membership-executor-test1", "127.0.0.1:10000", model.NodeTypeExecutor},
+	}
 
-	// test Membership.GetConfigs
-	membership := &EtcdMembership{etcdCli: client}
-	cfgs, err := membership.GetConfigs(ctx)
-	require.Nil(t, err)
-	require.Equal(t, 1, len(cfgs))
-	require.Contains(t, cfgs, name)
+	ctx := context.Background()
+	for _, tc := range testCases {
+		info := &model.NodeInfo{
+			Type: tc.tp,
+			ID:   model.DeployNodeID(tc.name),
+			Addr: tc.addr,
+		}
+		infoBytes, err := info.ToJSON()
+		require.Nil(t, err)
+		_, err = client.Put(ctx, adapter.NodeInfoKeyAdapter.Encode(tc.name), infoBytes)
+		require.Nil(t, err)
+	}
 
 	// test Membership.GetMembers
+	membership := &EtcdMembership{etcdCli: client}
 	etcdLeaderID := etcd.Server.Lead()
 	leader := &Member{Name: name}
 	members, err := membership.GetMembers(ctx, leader, etcdLeaderID)
 	require.Nil(t, err)
 	require.Len(t, members, 1)
+	require.Equal(t, name, members[0].Name)
 }
 
 func TestUpdateServerMembers(t *testing.T) {
@@ -59,13 +66,30 @@ func TestUpdateServerMembers(t *testing.T) {
 	addr, etcd, etcdCli, cleanFn := test.PrepareEtcd(t, name)
 	defer cleanFn()
 
+	testCases := []struct {
+		name string
+		addr string
+		tp   model.NodeType
+	}{
+		{name, addr, model.NodeTypeServerMaster},
+		{"membership-executor-test1", "127.0.0.1:10000", model.NodeTypeExecutor},
+	}
+
+	for _, tc := range testCases {
+		info := &model.NodeInfo{
+			Type: tc.tp,
+			ID:   model.DeployNodeID(tc.name),
+			Addr: tc.addr,
+		}
+		infoBytes, err := info.ToJSON()
+		require.Nil(t, err)
+		_, err = etcdCli.Put(ctx, adapter.NodeInfoKeyAdapter.Encode(tc.name), infoBytes)
+		require.Nil(t, err)
+	}
+
 	cfg := NewConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
-	cfgBytes, err := json.Marshal(cfg)
-	require.Nil(t, err)
-	_, err = etcdCli.Put(ctx, adapter.MasterInfoKey.Encode(name), string(cfgBytes))
-	require.Nil(t, err)
 
 	s := &Server{
 		cfg:        cfg,
@@ -83,7 +107,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		AdvertiseAddr: addr,
 	}
 	s.leader.Store(member)
-	err = s.updateServerMasterMembers(ctx)
+	err := s.updateServerMasterMembers(ctx)
 	require.Nil(t, err)
 	s.members.RLock()
 	defer s.members.RUnlock()

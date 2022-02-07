@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -33,7 +34,6 @@ func (m *Member) Unmarshal(data []byte) error {
 
 // Membership defines the interface to query member information in metastore
 type Membership interface {
-	GetConfigs(ctx context.Context) (map[string]*Config, error)
 	GetMembers(ctx context.Context, leader *Member, etcdLeaderID uint64) ([]*Member, error)
 }
 
@@ -41,25 +41,27 @@ type EtcdMembership struct {
 	etcdCli *clientv3.Client
 }
 
-func (em *EtcdMembership) GetConfigs(ctx context.Context) (map[string]*Config, error) {
-	resp, err := em.etcdCli.Get(ctx, adapter.MasterInfoKey.Path(), clientv3.WithPrefix())
+func (em *EtcdMembership) getMasterNodes(ctx context.Context) (map[string]*model.NodeInfo, error) {
+	resp, err := em.etcdCli.Get(ctx, adapter.NodeInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Wrap(errors.ErrEtcdAPIError, err)
 	}
-	cfgs := make(map[string]*Config, resp.Count)
+	nodes := make(map[string]*model.NodeInfo, resp.Count)
 	for _, kv := range resp.Kvs {
-		cfg := &Config{}
-		err := json.Unmarshal(kv.Value, cfg)
+		info := &model.NodeInfo{}
+		err := json.Unmarshal(kv.Value, info)
 		if err != nil {
 			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err)
 		}
-		cfgs[cfg.Etcd.Name] = cfg
+		if info.Type == model.NodeTypeServerMaster {
+			nodes[string(info.ID)] = info
+		}
 	}
-	return cfgs, nil
+	return nodes, nil
 }
 
 func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLeaderID uint64) ([]*Member, error) {
-	servers, err := em.GetConfigs(ctx)
+	servers, err := em.getMasterNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLe
 		isEtcdLeader := m.ID == etcdLeaderID
 		members = append(members, &Member{
 			Name:          m.Name,
-			AdvertiseAddr: server.AdvertiseAddr,
+			AdvertiseAddr: server.Addr,
 			IsEtcdLeader:  isEtcdLeader,
 			IsServLeader:  isServLeader,
 		})
