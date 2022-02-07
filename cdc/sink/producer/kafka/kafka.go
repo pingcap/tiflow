@@ -37,7 +37,7 @@ import (
 
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
-	defaultPartitionNum = 1
+	defaultPartitionNum = 3
 )
 
 const (

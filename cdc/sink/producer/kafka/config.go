@@ -225,14 +225,13 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	// TODO: make these configurations can be customized by user
 	// Producer fetch metadata from brokers frequently, if metadata cannot be
-	// refreshed, this would indicate bad network connection between the capture
-	// server and kafka broker. The default setting should be enough to detect
-	// the health of kafka cluster. For kafka cluster with a bad network condition,
-	// errors can be quickly obtained.
-	// In the scenario that kafka cluster is down, this would cost at most around
-	// 750ms to get known that.
+	// refreshed easily, this would indicate the network condition between the capture
+	// server and kafka broker is not good. To avoid spend too much time on such
+	// scenarios, just retry for once is enough.
+	// In the scenario that cannot get response from Kafka server, this can save
+	// a mount of time.
 	config.Metadata.Retry.Max = 1
-	config.Metadata.Retry.Backoff = 250 * time.Millisecond
+	config.Metadata.Retry.Backoff = 100 * time.Millisecond
 	// If it is not set, this means a metadata request against an unreachable
 	// cluster (all brokers are unreachable or unresponsive) can take up to
 	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
@@ -242,6 +241,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// In the scenario that the network connection `producer -> kafka` is ok,
 	// but the producer cannot get response from kafka, this is the upperbound
 	// time cost for fetching metadata.
+	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
 	config.Metadata.Timeout = 1 * time.Minute
 
 	// Admin.Retry take effect on `ClusterAdmin` related operations,
@@ -260,7 +260,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	config.Net.DialTimeout = 10 * time.Second
 	config.Net.WriteTimeout = 10 * time.Second
-	config.Net.ReadTimeout = 5 * time.Second
+	config.Net.ReadTimeout = 10 * time.Second
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
