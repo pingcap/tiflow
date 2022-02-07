@@ -15,24 +15,81 @@ package master
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestCreateTask(t *testing.T) {
+type TaskManagerSuite struct {
+	suite.Suite
+
+	ctx     context.Context
+	cancel  context.CancelFunc
+	master1 *Server
+}
+
+// SetupSuite setup a test cluster with one master and two worker.
+func (suite *TaskManagerSuite) SetupSuite() {
+	suite.Nil(log.InitLogger(&log.Config{}))
+	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+
+	suite.ctx, suite.cancel = context.WithCancel(context.Background())
+	suite.master1 = setupTestServer(suite.ctx, suite.T())
+
+	sources, workers := defaultWorkerSource()
+	// add worker
+	for i, workerAddr := range workers {
+		workerName := fmt.Sprintf("worker-%d", i)
+		suite.Nil(suite.master1.scheduler.AddWorker(workerName, workerAddr))
+
+		go func(ctx context.Context, workerName string) {
+			suite.Nil(ha.KeepAlive(ctx, suite.master1.etcdClient, workerName, keepAliveTTL), check.IsNil)
+		}(suite.ctx, workerName)
+	}
+	// add sources
+	for _, sourceName := range sources {
+		sourceCfg := config.NewSourceConfig()
+		sourceCfg.SourceID = sourceName
+		suite.Nil(suite.master1.scheduler.AddSourceCfg(sourceCfg))
+		// wait worker ready
+		suite.True(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+			w := suite.master1.scheduler.GetWorkerBySource(sourceName)
+			return w != nil
+		}))
+	}
+}
+
+func (suite *TaskManagerSuite) TearDownSuite() {
+	suite.cancel()
+	suite.master1.Close()
+
+	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+}
+
+func (suite *TaskManagerSuite) TestCreateTask() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := setupTestServer(ctx, t)
-
 	taskCfg := config.NewTaskConfig()
-	require.Nil(t, taskCfg.Decode(taskConfig))
-	require.Nil(t, s.createTask(ctx, taskCfg))
+	suite.Nil(taskCfg.Decode(taskConfig))
 
+	s := suite.master1
+	suite.Nil(s.createTask(ctx, taskCfg))
 	subTaskM := s.scheduler.GetSubTaskCfgsByTask(taskCfg.Name)
-	require.Equal(t, len(subTaskM), 1)
-	require.Equal(t, subTaskM[source1Name].Name, taskCfg.Name)
-	require.Equal(t, s.scheduler.GetExpectSubTaskStage(taskCfg.Name, taskCfg.MySQLInstances[0].SourceID), pb.Stage_Stopped)
+	suite.Equal(len(subTaskM), len(taskCfg.MySQLInstances))
+	suite.Equal(subTaskM[source1Name].Name, taskCfg.Name)
+	for _, source := range taskCfg.MySQLInstances {
+		suite.Equal(s.scheduler.GetExpectSubTaskStage(taskCfg.Name, source.SourceID).Expect, pb.Stage_Stopped)
+	}
+}
+
+func TestTaskManagerSuite(t *testing.T) {
+	suite.Run(t, new(TaskManagerSuite))
 }

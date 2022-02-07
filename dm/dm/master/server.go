@@ -450,7 +450,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		return respWithErr(err)
 	}
 
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	msg, err := s.checkTask(ctx, taskCfg, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil

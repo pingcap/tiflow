@@ -787,6 +787,7 @@ func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 }
 
 func setupTestServer(ctx context.Context, t *testing.T) *Server {
+	t.Helper()
 	// create a new cluster
 	cfg1 := NewConfig()
 	require.Nil(t, cfg1.Parse([]string{"-config=./dm-master.toml"}))
