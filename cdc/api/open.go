@@ -90,7 +90,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	changefeedGroup.POST("/:changefeed_id/pause", api.PauseChangefeed)
 	changefeedGroup.POST("/:changefeed_id/resume", api.ResumeChangefeed)
 	changefeedGroup.DELETE("/:changefeed_id", api.RemoveChangefeed)
-	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", api.RebalanceTable)
+	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", api.RebalanceTables)
 	changefeedGroup.POST("/:changefeed_id/tables/move_table", api.MoveTable)
 
 	// owner API
@@ -319,13 +319,7 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 		Type: model.AdminStop,
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.EnqueueJob(job, done)
-		return nil
-	})
-	if err := waitDone(ctx, done); err != nil {
+	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -366,13 +360,7 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 		Type: model.AdminResume,
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.EnqueueJob(job, done)
-		return nil
-	})
-	if err := waitDone(ctx, done); err != nil {
+	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -475,20 +463,14 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 		Type: model.AdminRemove,
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.EnqueueJob(job, done)
-		return nil
-	})
-	if err := waitDone(ctx, done); err != nil {
+	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
 	c.Status(http.StatusAccepted)
 }
 
-// RebalanceTable rebalances tables
+// RebalanceTables rebalances tables
 // @Summary rebalance tables
 // @Description rebalance all tables of a changefeed
 // @Tags changefeed
@@ -498,7 +480,7 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/rebalance_table [post]
-func (h *openAPI) RebalanceTable(c *gin.Context) {
+func (h *openAPI) RebalanceTables(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -518,13 +500,7 @@ func (h *openAPI) RebalanceTable(c *gin.Context) {
 		return
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.TriggerRebalance(changefeedID, done)
-		return nil
-	})
-	if err := waitDone(ctx, done); err != nil {
+	if err := handleOwnerRebalance(ctx, h.capture, changefeedID); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -577,13 +553,9 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.ManualSchedule(changefeedID, data.CaptureID, data.TableID, done)
-		return nil
-	})
-	if err := waitDone(ctx, done); err != nil {
+	err = handleOwnerScheduleTable(
+		ctx, h.capture, changefeedID, data.CaptureID, data.TableID)
+	if err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -605,10 +577,10 @@ func (h *openAPI) ResignOwner(c *gin.Context) {
 		return
 	}
 
-	_ = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.AsyncStop()
-		return nil
-	})
+	o, _ := h.capture.GetOwner()
+	if o != nil {
+		o.AsyncStop()
+	}
 
 	c.Status(http.StatusAccepted)
 }
@@ -773,7 +745,7 @@ func (h *openAPI) ServerStatus(c *gin.Context) {
 func (h *openAPI) Health(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if _, err := h.capture.GetOwner(ctx); err != nil {
+	if _, err := h.capture.GetOwnerCaptureInfo(ctx); err != nil {
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
@@ -823,7 +795,7 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 	var owner *model.CaptureInfo
 	// get owner
 	err := retry.Do(ctx, func() error {
-		o, err := h.capture.GetOwner(ctx)
+		o, err := h.capture.GetOwnerCaptureInfo(ctx)
 		if err != nil {
 			log.Info("get owner failed, retry later", zap.Error(err))
 			return err

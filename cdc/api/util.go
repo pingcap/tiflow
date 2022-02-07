@@ -21,6 +21,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -78,11 +80,57 @@ func writeData(w http.ResponseWriter, data interface{}) {
 	}
 }
 
-func waitDone(ctx context.Context, done <-chan error) (err error) {
+func handleOwnerJob(
+	ctx context.Context, capture *capture.Capture, job model.AdminJob,
+) error {
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	o.EnqueueJob(job, done)
 	select {
 	case <-ctx.Done():
-		err = ctx.Err()
-	case err = <-done:
+		return errors.Trace(ctx.Err())
+	case err := <-done:
+		return errors.Trace(err)
 	}
-	return
+}
+
+func handleOwnerRebalance(
+	ctx context.Context, capture *capture.Capture, changefeedID string,
+) error {
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	o.RebalanceTables(changefeedID, done)
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err := <-done:
+		return errors.Trace(err)
+	}
+}
+
+func handleOwnerScheduleTable(
+	ctx context.Context, capture *capture.Capture,
+	changefeedID string, captureID string, tableID int64,
+) error {
+	// Use buffered channel to prevernt blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	o.ScheduleTable(changefeedID, captureID, tableID, done)
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err := <-done:
+		return errors.Trace(err)
+	}
 }

@@ -486,14 +486,14 @@ func (c *Capture) setOwner(owner owner.Owner) {
 	c.owner = owner
 }
 
-// OperateOwnerUnderLock operates the owner with lock
-func (c *Capture) OperateOwnerUnderLock(fn func(owner.Owner) error) error {
+// GetOwner returns owner if it is the owner.
+func (c *Capture) GetOwner() (owner.Owner, error) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
-		return cerror.ErrNotOwner.GenWithStackByArgs()
+		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
-	return fn(c.owner)
+	return c.owner, nil
 }
 
 // campaign to be an owner.
@@ -527,10 +527,10 @@ func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
-	_ = c.OperateOwnerUnderLock(func(o owner.Owner) error {
+	o, _ := c.GetOwner()
+	if o != nil {
 		o.AsyncStop()
-		return nil
-	})
+	}
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -583,14 +583,14 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	}
 	// Safety: Because we are mainly outputting information about the owner here,
 	// if the owner does not exist or is not set, the information will not be output.
-	doneOwner := make(chan error, 1)
-	_ = c.OperateOwnerUnderLock(func(o owner.Owner) error {
+	o, _ := c.GetOwner()
+	if o != nil {
+		doneOwner := make(chan error, 1)
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 		o.WriteDebugInfo(w, doneOwner)
-		return nil
-	})
-	// wait the debug info printed
-	wait(doneOwner)
+		// wait the debug info printed
+		wait(doneOwner)
+	}
 
 	doneM := make(chan error, 1)
 	c.captureMu.Lock()
@@ -610,8 +610,8 @@ func (c *Capture) IsOwner() bool {
 	return c.owner != nil
 }
 
-// GetOwner return the owner of current TiCDC cluster
-func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
+// GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
+func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err

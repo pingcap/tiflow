@@ -139,7 +139,7 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	}
 }
 
-// AsyncClose sends a close signal to Manager and closing all processors
+// AsyncClose sends a signal to Manager to close all processors.
 func (m *Manager) AsyncClose() {
 	timeout := 3 * time.Second
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)

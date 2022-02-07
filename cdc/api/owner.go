@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/oracle"
@@ -112,10 +111,10 @@ func (h *ownerAPI) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
-	err := h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.AsyncStop()
-		return nil
-	})
+	o, err := h.capture.GetOwner()
+	if o != nil {
+		o.AsyncStop()
+	}
 	handleOwnerResp(w, err)
 }
 
@@ -153,17 +152,8 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		Opts: opts,
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.EnqueueJob(job, done)
-		return nil
-	})
-	if err != nil {
-		handleOwnerResp(w, err)
-		return
-	}
-	handleOwnerResp(w, waitDone(req.Context(), done))
+	err = handleOwnerJob(req.Context(), h.capture, job)
+	handleOwnerResp(w, err)
 }
 
 func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
@@ -185,18 +175,8 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.TriggerRebalance(changefeedID, done)
-		return nil
-	})
-
-	if err != nil {
-		handleOwnerResp(w, err)
-		return
-	}
-	handleOwnerResp(w, waitDone(req.Context(), done))
+	err = handleOwnerRebalance(req.Context(), h.capture, changefeedID)
+	handleOwnerResp(w, err)
 }
 
 func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
@@ -232,18 +212,9 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Use buffered channel to prevernt blocking owner.
-	done := make(chan error, 1)
-	err = h.capture.OperateOwnerUnderLock(func(owner owner.Owner) error {
-		owner.ManualSchedule(changefeedID, to, tableID, done)
-		return nil
-	})
-
-	if err != nil {
-		handleOwnerResp(w, err)
-		return
-	}
-	handleOwnerResp(w, waitDone(req.Context(), done))
+	err = handleOwnerScheduleTable(
+		req.Context(), h.capture, changefeedID, to, tableID)
+	handleOwnerResp(w, err)
 }
 
 func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {

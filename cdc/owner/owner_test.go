@@ -313,9 +313,9 @@ func TestAdminJob(t *testing.T) {
 		Type: model.AdminResume,
 	}, done1)
 	done2 := make(chan error, 1)
-	owner.TriggerRebalance("test-changefeed2", done2)
+	owner.RebalanceTables("test-changefeed2", done2)
 	done3 := make(chan error, 1)
-	owner.ManualSchedule("test-changefeed3", "test-caputre1", 10, done3)
+	owner.ScheduleTable("test-changefeed3", "test-caputre1", 10, done3)
 	done4 := make(chan error, 1)
 	var buf bytes.Buffer
 	owner.WriteDebugInfo(&buf, done4)
@@ -339,7 +339,7 @@ func TestAdminJob(t *testing.T) {
 			Tp:           ownerJobTypeRebalance,
 			ChangefeedID: "test-changefeed2",
 		}, {
-			Tp:              ownerJobTypeManualSchedule,
+			Tp:              ownerJobTypeScheduleTable,
 			ChangefeedID:    "test-changefeed3",
 			TargetCaptureID: "test-caputre1",
 			TableID:         10,

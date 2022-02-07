@@ -361,7 +361,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
-func TestRebalanceTable(t *testing.T) {
+func TestRebalanceTables(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
@@ -370,7 +370,7 @@ func TestRebalanceTable(t *testing.T) {
 
 	// test rebalance table succeeded
 	mo.EXPECT().
-		TriggerRebalance(gomock.Any(), gomock.Any()).
+		RebalanceTables(gomock.Any(), gomock.Any()).
 		Do(func(cfID model.ChangeFeedID, done chan<- error) {
 			require.EqualValues(t, cfID, changeFeedID)
 			close(done)
@@ -386,7 +386,7 @@ func TestRebalanceTable(t *testing.T) {
 
 	// test rebalance table failed from owner side.
 	mo.EXPECT().
-		TriggerRebalance(gomock.Any(), gomock.Any()).
+		RebalanceTables(gomock.Any(), gomock.Any()).
 		Do(func(cfID model.ChangeFeedID, done chan<- error) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(cfID)
 			close(done)
@@ -436,7 +436,7 @@ func TestMoveTable(t *testing.T) {
 	require.Nil(t, err)
 	body := bytes.NewReader(b)
 	mo.EXPECT().
-		ManualSchedule(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(
 			cfID model.ChangeFeedID, toCapture model.CaptureID,
 			tableID model.TableID, done chan<- error,
@@ -464,7 +464,7 @@ func TestMoveTable(t *testing.T) {
 	require.Nil(t, err)
 	body = bytes.NewReader(b)
 	mo.EXPECT().
-		ManualSchedule(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(
 			cfID model.ChangeFeedID, toCapture model.CaptureID,
 			tableID model.TableID, done chan<- error,

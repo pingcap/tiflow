@@ -40,7 +40,7 @@ type ownerJobType int
 // All OwnerJob types
 const (
 	ownerJobTypeRebalance ownerJobType = iota
-	ownerJobTypeManualSchedule
+	ownerJobTypeScheduleTable
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
@@ -55,9 +55,9 @@ type ownerJob struct {
 	Tp           ownerJobType
 	ChangefeedID model.ChangeFeedID
 
-	// for ManualSchedule only
+	// for ScheduleTable only
 	TargetCaptureID model.CaptureID
-	// for ManualSchedule only
+	// for ScheduleTable only
 	TableID model.TableID
 
 	// for Admin Job only
@@ -78,8 +78,8 @@ type ownerJob struct {
 type Owner interface {
 	orchestrator.Reactor
 	EnqueueJob(adminJob model.AdminJob, done chan<- error)
-	TriggerRebalance(cfID model.ChangeFeedID, done chan<- error)
-	ManualSchedule(
+	RebalanceTables(cfID model.ChangeFeedID, done chan<- error)
+	ScheduleTable(
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
@@ -157,7 +157,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.HandleJobs()
+	o.handleJobs()
 
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
@@ -226,9 +226,9 @@ func (o *ownerImpl) EnqueueJob(adminJob model.AdminJob, done chan<- error) {
 	})
 }
 
-// TriggerRebalance triggers a rebalance for the specified changefeed
+// RebalanceTables triggers a rebalance for the specified changefeed
 // `done` must be buffered to prevernt blocking owner.
-func (o *ownerImpl) TriggerRebalance(cfID model.ChangeFeedID, done chan<- error) {
+func (o *ownerImpl) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:           ownerJobTypeRebalance,
 		ChangefeedID: cfID,
@@ -236,14 +236,14 @@ func (o *ownerImpl) TriggerRebalance(cfID model.ChangeFeedID, done chan<- error)
 	})
 }
 
-// ManualSchedule moves a table from a capture to another capture
+// ScheduleTable moves a table from a capture to another capture
 // `done` must be buffered to prevernt blocking owner.
-func (o *ownerImpl) ManualSchedule(
+func (o *ownerImpl) ScheduleTable(
 	cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
-		Tp:              ownerJobTypeManualSchedule,
+		Tp:              ownerJobTypeScheduleTable,
 		ChangefeedID:    cfID,
 		TargetCaptureID: toCapture,
 		TableID:         tableID,
@@ -357,9 +357,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
-// HandleJobs handles changefeed admin jobs and others.
-// Exported for tests.
-func (o *ownerImpl) HandleJobs() {
+func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -373,7 +371,7 @@ func (o *ownerImpl) HandleJobs() {
 		switch job.Tp {
 		case ownerJobTypeAdminJob:
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
-		case ownerJobTypeManualSchedule:
+		case ownerJobTypeScheduleTable:
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()

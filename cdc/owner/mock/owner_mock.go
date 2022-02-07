@@ -62,18 +62,6 @@ func (mr *MockOwnerMockRecorder) EnqueueJob(adminJob, done interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueJob", reflect.TypeOf((*MockOwner)(nil).EnqueueJob), adminJob, done)
 }
 
-// ManualSchedule mocks base method.
-func (m *MockOwner) ManualSchedule(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID, done chan<- error) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ManualSchedule", cfID, toCapture, tableID, done)
-}
-
-// ManualSchedule indicates an expected call of ManualSchedule.
-func (mr *MockOwnerMockRecorder) ManualSchedule(cfID, toCapture, tableID, done interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ManualSchedule", reflect.TypeOf((*MockOwner)(nil).ManualSchedule), cfID, toCapture, tableID, done)
-}
-
 // Query mocks base method.
 func (m *MockOwner) Query(query *owner.Query, done chan<- error) {
 	m.ctrl.T.Helper()
@@ -84,6 +72,30 @@ func (m *MockOwner) Query(query *owner.Query, done chan<- error) {
 func (mr *MockOwnerMockRecorder) Query(query, done interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockOwner)(nil).Query), query, done)
+}
+
+// RebalanceTables mocks base method.
+func (m *MockOwner) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RebalanceTables", cfID, done)
+}
+
+// RebalanceTables indicates an expected call of RebalanceTables.
+func (mr *MockOwnerMockRecorder) RebalanceTables(cfID, done interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebalanceTables", reflect.TypeOf((*MockOwner)(nil).RebalanceTables), cfID, done)
+}
+
+// ScheduleTable mocks base method.
+func (m *MockOwner) ScheduleTable(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID, done chan<- error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ScheduleTable", cfID, toCapture, tableID, done)
+}
+
+// ScheduleTable indicates an expected call of ScheduleTable.
+func (mr *MockOwnerMockRecorder) ScheduleTable(cfID, toCapture, tableID, done interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleTable", reflect.TypeOf((*MockOwner)(nil).ScheduleTable), cfID, toCapture, tableID, done)
 }
 
 // Tick mocks base method.
@@ -99,18 +111,6 @@ func (m *MockOwner) Tick(ctx context.Context, state orchestrator.ReactorState) (
 func (mr *MockOwnerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockOwner)(nil).Tick), ctx, state)
-}
-
-// TriggerRebalance mocks base method.
-func (m *MockOwner) TriggerRebalance(cfID model.ChangeFeedID, done chan<- error) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "TriggerRebalance", cfID, done)
-}
-
-// TriggerRebalance indicates an expected call of TriggerRebalance.
-func (mr *MockOwnerMockRecorder) TriggerRebalance(cfID, done interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerRebalance", reflect.TypeOf((*MockOwner)(nil).TriggerRebalance), cfID, done)
 }
 
 // WriteDebugInfo mocks base method.
