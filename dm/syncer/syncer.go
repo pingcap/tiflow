@@ -735,14 +735,6 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return ti, nil
 	}
 
-	// in optimistic shard mode, we should try to get the init schema (the one before modified by other tables) first.
-	if s.cfg.ShardMode == config.ShardOptimistic {
-		ti, err = s.trackInitTableInfoOptimistic(sourceTable, targetTable)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
 	if ti == nil {
 		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
@@ -1492,7 +1484,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if s.cfg.Mode == config.ModeAll && fresh {
+	if fresh && s.cfg.Mode == config.ModeAll {
 		delLoadTask = true
 		flushCheckpoint = true
 		err = s.loadTableStructureFromDump(ctx)
@@ -1500,7 +1492,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
 			cleanDumpFile = false
 		}
-	} else {
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(tctx)
+		}
+	}
+
+	if s.cfg.Mode == config.ModeIncrement || !fresh {
 		cleanDumpFile = false
 	}
 
@@ -3172,7 +3169,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			continue
 		}
 	}
-	logger.Info("fetch table structure form dump files",
+	logger.Info("fetch table structure from dump files",
 		zap.Strings("database", dbs),
 		zap.Any("tables", tables))
 	for _, db := range dbs {
@@ -3763,4 +3760,24 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 		chanSize /= 2
 	}
 	return chanSize
+}
+
+func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
+	tbls := s.optimist.Tables()
+	sourceTables := make([]*filter.Table, 0, len(tbls))
+	tableInfos := make([]*model.TableInfo, 0, len(tbls))
+	for _, tbl := range tbls {
+		sourceTable := tbl[0]
+		targetTable := tbl[1]
+		tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
+		if err != nil {
+			tctx.L().Error("failed to get table  infos", log.ShortError(err))
+			continue
+		}
+		sourceTables = append(sourceTables, &sourceTable)
+		tableInfos = append(tableInfos, tableInfo)
+	}
+	if err := s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos); err != nil {
+		tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
+	}
 }
