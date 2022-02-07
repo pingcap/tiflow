@@ -73,7 +73,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	prodSuccess := new(sarama.ProduceResponse)
@@ -352,7 +352,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
@@ -434,7 +434,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
