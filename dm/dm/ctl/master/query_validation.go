@@ -17,8 +17,8 @@ func NewQueryValidationErrorCmd() *cobra.Command {
 		Short: "show error of the validation task",
 		RunE:  queryValidationError,
 	}
-	cmd.Flags().BoolP("all-error", "", false, "show all error")
-	cmd.Flags().BoolP("ignored-error", "", false, "show ignored error")
+	cmd.Flags().Bool("all-error", false, "show all error")
+	cmd.Flags().Bool("ignored-error", false, "show ignored error")
 	return cmd
 }
 

@@ -17,7 +17,7 @@ func NewStartValidationCmd() *cobra.Command {
 		Short: "start to validate the completeness of the data",
 		RunE:  startValidation,
 	}
-	cmd.Flags().BoolP("all-task", "", false, "whether the validator applied to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether the validator applied to all tasks")
 	cmd.Flags().String("from-time", "", "specify a starting time to validate")
 	cmd.Flags().String("mode", "full", "specify the mode of validation: full, fast")
 	return cmd
@@ -29,7 +29,7 @@ func NewStopValidationCmd() *cobra.Command {
 		Short: "start to validate the completeness of the data",
 		RunE:  stopValidation,
 	}
-	cmd.Flags().BoolP("all-task", "", false, "whether the validator applied to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether the validator applied to all tasks")
 	return cmd
 }
 
