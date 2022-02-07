@@ -415,7 +415,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 	worker.metrics.metricEtcdTxnDuration.Observe(costTime.Seconds())
 	if err != nil {
-		return cerrors.WrapError(cerrors.ErrEtcdTryAgain, err)
+		return errors.Trace(err)
 	}
 
 	logEtcdOps(opsThen, resp.Succeeded)
