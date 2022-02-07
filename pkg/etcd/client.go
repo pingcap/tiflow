@@ -159,15 +159,19 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 		if !cerrors.IsRetryableError(err) {
 			return false
 		}
-		if rpcName == EtcdRevoke {
+
+		switch rpcName {
+		case EtcdRevoke:
 			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
-				// it means the etcd lease is already expired or revoked
+				// It means the etcd lease is already expired or revoked
 				return false
 			}
-		}
-		if rpcName == EtcdTxn {
+		case EtcdTxn:
 			return errorutil.IsRetryableEtcdError(err)
+		default:
+			// For other types of operation, we retry directly without handling errors
 		}
+
 		return true
 	}
 }
