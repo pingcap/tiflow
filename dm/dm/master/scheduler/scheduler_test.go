@@ -135,6 +135,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 
 	// not started scheduler can't do anything.
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfg(sourceCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfgWithWorker(sourceCfg1, workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSourceCfg(sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue)
@@ -406,7 +407,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.relayStageMatch(c, s, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
-	// CASE 4.4: start a task with two sources.
+	// CASE 4.4.1: start a task with two sources.
 	// can't add more than one tasks at a time now.
 	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, subtaskCfg1, subtaskCfg21)), IsTrue)
 	// task2' config and stage not exists before.
@@ -423,7 +424,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
-	// CASE 4.4.1 fail to stop any task.
+	// CASE 4.4.2 fail to stop any task.
 	// can call without tasks or sources, return without error, but take no effect.
 	c.Assert(s.RemoveSubTasks("", sourceID1), IsNil)
 	c.Assert(s.RemoveSubTasks(taskName1), IsNil)
@@ -470,6 +471,38 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	rebuildScheduler(ctx)
 
 	// CASE 4.7: remove source2.
+	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
+	c.Assert(s.RemoveSourceCfg(sourceID2), IsNil)
+	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.RemoveSourceCfg(sourceID2)), IsTrue) // already removed.
+	// source2 removed.
+	t.sourceCfgNotExist(c, s, sourceID2)
+	// worker2 become Free now.
+	t.workerFree(c, s, workerName2)
+	t.sourceBounds(c, s, []string{sourceID1}, []string{})
+	t.relayStageMatch(c, s, sourceID2, pb.Stage_InvalidStage)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.1: add source2 with specify worker1
+	// source2 not exist, worker1 is bound
+	t.sourceCfgNotExist(c, s, sourceID2)
+	t.workerBound(c, s, ha.NewSourceBound(sourceID1, workerName1))
+	c.Assert(terror.ErrSchedulerWorkerNotFree.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)), IsTrue)
+	// source2 is not created because expected worker1 is already bound
+	t.sourceCfgNotExist(c, s, sourceID2)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.2: add source2 with specify worker2
+	// source2 not exist, worker2 should be free
+	t.sourceCfgNotExist(c, s, sourceID2)
+	t.workerFree(c, s, workerName2)
+	c.Assert(s.AddSourceCfgWithWorker(&sourceCfg2, workerName2), IsNil)
+	t.workerBound(c, s, ha.NewSourceBound(sourceID2, workerName2))
+	t.sourceBounds(c, s, []string{sourceID1, sourceID2}, []string{})
+	c.Assert(s.StartRelay(sourceID2, []string{workerName2}), IsNil)
+	t.relayStageMatch(c, s, sourceID2, pb.Stage_Running)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.3: remove source2 again.
 	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
 	c.Assert(s.RemoveSourceCfg(sourceID2), IsNil)
 	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.RemoveSourceCfg(sourceID2)), IsTrue) // already removed.
