@@ -47,7 +47,7 @@ func TestInfo(t *testing.T) {
 
 // clear keys in etcd test cluster.
 func clearTestInfoOperation(c *C) {
-	c.Assert(ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {

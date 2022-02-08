@@ -445,6 +445,118 @@ func (s *trackerSuite) TestCreateTableIfNotExists(c *C) {
 	c.Assert(duration.Seconds(), Less, float64(30))
 }
 
+func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
+	log.SetLevel(zapcore.ErrorLevel)
+	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	c.Assert(err, IsNil)
+	err = tracker.CreateSchemaIfNotExists("testdb")
+	c.Assert(err, IsNil)
+	err = tracker.CreateSchemaIfNotExists("testdb2")
+	c.Assert(err, IsNil)
+
+	tables := []*filter.Table{
+		{
+			Schema: "testdb",
+			Name:   "foo",
+		},
+		{
+			Schema: "testdb",
+			Name:   "foo1",
+		},
+		{
+			Schema: "testdb2",
+			Name:   "foo3",
+		},
+	}
+	execStmt := []string{
+		`create table foo(
+			a int primary key auto_increment,
+			b int as (c+1) not null,
+			c int comment 'some cmt',
+			d text,
+			key dk(d(255))
+		) comment 'more cmt' partition by range columns (a) (
+			partition x41 values less than (41),
+			partition x82 values less than (82),
+			partition rest values less than maxvalue comment 'part cmt'
+		);`,
+		`create table foo1(
+			a int primary key,
+			b text not null,
+			d datetime,
+			e varchar(5)
+		);`,
+		`create table foo3(
+			a int,
+			b int,
+			primary key(a));`,
+	}
+	tiInfos := make([]*model.TableInfo, len(tables))
+	for i := range tables {
+		ctx := context.Background()
+		err = tracker.Exec(ctx, tables[i].Schema, execStmt[i])
+		c.Assert(err, IsNil)
+		tiInfos[i], err = tracker.GetTableInfo(tables[i])
+		c.Assert(err, IsNil)
+		c.Assert(tiInfos[i], NotNil)
+		c.Assert(tiInfos[i].Name.O, Equals, tables[i].Name)
+		tiInfos[i] = tiInfos[i].Clone()
+		clearVolatileInfo(tiInfos[i])
+	}
+	// drop all tables and recover
+	// 1. drop
+	for i := range tables {
+		err = tracker.DropTable(tables[i])
+		c.Assert(err, IsNil)
+		_, err = tracker.GetTableInfo(tables[i])
+		c.Assert(err, ErrorMatches, `.*Table 'testdb.*\.foo.*' doesn't exist`) // drop table success
+	}
+	// 2. recover
+	tablesToCreate := map[string]map[string]*model.TableInfo{}
+	tablesToCreate["testdb"] = map[string]*model.TableInfo{}
+	tablesToCreate["testdb2"] = map[string]*model.TableInfo{}
+	for i := range tables {
+		tablesToCreate[tables[i].Schema][tables[i].Name] = tiInfos[i]
+	}
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+	c.Assert(err, IsNil)
+	// 3. check all create success
+	for i := range tables {
+		var ti *model.TableInfo
+		ti, err = tracker.GetTableInfo(tables[i])
+		c.Assert(err, IsNil)
+		cloneTi := ti.Clone()
+		clearVolatileInfo(cloneTi)
+		c.Assert(cloneTi, DeepEquals, tiInfos[i])
+	}
+
+	// drop two tables and create all three
+	// expect: silently succeed
+	// 1. drop table
+	err = tracker.DropTable(tables[2])
+	c.Assert(err, IsNil)
+	err = tracker.DropTable(tables[0])
+	c.Assert(err, IsNil)
+	// 2. batch create
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+	c.Assert(err, IsNil)
+	// 3. check
+	for i := range tables {
+		var ti *model.TableInfo
+		ti, err = tracker.GetTableInfo(tables[i])
+		c.Assert(err, IsNil)
+		clearVolatileInfo(ti)
+		c.Assert(ti, DeepEquals, tiInfos[i])
+	}
+
+	// drop schema and raise error
+	ctx := context.Background()
+	err = tracker.Exec(ctx, "", `drop database testdb`)
+	c.Assert(err, IsNil)
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+	c.Assert(err, NotNil)
+}
+
 func (s *trackerSuite) TestAllSchemas(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 	ctx := context.Background()

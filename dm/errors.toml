@@ -1297,7 +1297,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]
@@ -2392,6 +2392,18 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38057]
+message = "invalid cluster id: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-worker-40001]
 message = "parse dm-worker config flag set"
 description = ""
@@ -3230,6 +3242,12 @@ tags = ["internal", "low"]
 message = "failed to auto pause tasks %s when transfer-source"
 description = ""
 workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46033]
+message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
