@@ -20,7 +20,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
 func newMysqlErr(number uint16, message string) *mysql.MySQLError {
@@ -42,6 +43,24 @@ func TestIgnoreMysqlDDLError(t *testing.T) {
 	}
 
 	for _, item := range cases {
-		assert.Equal(t, item.ret, IsIgnorableMySQLDDLError(item.err))
+		require.Equal(t, item.ret, IsIgnorableMySQLDDLError(item.err))
+	}
+}
+
+func TestIsRetryableEtcdError(t *testing.T) {
+	cases := []struct {
+		err error
+		ret bool
+	}{
+		{nil, false},
+		{v3rpc.ErrCorrupt, false},
+
+		{v3rpc.ErrGRPCTimeoutDueToConnectionLost, true},
+		{v3rpc.ErrTimeoutDueToLeaderFail, true},
+		{v3rpc.ErrNoSpace, true},
+	}
+
+	for _, item := range cases {
+		require.Equal(t, item.ret, IsRetryableEtcdError(item.err))
 	}
 }

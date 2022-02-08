@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -748,4 +749,11 @@ func TestModifyAfterDelete(t *testing.T) {
 
 	_ = cli1.Unwrap().Close()
 	_ = cli2.Unwrap().Close()
+}
+
+func TestRetryableError(t *testing.T) {
+	require.True(t, isRetryableError(cerrors.ErrEtcdTryAgain))
+	require.True(t, isRetryableError(cerrors.ErrReachMaxTry.Wrap(rpctypes.ErrTimeoutDueToLeaderFail)))
+	require.True(t, isRetryableError(errors.Trace(context.DeadlineExceeded)))
+	require.False(t, isRetryableError(context.Canceled))
 }
