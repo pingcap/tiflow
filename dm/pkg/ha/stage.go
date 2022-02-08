@@ -176,10 +176,10 @@ func GetAllRelayStage(cli *clientv3.Client) (map[string]Stage, int64, error) {
 // if task name is "", it will return all subtasks' stage as a map{task-name: stage} for the source.
 // if task name is given, it will return a map{task-name: stage} whose length is 1.
 func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stage, int64, error) {
-	return getStageByKey(cli, common.StageSubTaskKeyAdapter, source, task)
+	return getStageByKey(cli, common.StageSubTaskKeyAdapter, source, task, 0)
 }
 
-func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task string) (map[string]Stage, int64, error) {
+func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task string, revision int64) (map[string]Stage, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
@@ -187,11 +187,16 @@ func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task str
 		stm  = make(map[string]Stage)
 		resp *clientv3.GetResponse
 		err  error
+		opts = make([]clientv3.OpOption, 0)
 	)
+	if revision > 0 {
+		opts = append(opts, clientv3.WithRev(revision))
+	}
 	if task != "" {
-		resp, err = cli.Get(ctx, key.Encode(source, task))
+		resp, err = cli.Get(ctx, key.Encode(source, task), opts...)
 	} else {
-		resp, err = cli.Get(ctx, key.Encode(source), clientv3.WithPrefix())
+		opts = append(opts, clientv3.WithPrefix())
+		resp, err = cli.Get(ctx, key.Encode(source), opts...)
 	}
 
 	if err != nil {
@@ -207,8 +212,8 @@ func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task str
 	return stm, resp.Header.Revision, nil
 }
 
-func GetValidatorStage(cli *clientv3.Client, source, task string) (map[string]Stage, int64, error) {
-	return getStageByKey(cli, common.StageValidatorKeyAdapter, source, task)
+func GetValidatorStage(cli *clientv3.Client, source, task string, revision int64) (map[string]Stage, int64, error) {
+	return getStageByKey(cli, common.StageValidatorKeyAdapter, source, task, revision)
 }
 
 // GetAllSubTaskStage gets all subtask stages.

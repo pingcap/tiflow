@@ -800,9 +800,18 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 			// create the subtask for expected running and paused stage.
 			log.L().Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
-			// new subtask, pass Running to validator stage, let internal logic determines it.
-			// as there's no new subtask with a stopped validator, either it has a Running one or none
-			err := w.StartSubTask(&subTaskCfg, stage.Expect, pb.Stage_Running, true)
+
+			validatorStageM, _, err := ha.GetValidatorStage(w.etcdClient, stage.Source, stage.Task, stage.Revision)
+			if err != nil {
+				return opErrTypeBeforeOp, terror.Annotate(err, "fail to get validator stage from etcd")
+			}
+			// for subtask with validation mode=none, there is no validator stage, set to stopped
+			expectedValidatorStage := pb.Stage_Stopped
+			if s, ok := validatorStageM[stage.Task]; ok {
+				expectedValidatorStage = s.Expect
+			}
+
+			err = w.StartSubTask(&subTaskCfg, stage.Expect, expectedValidatorStage, true)
 			return opErrTypeBeforeOp, err
 		}
 		if stage.Expect == pb.Stage_Running {
@@ -1200,7 +1209,7 @@ func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha
 }
 
 func (w *SourceWorker) getCurrentValidatorRevision(source string) (int64, error) {
-	_, rev, err := ha.GetValidatorStage(w.etcdClient, source, "")
+	_, rev, err := ha.GetValidatorStage(w.etcdClient, source, "", 0)
 	if err != nil {
 		return 0, err
 	}

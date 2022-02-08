@@ -780,9 +780,9 @@ func (st *SubTask) getCfg() *config.SubTaskConfig {
 	return st.cfg
 }
 
-func (st *SubTask) SetCfg(taskConfig config.SubTaskConfig) {
+func (st *SubTask) SetCfg(subTaskConfig config.SubTaskConfig) {
 	st.Lock()
-	st.cfg = &taskConfig
+	st.cfg = &subTaskConfig
 	st.Unlock()
 }
 

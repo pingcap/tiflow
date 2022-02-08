@@ -115,7 +115,14 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	subtaskStage2.Revision = rev6
 	c.Assert(stsm[task1], DeepEquals, subtaskStage1)
 	c.Assert(stsm[task2], DeepEquals, subtaskStage2)
-	validatorStages, rev7, err := GetValidatorStage(etcdTestCli, source, "")
+	validatorStages, rev7, err := GetValidatorStage(etcdTestCli, source, "", rev6)
+	c.Assert(err, IsNil)
+	c.Assert(rev7, Equals, rev6)
+	c.Assert(validatorStages, HasLen, 1)
+	validatorStage.Revision = rev6
+	c.Assert(validatorStages[task2], DeepEquals, validatorStage)
+	// get with task name
+	validatorStages, rev7, err = GetValidatorStage(etcdTestCli, source, task2, rev6)
 	c.Assert(err, IsNil)
 	c.Assert(rev7, Equals, rev6)
 	c.Assert(validatorStages, HasLen, 1)
@@ -136,7 +143,7 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev9, Equals, rev8)
 	c.Assert(stsm, HasLen, 0)
-	validatorStages, rev9, err = GetValidatorStage(etcdTestCli, source, "")
+	validatorStages, rev9, err = GetValidatorStage(etcdTestCli, source, "", 0)
 	c.Assert(err, IsNil)
 	c.Assert(rev9, Equals, rev8)
 	c.Assert(validatorStages, HasLen, 0)

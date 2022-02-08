@@ -734,7 +734,7 @@ func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source str
 	} else {
 		stageDeepEqualExcludeRev(c, m[source], stage)
 	}
-	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task)
+	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task, 0)
 	c.Assert(err, IsNil)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Stopped:
