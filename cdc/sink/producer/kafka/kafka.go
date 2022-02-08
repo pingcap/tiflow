@@ -32,6 +32,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -302,8 +303,8 @@ var (
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
-	opts map[string]string, errCh chan error,
-	changefeedID model.ChangeFeedID, role string) (*kafkaSaramaProducer, error) {
+	opts map[string]string, errCh chan error, role string) (*kafkaSaramaProducer, error) {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.String("role", role))
 	cfg, err := newSaramaConfigImpl(ctx, config)

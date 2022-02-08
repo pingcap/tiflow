@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -82,8 +83,8 @@ type mqSink struct {
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
-	changefeedID model.ChangeFeedID, role string,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	errCh chan error, role string,
 ) (*mqSink, error) {
 	var protocol config.Protocol
 	err := protocol.FromString(replicaConfig.Sink.Protocol)
@@ -115,6 +116,8 @@ func newMqSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
@@ -458,8 +461,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error,
-	changefeedID model.ChangeFeedID, role string) (*mqSink, error) {
+	opts map[string]string, errCh chan error, role string) (*mqSink, error) {
 	producerConfig := kafka.NewConfig()
 	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -477,11 +479,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh, changefeedID, role)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh, changefeedID, role)
+	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -489,8 +491,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
-	changefeedID model.ChangeFeedID, role string) (*mqSink, error) {
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error, role string) (*mqSink, error) {
 	producer, err := pulsar.NewProducer(sinkURI, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -516,7 +517,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh, changefeedID, role)
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh, role)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

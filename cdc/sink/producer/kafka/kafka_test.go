@@ -108,7 +108,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	}()
 
 	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "", "")
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "")
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	c.Assert(opts, check.HasKey, "max-message-bytes")
@@ -336,7 +336,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 	opts := make(map[string]string)
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "", "")
+	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "")
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 }
 
@@ -384,7 +384,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "", "")
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "")
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
@@ -453,7 +453,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "", "")
+	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh, "")
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
