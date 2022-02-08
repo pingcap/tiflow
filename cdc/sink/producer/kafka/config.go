@@ -295,3 +295,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 	return config, err
 }
+
+//func getSaramaMetrics(saramaConfig *sarama.Config, metricsName string) interface{} {
+//	return saramaConfig.MetricRegistry.GetOrRegister(metricsName, saramaConfig.MetricRegistry)
+//}

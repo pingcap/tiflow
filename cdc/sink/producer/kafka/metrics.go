@@ -17,6 +17,95 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+type kafkaComponentType int
+
+const (
+	kafkaBroker kafkaComponentType = iota
+	kafkaProducer
+)
+
+type saramaMetrics struct {
+	component   kafkaComponentType
+	name        string
+	description string
+}
+
+var (
+	incomingByteRate = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "incoming-byte-rate",
+		description: "Bytes/second read off all brokers",
+	}
+
+	outgoingByteRate = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "outgoing-byte-rate",
+		description: "Bytes/second written off all brokers",
+	}
+
+	requestRate = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "request-rate",
+		description: "Requests/second sent to all brokers",
+	}
+
+	requestSize = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "request-size",
+		description: "Distribution of the request size in bytes for all brokers",
+	}
+
+	requestLatencyInMs = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "request-latency-in-ms",
+		description: "Distribution of the request latency in ms for all brokers",
+	}
+
+	responseRate = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "response-rate",
+		description: "Responses/second received from all brokers",
+	}
+
+	responseSize = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "response-size",
+		description: "Distribution of the response size in bytes for all brokers",
+	}
+
+	requestInFlight = saramaMetrics{
+		component:   kafkaBroker,
+		name:        "requests-in-flight",
+		description: "The current number of in-flight requests awaiting a response for all brokers",
+	}
+)
+
+var (
+	batchSize = saramaMetrics{
+		component:   kafkaProducer,
+		name:        "batch-size",
+		description: "Distribution of the number of bytes sent per partition per request for all topics",
+	}
+
+	recordSendRate = saramaMetrics{
+		component:   kafkaProducer,
+		name:        "record-send-rate",
+		description: "Records/second sent to all topics",
+	}
+
+	recordsPerRequest = saramaMetrics{
+		component:   kafkaProducer,
+		name:        "records-per-request",
+		description: "Distribution of the number of records sent per request for all topics",
+	}
+
+	compressionRatio = saramaMetrics{
+		component:   kafkaProducer,
+		name:        "compression-ratio",
+		description: "Distribution of the compression ratio times 100 of record batches for all topics",
+	}
+)
+
 var (
 	// Producer level metrics
 	batchSizeHistogram = prometheus.NewHistogramVec(
