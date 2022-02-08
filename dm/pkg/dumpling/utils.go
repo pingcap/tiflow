@@ -54,7 +54,7 @@ func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location,
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
 func ParseMetaDataByExternalStore(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	fd, err := exstorage.OpenFile(ctx, dir, filename)
+	fd, err := exstorage.OpenFile(ctx, dir, filename, nil)
 	if err != nil {
 		return nil, nil, err
 	}

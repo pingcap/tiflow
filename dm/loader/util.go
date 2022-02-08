@@ -25,6 +25,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/exstorage"
@@ -146,9 +147,15 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 // getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
 func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
+	failpoint.Inject("TestRemoveMetaFile", func() {
+		exstorage.RemoveAll(ctx, cfg.Dir, nil)
+	})
 	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.Dir, metafile, cfg.Flavor)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if exstorage.IsNotExistError(err) {
+			failpoint.Inject("TestRemoveMetaFile", func() {
+				panic("success check file not exist!!")
+			})
 			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
 			if err2 != nil {
 				log.L().Warn("get load task", log.ShortError(err2))
@@ -162,7 +169,7 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 			return "", "", nil
 		}
 
-		toPrint, err2 := exstorage.ReadFile(ctx, cfg.Dir, metafile)
+		toPrint, err2 := exstorage.ReadFile(ctx, cfg.Dir, metafile, nil)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}
@@ -178,7 +185,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	log.L().Info("clean dump files")
 	if cfg.Mode == config.ModeFull {
 		// in full-mode all files won't be need in the future
-		if err := exstorage.RemoveAll(ctx, cfg.Dir); err != nil {
+		if err := exstorage.RemoveAll(ctx, cfg.Dir, nil); err != nil {
 			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", cfg.Dir), zap.Error(err))
 		}
 	} else {

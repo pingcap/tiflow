@@ -16,31 +16,33 @@ package exstorage
 import (
 	"context"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// AdjustS3Path adjust s3 rawURL, add uniqueId into s3 path.
-func AdjustS3Path(rawURL string, uniqueID string) (string, error) {
+// AdjustPath adjust rawURL, add uniqueId as path suffix.
+func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" {
-		return "", nil
+		return rawURL, nil
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	if u.Scheme == "s3" {
-		trimPath := strings.TrimRight(u.Path, "/")
-		// avoid duplicate add uniqueID
-		if uniqueID != "" && !strings.HasSuffix(trimPath, uniqueID) {
-			u.Path = trimPath + "." + uniqueID
-			return u.String(), nil
-		}
-		return rawURL, nil
+	trimPath := strings.TrimRight(u.Path, "/")
+	// avoid duplicate add uniqueID
+	if uniqueID != "" && !strings.HasSuffix(trimPath, uniqueID) {
+		u.Path = trimPath + "." + uniqueID
+		return u.String(), nil
 	}
+
 	return rawURL, nil
 }
 
@@ -68,13 +70,15 @@ func CreateExternalStore(ctx context.Context, path string) (storage.ExternalStor
 	return storage.New(ctx, backend, &storage.ExternalStorageOptions{})
 }
 
-// CollectDirFiles gets files in path.
-func CollectDirFiles(ctx context.Context, dir string) (map[string]struct{}, error) {
-	externalStore, err := CreateExternalStore(ctx, dir)
-	if err != nil {
-		return nil, err
+// CollectDirFiles gets files in dir.
+func CollectDirFiles(ctx context.Context, dir string, externalStore storage.ExternalStorage) (map[string]struct{}, error) {
+	var err error
+	if externalStore == nil {
+		externalStore, err = CreateExternalStore(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	files := make(map[string]struct{})
 
 	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
@@ -86,10 +90,14 @@ func CollectDirFiles(ctx context.Context, dir string) (map[string]struct{}, erro
 	return files, err
 }
 
-func RemoveAll(ctx context.Context, dir string) error {
-	externalStore, err := CreateExternalStore(ctx, dir)
-	if err != nil {
-		return err
+// RemoveAll remove files in dir.
+func RemoveAll(ctx context.Context, dir string, externalStore storage.ExternalStorage) error {
+	var err error
+	if externalStore == nil {
+		externalStore, err = CreateExternalStore(ctx, dir)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
@@ -101,18 +109,40 @@ func RemoveAll(ctx context.Context, dir string) error {
 	return err
 }
 
-func ReadFile(ctx context.Context, dir, fileName string) ([]byte, error) {
-	externalStore, err := CreateExternalStore(ctx, dir)
-	if err != nil {
-		return nil, err
+func ReadFile(ctx context.Context, dir, fileName string, externalStore storage.ExternalStorage) ([]byte, error) {
+	var err error
+	if externalStore == nil {
+		externalStore, err = CreateExternalStore(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return externalStore.ReadFile(ctx, fileName)
 }
 
-func OpenFile(ctx context.Context, dir, fileName string) (storage.ExternalFileReader, error) {
-	externalStore, err := CreateExternalStore(ctx, dir)
-	if err != nil {
-		return nil, err
+func OpenFile(ctx context.Context, dir, fileName string, externalStore storage.ExternalStorage) (storage.ExternalFileReader, error) {
+	var err error
+	if externalStore == nil {
+		externalStore, err = CreateExternalStore(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return externalStore.Open(ctx, fileName)
+}
+
+func IsNotExistError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if os.IsNotExist(err) {
+		return true
+	}
+	if aerr, ok := errors.Cause(err).(awserr.Error); ok {
+		switch aerr.Code() {
+		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
+			return true
+		}
+	}
+	return false
 }

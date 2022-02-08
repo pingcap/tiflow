@@ -1183,7 +1183,7 @@ func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location
 	filename := "metadata"
 	loc, loc2, err := dumpling.ParseMetaDataByExternalStore(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
 	if err != nil {
-		toPrint, err2 := exstorage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename)
+		toPrint, err2 := exstorage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

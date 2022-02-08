@@ -397,27 +397,26 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 
 	// adjust dir
 	if c.Mode == ModeAll || c.Mode == ModeFull {
+		// check
 		isS3, err := exstorage.IsS3Path(c.LoaderConfig.Dir)
 		if err != nil {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
-		if isS3 {
-			// check
-			if c.ImportMode != LoadModeSQL {
-				return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
-			}
-			newDir, err := exstorage.AdjustS3Path(c.LoaderConfig.Dir, c.Name+"."+c.SourceID)
-			if err != nil {
-				return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
-			}
-			c.LoaderConfig.Dir = newDir
-		} else {
-			// compatible with other storage and dirSuffix like older
-			dirSuffix := "." + c.Name
-			if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) {
-				c.LoaderConfig.Dir += dirSuffix
-			}
+		if isS3 && c.ImportMode != LoadModeSQL {
+			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
 		}
+		// add suffix
+		dirSuffix := ""
+		if isS3 {
+			dirSuffix = c.Name + "." + c.SourceID
+		} else {
+			dirSuffix = c.Name
+		}
+		newDir, err := exstorage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		if err != nil {
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+		}
+		c.LoaderConfig.Dir = newDir
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {

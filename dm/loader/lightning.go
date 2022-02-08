@@ -164,7 +164,6 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		l.sqlMode = sqlModes
 	}
 
-	l.logger.Info("create lightingloader", zap.Stringer("config", l.cfg))
 	return nil
 }
 

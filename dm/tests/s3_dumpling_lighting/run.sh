@@ -141,11 +141,64 @@ function run_test() {
 	cleanup_s3
 }
 
+function run_error_check() {
+
+	cleanup_data
+	cleanup_s3
+	# start s3 server
+	start_s3
+
+	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	check_master_port_offline 1
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/TestRemoveMetaFile=return()"
+	
+	# start dm master and worker
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	echo "prepare source data"
+	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_file $cur/data/clean_data.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	echo "start task"
+	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
+
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	echo "error check"
+	check_log_contain_with_retry 'panic: success check file not exist!!' $WORK_DIR/worker1/log/stdout.log
+	check_log_contain_with_retry 'panic: success check file not exist!!' $WORK_DIR/worker2/log/stdout.log
+
+	export GO_FAILPOINTS=""
+	
+	cleanup_s3
+}
+
 function run() {
 	run_test true
 	echo "run s3 test with check dump files success"
 	run_test false
 	echo "run s3 test without check dump files success"
+	run_error_check
+	echo "run s3 test error check success"
 }
 
 cleanup_data $TEST_NAME
