@@ -38,15 +38,18 @@ import {
   useDmapiPauseTaskMutation,
   useDmapiResumeTaskMutation,
   useDmapiGetTaskStatusQuery,
+  calculateTaskStatus,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
+import StartTaskWithListSelection from '~/components/StartTaskWithListSelection'
 
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
   const [visible, setVisible] = useState(false)
   const [currentTaskName, setCurrentTaskName] = useState('')
   const [selectedSources, setSelectedSources] = useState<string[]>([])
+  const [isStartTaskModalVisible, setIsStartTaskModalVisible] = useState(false)
   const [displayedSubtaskOffset, setDisplayedSubtaskOffset] = useState({
     start: 0,
     end: 10,
@@ -132,18 +135,36 @@ const TaskList: React.FC = () => {
     keys: ['name'],
   })
 
-  const columns: TableColumnsType<Task> | undefined = [
+  const columns: TableColumnsType<Task> = [
     {
       title: t('task name'),
       dataIndex: 'name',
     },
     {
       title: t('source info'),
-      dataIndex: 'name',
+      dataIndex: 'source_config',
+      render(sourceConfig) {
+        return sourceConfig.source_conf?.length > 0
+          ? t('{{val}} and {{count}} others', {
+              val: `${sourceConfig.source_conf[0].source_name}`,
+              count: sourceConfig.source_conf.length,
+            })
+          : '-'
+      },
     },
     {
       title: t('target info'),
-      dataIndex: 'name',
+      dataIndex: 'target_config',
+      render(targetConfig) {
+        return `${targetConfig.host}:${targetConfig.port}`
+      },
+    },
+    {
+      title: t('status'),
+      dataIndex: 'status_list',
+      render(subtasks) {
+        return calculateTaskStatus(subtasks)
+      },
     },
     {
       title: t('operations'),
@@ -203,6 +224,13 @@ const TaskList: React.FC = () => {
                 {t('pause')} <DownOutlined />
               </Button>
             </Dropdown>
+
+            <Button
+              icon={<PlayCircleOutlined />}
+              onClick={() => setIsStartTaskModalVisible(true)}
+            >
+              {t('start task')}
+            </Button>
           </Space>
         </Col>
       </Row>
@@ -269,6 +297,19 @@ const TaskList: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      <Modal
+        width={720}
+        title={t('start task')}
+        visible={isStartTaskModalVisible}
+        footer={null}
+        destroyOnClose
+        onCancel={() => setIsStartTaskModalVisible(false)}
+      >
+        <StartTaskWithListSelection
+          onCancel={() => setIsStartTaskModalVisible(false)}
+        />
+      </Modal>
     </div>
   )
 }
