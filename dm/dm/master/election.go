@@ -188,6 +188,12 @@ func (s *Server) startLeaderComponent(ctx context.Context) bool {
 		return false
 	}
 
+	err = s.initClusterID(ctx)
+	if err != nil {
+		log.L().Error("init cluster id failed", zap.Error(err))
+		return false
+	}
+
 	failpoint.Inject("FailToStartLeader", func(val failpoint.Value) {
 		masterStrings := val.(string)
 		if strings.Contains(masterStrings, s.cfg.Name) {
