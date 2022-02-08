@@ -284,7 +284,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			if err == nil {
 				return nil
 			}
-			log.Info("get error from asyncProducer", zap.Error(err))
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}
