@@ -74,7 +74,7 @@ type kafkaSaramaProducer struct {
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
 
-	role string
+	role util.Role
 	id   model.ChangeFeedID
 }
 
@@ -101,7 +101,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
-		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.String("role", k.role))
+		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
@@ -109,7 +109,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
 		log.Panic("SinkFlushDMLPanic",
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
 
 	select {
@@ -202,13 +202,13 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
-	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.String("role", k.role))
+	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	close(k.closeCh)
 }
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
-	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.String("role", k.role))
+	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	k.stop()
 
 	k.clientLock.Lock()
@@ -231,10 +231,10 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err := k.client.Close(); err != nil {
 		log.Error("close sarama client with error", zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
 		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
 	start = time.Now()
@@ -242,20 +242,20 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err != nil {
 		log.Error("close async client with error", zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
 		log.Info("async client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 	start = time.Now()
 	err = k.syncProducer.Close()
 	if err != nil {
 		log.Error("close sync client with error", zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
 		log.Info("stop the kafka producer",
-			zap.String("changefeed", k.id), zap.String("role", k.role))
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
 	for {
@@ -275,7 +275,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			return nil
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
-				zap.String("changefeed", k.id), zap.String("role", k.role))
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
 		case msg := <-k.asyncProducer.Successes():
 			if msg == nil || msg.Metadata == nil {
@@ -303,10 +303,10 @@ var (
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
-	opts map[string]string, errCh chan error, role string) (*kafkaSaramaProducer, error) {
+	opts map[string]string, errCh chan error, role util.Role) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
-		zap.String("changefeed", changefeedID), zap.String("role", role))
+		zap.String("changefeed", changefeedID), zap.Any("role", role))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
@@ -319,7 +319,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 	defer func() {
 		if err := admin.Close(); err != nil {
 			log.Warn("close kafka cluster admin failed", zap.Error(err),
-				zap.String("changefeed", changefeedID), zap.String("role", role))
+				zap.String("changefeed", changefeedID), zap.Any("role", role))
 		}
 	}()
 
@@ -374,7 +374,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 			case errCh <- err:
 			default:
 				log.Error("error channel is full", zap.Error(err),
-					zap.String("changefeed", k.id), zap.String("role", role))
+					zap.String("changefeed", k.id), zap.Any("role", role))
 			}
 		}
 	}()

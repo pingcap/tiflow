@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Sink options keys
@@ -82,17 +83,17 @@ type Sink interface {
 
 var sinkIniterMap = make(map[string]sinkInitFunc)
 
-type sinkInitFunc func(context.Context, model.ChangeFeedID, string, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
+type sinkInitFunc func(context.Context, model.ChangeFeedID, util.Role, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
 
 func init() {
 	// register blackhole sink
-	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role string, sinkURI *url.URL,
+	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role util.Role, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newBlackHoleSink(ctx, opts), nil
 	}
 
 	// register mysql sink
-	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role string, sinkURI *url.URL,
+	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role util.Role, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, config, opts)
 	}
@@ -101,14 +102,14 @@ func init() {
 	sinkIniterMap["tidb+ssl"] = sinkIniterMap["mysql"]
 
 	// register kafka sink
-	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role string, sinkURI *url.URL,
+	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role util.Role, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh, role)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
 	// register pulsar sink
-	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role string, sinkURI *url.URL,
+	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, role util.Role, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh, role)
 	}
@@ -116,7 +117,7 @@ func init() {
 }
 
 // New creates a new sink with the sink-uri
-func New(ctx context.Context, changefeedID model.ChangeFeedID, role string, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+func New(ctx context.Context, changefeedID model.ChangeFeedID, role util.Role, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -136,7 +137,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 	}
 	errCh := make(chan error)
 	// TODO: find a better way to verify a sinkURI is valid
-	s, err := New(ctx, "sink-verify", "cdc-client", sinkURI, sinkFilter, cfg, opts, errCh)
+	s, err := New(ctx, "sink-verify", util.CDCClient, sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}
