@@ -29,9 +29,7 @@ type opType byte
 
 const (
 	null opType = iota
-	insert
-	update
-	del
+	dml
 	ddl
 	xid
 	flush
@@ -45,12 +43,8 @@ const (
 
 func (t opType) String() string {
 	switch t {
-	case insert:
-		return "insert"
-	case update:
-		return "update"
-	case del:
-		return "delete"
+	case dml:
+		return "dml"
 	case ddl:
 		return "ddl"
 	case xid:
@@ -115,12 +109,18 @@ func (j *job) String() string {
 	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
-func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *sqlmodel.RowChange, ec *eventContext) *job {
+func newDMLJob(rowChange *sqlmodel.RowChange, ec *eventContext) *job {
+	sourceTable := rowChange.GetSourceTable()
+	targetTable := rowChange.GetTargetTable()
+	// TODO: remove sourceTbls and targetTable for dml Job
 	return &job{
-		tp:          tp,
-		sourceTbls:  map[string][]*filter.Table{sourceTable.Schema: {sourceTable}},
-		targetTable: targetTable,
-		dml:         dml,
+		tp: dml,
+		sourceTbls: map[string][]*filter.Table{
+			sourceTable.Schema: {
+				&filter.Table{Schema: sourceTable.Schema, Name: sourceTable.Table},
+			}},
+		targetTable: &filter.Table{Schema: targetTable.Schema, Name: targetTable.Table},
+		dml:         rowChange,
 		retry:       true,
 		safeMode:    ec.safeMode,
 
@@ -229,6 +229,23 @@ func newConflictJob(workerCount int) *job {
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
 		flushWg:     wg,
+	}
+}
+
+// newCompactJob is only used for metrics.
+func newCompactJob(targetTable *filter.Table) *job {
+	return &job{
+		tp:          compact,
+		targetTable: targetTable,
+	}
+}
+
+// newMockJob is only used in tests.
+func newMockJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
+	return &job{
+		tp:          tp,
+		targetTable: targetTable,
+		ddls:        ddls,
 	}
 }
 

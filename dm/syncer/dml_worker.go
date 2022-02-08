@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -47,10 +46,10 @@ type DMLWorker struct {
 
 	// callback func
 	// TODO: refine callback func
-	successFunc  func(int, int, []*job)
-	fatalFunc    func(*job, error)
-	lagFunc      func(*job, int)
-	addCountFunc func(bool, string, opType, int64, *filter.Table)
+	successFunc          func(int, int, []*job)
+	fatalFunc            func(*job, error)
+	lagFunc              func(*job, int)
+	updateJobMetricsFunc func(bool, string, *job)
 
 	// channel
 	inCh    chan *job
@@ -64,22 +63,22 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		chanSize /= 2
 	}
 	dmlWorker := &DMLWorker{
-		batch:        syncer.cfg.Batch,
-		workerCount:  syncer.cfg.WorkerCount,
-		chanSize:     chanSize,
-		multipleRows: syncer.cfg.MultipleRows,
-		task:         syncer.cfg.Name,
-		source:       syncer.cfg.SourceID,
-		worker:       syncer.cfg.WorkerName,
-		logger:       syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
-		successFunc:  syncer.successFunc,
-		fatalFunc:    syncer.fatalFunc,
-		lagFunc:      syncer.updateReplicationJobTS,
-		addCountFunc: syncer.addCount,
-		tctx:         syncer.tctx,
-		toDBConns:    syncer.toDBConns,
-		inCh:         inCh,
-		flushCh:      make(chan *job),
+		batch:                syncer.cfg.Batch,
+		workerCount:          syncer.cfg.WorkerCount,
+		chanSize:             chanSize,
+		multipleRows:         syncer.cfg.MultipleRows,
+		task:                 syncer.cfg.Name,
+		source:               syncer.cfg.SourceID,
+		worker:               syncer.cfg.WorkerName,
+		logger:               syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
+		successFunc:          syncer.successFunc,
+		fatalFunc:            syncer.fatalFunc,
+		lagFunc:              syncer.updateReplicationJobTS,
+		updateJobMetricsFunc: syncer.updateJobMetrics,
+		tctx:                 syncer.tctx,
+		toDBConns:            syncer.toDBConns,
+		inCh:                 inCh,
+		flushCh:              make(chan *job),
 	}
 
 	go func() {
@@ -118,23 +117,23 @@ func (w *DMLWorker) run() {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.flushWg.Wait()
-			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(true, adminQueueName, j)
 			w.flushCh <- j
 		case asyncFlush:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			w.flushCh <- j
 		case conflict:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.flushWg.Wait()
-			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(true, adminQueueName, j)
 		default:
 			queueBucket := int(utils.GenHashKey(j.dmlQueueKey)) % w.workerCount
-			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, queueBucketMapping[queueBucket], j)
 			startTime := time.Now()
 			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
 			jobChs[queueBucket] <- j
@@ -274,6 +273,11 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 	for _, j := range jobs {
 		var query string
 		var arg []interface{}
+		appendQueryAndArg := func() {
+			queries = append(queries, query)
+			args = append(args, arg)
+		}
+
 		switch j.dml.Type() {
 		case sqlmodel.RowChangeInsert:
 			if j.safeMode {
@@ -281,13 +285,23 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLInsert)
 			}
+			appendQueryAndArg()
+
 		case sqlmodel.RowChangeUpdate:
-			query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
+			if j.safeMode {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+				appendQueryAndArg()
+				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+				appendQueryAndArg()
+			} else {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
+				appendQueryAndArg()
+			}
+
 		case sqlmodel.RowChangeDelete:
 			query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+			appendQueryAndArg()
 		}
-		queries = append(queries, query)
-		args = append(args, arg)
 	}
 	return queries, args
 }
