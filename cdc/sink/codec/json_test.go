@@ -224,10 +224,10 @@ func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": "0"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
+	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": "-1"})
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
