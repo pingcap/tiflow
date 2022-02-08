@@ -496,6 +496,7 @@ const (
 	codeMasterFailToImportFromV10x
 	codeMasterInconsistentOptimistDDLsAndInfo
 	codeMasterOptimisticTableInfobeforeNotExist
+	codeMasterOptimisticDownstreamMetaNotFound
 	codeMasterInvalidClusterID
 )
 
@@ -1144,6 +1145,7 @@ var (
 
 	ErrMasterInconsistentOptimisticDDLsAndInfo = New(codeMasterInconsistentOptimistDDLsAndInfo, ClassDMMaster, ScopeInternal, LevelHigh, "inconsistent count of optimistic ddls and table infos, ddls: %d, table info: %d", "")
 	ErrMasterOptimisticTableInfoBeforeNotExist = New(codeMasterOptimisticTableInfobeforeNotExist, ClassDMMaster, ScopeInternal, LevelHigh, "table-info-before not exist in optimistic ddls: %v", "")
+	ErrMasterOptimisticDownstreamMetaNotFound  = New(codeMasterOptimisticDownstreamMetaNotFound, ClassDMMaster, ScopeInternal, LevelHigh, "downstream database config and meta for task %s not found", "")
 	ErrMasterInvalidClusterID                  = New(codeMasterInvalidClusterID, ClassDMMaster, ScopeInternal, LevelHigh, "invalid cluster id: %v", "")
 
 	// DM-worker error.
