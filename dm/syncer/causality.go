@@ -66,33 +66,35 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 // run receives dml jobs and send causality jobs by adding causality key.
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
-	for j := range c.inCh {
-		metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
-
-		startTime := time.Now()
-
-		switch j.tp {
-		case flush, asyncFlush:
-			c.relation.rotate(j.flushSeq)
-		case gc:
-			// gc is only used on inner-causality logic
-			c.relation.gc(j.flushSeq)
-			continue
-		default:
-			keys := j.dml.identifyKeys(c.sessCtx)
-
-			// detectConflict before add
-			if c.detectConflict(keys) {
-				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
-				c.outCh <- newConflictJob(c.workerCount)
-				c.relation.clear()
+	for {
+		select {
+		case j, ok := <-c.inCh:
+			if !ok {
+				return
 			}
-			j.dml.key = c.add(keys)
-			c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
+			metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
+			startTime := time.Now()
+			switch j.tp {
+			case flush, asyncFlush:
+				c.relation.rotate(j.flushSeq)
+			case gc:
+				// gc is only used on inner-causality logic
+				c.relation.gc(j.flushSeq)
+				continue
+			default:
+				keys := j.dml.identifyKeys(c.sessCtx)
+				// detectConflict before add
+				if c.detectConflict(keys) {
+					c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
+					c.outCh <- newConflictJob(c.workerCount)
+					c.relation.clear()
+				}
+				j.dml.key = c.add(keys)
+				c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
+			}
+			metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
+			c.outCh <- j
 		}
-		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
-
-		c.outCh <- j
 	}
 }
 
