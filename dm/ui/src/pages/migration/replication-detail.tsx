@@ -7,7 +7,7 @@ import { RedoOutlined, SearchOutlined } from '~/uikit/icons'
 import { useDmapiGetTaskListQuery } from '~/models/task'
 import { useFuseSearch } from '~/utils/search'
 
-const SyncDetail: React.FC = () => {
+const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
     withStatus: true,
@@ -55,8 +55,8 @@ const SyncDetail: React.FC = () => {
 }
 
 export const meta = {
-  title: () => i18n.t('sync detail'),
+  title: () => i18n.t('replication detail'),
   index: 3,
 }
 
-export default SyncDetail
+export default ReplicationDetail
