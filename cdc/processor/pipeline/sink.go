@@ -377,7 +377,6 @@ func (n *sinkNode) UpdateBarrierTs(ctx context.Context, ts model.Ts) error {
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	n.status.Store(TableStatusStopped)
 	return n.ReleaseResource(ctx)
 }
 
