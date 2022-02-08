@@ -18,7 +18,7 @@ package reader
 import (
 	context "context"
 
-	model "github.com/pingcap/ticdc/cdc/model"
+	model "github.com/pingcap/tiflow/cdc/model"
 	mock "github.com/stretchr/testify/mock"
 )
 

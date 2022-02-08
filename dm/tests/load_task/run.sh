@@ -31,7 +31,7 @@ function test_worker_restart() {
 		"Please check if the previous worker is online." 1
 
 	# worker1 online
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
@@ -80,7 +80,7 @@ function test_transfer_two_sources() {
 		"\"unit\": \"Load\"" 1
 
 	# worker2 online
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(15000)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(15000)"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
@@ -170,6 +170,85 @@ function test_transfer_two_sources() {
 		"\"taskStatus\": \"Running\"" 4
 }
 
+function stop_task_left_load() {
+	echo "start DM master, workers and sources"
+	run_dm_master $WORK_DIR/master $MASTER_PORT1 $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+	dmctl_start_task_standalone "$cur/conf/dm-task-standalone.yaml" "--remove-meta"
+
+	export GO_FAILPOINTS=""
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# kill worker1, load_task1 will be transferred to worker2, but lack local files
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status load_task1" \
+		"different worker in load stage, previous worker: worker1, current worker: worker2" 1
+
+	# now stop this task without clean meta (left a load_task KV in etcd)
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task load_task1" \
+		"\"result\": true" 2
+
+	dmctl_start_task_standalone "$cur/conf/dm-task2-standalone.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status load_task2" \
+		"\"unit\": \"Sync\"" 1
+
+	# after worker1 goes online, although it has unfinished load_task1, but load_task1 is stopped so should not rebound
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member --name worker1" \
+		"\"source\": \"\"" 1
+
+	# start-task again, expect the source is auto transferred back
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/dm-task-standalone.yaml"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member --name worker1" \
+		"\"source\": \"mysql-replica-01\"" 1
+
+	# repeat again and check start-task --remove-meta will not cause transfer
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task load_task1" \
+		"\"result\": true" 2
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status load_task2" \
+		"\"unit\": \"Sync\"" 1
+
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	dmctl_start_task_standalone "$cur/conf/dm-task-standalone.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status load_task1" \
+		"\"unit\": \"Sync\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member --name worker1" \
+		"\"source\": \"\"" 1
+
+	cleanup_process $*
+	cleanup_data load_task1
+	cleanup_data load_task2
+}
+
 function run() {
 	echo "import prepare data"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -177,12 +256,14 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
+	stop_task_left_load
+
 	echo "start DM master, workers and sources"
 	run_dm_master $WORK_DIR/master $MASTER_PORT1 $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
 
 	# worker1 loading load_task1
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task1\")"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
@@ -190,7 +271,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	# worker2 loading load_task2
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/LoadDataSlowDownByTask=return(\"load_task2\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task2\")"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
@@ -198,7 +279,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# worker3 loading load_task3
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/loader/LoadDataSlowDownByTask=return(\"load_task3\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/LoadDataSlowDownByTask=return(\"load_task3\")"
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 

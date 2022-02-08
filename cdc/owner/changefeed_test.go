@@ -22,16 +22,16 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/pdtime"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/ticdc/pkg/version"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -272,7 +272,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create database test1")
+	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE DATABASE `test1`")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
@@ -287,7 +287,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "create table test1.test1(id int primary key)")
+	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
 
 	// executing the ddl finished
 	mockAsyncSink.ddlDone = true
@@ -353,6 +353,147 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 
 	c.Assert(state.Status.CheckpointTs, check.Equals, state.Info.TargetTs)
 	c.Assert(state.Info.State, check.Equals, model.StateFinished)
+}
+
+func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
+	defer testleak.AfterTest(c)()
+	testCase := []struct {
+		input  string
+		result string
+	}{
+		{
+			"create table t1 (id int ) shard_row_id_bits=2;",
+			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */",
+		},
+		{
+			"create table t1 (id int ) shard_row_id_bits=2 pre_split_regions=2;",
+			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int ) shard_row_id_bits=2     pre_split_regions=2;",
+			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int ) shard_row_id_bits=2 engine=innodb pre_split_regions=2;",
+			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ ENGINE = innodb /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int ) pre_split_regions=2 shard_row_id_bits=2;",
+			"CREATE TABLE `t1` (`id` INT) /*T! PRE_SPLIT_REGIONS = 2 */ /*T! SHARD_ROW_ID_BITS = 2 */",
+		},
+		{
+			"create table t6 (id int ) shard_row_id_bits=2 shard_row_id_bits=3 pre_split_regions=2;",
+			"CREATE TABLE `t6` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! SHARD_ROW_ID_BITS = 3 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+		},
+		{
+			"create table t1 (id int primary key auto_random(2));",
+			"CREATE TABLE `t1` (`id` INT PRIMARY KEY /*T![auto_rand] AUTO_RANDOM(2) */)",
+		},
+		{
+			"create table t1 (id int primary key auto_random);",
+			"CREATE TABLE `t1` (`id` INT PRIMARY KEY /*T![auto_rand] AUTO_RANDOM */)",
+		},
+		{
+			"create table t1 (id int auto_random ( 4 ) primary key);",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM(4) */ PRIMARY KEY)",
+		},
+		{
+			"create table t1 (id int  auto_random  (   4    ) primary key);",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM(4) */ PRIMARY KEY)",
+		},
+		{
+			"create table t1 (id int auto_random ( 3 ) primary key) auto_random_base = 100;",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM(3) */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 100 */",
+		},
+		{
+			"create table t1 (id int auto_random primary key) auto_random_base = 50;",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 50 */",
+		},
+		{
+			"create table t1 (id int auto_increment key) auto_id_cache 100;",
+			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT PRIMARY KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 100 */",
+		},
+		{
+			"create table t1 (id int auto_increment unique) auto_id_cache 10;",
+			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT UNIQUE KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 10 */",
+		},
+		{
+			"create table t1 (id int) auto_id_cache = 5;",
+			"CREATE TABLE `t1` (`id` INT) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int) auto_id_cache=5;",
+			"CREATE TABLE `t1` (`id` INT) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int) /*T![auto_id_cache] auto_id_cache=5 */ ;",
+			"CREATE TABLE `t1` (`id` INT) /*T![auto_id_cache] AUTO_ID_CACHE = 5 */",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) clustered);",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"create table t1(id int, v int, primary key(a) clustered);",
+			"CREATE TABLE `t1` (`id` INT,`v` INT,PRIMARY KEY(`a`) /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"create table t1(id int primary key clustered, v int);",
+			"CREATE TABLE `t1` (`id` INT PRIMARY KEY /*T![clustered_index] CLUSTERED */,`v` INT)",
+		},
+		{
+			"alter table t add primary key(a) clustered;",
+			"ALTER TABLE `t` ADD PRIMARY KEY(`a`) /*T![clustered_index] CLUSTERED */",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) nonclustered);",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] NONCLUSTERED */)",
+		},
+		{
+			"create table t1 (id int, a varchar(255), primary key (a, b) /*T![clustered_index] nonclustered */);",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] NONCLUSTERED */)",
+		},
+		{
+			"create table clustered_test(id int)",
+			"CREATE TABLE `clustered_test` (`id` INT)",
+		},
+		{
+			"create database clustered_test",
+			"CREATE DATABASE `clustered_test`",
+		},
+		{
+			"create database clustered",
+			"CREATE DATABASE `clustered`",
+		},
+		{
+			"create table clustered (id int)",
+			"CREATE TABLE `clustered` (`id` INT)",
+		},
+		{
+			"create table t1 (id int, a varchar(255) key clustered);",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255) PRIMARY KEY /*T![clustered_index] CLUSTERED */)",
+		},
+		{
+			"alter table t force auto_increment = 12;",
+			"ALTER TABLE `t` /*T![force_inc] FORCE */ AUTO_INCREMENT = 12",
+		},
+		{
+			"alter table t force, auto_increment = 12;",
+			"ALTER TABLE `t` FORCE /* AlterTableForce is not supported */ , AUTO_INCREMENT = 12",
+		},
+		{
+			"create table cdc_test (id varchar(10) primary key ,c1 varchar(10)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin/*!90000  SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			"CREATE TABLE `cdc_test` (`id` VARCHAR(10) PRIMARY KEY,`c1` VARCHAR(10)) ENGINE = InnoDB DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_BIN /*T! SHARD_ROW_ID_BITS = 4 */ /*T! PRE_SPLIT_REGIONS = 3 */",
+		},
+	}
+	for _, ca := range testCase {
+		re, err := addSpecialComment(ca.input)
+		c.Check(err, check.IsNil)
+		c.Check(re, check.Equals, ca.result)
+	}
+	c.Assert(func() {
+		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
+	}, check.Panics, "invalid ddlQuery statement size")
 }
 
 func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {

@@ -16,7 +16,7 @@ package filter
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/stretchr/testify/require"

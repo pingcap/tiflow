@@ -15,8 +15,8 @@ package cyclic
 
 import (
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"go.uber.org/zap"
 )
 

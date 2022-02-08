@@ -16,7 +16,7 @@ package reader
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // BlackHoleReader is a blockHole storage which implements LogReader interface

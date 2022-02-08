@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -645,7 +645,7 @@ func TestSendAfterClose(t *testing.T) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/ticdc/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem(b.Name(), b)
@@ -687,7 +687,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/ticdc/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem(b.Name(), b)

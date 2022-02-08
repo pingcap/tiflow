@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
 

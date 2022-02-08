@@ -65,7 +65,7 @@ function test_session_config() {
 
 function test_query_timeout() {
 	echo "[$(date)] <<<<<< start test_query_timeout >>>>>>"
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/BlockSyncStatus=return(\"5s\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/BlockSyncStatus=return(\"5s\")"
 
 	cp $cur/conf/dm-master.toml $WORK_DIR/dm-master.toml
 	sed -i 's/rpc-timeout = "30s"/rpc-timeout = "3s"/g' $WORK_DIR/dm-master.toml
@@ -160,7 +160,7 @@ function test_stop_task_before_checkpoint() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/loader/WaitLoaderStopAfterInitCheckpoint=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopAfterInitCheckpoint=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -187,7 +187,7 @@ function test_stop_task_before_checkpoint() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/loader/WaitLoaderStopBeforeLoadCheckpoint=return(5)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopBeforeLoadCheckpoint=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -234,10 +234,10 @@ function test_fail_job_between_event() {
 
 	# worker1 will be bound to source1 and fail when see the second row change in an event
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneEvent=return()"
-		"github.com/pingcap/ticdc/dm/syncer/flushFirstJob=return()"
-		"github.com/pingcap/ticdc/dm/syncer/failSecondJob=return()"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneEvent=return()"
+		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
+		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -246,10 +246,10 @@ function test_fail_job_between_event() {
 
 	# worker2 will be bound to source2 and fail when see the second event in a GTID
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/syncer/countJobFromOneGTID=return()"
-		"github.com/pingcap/ticdc/dm/syncer/flushFirstJob=return()"
-		"github.com/pingcap/ticdc/dm/syncer/failSecondJob=return()"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneGTID=return()"
+		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
+		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -330,8 +330,8 @@ function run() {
 	test_stop_task_before_checkpoint
 
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
-		"github.com/pingcap/ticdc/dm/relay/NewUpstreamServer=return(true)"
+		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -379,6 +379,18 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# check create view(should be skipped by func `skipSQLByPattern`) will not stop sync task
+	run_sql_source1 "create view all_mode.t1_v as select * from all_mode.t1 where id=0;"
+	sleep 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	run_sql_source1 "SHOW SLAVE HOSTS;"
+	check_contains 'Slave_UUID'
 
 	run_sql_tidb "set time_zone = '+04:00';SELECT count(*) from all_mode.no_diff where dt = ts;"
 	check_contains "count(*): 3"
@@ -495,7 +507,6 @@ function run() {
 	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "Error .* Table .* doesn't exist"
 
 	# test Db not exists should be reported
-
 	run_sql_tidb "drop database all_mode"
 	run_sql_source1 "create table all_mode.db_error (c int primary key);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

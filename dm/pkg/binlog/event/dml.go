@@ -19,8 +19,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // DMLData represents data used to generate events for DML statements.

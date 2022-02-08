@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 )
 
 const (
