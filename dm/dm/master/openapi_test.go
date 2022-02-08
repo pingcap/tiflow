@@ -632,6 +632,15 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 	c.Assert(resultMasters.Data[0].Leader, check.IsTrue)
 	c.Assert(resultMasters.Data[0].Alive, check.IsTrue)
 
+	// check cluster id
+	clusterIDURL := baseURL + "info"
+	resp := testutil.NewRequest().Get(clusterIDURL).GoWithHTTPHandler(t.testT, s1.openapiHandles)
+	c.Assert(resp.Code(), check.Equals, http.StatusOK)
+	var clusterIDResp openapi.GetClusterInfoResponse
+	err = resp.UnmarshalBodyToObject(&clusterIDResp)
+	c.Assert(err, check.IsNil)
+	c.Assert(clusterIDResp.ClusterId, check.Greater, uint64(0))
+
 	// offline master-2 with retry
 	// operate etcd cluster may met `etcdserver: unhealthy cluster`, add some retry
 	for i := 0; i < 20; i++ {
