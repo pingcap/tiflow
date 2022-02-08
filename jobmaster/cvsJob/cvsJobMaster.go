@@ -3,6 +3,8 @@ package cvs
 import (
 	"context"
 
+	"github.com/hanfei1991/microcosm/executor/worker"
+
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
@@ -173,7 +175,7 @@ func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (jm *JobMaster) WorkerID() lib.WorkerID {
+func (jm *JobMaster) ID() worker.RunnableID {
 	return jm.workerID
 }
 

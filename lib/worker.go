@@ -5,11 +5,13 @@ import (
 	"sync"
 	"time"
 
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -19,10 +21,10 @@ import (
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	WorkerID() WorkerID
+	ID() runtime.RunnableID
 	Workload() model.RescUnit
 
-	Closer
+	runtime.Closer
 }
 
 type WorkerImpl interface {
@@ -88,10 +90,6 @@ func NewBaseWorker(
 		errCh: make(chan error, 1),
 		clock: clock.New(),
 	}
-}
-
-func (w *BaseWorker) ID() WorkerID {
-	return w.id
 }
 
 func (w *BaseWorker) Workload() model.RescUnit {
@@ -169,7 +167,7 @@ func (w *BaseWorker) Close(ctx context.Context) error {
 	return nil
 }
 
-func (w *BaseWorker) WorkerID() WorkerID {
+func (w *BaseWorker) ID() runtime.RunnableID {
 	return w.id
 }
 

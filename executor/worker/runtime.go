@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/edwingeng/deque"
-	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -17,12 +16,30 @@ type Scheduler struct {
 
 	ctx              context.Context
 	queue            deque.Deque
-	onWorkerFinished func(lib.Worker, error)
+	onWorkerFinished func(Runnable, error)
+}
+
+type Closer interface {
+	Close(ctx context.Context) error
+}
+
+type Workloader interface {
+	Workload() model.RescUnit
+}
+
+type RunnableID = string
+
+type Runnable interface {
+	Init(ctx context.Context) error
+	Poll(ctx context.Context) error
+	ID() RunnableID
+
+	Closer
 }
 
 const emptyRestDuration = 50 * time.Millisecond
 
-func (s *Scheduler) AddWorker(worker lib.Worker) {
+func (s *Scheduler) AddWorker(worker Runnable) {
 	s.Lock()
 	s.queue.PushBack(worker)
 	s.Unlock()
@@ -48,7 +65,7 @@ func (s *Scheduler) runImpl() {
 			s.Unlock()
 			continue
 		}
-		worker := s.queue.PopFront().(lib.Worker)
+		worker := s.queue.PopFront().(Runnable)
 		s.Unlock()
 		if err := worker.Poll(s.ctx); err != nil {
 			s.onWorkerFinished(worker, err)
@@ -65,8 +82,8 @@ func (s *Scheduler) runImpl() {
 func NewRuntime(ctx context.Context) *Runtime {
 	rt := &Runtime{
 		ctx:           ctx,
-		closingWorker: make(chan lib.Worker, 1024),
-		initingWorker: make(chan lib.Worker, 1024),
+		closingWorker: make(chan Runnable, 1024),
+		initingWorker: make(chan Runnable, 1024),
 		scheduler:     Scheduler{ctx: ctx, queue: deque.NewDeque()},
 	}
 	rt.scheduler.onWorkerFinished = rt.onWorkerFinish
@@ -79,14 +96,14 @@ type Runtime struct {
 	// schedule algorithm. For now, we assume every worker consume similar
 	// poll time, so we expect go scheduler can produce a fair result.
 	scheduler     Scheduler
-	closingWorker chan lib.Worker
-	initingWorker chan lib.Worker
+	closingWorker chan Runnable
+	initingWorker chan Runnable
 	ctx           context.Context
 }
 
-func (r *Runtime) onWorkerFinish(worker lib.Worker, err error) {
+func (r *Runtime) onWorkerFinish(worker Runnable, err error) {
 	log.L().Warn("Worker has finished",
-		zap.Any("worker-id", worker.WorkerID()),
+		zap.Any("worker-id", worker.ID()),
 		zap.Error(err))
 	r.closingWorker <- worker
 }
@@ -95,7 +112,7 @@ func (r *Runtime) closeWorker() {
 	for worker := range r.closingWorker {
 		// TODO context and error handling
 		_ = worker.Close(context.Background())
-		r.workerList.Delete(worker.WorkerID())
+		r.workerList.Delete(worker.ID())
 	}
 }
 
@@ -115,16 +132,19 @@ func (r *Runtime) Start(conn int) {
 	r.scheduler.Run(conn)
 }
 
-func (r *Runtime) AddWorker(worker lib.Worker) {
-	r.workerList.Store(worker.WorkerID(), worker)
+func (r *Runtime) AddWorker(worker Runnable) {
+	r.workerList.Store(worker.ID(), worker)
 	r.initingWorker <- worker
 }
 
 func (r *Runtime) Workload() model.RescUnit {
 	ret := model.RescUnit(0)
 	r.workerList.Range(func(_, value interface{}) bool {
-		worker := value.(lib.Worker)
-		workload := worker.Workload()
+		workloader, ok := value.(Workloader)
+		if !ok {
+			return true
+		}
+		workload := workloader.Workload()
 		ret += workload
 		return true
 	})

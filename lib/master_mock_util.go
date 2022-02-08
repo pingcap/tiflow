@@ -79,14 +79,14 @@ func MockBaseMasterCreateWorker(
 			Req: &pb.DispatchTaskRequest{
 				TaskTypeId: int64(workerType),
 				TaskConfig: configBytes,
-				MasterId:   string(masterID),
-				WorkerId:   string(workerID),
+				MasterId:   masterID,
+				WorkerId:   workerID,
 			},
 		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
 		ErrorCode: 1,
 	}}, nil)
 
-	master.uuidGen.(*uuid.MockGenerator).Push(string(workerID))
+	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 
 func MockBaseMasterWorkerHeartbeat(

@@ -38,7 +38,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return errors.New("not yet init")
 	}
 
-	log.L().Info("FakeWorker: Tick", zap.String("worker-id", string(d.ID())))
+	log.L().Info("FakeWorker: Tick", zap.String("worker-id", d.ID()))
 	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}

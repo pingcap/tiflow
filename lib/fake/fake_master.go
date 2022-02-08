@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/executor/worker"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -36,7 +38,7 @@ type Master struct {
 	pendingWorkerSet map[lib.WorkerID]int
 }
 
-func (m *Master) WorkerID() lib.WorkerID {
+func (m *Master) ID() worker.RunnableID {
 	return m.workerID
 }
 
@@ -73,7 +75,7 @@ OUT:
 			}
 			log.L().Info("CreateWorker called",
 				zap.Int("index", i),
-				zap.String("worker-id", string(workerID)))
+				zap.String("worker-id", workerID))
 			m.pendingWorkerSet[workerID] = i
 		}
 	}
@@ -93,7 +95,7 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 	}
 
 	log.L().Info("FakeMaster: OnWorkerDispatched",
-		zap.String("worker-id", string(worker.ID())),
+		zap.String("worker-id", worker.ID()),
 		zap.Error(result))
 
 	m.workerListMu.Lock()
@@ -102,7 +104,7 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 	idx, ok := m.pendingWorkerSet[worker.ID()]
 	if !ok {
 		log.L().Panic("OnWorkerDispatched is called with an unknown workerID",
-			zap.String("worker-id", string(worker.ID())))
+			zap.String("worker-id", worker.ID()))
 	}
 	delete(m.pendingWorkerSet, worker.ID())
 	m.workerList[idx] = worker
@@ -112,14 +114,14 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 
 func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Info("FakeMaster: OnWorkerOnline",
-		zap.String("worker-id", string(worker.ID())))
+		zap.String("worker-id", worker.ID()))
 
 	return nil
 }
 
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("FakeMaster: OnWorkerOffline",
-		zap.String("worker-id", string(worker.ID())),
+		zap.String("worker-id", worker.ID()),
 		zap.Error(reason))
 
 	// TODO handle offlined workers

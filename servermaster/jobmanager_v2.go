@@ -70,7 +70,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	resp.JobIdStr = string(id)
+	resp.JobIdStr = id
 
 	return resp
 }

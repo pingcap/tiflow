@@ -29,7 +29,7 @@ func TestGlobalRegistry(t *testing.T) {
 	worker, err := GlobalWorkerRegistry().CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val":0}`))
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, worker)
-	require.Equal(t, lib.WorkerID("worker-1"), worker.WorkerID())
+	require.Equal(t, lib.WorkerID("worker-1"), worker.ID())
 }
 
 func TestRegistryDuplicateType(t *testing.T) {

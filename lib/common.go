@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -14,13 +13,13 @@ import (
 )
 
 type (
-	MasterID         string
-	WorkerID         string
 	WorkerStatusCode int32
 	WorkerType       int64
 
 	Epoch        = int64
 	WorkerConfig = interface{}
+	MasterID     = string
+	WorkerID     = string
 )
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
@@ -105,17 +104,13 @@ func (s *WorkerStatus) marshalExt() error {
 	return nil
 }
 
-type Closer interface {
-	Close(ctx context.Context) error
-}
-
 func HeartbeatPingTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
-	return fmt.Sprintf("heartbeat-ping-%s-%s", string(masterID), string(workerID))
+	return fmt.Sprintf("heartbeat-ping-%s-%s", masterID, workerID)
 }
 
 func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	// TODO do we need hex-encoding here?
-	return fmt.Sprintf("heartbeat-pong-%s-%s", string(masterID), string(workerID))
+	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
 func WorkloadReportTopic(masterID MasterID) p2p.Topic {

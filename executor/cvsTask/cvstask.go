@@ -79,7 +79,7 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 }
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
-	log.L().Info("init the task  ", zap.Any("task id :", task.WorkerID()))
+	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)

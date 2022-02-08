@@ -179,13 +179,13 @@ func (m *workerManagerImpl) UpdateStatus(msg *StatusUpdateMessage) {
 	info, ok := m.getWorkerInfo(msg.WorkerID)
 	if !ok {
 		log.L().Info("received status update for non-existing worker",
-			zap.String("master-id", string(m.masterID)),
+			zap.String("master-id", m.masterID),
 			zap.Any("msg", msg))
 		return
 	}
 	info.status = msg.Status
 	log.L().Debug("worker status updated",
-		zap.String("master-id", string(m.masterID)),
+		zap.String("master-id", m.masterID),
 		zap.Any("msg", msg))
 }
 

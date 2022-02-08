@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -459,7 +458,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(ctx, lib.MasterID(s.name()),
+	s.jobManager, err = NewJobManagerImplV2(ctx, s.name(),
 		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return

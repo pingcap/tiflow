@@ -23,7 +23,7 @@ func NewMetadataClient(masterID MasterID, metaKVClient metadata.MetaKV) *Metadat
 }
 
 func (c *MetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
-	key := adapter.MasterMetaKey.Encode(string(c.masterID))
+	key := adapter.MasterMetaKey.Encode(c.masterID)
 	rawResp, err := c.metaKVClient.Get(ctx, key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -46,7 +46,7 @@ func (c *MetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
 }
 
 func (c *MetadataClient) Store(ctx context.Context, data *MasterMetaKVData) error {
-	key := adapter.MasterMetaKey.Encode(string(c.masterID))
+	key := adapter.MasterMetaKey.Encode(c.masterID)
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Trace(err)

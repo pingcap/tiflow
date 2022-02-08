@@ -6,11 +6,18 @@ import (
 	"testing"
 	"time"
 
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	_ Worker           = (*BaseWorker)(nil)
+	_ runtime.Runnable = (Worker)(nil)
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *MasterMetaKVData) {

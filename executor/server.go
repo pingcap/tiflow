@@ -149,8 +149,8 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,
 		lib.WorkerType(req.GetTaskTypeId()),
-		lib.WorkerID(req.GetWorkerId()),
-		lib.MasterID(req.GetMasterId()),
+		req.GetWorkerId(),
+		req.GetMasterId(),
 		req.GetTaskConfig())
 	if err != nil {
 		log.L().Error("Failed to create worker", zap.Error(err))

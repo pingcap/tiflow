@@ -18,7 +18,7 @@ func TestBasicFunc(t *testing.T) {
 	workerNum := 1000
 
 	for i := 0; i < workerNum; i++ {
-		id := lib.WorkerID("executor" + strconv.Itoa(i))
+		id := "executor" + strconv.Itoa(i)
 		rt.AddWorker(&dummyWorker{
 			id: id,
 		})
@@ -42,7 +42,7 @@ func (d *dummyWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) WorkerID() lib.WorkerID {
+func (d *dummyWorker) ID() worker.RunnableID {
 	return d.id
 }
 
