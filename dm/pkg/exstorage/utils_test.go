@@ -105,7 +105,6 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 			require.Equal(t, testAjustResults[i].res, newDir)
 		}
 	}
-
 }
 
 type s3Suite struct {

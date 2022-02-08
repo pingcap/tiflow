@@ -155,7 +155,7 @@ function run_error_check() {
 	check_port_offline $WORKER2_PORT 20
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/TestRemoveMetaFile=return()"
-	
+
 	# start dm master and worker
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -188,7 +188,7 @@ function run_error_check() {
 	check_log_contain_with_retry 'panic: success check file not exist!!' $WORK_DIR/worker2/log/stdout.log
 
 	export GO_FAILPOINTS=""
-	
+
 	cleanup_s3
 }
 
