@@ -1751,8 +1751,10 @@ func TestWaitBeforeRunExit(t *testing.T) {
 
 	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
 	require.Equal(t, 0, len(errCh))
+	syncer.Lock()
 	require.NotNil(t, syncer.runCtx)
 	require.NotNil(t, syncer.runCancel)
+	syncer.Unlock()
 	syncer.runCancel() // this will make s.Run exit
 	wg.Wait()
 	require.Nil(t, <-errCh)
