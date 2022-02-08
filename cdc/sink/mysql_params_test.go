@@ -172,17 +172,63 @@ func TestParseSinkURITimezone(t *testing.T) {
 	}
 }
 
+func TestParseSinkURIOverride(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+	cases := []struct {
+		uri     string
+		checker func(*sinkParams)
+	}{{
+		uri: "mysql://127.0.0.1:3306/?worker-count=2147483648", // int32 max
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.workerCount, maxWorkerCount)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.maxTxnRow, maxMaxTxnRow)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
+		},
+	}}
+	ctx := context.TODO()
+	opts := map[string]string{OptChangefeedID: "changefeed-01"}
+	var uri *url.URL
+	var err error
+	for _, cs := range cases {
+		if cs.uri != "" {
+			uri, err = url.Parse(cs.uri)
+			require.Nil(t, err)
+		} else {
+			uri = nil
+		}
+		p, err := parseSinkURIToParams(ctx, uri, opts)
+		require.Nil(t, err)
+		cs.checker(p)
+	}
+}
+
 func TestParseSinkURIBadQueryString(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
 		"mysql://127.0.0.1:3306/?worker-count=not-number",
+		"mysql://127.0.0.1:3306/?worker-count=-1",
+		"mysql://127.0.0.1:3306/?worker-count=0",
 		"mysql://127.0.0.1:3306/?max-txn-row=not-number",
+		"mysql://127.0.0.1:3306/?max-txn-row=-1",
+		"mysql://127.0.0.1:3306/?max-txn-row=0",
 		"mysql://127.0.0.1:3306/?ssl-ca=only-ca-exists",
 		"mysql://127.0.0.1:3306/?batch-replace-enable=not-bool",
 		"mysql://127.0.0.1:3306/?batch-replace-enable=true&batch-replace-size=not-number",
 		"mysql://127.0.0.1:3306/?safe-mode=not-bool",
+		"mysql://127.0.0.1:3306/?time-zone=badtz",
+		"mysql://127.0.0.1:3306/?write-timeout=badduration",
+		"mysql://127.0.0.1:3306/?read-timeout=badduration",
+		"mysql://127.0.0.1:3306/?timeout=badduration",
 	}
 	ctx := context.TODO()
 	opts := map[string]string{OptChangefeedID: "changefeed-01"}
@@ -196,7 +242,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 			uri = nil
 		}
 		_, err = parseSinkURIToParams(ctx, uri, opts)
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 
