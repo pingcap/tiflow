@@ -261,7 +261,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 				),
 				newDMLJob(
 					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "c"}, ti, nil, nil),
-					ec,
+					ecWithSafeMode,
 				),
 			},
 		},
@@ -298,7 +298,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 		for i := 0; i <= len(tc.output); i++ {
 			j := <-outCh
 			if i < len(tc.output) {
-				c.Assert(j.dml, DeepEquals, tc.output[i])
+				c.Assert(j.String(), Equals, tc.output[i].String())
 			} else {
 				c.Assert(j.tp, Equals, flush)
 			}

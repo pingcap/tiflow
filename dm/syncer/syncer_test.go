@@ -1455,12 +1455,36 @@ func checkJobs(c *C, jobs []*job, expectJobs []*expectJob) {
 	c.Assert(len(jobs), Equals, len(expectJobs), Commentf("jobs = %q", jobs))
 	for i, job := range jobs {
 		c.Assert(job.tp, Equals, expectJobs[i].tp)
+
 		if job.tp == ddl {
 			c.Assert(job.ddls, DeepEquals, expectJobs[i].sqlInJob)
-		} else if job.tp == dml {
-			sqls, args := job.dml.GenSQL(defaultDMLType[job.dml.Type()])
-			c.Assert(sqls, DeepEquals, expectJobs[i].sqlInJob)
-			c.Assert(args, DeepEquals, expectJobs[i].args)
+			continue
+		}
+
+		if job.tp == dml {
+			if !job.safeMode {
+				sql, args := job.dml.GenSQL(defaultDMLType[job.dml.Type()])
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+				continue
+			}
+
+			// safemode
+			switch job.dml.Type() {
+			case sqlmodel.RowChangeInsert:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeUpdate:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				sql2, args2 := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql, sql2}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args, args2}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeDelete:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			}
 		}
 	}
 }
@@ -1474,8 +1498,8 @@ func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	for _, job := range jobs {
 		switch job.tp {
 		case ddl, dml, flush:
-			realJob := newMockJob(job.tp, &filter.Table{}, job.sqlInJob...)
-			s.updateJobMetrics(true, "test", realJob)
+			dummyJob := newDummyJob(job.tp, &filter.Table{}, job.sqlInJob...)
+			s.updateJobMetrics(true, "test", dummyJob)
 		}
 	}
 }

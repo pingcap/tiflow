@@ -28,6 +28,8 @@ import (
 )
 
 func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
+	t.Helper()
+
 	p := parser.New()
 	se := timock.NewContext()
 	node, err := p.ParseOneStmt(sql, "", "")
@@ -99,10 +101,11 @@ func TestGenSQL(t *testing.T) {
 	for _, c := range cases {
 		tableInfo := mockTableInfo(t, createSQL)
 		change := sqlmodel.NewRowChange(source, target, c.preValues, c.postValues, tableInfo, nil, nil)
-		ec := &eventContext{
-			safeMode: c.safeMode,
+		testEC := ec
+		if c.safeMode {
+			testEC = ecWithSafeMode
 		}
-		dmlJob := newDMLJob(change, ec)
+		dmlJob := newDMLJob(change, testEC)
 		queries, args := worker.genSQLs([]*job{dmlJob})
 		require.Equal(t, c.expectedSQLs, queries)
 		require.Equal(t, c.expectedArgs, args)

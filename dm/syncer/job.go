@@ -106,7 +106,7 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: [%s], safemode: %v, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.safeMode, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
 func newDMLJob(rowChange *sqlmodel.RowChange, ec *eventContext) *job {
@@ -241,12 +241,13 @@ func newCompactJob(targetTable *filter.Table) *job {
 	}
 }
 
-// newMockJob is only used in tests.
-func newMockJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
+// newDummyJob is only used in tests.
+func newDummyJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
 	return &job{
 		tp:          tp,
 		targetTable: targetTable,
 		ddls:        ddls,
+		dml:         &sqlmodel.RowChange{},
 	}
 }
 

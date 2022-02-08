@@ -205,7 +205,6 @@ RowLoop:
 		)
 		rowChange.SetIdentifyInfo(downstreamTableInfo)
 		dmls = append(dmls, rowChange)
-
 	}
 
 	return dmls, nil
@@ -260,7 +259,6 @@ RowLoop:
 		)
 		rowChange.SetIdentifyInfo(downstreamTableInfo)
 		dmls = append(dmls, rowChange)
-
 	}
 
 	return dmls, nil
