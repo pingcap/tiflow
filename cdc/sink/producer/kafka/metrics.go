@@ -66,7 +66,25 @@ var (
 	}
 )
 
-func (m saramaMetrics) Update(registry metrics.Registry) {
+type saramaMetricsMonitor struct {
+	registry metrics.Registry
+	metrics  []*saramaMetrics
+}
+
+// Refresh monitored metrics from sarama
+func (sm *saramaMetricsMonitor) Refresh() {
+	for _, m := range sm.metrics {
+		m.refresh(sm.registry)
+	}
+}
+
+func NewSaramaMetricsMonitor(registry metrics.Registry) *saramaMetricsMonitor {
+	return &saramaMetricsMonitor{
+		registry: registry,
+	}
+}
+
+func (m saramaMetrics) refresh(registry metrics.Registry) {
 	// fetch sarama metrics
 	rawMetric := registry.Get(m.metricsName)
 	if rawMetric == nil {
