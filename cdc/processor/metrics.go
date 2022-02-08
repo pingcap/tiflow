@@ -81,6 +81,22 @@ var (
 			Name:      "schema_storage_gc_ts",
 			Help:      "the TS of the currently maintained oldest snapshot in SchemaStorage",
 		}, []string{"changefeed", "capture"})
+	processorTickDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "processor_tick_duration",
+			Help:      "Bucketed histogram of processorManager tick processor time (s).",
+			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
+		}, []string{"changefeed", "capture"})
+	processorCloseDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "processor_close_duration",
+			Help:      "Bucketed histogram of processorManager close processor time (s).",
+			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
+		}, []string{"capture"})
 )
 
 // InitMetrics registers all metrics used in processor
@@ -94,4 +110,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(processorErrorCounter)
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
+	registry.MustRegister(processorTickDuration)
+	registry.MustRegister(processorCloseDuration)
 }
