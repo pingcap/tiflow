@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
 
@@ -68,6 +70,8 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+
+	metricsRegistry metrics.Registry
 }
 
 type kafkaProducerClosingFlag = int32
@@ -235,12 +239,15 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.flushedReceiver.Stop()
 		k.stop()
 	}()
+	ticker := time.NewTicker(2 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
+		case <-ticker.C:
+			printMetrics(os.Stdout, k.metricsRegistry)
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err))
 			return err
@@ -318,6 +325,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
+
+		// fetch sarama metrics from metricsRegistry
+		metricsRegistry: cfg.MetricRegistry,
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
