@@ -169,6 +169,10 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
+[cdc]
+# tiflash proxy does not support this feature yet.
+# TODO: enable hibernate-regions-compatible
+hibernate-regions-compatible = false
 EOF
 
 # tidb server config file

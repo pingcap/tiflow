@@ -25,9 +25,6 @@ mysql-instances:
     loader-config-name: "global"
     syncer-config-name: "global"
 
-tidb:
-  backend: "tidb"
-
 block-allow-list:
   instance:
     do-dbs: ["load_task2"]

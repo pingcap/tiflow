@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Form, Input, Button } from '~/uikit'
+import { Form, Input, Button, InputNumber } from '~/uikit'
 import { StepCompnent } from '~/components/CreateTaskConfig/shared'
 
 const IPv4Pattern =
@@ -38,7 +38,7 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
             name={['target_config', 'port']}
             rules={[{ required: true, message: t('port is required') }]}
           >
-            <Input placeholder="3306" />
+            <InputNumber min={1} max={65535} />
           </Form.Item>
 
           <Form.Item
@@ -55,17 +55,7 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
             <Input placeholder="root" />
           </Form.Item>
 
-          <Form.Item
-            label={t('password')}
-            name={['target_config', 'password']}
-            rules={[
-              {
-                required: true,
-                whitespace: true,
-                message: t('password is required'),
-              },
-            ]}
-          >
+          <Form.Item label={t('password')} name={['target_config', 'password']}>
             <Input type="password" />
           </Form.Item>
         </div>

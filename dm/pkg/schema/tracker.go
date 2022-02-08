@@ -345,7 +345,7 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil, nil)
+	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil)
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
@@ -370,6 +370,22 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
+func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	for schema, tableNameInfo := range tablesToCreate {
+		var cloneTis []*model.TableInfo
+		for table, ti := range tableNameInfo {
+			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
+			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`
+			cloneTis = append(cloneTis, cloneTi)
+		}
+		schemaName := model.NewCIStr(schema)
+		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetSystemVar gets a variable from schema tracker.
 func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 	return tr.se.GetSessionVars().GetSystemVar(name)
@@ -387,7 +403,7 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 			return nil, err
 		}
 
-		dti = GetDownStreamTi(ti, originTi)
+		dti = GetDownStreamTI(ti, originTi)
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
 	return dti, nil
@@ -396,9 +412,14 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 // GetAvailableDownStreamUKIndexInfo gets available downstream UK whose data is not null.
 // note. this function will not init downstreamTrack.
 func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []interface{}) *model.IndexInfo {
-	dti, ok := tr.dsTracker.tableInfos[tableID]
+	dti := tr.dsTracker.tableInfos[tableID]
 
-	if !ok || len(dti.AvailableUKIndexList) == 0 {
+	return GetIdentityUKByData(dti, data)
+}
+
+// GetIdentityUKByData gets available downstream UK whose data is not null.
+func GetIdentityUKByData(downstreamTI *DownstreamTableInfo, data []interface{}) *model.IndexInfo {
+	if downstreamTI == nil || len(downstreamTI.AvailableUKIndexList) == 0 {
 		return nil
 	}
 	// func for check data is not null
@@ -406,7 +427,7 @@ func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []inte
 		return data[i] != nil
 	}
 
-	for _, uk := range dti.AvailableUKIndexList {
+	for _, uk := range downstreamTI.AvailableUKIndexList {
 		// check uk's column data is not null
 		if isSpecifiedIndexColumn(uk, fn) {
 			return uk
@@ -483,8 +504,8 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	return nil
 }
 
-// GetDownStreamTi constructs downstreamTable index cache by tableinfo.
-func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
+// GetDownStreamTI constructs downstreamTable index cache by tableinfo.
+func GetDownStreamTI(downstreamTI *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
 	var (
 		absoluteUKIndexInfo  *model.IndexInfo
 		availableUKIndexList = []*model.IndexInfo{}
@@ -494,10 +515,10 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 
 	// func for check not null constraint
 	fn := func(i int) bool {
-		return mysql.HasNotNullFlag(ti.Columns[i].Flag)
+		return mysql.HasNotNullFlag(downstreamTI.Columns[i].Flag)
 	}
 
-	for i, idx := range ti.Indices {
+	for i, idx := range downstreamTI.Indices {
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
@@ -520,7 +541,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 	// handle pk exceptional case.
 	// e.g. "create table t(a int primary key, b int)".
 	if !hasPk {
-		exPk := redirectIndexKeys(handlePkExCase(ti), originTi)
+		exPk := redirectIndexKeys(handlePkExCase(downstreamTI), originTi)
 		if exPk != nil {
 			absoluteUKIndexInfo = exPk
 			absoluteUKPosition = len(availableUKIndexList)
@@ -534,7 +555,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 	}
 
 	return &DownstreamTableInfo{
-		TableInfo:            ti,
+		TableInfo:            downstreamTI,
 		AbsoluteUKIndexInfo:  absoluteUKIndexInfo,
 		AvailableUKIndexList: availableUKIndexList,
 	}

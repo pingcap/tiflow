@@ -99,9 +99,6 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		if err := cfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
 		}
-		if c.TiDB != nil {
-			cfg.TiDB = *c.TiDB
-		}
 		cfgs[i] = cfg
 	}
 	if c.EnableHeartbeat {
