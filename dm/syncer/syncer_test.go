@@ -1753,7 +1753,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.Equal(t, 0, len(errCh))
 	require.NotNil(t, syncer.runCtx)
 	require.NotNil(t, syncer.runCancel)
-	syncer.runCancel() //this will make s.Run exit
+	syncer.runCancel() // this will make s.Run exit
 	wg.Wait()
 	require.Nil(t, <-errCh)
 

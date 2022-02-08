@@ -1554,7 +1554,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// start flush checkpoints worker. this worker must start before s.flushCheckPoints()
 	go func() {
 		defer s.runWg.Done()
-		// also need to use a ctx different from s.runCtx, checkpointFlushWorker worker will be closed in the first defer
+		// also need to use a different ctx. checkpointFlushWorker worker will be closed in the first defer
 		s.checkpointFlushWorker.Run(s.tctx)
 	}()
 	s.runWg.Add(1)
