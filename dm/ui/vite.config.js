@@ -22,7 +22,6 @@ export default defineConfig({
           libName: 'lodash',
           libDirectory: '',
           camel2DashComponentName: false,
-          style: () => false,
         },
       ],
     }),
@@ -54,10 +53,6 @@ export default defineConfig({
 
           if (id.includes('@ant-design/icons')) {
             return 'icons'
-          }
-
-          if (id.includes('node_modules')) {
-            return 'vendor'
           }
         },
       },

@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { clamp } from 'lodash'
 import { useSafeState } from 'ahooks'
 import QueueAnim from 'rc-queue-anim'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { ghcolors } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 
 import { Button, Radio, Checkbox, Steps, Alert, StepProps } from '~/uikit'
 import {
@@ -12,6 +13,8 @@ import {
   useDmapiBatchImportTaskConfigMutation,
 } from '~/models/taskConfig'
 import { sleep } from '~/utils/sleep'
+
+SyntaxHighlighter.registerLanguage('json', json)
 
 const { Step } = Steps
 

@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { ghcolors } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 
 import {
   Table,
@@ -43,6 +44,8 @@ import {
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
 import StartTaskWithListSelection from '~/components/StartTaskWithListSelection'
+
+SyntaxHighlighter.registerLanguage('json', json)
 
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
