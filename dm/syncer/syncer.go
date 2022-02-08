@@ -871,7 +871,9 @@ func (s *Syncer) updateReplicationLagMetric() {
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 	ti, err := s.schemaTracker.GetTableInfo(table)
 	if err != nil && table.Name != "" {
-		s.tctx.L().DPanic("table info missing from schema tracker",
+		// TODO: if we RENAME tb1 TO tb2, the tracker will remove TableInfo of tb1 but we still save the table
+		// checkpoint for tb1. We can delete the table checkpoint in future.
+		s.tctx.L().Warn("table info missing from schema tracker",
 			zap.Stringer("table", table),
 			zap.Stringer("location", location),
 			zap.Error(err))
