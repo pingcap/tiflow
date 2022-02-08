@@ -2386,6 +2386,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-worker-40001]
 message = "parse dm-worker config flag set"
 description = ""
@@ -3224,6 +3230,12 @@ tags = ["internal", "low"]
 message = "failed to auto pause tasks %s when transfer-source"
 description = ""
 workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46033]
+message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
