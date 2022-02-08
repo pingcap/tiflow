@@ -25,6 +25,7 @@ const injectedRtkApi = api.injectEndpoints({
     dmapiGetTaskConfigList: build.query<ListResponse<Task>, void>({
       query: () => ({ url: `/tasks/templates` }),
       providesTags: ['TaskConfig'],
+      structuralSharing: false,
     }),
     dmapiGetTaskConfig: build.query<Task, { taskName: string }>({
       query: queryArg => ({
