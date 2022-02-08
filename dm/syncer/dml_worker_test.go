@@ -107,5 +107,4 @@ func TestGenSQL(t *testing.T) {
 		require.Equal(t, c.expectedSQLs, queries)
 		require.Equal(t, c.expectedArgs, args)
 	}
-
 }

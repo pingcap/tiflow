@@ -118,7 +118,8 @@ func newDMLJob(rowChange *sqlmodel.RowChange, ec *eventContext) *job {
 		sourceTbls: map[string][]*filter.Table{
 			sourceTable.Schema: {
 				&filter.Table{Schema: sourceTable.Schema, Name: sourceTable.Table},
-			}},
+			},
+		},
 		targetTable: &filter.Table{Schema: targetTable.Schema, Name: targetTable.Table},
 		dml:         rowChange,
 		retry:       true,

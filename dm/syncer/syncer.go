@@ -2268,9 +2268,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 
 	extRows := generateExtendColumn(originRows, s.tableRouter, sourceTable, s.cfg.SourceID)
 
-	var (
-		dmls []*sqlmodel.RowChange
-	)
+	var dmls []*sqlmodel.RowChange
 
 	param := &genDMLParam{
 		targetTable:     targetTable,
