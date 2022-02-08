@@ -207,11 +207,35 @@ func (m *MydumperConfig) UnmarshalYAML(unmarshal func(interface{}) error) error 
 	return nil
 }
 
+// LoadMode defines different mode used in load phase.
+type LoadMode string
+
+const (
+	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
+	LoadModeSQL LoadMode = "sql"
+	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
+	LoadModeLoader = "loader"
+)
+
+// DuplicateResolveType defines the duplication resolution when meet duplicate rows.
+type DuplicateResolveType string
+
+const (
+	// OnDuplicateReplace represents replace the old row with new data.
+	OnDuplicateReplace DuplicateResolveType = "replace"
+	// OnDuplicateError represents return an error when meet duplicate row.
+	OnDuplicateError = "error"
+	// OnDuplicateIgnore represents ignore the new data when meet duplicate row.
+	OnDuplicateIgnore = "ignore"
+)
+
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode  string `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	PoolSize    int                  `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir         string               `yaml:"dir" toml:"dir" json:"dir"`
+	SQLMode     string               `yaml:"-" toml:"-" json:"-"` // wrote by dump unit
+	ImportMode  LoadMode             `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	OnDuplicate DuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -232,6 +256,26 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return terror.ErrConfigYamlTransform.Delegate(err, "unmarshal loader config")
 	}
 	*m = LoaderConfig(raw) // raw used only internal, so no deep copy
+	return nil
+}
+
+func (m *LoaderConfig) adjust() error {
+	if m.ImportMode == "" {
+		m.ImportMode = LoadModeSQL
+	}
+	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
+	if m.ImportMode != LoadModeSQL && m.ImportMode != LoadModeLoader {
+		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
+	}
+
+	if m.OnDuplicate == "" {
+		m.OnDuplicate = OnDuplicateReplace
+	}
+	m.OnDuplicate = DuplicateResolveType(strings.ToLower(string(m.OnDuplicate)))
+	if m.OnDuplicate != OnDuplicateReplace && m.OnDuplicate != OnDuplicateError && m.OnDuplicate != OnDuplicateIgnore {
+		return terror.ErrConfigInvalidDuplicateResolution.Generate(m.OnDuplicate)
+	}
+
 	return nil
 }
 
@@ -343,9 +387,6 @@ type TaskConfig struct {
 
 	// deprecated, replaced by `start-task --remove-meta`
 	RemoveMeta bool `yaml:"remove-meta"`
-
-	// extra config when target db is TiDB
-	TiDB *TiDBExtraConfig `yaml:"tidb" toml:"tidb" json:"tidb"`
 
 	// task experimental configs
 	Experimental struct {
@@ -696,7 +737,10 @@ func (c *TaskConfig) adjust() error {
 			unusedConfigs = append(unusedConfigs, mydumper)
 		}
 	}
-	for loader := range c.Loaders {
+	for loader, cfg := range c.Loaders {
+		if err1 := cfg.adjust(); err1 != nil {
+			return err1
+		}
 		if globalConfigReferCount[configRefPrefixes[loaderIdx]+loader] == 0 {
 			unusedConfigs = append(unusedConfigs, loader)
 		}

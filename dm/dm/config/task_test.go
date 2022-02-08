@@ -690,8 +690,10 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				ExtraArgs:     "--escape-backslash",
 			},
 			LoaderConfig: LoaderConfig{
-				PoolSize: 32,
-				Dir:      "./dumpped_data",
+				PoolSize:    32,
+				Dir:         "./dumpped_data",
+				ImportMode:  LoadModeSQL,
+				OnDuplicate: OnDuplicateReplace,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,
@@ -1029,7 +1031,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, tidb, collation_compatible and experimental
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+3) // without flag, collation_compatible and experimental
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

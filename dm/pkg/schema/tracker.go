@@ -345,7 +345,7 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil, nil)
+	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil)
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
@@ -368,6 +368,22 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
+}
+
+func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	for schema, tableNameInfo := range tablesToCreate {
+		var cloneTis []*model.TableInfo
+		for table, ti := range tableNameInfo {
+			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
+			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`
+			cloneTis = append(cloneTis, cloneTi)
+		}
+		schemaName := model.NewCIStr(schema)
+		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetSystemVar gets a variable from schema tracker.

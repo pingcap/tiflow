@@ -87,6 +87,8 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
+    import-mode: sql
+    on-duplicate: replace
 syncers:
   sync-01:
     meta-file: ""
@@ -119,6 +121,5 @@ syncers:
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false
-tidb: null
 experimental:
   async-checkpoint-flush: false
