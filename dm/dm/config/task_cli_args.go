@@ -15,6 +15,9 @@ package config
 
 import (
 	"encoding/json"
+	"time"
+
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // TaskCliArgs is the task command line arguments, these arguments have higher priority than the config file and
@@ -36,4 +39,17 @@ func (t *TaskCliArgs) ToJSON() (string, error) {
 func (t *TaskCliArgs) Decode(data []byte) error {
 	err := json.Unmarshal(data, t)
 	return err
+}
+
+// Verify checks if all fields are legal.
+func (t *TaskCliArgs) Verify() error {
+	if t.StartTime == "" {
+		return nil
+	}
+	_, err := time.Parse("2006-01-02 15:04:05", t.StartTime)
+	if err == nil {
+		return nil
+	}
+	_, err = time.Parse("2006-01-02T15:04:05", t.StartTime)
+	return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05'")
 }

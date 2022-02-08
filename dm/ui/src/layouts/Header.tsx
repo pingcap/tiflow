@@ -6,11 +6,18 @@ import { Select, Space } from '~/uikit'
 
 export default function HeaderNav() {
   const { i18n } = useTranslation()
-  const [lang, setLang] = useLocalStorageState<'en' | 'zh'>('lang', 'en')
+  const [lang, setLang] = useLocalStorageState<'en' | 'zh'>('lang', {
+    defaultValue: 'en',
+  })
 
-  const handleLangChange = useCallback(value => {
-    i18n.changeLanguage(value).then(() => setLang(value))
-  }, [])
+  const handleLangChange = useCallback(
+    value => {
+      i18n.changeLanguage(value).then(() => {
+        setLang(value)
+      })
+    },
+    [i18n]
+  )
 
   return (
     <div className="flex justify-end">

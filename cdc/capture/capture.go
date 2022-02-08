@@ -107,10 +107,14 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 	}
 }
 
-func NewCapture4Test() *Capture {
-	return &Capture{
+func NewCapture4Test(isOwner bool) *Capture {
+	res := &Capture{
 		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
 	}
+	if isOwner {
+		res.owner = &owner.Owner{}
+	}
+	return res
 }
 
 func (c *Capture) reset(ctx context.Context) error {
@@ -313,7 +317,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval)
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	wg.Add(1)
@@ -425,7 +429,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			})
 		}
 
-		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -441,13 +445,19 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
+func (c *Capture) runEtcdWorker(
+	ctx cdcContext.Context,
+	reactor orchestrator.Reactor,
+	reactorState orchestrator.ReactorState,
+	timerInterval time.Duration,
+	role string,
+) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	captureAddr := c.info.AdvertiseAddr
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as

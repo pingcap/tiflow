@@ -20,7 +20,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -43,7 +42,7 @@ var _ = SerialSuites(&testOptimist{})
 
 // clear keys in etcd test cluster.
 func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -104,7 +103,7 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 
 	var (
 		logger     = log.L()
-		o          = NewOptimist(&logger)
+		o          = NewOptimist(&logger, getDownstreamMeta)
 		task       = "task"
 		source1    = "mysql-replica-1"
 		source2    = "mysql-replica-2"
@@ -164,7 +163,7 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 	o.Close()
 
 	// CASE 4: create (not re-start) a new optimist with previous source tables.
-	o = NewOptimist(&logger)
+	o = NewOptimist(&logger, getDownstreamMeta)
 	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	c.Assert(tts, HasLen, 2)
@@ -197,14 +196,14 @@ func (t *testOptimist) TestOptimist(c *C) {
 
 func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationSchema(cli), IsNil)
+		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
 	}()
 
 	var (
 		backOff  = 30
 		waitTime = 100 * time.Millisecond
 		logger   = log.L()
-		o        = NewOptimist(&logger)
+		o        = NewOptimist(&logger, getDownstreamMeta)
 
 		rebuildOptimist = func(ctx context.Context) {
 			switch restart {
@@ -213,7 +212,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 				c.Assert(o.Start(ctx, cli), IsNil)
 			case restartNewInstance:
 				o.Close()
-				o = NewOptimist(&logger)
+				o = NewOptimist(&logger, getDownstreamMeta)
 				c.Assert(o.Start(ctx, cli), IsNil)
 			}
 		}
@@ -613,9 +612,9 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	defer clearOptimistTestSourceInfoOperation(c)
 
 	var (
-		watchTimeout       = 2 * time.Second
+		watchTimeout       = 5 * time.Second
 		logger             = log.L()
-		o                  = NewOptimist(&logger)
+		o                  = NewOptimist(&logger, getDownstreamMeta)
 		task               = "task-test-optimist"
 		source1            = "mysql-replica-1"
 		downSchema         = "foo"
@@ -654,15 +653,20 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i1 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op1 := <-opCh:
+		c.Assert(op1.DDLs, DeepEquals, DDLs1)
+		c.Assert(op1.ConflictStage, Equals, optimism.ConflictNone)
+	}
+
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op1 := <-opCh
-	c.Assert(op1.DDLs, DeepEquals, DDLs1)
-	c.Assert(op1.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// PUT i2, conflict will be detected.
@@ -671,15 +675,21 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i2 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op2 := <-opCh:
+		c.Assert(op2.DDLs, DeepEquals, []string{})
+		c.Assert(op2.ConflictStage, Equals, optimism.ConflictDetected)
+	}
+
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op2 := <-opCh
-	c.Assert(op2.DDLs, DeepEquals, []string{})
-	c.Assert(op2.ConflictStage, Equals, optimism.ConflictDetected)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// PUT i3, no conflict now.
@@ -689,15 +699,19 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	// wait operation for i3 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op3 := <-opCh:
+		c.Assert(op3.DDLs, DeepEquals, []string{})
+		c.Assert(op3.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op3 := <-opCh
-	c.Assert(op3.DDLs, DeepEquals, []string{})
-	c.Assert(op3.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 }
 
@@ -707,9 +721,9 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	var (
 		backOff            = 30
 		waitTime           = 100 * time.Millisecond
-		watchTimeout       = 2 * time.Second
+		watchTimeout       = 5 * time.Second
 		logger             = log.L()
-		o                  = NewOptimist(&logger)
+		o                  = NewOptimist(&logger, getDownstreamMeta)
 		task               = "test-optimist-lock-multiple-target"
 		source             = "mysql-replica-1"
 		upSchema           = "foo"
@@ -821,15 +835,20 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	var op12 optimism.Operation
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op12 = <-opCh:
+		c.Assert(op12.DDLs, DeepEquals, DDLs)
+		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op12 := <-opCh
-	c.Assert(op12.DDLs, DeepEquals, DDLs)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op11 and op12 as done, the lock should be resolved.
@@ -855,15 +874,20 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	// wait operation for i22 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
-	ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	var op22 optimism.Operation
+	ctx2, cancel2 = context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op22 = <-opCh:
+		c.Assert(op22.DDLs, DeepEquals, DDLs)
+		c.Assert(op22.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op22 := <-opCh
-	c.Assert(op22.DDLs, DeepEquals, DDLs)
-	c.Assert(op22.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op21 and op22 as done, the lock should be resolved.
@@ -892,9 +916,9 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	var (
 		backOff      = 30
 		waitTime     = 100 * time.Millisecond
-		watchTimeout = 2 * time.Second
+		watchTimeout = 5 * time.Second
 		logger       = log.L()
-		o            = NewOptimist(&logger)
+		o            = NewOptimist(&logger, getDownstreamMeta)
 		task         = "test-optimist-init-schema"
 		source       = "mysql-replica-1"
 		upSchema     = "foo"
@@ -929,11 +953,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
 	c.Assert(o.Locks(), HasLen, 0)
 
-	// no init schema exist now.
-	is, _, err := optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(is.IsEmpty(), IsTrue)
-
 	// PUT i11, will creat a lock.
 	_, err = optimism.PutInfo(etcdTestCli, i11)
 	c.Assert(err, IsNil)
@@ -942,11 +961,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	}), IsTrue)
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
 
-	// the init schema exist now.
-	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(is.TableInfo, DeepEquals, ti0) // the init schema.
-
 	// PUT i12, the lock will be synced.
 	rev1, err := optimism.PutInfo(etcdTestCli, i12)
 	c.Assert(err, IsNil)
@@ -954,15 +968,20 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
-	ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
-	optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	var op12 optimism.Operation
+	ctx2, cancel2 := context.WithCancel(ctx)
+	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	select {
+	case <-time.After(watchTimeout):
+		c.Fatal("timeout")
+	case op12 = <-opCh:
+		c.Assert(op12.DDLs, DeepEquals, DDLs1)
+		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 1)
-	op12 := <-opCh
-	c.Assert(op12.DDLs, DeepEquals, DDLs1)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	c.Assert(len(opCh), Equals, 0)
 	c.Assert(len(errCh), Equals, 0)
 
 	// mark op11 and op12 as done, the lock should be resolved.
@@ -981,11 +1000,6 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		return len(o.Locks()) == 0
 	}), IsTrue)
 
-	// the init schema should also be deleted.
-	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(is.IsEmpty(), IsTrue)
-
 	// PUT i21 to create the lock again.
 	_, err = optimism.PutInfo(etcdTestCli, i21)
 	c.Assert(err, IsNil)
@@ -993,16 +1007,11 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		return len(o.Locks()) == 1
 	}), IsTrue)
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
-
-	// the init schema exist now.
-	is, _, err = optimism.GetInitSchema(etcdTestCli, task, downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(is.TableInfo, DeepEquals, ti1) // the init schema is ti1 now.
 }
 
 func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationSchema(cli), IsNil)
+		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
 	}()
 
 	var (
@@ -1074,7 +1083,7 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 
 	var (
 		logger           = log.L()
-		o                = NewOptimist(&logger)
+		o                = NewOptimist(&logger, getDownstreamMeta)
 		task             = "task"
 		source1          = "mysql-replica-1"
 		source2          = "mysql-replica-2"
@@ -1116,19 +1125,6 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
-
-	ifm, _, err := optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-
-	lockJoined, lockTTS, missTable := o.buildLockJoinedAndTTS(ifm, nil)
-	c.Assert(len(lockJoined), Equals, 1)
-	c.Assert(len(lockTTS), Equals, 1)
-	c.Assert(len(missTable), Equals, 0)
-	joined, ok := lockJoined[utils.GenDDLLockID(task, downSchema, downTable)]
-	c.Assert(ok, IsTrue)
-	cmp, err := joined.Compare(schemacmp.Encode(ti2))
-	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
 }
 
 func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
@@ -1136,7 +1132,7 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 
 	var (
 		logger     = log.L()
-		o          = NewOptimist(&logger)
+		o          = NewOptimist(&logger, getDownstreamMeta)
 		task       = "task"
 		source1    = "mysql-replica-1"
 		source2    = "mysql-replica-2"
@@ -1152,11 +1148,10 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 		ti1 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, b INT)`)
 		ti2 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
-		ddlDropB   = "ALTER TABLE bar DROP COLUMN b"
-		ddlDropC   = "ALTER TABLE bar DROP COLUMN c"
-		infoDropB  = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropC}, ti0, []*model.TableInfo{ti1})
-		infoDropC  = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropB}, ti1, []*model.TableInfo{ti2})
-		initSchema = optimism.NewInitSchema(task, downSchema, downTable, ti0)
+		ddlDropB  = "ALTER TABLE bar DROP COLUMN b"
+		ddlDropC  = "ALTER TABLE bar DROP COLUMN c"
+		infoDropB = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropC}, ti0, []*model.TableInfo{ti1})
+		infoDropC = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, []string{ddlDropB}, ti1, []*model.TableInfo{ti2})
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1179,21 +1174,8 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
+}
 
-	ifm, _, err := optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-
-	initSchemas := map[string]map[string]map[string]optimism.InitSchema{task: {downSchema: {downTable: initSchema}}}
-	lockJoined, lockTTS, missTable := o.buildLockJoinedAndTTS(ifm, initSchemas)
-	c.Assert(len(lockJoined), Equals, 1)
-	c.Assert(len(lockTTS), Equals, 1)
-	c.Assert(len(missTable), Equals, 1)
-	cmp, err := missTable[utils.GenDDLLockID(task, downSchema, downTable)][source2]["foo"]["bar-1"].Compare(schemacmp.Encode(initSchema.TableInfo))
-	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-	joined, ok := lockJoined[utils.GenDDLLockID(task, downSchema, downTable)]
-	c.Assert(ok, IsTrue)
-	cmp, err = joined.Compare(schemacmp.Encode(ti0))
-	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
+func getDownstreamMeta(string) (*config.DBConfig, string) {
+	return nil, ""
 }

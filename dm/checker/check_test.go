@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -35,6 +35,12 @@ func TestChecker(t *testing.T) {
 type testCheckerSuite struct{}
 
 var _ = tc.Suite(&testCheckerSuite{})
+
+var (
+	schema = "db_1"
+	tb1    = "t_1"
+	tb2    = "t_2"
+)
 
 func ignoreExcept(itemMap map[string]struct{}) []string {
 	items := []string{
@@ -80,16 +86,15 @@ func (s *testCheckerSuite) TestDumpPrivilegeChecking(c *tc.C) {
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.DumpPrivilegeChecking: {}}),
 		},
 	}
-	mock := conn.InitMockDB(c)
+
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT USAGE ON *.* TO 'haha'@'%'"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*RELOAD(.|\n)*")
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*Select(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT RELOAD,SELECT ON *.* TO 'haha'@'%'"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -104,7 +109,8 @@ func (s *testCheckerSuite) TestReplicationPrivilegeChecking(c *tc.C) {
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ReplicationPrivilegeChecking: {}}),
 		},
 	}
-	mock := conn.InitMockDB(c)
+
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT USAGE ON *.* TO 'haha'@'%'"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -112,8 +118,7 @@ func (s *testCheckerSuite) TestReplicationPrivilegeChecking(c *tc.C) {
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION SLAVE(.|\n)*")
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*lack.*REPLICATION CLIENT(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT REPLICATION SLAVE,REPLICATION CLIENT ON *.* TO 'haha'@'%'"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -128,36 +133,26 @@ func (s *testCheckerSuite) TestVersionChecking(c *tc.C) {
 		},
 	}
 
-	mock := conn.InitMockDB(c)
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.26-log"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 	c.Assert(err, tc.IsNil)
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "10.1.29-MariaDB"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+	c.Assert(msg, tc.Matches, "(.|\n)*Migrating from MariaDB is experimentally supported(.|\n)*")
 	c.Assert(err, tc.IsNil)
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.5.26-log"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*version required at least .* but got 5.5.26(.|\n)*")
-
-	mock = conn.InitMockDB(c)
-
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("version", "10.0.0-MariaDB"))
-	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*version required at least .* but got 10.0.0(.|\n)*")
+	c.Assert(msg, tc.Matches, "(.|\n)*version suggested at least .* but got 5.5.26(.|\n)*")
+	c.Assert(err, tc.IsNil)
 }
 
 func (s *testCheckerSuite) TestServerIDChecking(c *tc.C) {
@@ -167,15 +162,14 @@ func (s *testCheckerSuite) TestServerIDChecking(c *tc.C) {
 		},
 	}
 
-	mock := conn.InitMockDB(c)
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("server_id", "0"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*please set server_id greater than 0(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("server_id", "1"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -190,15 +184,14 @@ func (s *testCheckerSuite) TestBinlogEnableChecking(c *tc.C) {
 		},
 	}
 
-	mock := conn.InitMockDB(c)
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'log_bin'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("log_bin", "OFF"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*log_bin is OFF, and should be ON(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'log_bin'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("log_bin", "ON"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -213,15 +206,14 @@ func (s *testCheckerSuite) TestBinlogFormatChecking(c *tc.C) {
 		},
 	}
 
-	mock := conn.InitMockDB(c)
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'binlog_format'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("binlog_format", "STATEMENT"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*binlog_format is STATEMENT, and should be ROW(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'binlog_format'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("binlog_format", "ROW"))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
@@ -236,7 +228,7 @@ func (s *testCheckerSuite) TestBinlogRowImageChecking(c *tc.C) {
 		},
 	}
 
-	mock := conn.InitMockDB(c)
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.26-log"))
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'binlog_row_image'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -245,8 +237,7 @@ func (s *testCheckerSuite) TestBinlogRowImageChecking(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*binlog_row_image is MINIMAL, and should be FULL(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "10.1.29-MariaDB"))
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'binlog_row_image'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -257,11 +248,6 @@ func (s *testCheckerSuite) TestBinlogRowImageChecking(c *tc.C) {
 }
 
 func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
-	var (
-		schema = "db_1"
-		tb1    = "t_1"
-		tb2    = "t_2"
-	)
 	cfgs := []*config.SubTaskConfig{
 		{
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
@@ -278,9 +264,7 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
   					UNIQUE KEY id (id)
 					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
-	mock := conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
@@ -289,10 +273,7 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*primary/unique key does not exist(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb1)))
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
@@ -303,11 +284,6 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
 }
 
 func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
-	var (
-		schema = "db_1"
-		tb1    = "t_1"
-		tb2    = "t_2"
-	)
 	cfgs := []*config.SubTaskConfig{
 		{
 			RouteRules: []*router.TableRule{
@@ -331,9 +307,7 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
   					c int(11) DEFAULT NULL
 					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
-	mock := conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
@@ -341,10 +315,7 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*different column definition(.|\n)*")
 
-	mock = conn.InitMockDB(c)
-
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
@@ -354,11 +325,6 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 }
 
 func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
-	var (
-		schema = "db_1"
-		tb1    = "t_1"
-		tb2    = "t_2"
-	)
 	cfgs := []*config.SubTaskConfig{
 		{
 			RouteRules: []*router.TableRule{
@@ -387,9 +353,7 @@ func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
 					UNIQUE KEY u_b(b)
 					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
-	mock := conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
@@ -409,11 +373,6 @@ func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
 }
 
 func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {
-	var (
-		schema = "db_1"
-		tb1    = "t_1"
-		tb2    = "t_2"
-	)
 	cfgs := []*config.SubTaskConfig{
 		{
 			RouteRules: []*router.TableRule{
@@ -440,13 +399,18 @@ func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {
 					UNIQUE KEY u_b(b)
 					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
-	mock := conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*same table name in case-insensitive(.|\n)*")
+}
+
+func initMockDB(c *tc.C) sqlmock.Sqlmock {
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	return mock
 }

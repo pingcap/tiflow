@@ -21,12 +21,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// MonitorCancelLatency monitors the latency from ctx being cancelled and the returned function being called
-func MonitorCancelLatency(ctx context.Context, identifier string) func() {
+// MonitorCancelLatency monitors the latency from ctx being cancelled
+// the first returned function should be called when the cancellation is done
+// the second returned function should be called to mark the cancellation is started, it will start a
+// background go routine to monitor the latency util finish is called or cancellation is done
+func MonitorCancelLatency(ctx context.Context, identifier string) (func(), func()) {
 	finishedCh := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
+	start := func() {
+		go func() {
 			log.Debug("MonitorCancelLatency: Cancelled", zap.String("identifier", identifier))
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
@@ -43,10 +45,9 @@ func MonitorCancelLatency(ctx context.Context, identifier string) func() {
 						zap.Int("duration", elapsed), zap.Error(ctx.Err()))
 				}
 			}
-		case <-finishedCh:
-		}
-	}()
+		}()
+	}
 	return func() {
 		close(finishedCh)
-	}
+	}, start
 }
