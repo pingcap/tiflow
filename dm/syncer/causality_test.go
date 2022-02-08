@@ -95,6 +95,7 @@ func (s *testSyncerSuite) TestCasuality(c *C) {
 			Name:     "task",
 			SourceID: "source",
 		},
+		syncCtx: tcontext.Background(),
 		tctx:    tcontext.Background().WithLogger(log.L()),
 		sessCtx: utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
 	}
@@ -166,6 +167,7 @@ func (s *testSyncerSuite) TestCasualityWithPrefixIndex(c *C) {
 			Name:     "task",
 			SourceID: "source",
 		},
+		syncCtx: tcontext.Background(),
 		tctx:    tcontext.Background().WithLogger(log.L()),
 		sessCtx: utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
 	}
