@@ -30,11 +30,6 @@ type saramaMetrics struct {
 	collector   prometheus.Collector
 }
 
-//type kafkaMetrics struct {
-//	metrics []*saramaMetrics
-//}
-//
-
 var (
 	batchSize = saramaMetrics{
 		metricsName: "batch-size",
@@ -45,7 +40,7 @@ var (
 				Name:      "kafka_producer_batch_size",
 				Help:      "Distribution of the number of bytes sent per partition per request for all topics",
 				Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-			}, []string{}),
+			}, []string{"capture", "topic", "partition"}),
 	}
 
 	recordSendRate = saramaMetrics{
@@ -115,6 +110,8 @@ func (m saramaMetrics) Update(registry metrics.Registry) {
 	switch tp := m.collector.(type) {
 	case prometheus.Histogram:
 		tp.Observe(value)
+	case prometheus.Gauge:
+		tp.Set(value)
 	default:
 		log.Panic("not support prometheus collector type")
 	}
