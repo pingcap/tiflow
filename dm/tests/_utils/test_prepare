@@ -324,7 +324,7 @@ function init_cluster(){
 }
 
 function get_master_status() {
-	arr=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P3306 | awk 'NR==2')
+	arr=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'NR==2')
 	echo $arr
 }
 

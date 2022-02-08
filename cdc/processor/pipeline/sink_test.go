@@ -374,7 +374,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	// empty row, no Columns and PreColumns.
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)))
-	require.Equal(t, 0, len(node.eventBuffer))
+	require.Equal(t, 0, len(node.rowBuffer))
 }
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
@@ -393,7 +393,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	// nil row.
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}}), nil)))
-	require.Equal(t, 0, len(node.eventBuffer))
+	require.Equal(t, 0, len(node.rowBuffer))
 
 	columns := []*model.Column{
 		{
@@ -426,9 +426,9 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
-	require.Equal(t, 1, len(node.eventBuffer))
-	require.Equal(t, 2, len(node.eventBuffer[0].Row.Columns))
-	require.Equal(t, 2, len(node.eventBuffer[0].Row.PreColumns))
+	require.Equal(t, 1, len(node.rowBuffer))
+	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
+	require.Equal(t, 2, len(node.rowBuffer[0].PreColumns))
 }
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
@@ -449,7 +449,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	// nil row.
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}}), nil)))
-	require.Equal(t, 0, len(node.eventBuffer))
+	require.Equal(t, 0, len(node.rowBuffer))
 
 	// No update to the handle key column.
 	columns := []*model.Column{
@@ -484,12 +484,12 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
-	require.Equal(t, 1, len(node.eventBuffer))
-	require.Equal(t, 2, len(node.eventBuffer[0].Row.Columns))
-	require.Equal(t, 0, len(node.eventBuffer[0].Row.PreColumns))
+	require.Equal(t, 1, len(node.rowBuffer))
+	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
+	require.Equal(t, 0, len(node.rowBuffer[0].PreColumns))
 
 	// Cleanup.
-	node.eventBuffer = []*model.PolymorphicEvent{}
+	node.rowBuffer = []*model.RowChangedEvent{}
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
@@ -524,21 +524,21 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
 	// Split an update event into a delete and an insert event.
-	require.Equal(t, 2, len(node.eventBuffer))
+	require.Equal(t, 2, len(node.rowBuffer))
 
 	deleteEventIndex := 0
-	require.Equal(t, 0, len(node.eventBuffer[deleteEventIndex].Row.Columns))
-	require.Equal(t, 2, len(node.eventBuffer[deleteEventIndex].Row.PreColumns))
+	require.Equal(t, 0, len(node.rowBuffer[deleteEventIndex].Columns))
+	require.Equal(t, 2, len(node.rowBuffer[deleteEventIndex].PreColumns))
 	nonHandleKeyColIndex := 0
 	handleKeyColIndex := 1
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
-	require.Nil(t, node.eventBuffer[deleteEventIndex].Row.PreColumns[nonHandleKeyColIndex])
-	require.Equal(t, "col2", node.eventBuffer[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Name)
-	require.True(t, node.eventBuffer[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Flag.IsHandleKey())
+	require.Nil(t, node.rowBuffer[deleteEventIndex].PreColumns[nonHandleKeyColIndex])
+	require.Equal(t, "col2", node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Name)
+	require.True(t, node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Flag.IsHandleKey())
 
 	insertEventIndex := 1
-	require.Equal(t, 2, len(node.eventBuffer[insertEventIndex].Row.Columns))
-	require.Equal(t, 0, len(node.eventBuffer[insertEventIndex].Row.PreColumns))
+	require.Equal(t, 2, len(node.rowBuffer[insertEventIndex].Columns))
+	require.Equal(t, 0, len(node.rowBuffer[insertEventIndex].PreColumns))
 }
 
 type flushFlowController struct {
