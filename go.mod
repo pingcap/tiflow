@@ -35,6 +35,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.1.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -53,12 +54,12 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
-	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
+	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00
 	github.com/pingcap/kvproto v0.0.0-20211207042851-78a55fb8e69c
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
-	github.com/pingcap/tidb v1.1.0-beta.0.20220112050342-d088e3d6fc6c
+	github.com/pingcap/tidb v1.1.0-beta.0.20220124083611-18fc286fbf0d
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220112091742-82a75542e83f
+	github.com/pingcap/tidb/parser v0.0.0-20220124083611-18fc286fbf0d
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0

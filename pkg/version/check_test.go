@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -171,7 +172,7 @@ func TestCheckClusterVersion(t *testing.T) {
 		}
 
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
-		require.Regexp(t, ".*response status: .*", err)
+		require.Regexp(t, ".*400 Bad Request.*", err)
 	}
 }
 
@@ -337,7 +338,7 @@ func TestCheckTiCDCClusterVersion(t *testing.T) {
 			expectedUnknown:   true,
 		},
 		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: minTiCDCVersion},
+			cdcClusterVersion: TiCDCClusterVersion{Version: MinTiCDCVersion},
 			expectedErr:       "",
 			expectedUnknown:   false,
 		},
@@ -360,4 +361,21 @@ func TestCheckTiCDCClusterVersion(t *testing.T) {
 			require.Regexp(t, tc.expectedErr, err)
 		}
 	}
+}
+
+func TestCheckPDVersionError(t *testing.T) {
+	t.Parallel()
+
+	var resp func(w http.ResponseWriter, r *http.Request)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp(w, r)
+	}))
+	defer ts.Close()
+
+	resp = func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	require.Contains(t, CheckPDVersion(context.TODO(), ts.URL, nil).Error(),
+		"[CDC:ErrCheckClusterVersionFromPD]failed to request PD 500 Internal Server Error , please try again later",
+	)
 }

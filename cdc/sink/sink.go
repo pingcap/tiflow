@@ -41,6 +41,7 @@ type Sink interface {
 
 	// TryEmitRowChangedEvents is thread-safety and non-blocking.
 	TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
+
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
 	//
