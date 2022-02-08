@@ -193,7 +193,7 @@ func (jm *JobMaster) listSrcFiles(ctx context.Context) ([]string, error) {
 	defer conn.Close()
 	reply, err := client.ListFiles(ctx, &pb.ListFilesReq{FolderName: jm.syncInfo.SrcDir})
 	if err != nil {
-		log.L().Info(" list the directory failed ", zap.Any("message", jm.syncInfo.SrcDir))
+		log.L().Info(" list the directory failed ", zap.String("dir", jm.syncInfo.SrcDir), zap.Error(err))
 		return []string{}, err
 	}
 	return reply.GetFileNames(), nil

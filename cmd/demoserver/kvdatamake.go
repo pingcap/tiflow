@@ -58,7 +58,7 @@ func main() {
 				folder := strs[1]
 				recorderNum := RECORDERNUM
 				if len(strs) > 2 {
-					recorderNum, err = strconv.Atoi(os.Args[2])
+					recorderNum, err = strconv.Atoi(strs[2])
 					if err != nil {
 						fmt.Printf("the third parameter should be an interger,the format is : d dir [100000]\n")
 					}
