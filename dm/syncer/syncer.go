@@ -1539,7 +1539,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			cleanDumpFile = false
 		}
 		if s.cfg.ShardMode == config.ShardOptimistic {
-			s.flushOptimisticTableInfos(tctx)
+			s.flushOptimisticTableInfos(s.runCtx)
 		}
 	}
 
@@ -1967,7 +1967,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
 					// replace operator need redirect to currentLocation
-					if err = s.streamerController.RedirectStreamer(tctx, currentLocation); err != nil {
+					if err = s.streamerController.RedirectStreamer(s.runCtx, currentLocation); err != nil {
 						return err
 					}
 				}
