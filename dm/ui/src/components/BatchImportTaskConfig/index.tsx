@@ -24,7 +24,7 @@ const BlinkingText: React.FC<{ text: string; active: boolean }> = ({
 
   useEffect(() => {
     if (active) {
-      timer.current = window.setInterval(() => setCount(c => c + 1), 300)
+      timer.current = window.setInterval(() => setCount(c => (c + 1) % 4), 300)
     }
     return () => {
       if (timer.current) {
@@ -49,7 +49,7 @@ const BatchImportTaskConfig: React.FC = () => {
   const [overwrite, setOverwrite] = useState(false)
   const [batchImportTaskConfig] = useDmapiBatchImportTaskConfigMutation()
   const timerId = useRef<number>()
-  const stopTimer = useRef<boolean>(false)
+  const stopTimer = useRef(false)
 
   const calcStepStatus = (thisStep: number): Pick<StepProps, 'status'> => {
     if (currentStep === thisStep) {

@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
@@ -68,6 +69,25 @@ func (o *Optimist) Init(sourceTables map[string]map[string]map[string]map[string
 	}
 	_, err := optimism.PutSourceTables(o.cli, o.tables)
 	return err
+}
+
+// Tables clone and return tables
+// first one is sourceTable, second one is targetTable.
+func (o *Optimist) Tables() [][]filter.Table {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	tbls := make([][]filter.Table, 0)
+	for downSchema, downTables := range o.tables.Tables {
+		for downTable, upSchemas := range downTables {
+			for upSchema, upTables := range upSchemas {
+				for upTable := range upTables {
+					tbls = append(tbls, []filter.Table{{Schema: upSchema, Name: upTable}, {Schema: downSchema, Name: downTable}})
+				}
+			}
+		}
+	}
+	return tbls
 }
 
 // Reset resets the internal state of the optimist.
@@ -159,24 +179,6 @@ func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	o.mu.Unlock()
 
 	return nil
-}
-
-// GetTableInfo tries to get the init schema of the downstream table.
-func (o *Optimist) GetTableInfo(downSchema, downTable string) (*model.TableInfo, error) {
-	if downTable == "" {
-		return nil, nil
-	}
-
-	is, rev, err := optimism.GetInitSchema(o.cli, o.task, downSchema, downTable)
-	if err != nil {
-		return nil, err
-	}
-	if is.IsEmpty() {
-		o.logger.Info("no init schema exists", zap.String("schema", downSchema), zap.String("table", downTable), zap.Int64("revision", rev))
-	} else {
-		o.logger.Info("got init schema", zap.Stringer("init schema", is))
-	}
-	return is.TableInfo, nil
 }
 
 // PendingInfo returns the shard DDL info which is pending to handle.

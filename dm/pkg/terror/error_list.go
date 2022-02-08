@@ -496,6 +496,7 @@ const (
 	codeMasterFailToImportFromV10x
 	codeMasterInconsistentOptimistDDLsAndInfo
 	codeMasterOptimisticTableInfobeforeNotExist
+	codeMasterOptimisticDownstreamMetaNotFound
 )
 
 // DM-worker error code.
@@ -652,6 +653,7 @@ const (
 	codeSchedulerStartRelayOnBound
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
+	codeSchedulerWorkerNotFree
 )
 
 // dmctl error code.
@@ -1142,6 +1144,7 @@ var (
 
 	ErrMasterInconsistentOptimisticDDLsAndInfo = New(codeMasterInconsistentOptimistDDLsAndInfo, ClassDMMaster, ScopeInternal, LevelHigh, "inconsistent count of optimistic ddls and table infos, ddls: %d, table info: %d", "")
 	ErrMasterOptimisticTableInfoBeforeNotExist = New(codeMasterOptimisticTableInfobeforeNotExist, ClassDMMaster, ScopeInternal, LevelHigh, "table-info-before not exist in optimistic ddls: %v", "")
+	ErrMasterOptimisticDownstreamMetaNotFound  = New(codeMasterOptimisticDownstreamMetaNotFound, ClassDMMaster, ScopeInternal, LevelHigh, "downstream database config and meta for task %s not found", "")
 
 	// DM-worker error.
 	ErrWorkerParseFlagSet            = New(codeWorkerParseFlagSet, ClassDMWorker, ScopeInternal, LevelMedium, "parse dm-worker config flag set", "")
@@ -1303,7 +1306,7 @@ var (
 	ErrSchedulerStartRelayOnBound            = New(codeSchedulerStartRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now", "Please stop relay by `stop-relay` without worker name first.")
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
-
+	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
 	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
