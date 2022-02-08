@@ -4,7 +4,6 @@ import {
   isRejectedWithValue,
 } from '@reduxjs/toolkit'
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
-import { createLogger } from 'redux-logger'
 
 import { api } from '~/models/api'
 import { message } from '~/uikit'
@@ -14,7 +13,10 @@ const rtkQueryErrorLogger: Middleware = () => next => action => {
     console.error('RTKQ error caught: ', action)
     // insert your own error handler here
     message.error({
-      content: action.payload?.data?.error_msg ?? 'Oops, somthing went wrong',
+      content:
+        action.payload?.data?.error_msg ??
+        action.payload?.data?.error ??
+        'Oops, somthing went wrong',
     })
   }
 
@@ -31,14 +33,6 @@ export const store = configureStore({
     })
 
     middlewares.push(api.middleware, rtkQueryErrorLogger)
-
-    if (import.meta.env.DEV) {
-      const logger = createLogger({
-        duration: true,
-        collapsed: true,
-      })
-      middlewares.push(logger)
-    }
 
     return middlewares
   },

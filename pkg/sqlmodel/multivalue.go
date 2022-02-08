@@ -22,19 +22,23 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
-// SameTypeTargetAndColumns check whether two row changes have same type, target and columns, so they can be merged to a
-// multi-value DML.
+// SameTypeTargetAndColumns check whether two row changes have same type, target
+// and columns, so they can be merged to a multi-value DML.
 func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 	if lhs.tp != rhs.tp {
 		return false
 	}
-	if lhs.sourceTable.Schema == rhs.sourceTable.Schema && lhs.sourceTable.Table == rhs.sourceTable.Table {
+	if lhs.sourceTable.Schema == rhs.sourceTable.Schema &&
+		lhs.sourceTable.Table == rhs.sourceTable.Table {
 		return true
 	}
-	if lhs.targetTable.Schema != rhs.targetTable.Schema || lhs.targetTable.Table == rhs.targetTable.Table {
+	if lhs.targetTable.Schema != rhs.targetTable.Schema ||
+		lhs.targetTable.Table != rhs.targetTable.Table {
 		return false
 	}
 
+	// when the targets are the same and the sources are not the same (same
+	// group of shard tables), this piece of code is run.
 	var lhsCols, rhsCols []string
 	switch lhs.tp {
 	case RowChangeDelete:
@@ -64,8 +68,8 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 }
 
 // GenDeleteSQL generates the DELETE SQL and its arguments.
-// Input `changes` should have same target table and same columns for WHERE (typically same PK/NOT NULL UK), otherwise
-// the behaviour is undefined.
+// Input `changes` should have same target table and same columns for WHERE
+// (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
 func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
@@ -98,13 +102,14 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 		}
 		buf.WriteString(holder)
 		_, whereValues := change.whereColumnsAndValues()
-		// a simple check about different number of WHERE values, not cover all cases
+		// a simple check about different number of WHERE values, not trying to
+		// cover all cases
 		if len(whereValues) != len(whereColumns) {
 			log.L().DPanic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
 				zap.Any("whereValues", whereValues),
-				zap.Stringer("source table", change.sourceTable))
+				zap.Stringer("sourceTable", change.sourceTable))
 			return "", nil
 		}
 		args = append(args, whereValues...)
@@ -116,7 +121,8 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 // TODO: support GenUpdateSQL(changes ...*RowChange) using UPDATE SET CASE WHEN
 
 // GenInsertSQL generates the INSERT SQL and its arguments.
-// Input `changes` should have same target table and same modifiable columns, otherwise the behaviour is undefined.
+// Input `changes` should have same target table and same modifiable columns,
+// otherwise the behaviour is undefined.
 func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")

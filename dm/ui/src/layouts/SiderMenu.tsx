@@ -1,16 +1,51 @@
-import React from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import React, { useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { groupBy } from 'lodash'
 
+import { pages } from '~/routes'
 import { Menu } from '~/uikit'
 import {
+  ClusterOutlined,
   DashboardOutlined,
   ExportOutlined,
-  ClusterOutlined,
 } from '~/uikit/icons'
 import logo from '~/assets/logo.png'
+import i18n from '~/i18n'
 
 const { SubMenu } = Menu
+
+function usePagesToMenuItems(key: string) {
+  const groupedPages = useMemo(
+    () =>
+      groupBy(pages, page => {
+        if (page.route === '/') {
+          return page.route
+        }
+
+        return '/' + page.route.split('/')[1]
+      }),
+    [pages]
+  )
+
+  return useMemo(() => {
+    if (!groupedPages[key]) {
+      return []
+    }
+    return groupedPages[key]
+      .filter(
+        page =>
+          page.meta &&
+          typeof page?.meta.index === 'number' &&
+          page.meta.index >= 0
+      )
+      .sort((a, b) => a.meta!.index - b.meta!.index)
+      .map(page => ({
+        text: page?.meta?.title(),
+        itemKey: page.route,
+      }))
+  }, [groupedPages, i18n.language])
+}
 
 const SiderMenu: React.FC<{
   collapsed: boolean
@@ -19,54 +54,35 @@ const SiderMenu: React.FC<{
   const navigate = useNavigate()
   const loc = useLocation()
 
-  const items = [
-    { itemKey: '/', text: 'Dashboard', icon: <DashboardOutlined /> },
-    {
-      itemKey: '/migration',
-      text: t('migration'),
-      icon: <ExportOutlined />,
-      items: [
-        {
-          text: t('task list'),
-          itemKey: '/migration/task',
-        },
-        {
-          text: t('source list'),
-          itemKey: '/migration/source',
-        },
-        {
-          text: t('task config'),
-          itemKey: '/migration/task-config',
-        },
-        {
-          text: t('sync detail'),
-          itemKey: '/migration/sync-detail',
-        },
-      ],
-    },
-    {
-      itemKey: '/cluster',
-      text: t('cluster management'),
-      icon: <ClusterOutlined />,
-      items: [
-        {
-          text: t('member list'),
-          itemKey: '/cluster/member',
-        },
-        {
-          text: t('relay log'),
-          itemKey: '/cluster/relay-log',
-        },
-      ],
-    },
-  ]
+  const migrationItems = usePagesToMenuItems('/migration')
+  const clusterItems = usePagesToMenuItems('/cluster')
+
+  const items = useMemo(
+    () => [
+      { itemKey: '/', text: 'Dashboard', icon: <DashboardOutlined /> },
+      {
+        itemKey: '/migration',
+        text: t('migration'),
+        icon: <ExportOutlined />,
+        items: migrationItems,
+      },
+      {
+        itemKey: '/cluster',
+        text: t('cluster management'),
+        icon: <ClusterOutlined />,
+        items: clusterItems,
+      },
+    ],
+    [migrationItems, clusterItems]
+  )
+
   return (
     <div>
       <div className="flex p-4 justify-center">
         <img src={logo} alt="" className="h-[36px]" />
         {!collapsed && (
           <h1 className="font-extrabold text-lg ml-2 leading-[36px]">
-            Data Sync Platform
+            Data Migration
           </h1>
         )}
       </div>
@@ -75,7 +91,7 @@ const SiderMenu: React.FC<{
         theme="light"
         mode="inline"
         defaultSelectedKeys={[loc.pathname]}
-        defaultOpenKeys={['/migration']}
+        defaultOpenKeys={['/migration', '/cluster']}
       >
         {items.map(item => {
           if (item.items) {

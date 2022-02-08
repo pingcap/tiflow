@@ -1,7 +1,7 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
-	dm dm-master dm-worker dmctl dm-portal dm-syncer dm_coverage
+	dm dm-master dm-worker dmctl dm-syncer dm_coverage
 
 PROJECT=tiflow
 P=3
@@ -240,7 +240,7 @@ clean:
 	rm -rf bin
 	rm -rf tools/bin
 
-dm: dm-master dm-worker dmctl dm-portal dm-syncer
+dm: dm-master dm-worker dmctl dm-syncer
 
 dm-master:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-master ./dm/cmd/dm-master
@@ -255,9 +255,6 @@ dm-worker:
 
 dmctl:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dmctl ./dm/cmd/dm-ctl
-
-dm-portal:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-portal ./dm/cmd/dm-portal
 
 dm-syncer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/dm-syncer ./dm/cmd/dm-syncer
@@ -280,13 +277,22 @@ dm_generate_openapi: tools/bin/oapi-codegen
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/types-gen-cfg.yaml openapi/spec/dm.yaml
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/client-gen-cfg.yaml openapi/spec/dm.yaml
 
-dm_unit_test: check_failpoint_ctl
+define run_dm_unit_test
+	@echo "running unit test for packages:" $(1)
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
+	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(1) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
+endef
+
+dm_unit_test: check_failpoint_ctl
+	$(call run_dm_unit_test,$(DM_PACKAGES))
+
+# run unit test for the specified pkg only, like `make dm_unit_test_pkg PKG=github.com/pingcap/tiflow/dm/dm/master`
+dm_unit_test_pkg: check_failpoint_ctl
+	$(call run_dm_unit_test,$(PKG))
 
 dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
 	mkdir -p $(DM_TEST_DIR)
@@ -365,11 +371,10 @@ dm_compatibility_test: check_third_party_binary_for_dm
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	# unify cover mode in coverage files, more details refer to dm/tests/_utils/run_dm_ctl
 	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec sed -i "s/mode: count/mode: atomic/g" {} \;
-	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
-	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
+	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
+	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
 	go tool cover -html "$(DM_TEST_DIR)/unit_test.out" -o "$(DM_TEST_DIR)/unit_test_cov.html"
-
 
 tools/bin/failpoint-ctl: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/failpoint-ctl github.com/pingcap/failpoint/failpoint-ctl

@@ -22,6 +22,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	timock "github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -36,6 +37,19 @@ func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
 	ti, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
 	require.NoError(t, err)
 	return ti
+}
+
+type dpanicSuite struct {
+	suite.Suite
+}
+
+func (s *dpanicSuite) SetupSuite() {
+	err := log.InitLogger(&log.Config{Level: "debug"})
+	s.NoError(err)
+}
+
+func TestDpanicSuite(t *testing.T) {
+	suite.Run(t, new(dpanicSuite))
 }
 
 func TestNewRowChange(t *testing.T) {
@@ -71,37 +85,30 @@ func TestNewRowChange(t *testing.T) {
 
 	expected.targetTable = expected.sourceTable
 	expected.targetTableInfo = expected.sourceTableInfo
-	expected.tiSessionCtx = utils.NewSessionCtx(nil)
+	expected.tiSessionCtx = utils.ZeroSessionCtx
 	expected.identityInfo = nil
 	actual = NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, nil, nil)
 	require.Equal(t, expected, actual)
 }
 
-func TestRowChangeType(t *testing.T) {
-	t.Parallel()
-
-	err := log.InitLogger(&log.Config{Level: "debug"})
-	require.NoError(t, err)
-
+func (s *dpanicSuite) TestRowChangeType() {
 	change := &RowChange{preValues: []interface{}{1}}
 	change.calculateType()
-	require.Equal(t, RowChangeDelete, change.tp)
+	s.Equal(RowChangeDelete, change.tp)
 	change = &RowChange{preValues: []interface{}{1}, postValues: []interface{}{2}}
 	change.calculateType()
-	require.Equal(t, RowChangeUpdate, change.tp)
+	s.Equal(RowChangeUpdate, change.tp)
 	change = &RowChange{postValues: []interface{}{1}}
 	change.calculateType()
-	require.Equal(t, RowChangeInsert, change.tp)
+	s.Equal(RowChangeInsert, change.tp)
 
-	require.Panics(t, func() {
+	s.Panics(func() {
 		change = &RowChange{}
 		change.calculateType()
 	})
 }
 
-func TestGenDelete(t *testing.T) {
-	t.Parallel()
-
+func (s *dpanicSuite) TestGenDelete() {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
 
@@ -166,32 +173,28 @@ func TestGenDelete(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		sourceTI := mockTableInfo(t, c.sourceCreateSQL)
-		targetTI := mockTableInfo(t, c.targetCreateSQL)
+		sourceTI := mockTableInfo(s.T(), c.sourceCreateSQL)
+		targetTI := mockTableInfo(s.T(), c.targetCreateSQL)
 		change := NewRowChange(source, target, c.preValues, nil, sourceTI, targetTI, nil)
 		sql, args := change.GenSQL(DMLDelete)
-		require.Equal(t, c.expectedSQL, sql)
-		require.Equal(t, c.expectedArgs, args)
+		s.Equal(c.expectedSQL, sql)
+		s.Equal(c.expectedArgs, args)
 	}
 
 	// a RowChangeUpdate can still generate DELETE SQL
-	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
+	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
 	change := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI, nil, nil)
 	sql, args := change.GenSQL(DMLDelete)
-	require.Equal(t, "DELETE FROM `db`.`tb1` WHERE `id` = ? LIMIT 1", sql)
-	require.Equal(t, []interface{}{1}, args)
+	s.Equal("DELETE FROM `db`.`tb1` WHERE `id` = ? LIMIT 1", sql)
+	s.Equal([]interface{}{1}, args)
 
-	err := log.InitLogger(&log.Config{Level: "debug"})
-	require.NoError(t, err)
 	change = NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
-	require.Panics(t, func() {
+	s.Panics(func() {
 		change.GenSQL(DMLDelete)
 	})
 }
 
-func TestGenUpdate(t *testing.T) {
-	t.Parallel()
-
+func (s *dpanicSuite) TestGenUpdate() {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
 
@@ -253,19 +256,17 @@ func TestGenUpdate(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		sourceTI := mockTableInfo(t, c.sourceCreateSQL)
-		targetTI := mockTableInfo(t, c.targetCreateSQL)
+		sourceTI := mockTableInfo(s.T(), c.sourceCreateSQL)
+		targetTI := mockTableInfo(s.T(), c.targetCreateSQL)
 		change := NewRowChange(source, target, c.preValues, c.postValues, sourceTI, targetTI, nil)
 		sql, args := change.GenSQL(DMLUpdate)
-		require.Equal(t, c.expectedSQL, sql)
-		require.Equal(t, c.expectedArgs, args)
+		s.Equal(c.expectedSQL, sql)
+		s.Equal(c.expectedArgs, args)
 	}
 
-	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
-	err := log.InitLogger(&log.Config{Level: "debug"})
-	require.NoError(t, err)
+	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
 	change := NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
-	require.Panics(t, func() {
+	s.Panics(func() {
 		change.GenSQL(DMLUpdate)
 	})
 }
@@ -333,4 +334,12 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedInsertOnDupSQL, sql)
 		require.Equal(t, c.expectedArgs, args)
 	}
+}
+
+func TestValuesHolder(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "()", valuesHolder(0))
+	require.Equal(t, "(?)", valuesHolder(1))
+	require.Equal(t, "(?,?)", valuesHolder(2))
 }

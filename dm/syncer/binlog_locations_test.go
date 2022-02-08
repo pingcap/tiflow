@@ -98,7 +98,7 @@ func (s *testLocationSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) 
 				},
 			}
 			eventType := replication.WRITE_ROWS_EVENTv2
-			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData)
+			evs, _, err := s.eventsGenerator.GenDMLEvents(eventType, dmlData, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 
@@ -109,7 +109,7 @@ func (s *testLocationSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) 
 					Query:  e.args[1].(string),
 				},
 			}
-			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData)
+			evs, _, err := s.eventsGenerator.GenDMLEvents(replication.UNKNOWN_EVENT, dmlData, 0)
 			c.Assert(err, IsNil)
 			events = append(events, evs...)
 
@@ -119,7 +119,7 @@ func (s *testLocationSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) 
 			c.Assert(err, IsNil)
 			events = append(events, fakeRotate)
 
-			events1, _, err := event.GenCommonFileHeader(s.flavor, s.serverID, s.prevGSet)
+			events1, _, err := event.GenCommonFileHeader(s.flavor, s.serverID, s.prevGSet, true, 0)
 			c.Assert(err, IsNil)
 			events = append(events, events1...)
 

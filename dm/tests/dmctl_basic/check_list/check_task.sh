@@ -16,7 +16,7 @@ function check_task_pass() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
-		"\"msg\": \"check pass!!!\"" 1 \
+		"\"passed\": true" 1 \
 		"\"result\": true" 1
 }
 
@@ -33,6 +33,13 @@ function check_task_error_database_config() {
 		"check-task $task_conf" \
 		"Access denied for user" 1 \
 		"Please check the database connection and the database config in configuration file" 1
+}
+
+function check_task_wrong_start_time_format() {
+	task_conf=$1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf --start-time '20060102 150405'" \
+		"error while parse start-time" 1
 }
 
 function check_task_error_count() {

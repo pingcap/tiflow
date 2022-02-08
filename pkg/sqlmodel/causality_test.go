@@ -14,6 +14,7 @@
 package sqlmodel
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,4 +53,21 @@ func TestCausalityKeys(t *testing.T) {
 		change := NewRowChange(source, nil, ca.preValue, ca.postValue, ti, nil, nil)
 		require.Equal(t, ca.causalityKeys, change.CausalityKeys())
 	}
+}
+
+func TestCausalityKeysNoRace(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT, c3 VARCHAR(10) UNIQUE)")
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			change := NewRowChange(source, nil, []interface{}{1, 2, "abc"}, []interface{}{3, 4, "abc"}, ti, nil, nil)
+			change.CausalityKeys()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }

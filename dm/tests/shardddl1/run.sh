@@ -394,9 +394,16 @@ function DM_UpdateBARule_CASE() {
 	sed -i 's/do-dbs: \["shardddl1","shardddl2"\]/do-dbs: \["shardddl1"\]/g' $WORK_DIR/task.yaml
 	echo 'ignore-checking-items: ["schema_of_shard_tables"]' >>$WORK_DIR/task.yaml
 
+	# source1: db1.tb1(id,new_col1,new_col3)
+	# source2: db1.tb1(id)
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/task.yaml" \
 		"\"result\": true" 3
+
+	# no lock exist when task begin
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"show-ddl-locks" \
+		"no DDL lock exists" 1
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14);"
@@ -406,7 +413,7 @@ function DM_UpdateBARule_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"show-ddl-locks" \
-		"\"ID\": \"test-\`shardddl\`.\`tb\`\"" 1
+		"no DDL lock exists" 1
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column new_col1"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col3 int"
@@ -783,6 +790,32 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 		"clean_table" ""
 }
 
+function DM_DML_EXECUTE_ERROR_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,1)"
+	run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=1"
+
+	check_log_contain_with_retry "length of queries not equals length of jobs" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"RawCause\": \"ErrorOnLastDML\"" 1 \
+		"Paused" 1
+}
+
+function DM_DML_EXECUTE_ERROR() {
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ErrorOnLastDML=return()'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case DML_EXECUTE_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -799,6 +832,7 @@ function run() {
 	DM_RestartMaster
 	DM_ADD_DROP_COLUMNS
 	DM_COLUMN_INDEX
+	DM_DML_EXECUTE_ERROR
 	start=1
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do

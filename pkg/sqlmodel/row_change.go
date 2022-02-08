@@ -67,19 +67,21 @@ type RowChange struct {
 	tiSessionCtx sessionctx.Context
 
 	tp           RowChangeType
-	identityInfo *schema.DownstreamTableInfo // this field can be set from outside or lazy initialized
+	identityInfo *schema.DownstreamTableInfo
 }
 
 // NewRowChange creates a new RowChange.
-// preValues stands for values exists before this change, postValues stands for values exists after this change.
+// preValues stands for values exists before this change, postValues stands for
+// values exists after this change.
 // These parameters can be nil:
 // - targetTable: when same as sourceTable or not applicable
 // - preValues: when INSERT
 // - postValues: when DELETE
 // - targetTableInfo: when same as sourceTableInfo or not applicable
 // - tiSessionCtx: will use default sessionCtx which is UTC timezone
-// All arguments must not be changed after assigned to RowChange, any modification (like convert []byte to string)
-// should be done before NewRowChange.
+// All arguments must not be changed after assigned to RowChange, any
+// modification (like convert []byte to string) should be done before
+// NewRowChange.
 func NewRowChange(
 	sourceTable *cdcmodel.TableName,
 	targetTable *cdcmodel.TableName,
@@ -98,15 +100,15 @@ func NewRowChange(
 
 	if preValues != nil && len(preValues) != len(sourceTableInfo.Columns) {
 		log.L().DPanic("preValues length not equal to sourceTableInfo columns",
-			zap.Int("preValues length", len(preValues)),
-			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
-			zap.Stringer("source table", sourceTable))
+			zap.Int("preValues", len(preValues)),
+			zap.Int("sourceTableInfo", len(sourceTableInfo.Columns)),
+			zap.Stringer("sourceTable", sourceTable))
 	}
 	if postValues != nil && len(postValues) != len(sourceTableInfo.Columns) {
 		log.L().DPanic("postValues length not equal to sourceTableInfo columns",
-			zap.Int("postValues length", len(postValues)),
-			zap.Int("sourceTableInfo length", len(sourceTableInfo.Columns)),
-			zap.Stringer("source table", sourceTable))
+			zap.Int("postValues", len(postValues)),
+			zap.Int("sourceTableInfo", len(sourceTableInfo.Columns)),
+			zap.Stringer("sourceTable", sourceTable))
 	}
 
 	if targetTable != nil {
@@ -124,7 +126,7 @@ func NewRowChange(
 	if tiCtx != nil {
 		ret.tiSessionCtx = tiCtx
 	} else {
-		ret.tiSessionCtx = utils.NewSessionCtx(nil)
+		ret.tiSessionCtx = utils.ZeroSessionCtx
 	}
 
 	ret.calculateType()
@@ -141,11 +143,13 @@ func (r *RowChange) calculateType() {
 	case r.preValues != nil && r.postValues == nil:
 		r.tp = RowChangeDelete
 	default:
-		log.L().DPanic("preValues and postValues can't both be nil", zap.Stringer("sourceTable", r.sourceTable))
+		log.L().DPanic("preValues and postValues can't both be nil",
+			zap.Stringer("sourceTable", r.sourceTable))
 	}
 }
 
-// Type returns the RowChangeType of this RowChange. Caller can future decide the DMLType when generate DML from it.
+// Type returns the RowChangeType of this RowChange. Caller can future decide
+// the DMLType when generate DML from it.
 func (r *RowChange) Type() RowChangeType {
 	return r.tp
 }
@@ -161,8 +165,8 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used when caller has calculated and cached identityInfo, to avoid every RowChange lazily
-// initialize it.
+// SetIdentifyInfo can be used when caller has calculated and cached
+// identityInfo, to avoid every RowChange lazily initialize it.
 func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
 	r.identityInfo = info
 }
@@ -175,7 +179,11 @@ func (r *RowChange) lazyInitIdentityInfo() {
 	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
 }
 
-func getColsAndValuesOfIdx(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo, data []interface{}) ([]*timodel.ColumnInfo, []interface{}) {
+func getColsAndValuesOfIdx(
+	columns []*timodel.ColumnInfo,
+	indexColumns *timodel.IndexInfo,
+	data []interface{},
+) ([]*timodel.ColumnInfo, []interface{}) {
 	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
 	values := make([]interface{}, 0, len(indexColumns.Columns))
 	for _, col := range indexColumns.Columns {
@@ -186,7 +194,8 @@ func getColsAndValuesOfIdx(columns []*timodel.ColumnInfo, indexColumns *timodel.
 	return cols, values
 }
 
-// whereColumnsAndValues returns columns and values to identify the row, to form the WHERE clause.
+// whereColumnsAndValues returns columns and values to identify the row, to form
+// the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitIdentityInfo()
 
@@ -207,9 +216,11 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 
 	failpoint.Inject("DownstreamTrackerWhereCheck", func() {
 		if r.tp == RowChangeUpdate {
-			log.L().Info("UpdateWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+			log.L().Info("UpdateWhereColumnsCheck",
+				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
 		} else if r.tp == RowChangeDelete {
-			log.L().Info("DeleteWhereColumnsCheck", zap.String("Columns", fmt.Sprintf("%v", columnNames)))
+			log.L().Info("DeleteWhereColumnsCheck",
+				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
 		}
 	})
 
@@ -236,7 +247,6 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 }
 
 // valuesHolder gens values holder like (?,?,?).
-// n must be greater or equal than 1, or the function will panic.
 func valuesHolder(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 3)
@@ -254,8 +264,8 @@ func valuesHolder(n int) string {
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
-			zap.String("source table", r.sourceTable.String()),
-			zap.Stringer("change type", r.tp))
+			zap.String("sourceTable", r.sourceTable.String()),
+			zap.Stringer("changeType", r.tp))
 		return "", nil
 	}
 
@@ -282,8 +292,8 @@ func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	if r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genUpdateSQL",
-			zap.String("source table", r.sourceTable.String()),
-			zap.Stringer("change type", r.tp))
+			zap.String("sourceTable", r.sourceTable.String()),
+			zap.Stringer("changeType", r.tp))
 		return "", nil
 	}
 
@@ -361,7 +371,7 @@ func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 		return r.genDeleteSQL()
 	}
 	log.L().DPanic("illegal type for GenSQL",
-		zap.String("source table", r.sourceTable.String()),
-		zap.Stringer("DML type", tp))
+		zap.String("sourceTable", r.sourceTable.String()),
+		zap.Stringer("DMLType", tp))
 	return "", nil
 }

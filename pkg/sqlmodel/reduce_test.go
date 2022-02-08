@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func TestIdentity(t *testing.T) {
@@ -62,11 +61,9 @@ func TestSplit(t *testing.T) {
 	require.NotEqual(t, delIDKey, insIDKey)
 }
 
-func TestReduce(t *testing.T) {
-	t.Parallel()
-
+func (s *dpanicSuite) TestReduce() {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
-	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)")
+	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)")
 
 	cases := []struct {
 		pre1      []interface{}
@@ -78,27 +75,39 @@ func TestReduce(t *testing.T) {
 	}{
 		// INSERT + UPDATE
 		{
-			nil, []interface{}{1, 2},
-			[]interface{}{1, 2}, []interface{}{3, 4},
-			nil, []interface{}{3, 4},
+			nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 2},
+			[]interface{}{3, 4},
+			nil,
+			[]interface{}{3, 4},
 		},
 		// INSERT + DELETE
 		{
-			nil, []interface{}{1, 2},
-			[]interface{}{1, 2}, nil,
-			[]interface{}{1, 2}, nil,
+			nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 2},
+			nil,
+			[]interface{}{1, 2},
+			nil,
 		},
 		// UPDATE + UPDATE
 		{
-			[]interface{}{1, 2}, []interface{}{1, 3},
-			[]interface{}{1, 3}, []interface{}{1, 4},
-			[]interface{}{1, 2}, []interface{}{1, 4},
+			[]interface{}{1, 2},
+			[]interface{}{1, 3},
+			[]interface{}{1, 3},
+			[]interface{}{1, 4},
+			[]interface{}{1, 2},
+			[]interface{}{1, 4},
 		},
 		// UPDATE + DELETE
 		{
-			[]interface{}{1, 2}, []interface{}{1, 3},
-			[]interface{}{1, 3}, nil,
-			[]interface{}{1, 2}, nil,
+			[]interface{}{1, 2},
+			[]interface{}{1, 3},
+			[]interface{}{1, 3},
+			nil,
+			[]interface{}{1, 2},
+			nil,
 		},
 	}
 
@@ -109,15 +118,13 @@ func TestReduce(t *testing.T) {
 		changeAfter.lazyInitIdentityInfo()
 
 		change2.Reduce(change1)
-		require.Equal(t, changeAfter, change2)
+		s.Equal(changeAfter, change2)
 	}
 
 	// test reduce on IdentityUpdated will DPanic
-	err := log.InitLogger(&log.Config{Level: "debug"})
-	require.NoError(t, err)
 	change1 := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI, nil, nil)
 	change2 := NewRowChange(source, nil, []interface{}{3, 4}, []interface{}{5, 6}, sourceTI, nil, nil)
-	require.Panics(t, func() {
+	s.Panics(func() {
 		change2.Reduce(change1)
 	})
 }
