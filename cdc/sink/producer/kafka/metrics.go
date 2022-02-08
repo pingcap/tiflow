@@ -133,26 +133,3 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(responseSizeHistogram)
 	registry.MustRegister(requestInFlightCounter)
 }
-
-//+----------------------------------------------+------------+---------------------------------------------------------------+
-//| Name                                         | Type       | Description                                                   |
-//+----------------------------------------------+------------+---------------------------------------------------------------+
-//| incoming-byte-rate                           | meter      | Bytes/second read off all brokers                             |
-//| incoming-byte-rate-for-broker-<broker-id>    | meter      | Bytes/second read off a given broker                          |
-//| outgoing-byte-rate                           | meter      | Bytes/second written off all brokers                          |
-//| outgoing-byte-rate-for-broker-<broker-id>    | meter      | Bytes/second written off a given broker                       |
-//| request-rate                                 | meter      | Requests/second sent to all brokers                           |
-//| request-rate-for-broker-<broker-id>          | meter      | Requests/second sent to a given broker                        |
-//| request-size                                 | histogram  | Distribution of the request size in bytes for all brokers     |
-//| request-size-for-broker-<broker-id>          | histogram  | Distribution of the request size in bytes for a given broker  |
-//| request-latency-in-ms                        | histogram  | Distribution of the request latency in ms for all brokers     |
-//| request-latency-in-ms-for-broker-<broker-id> | histogram  | Distribution of the request latency in ms for a given broker  |
-//| response-rate                                | meter      | Responses/second received from all brokers                    |
-//| response-rate-for-broker-<broker-id>         | meter      | Responses/second received from a given broker                 |
-//| response-size                                | histogram  | Distribution of the response size in bytes for all brokers    |
-//| response-size-for-broker-<broker-id>         | histogram  | Distribution of the response size in bytes for a given broker |
-//| requests-in-flight                           | counter    | The current number of in-flight requests awaiting a response  |
-//|                                              |            | for all brokers                                               |
-//| requests-in-flight-for-broker-<broker-id>    | counter    | The current number of in-flight requests awaiting a response  |
-//|                                              |            | for a given broker                                            |
-//+----------------------------------------------+------------+---------------------------------------------------------------+
