@@ -78,13 +78,16 @@ type WorkerStatus struct {
 	Ext interface{} `json:"-"`
 }
 
-func (s *WorkerStatus) fillExt(tpi interface{}) error {
+func (s *WorkerStatus) fillExt(tpi interface{}) (err error) {
 	defer func() {
 		// ExtBytes is no longer useful after this function returns.
 		s.ExtBytes = nil
+		if r := recover(); r != nil {
+			err = errors.Errorf("Fill ext field of worker status failed: %v", r)
+		}
 	}()
 	obj := reflect.New(reflect.TypeOf(tpi).Elem()).Interface()
-	err := json.Unmarshal(s.ExtBytes, obj)
+	err = json.Unmarshal(s.ExtBytes, obj)
 	if err != nil {
 		return errors.Trace(err)
 	}
