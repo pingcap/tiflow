@@ -871,7 +871,9 @@ func (s *Syncer) updateReplicationLagMetric() {
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 	ti, err := s.schemaTracker.GetTableInfo(table)
 	if err != nil && table.Name != "" {
-		s.tctx.L().DPanic("table info missing from schema tracker",
+		// TODO: if we RENAME tb1 TO tb2, the tracker will remove TableInfo of tb1 but we still save the table
+		// checkpoint for tb1. We can delete the table checkpoint in future.
+		s.tctx.L().Warn("table info missing from schema tracker",
 			zap.Stringer("table", table),
 			zap.Stringer("location", location),
 			zap.Error(err))
@@ -1875,11 +1877,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
 
-		// TODO: support all event
+		// support QueryEvent and RowsEvent
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
-		if ev, ok := e.Event.(*replication.QueryEvent); ok {
+		switch ev := e.Event.(type) {
+		case *replication.QueryEvent, *replication.RowsEvent:
 			startLocation = binlog.InitLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -1902,19 +1905,22 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			currentLocation.Suffix = endSuffix
 
-			err = currentLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
+			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
+				err = currentLocation.SetGTID(queryEvent.GSet)
+				if err != nil {
+					return terror.Annotatef(err, "fail to record GTID %v", queryEvent.GSet)
+				}
 			}
 
 			if !s.isReplacingOrInjectingErr {
-				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e.Header.Timestamp)
+				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e)
 				if apply {
 					if op == pb.ErrorOp_Replace || op == pb.ErrorOp_Inject {
 						s.isReplacingOrInjectingErr = true
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
+						queryEvent := ev.(*replication.QueryEvent)
 						ec := eventContext{
 							tctx:            tctx,
 							header:          e.Header,
@@ -1923,9 +1929,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 							lastLocation:    &lastLocation,
 						}
 						var sourceTbls map[string]map[string]struct{}
-						sourceTbls, err = s.trackOriginDDL(ev, ec)
+						sourceTbls, err = s.trackOriginDDL(queryEvent, ec)
 						if err != nil {
-							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", ev.Query))
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", queryEvent.Query))
 						}
 
 						s.saveGlobalPoint(currentLocation)
@@ -1949,21 +1955,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 			// set endLocation.Suffix=0 of last replace or inject event
-			// also redirect stream to next event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
 				s.locations.reset(currentLocation)
-				if s.errOperatorHolder.IsInject(startLocation) {
-					s.errOperatorHolder.SetHasAllInjected(startLocation)
-					// reset event as startLocation, avoid to be marked in checkpoint
-					currentLocation.Position.Pos = startLocation.Position.Pos
-					err = s.streamerController.RedirectStreamer(tctx, startLocation)
-				} else {
-					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
-				}
-				if err != nil {
-					return err
+				if !s.errOperatorHolder.IsInject(startLocation) {
+					// replace operator need redirect to currentLocation
+					if err = s.streamerController.RedirectStreamer(tctx, currentLocation); err != nil {
+						return err
+					}
 				}
 			}
 		}

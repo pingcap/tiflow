@@ -39,7 +39,7 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 			return "", fmt.Errorf("source '%s' has no error", s.cfg.SourceID)
 		}
 
-		if !isQueryEvent {
+		if !isQueryEvent && req.Op != pb.ErrorOp_Inject {
 			return "", fmt.Errorf("only support to handle ddl error currently, see https://docs.pingcap.com/tidb-data-migration/stable/error-handling for other errors")
 		}
 		pos = startLocation.Position.String()
