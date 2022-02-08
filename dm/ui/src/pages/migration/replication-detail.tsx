@@ -2,7 +2,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '~/i18n'
-import { Input, Row, Col, Button, Space, Table } from '~/uikit'
+import { Input, Row, Col, Button, Space, Table, Breadcrumb } from '~/uikit'
 import { RedoOutlined, SearchOutlined } from '~/uikit/icons'
 import { useDmapiGetTaskListQuery } from '~/models/task'
 import { useFuseSearch } from '~/utils/search'
@@ -25,6 +25,13 @@ const ReplicationDetail: React.FC = () => {
   ]
   return (
     <div>
+      <div className="px-4 pt-4">
+        <Breadcrumb>
+          <Breadcrumb.Item>{t('migration')}</Breadcrumb.Item>
+          <Breadcrumb.Item>{t('replication detail')}</Breadcrumb.Item>
+        </Breadcrumb>
+      </div>
+
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>

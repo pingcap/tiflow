@@ -14,6 +14,7 @@ import {
   Modal,
   message,
   TableColumnsType,
+  Breadcrumb,
 } from '~/uikit'
 import {
   RedoOutlined,
@@ -161,6 +162,13 @@ const TaskConfig: React.FC = () => {
 
   return (
     <div>
+      <div className="px-4 pt-4">
+        <Breadcrumb>
+          <Breadcrumb.Item>{t('migration')}</Breadcrumb.Item>
+          <Breadcrumb.Item>{t('task config')}</Breadcrumb.Item>
+        </Breadcrumb>
+      </div>
+
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>

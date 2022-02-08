@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -10,6 +10,7 @@ import {
   Badge,
   message,
   Modal,
+  Breadcrumb,
 } from '~/uikit'
 import {
   RedoOutlined,
@@ -203,8 +204,17 @@ const WorkerTable: React.FC = () => {
 }
 
 const Member: React.FC = () => {
+  const [t] = useTranslation()
+
   return (
     <div>
+      <div className="px-4 pt-4">
+        <Breadcrumb>
+          <Breadcrumb.Item>{t('cluster management')}</Breadcrumb.Item>
+          <Breadcrumb.Item>{t('member list')}</Breadcrumb.Item>
+        </Breadcrumb>
+      </div>
+
       <Card className="!m-4">
         <Tabs defaultActiveKey="1">
           <TabPane tab="Master" key="1">
