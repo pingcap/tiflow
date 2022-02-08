@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -90,7 +91,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 		return errors.Trace(err)
 	}
 
-	s, err := sink.New(ctx, id, "owner", info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+	s, err := sink.New(ctx, id, util.Owner, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -156,7 +157,10 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
 				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-					log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
+					log.Info("Execute DDL succeeded",
+						zap.String("changefeed", ctx.ChangefeedVars().ID),
+						zap.Bool("ignored", err != nil),
+						zap.Reflect("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
