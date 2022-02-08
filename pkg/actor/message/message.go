@@ -45,6 +45,7 @@ type Message struct {
 	//       memory allocation.
 	// See https://cs.opensource.google/go/go/+/refs/tags/go1.17.2:src/runtime/iface.go;l=325
 	SorterTask sorter.Task
+	Err        error
 }
 
 // TickMessage creates the message of Tick
@@ -58,6 +59,14 @@ func TickMessage() Message {
 func StopMessage() Message {
 	return Message{
 		Tp: TypeStop,
+	}
+}
+
+// StopWithErrorMessage creates the message of Stop with error
+func StopWithErrorMessage(err error) Message {
+	return Message{
+		Tp:  TypeStop,
+		Err: err,
 	}
 }
 

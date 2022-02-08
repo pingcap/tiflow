@@ -71,8 +71,9 @@ type tableActor struct {
 	sortNode   *sorterNode
 	sinkNode   *sinkNode
 
-	nodes   []*ActorNode
-	actorID actor.ID
+	nodes    []*ActorNode
+	actorID  actor.ID
+	stopFunc func(err error)
 }
 
 // NewTableActor creates a table actor.
@@ -119,6 +120,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableActorRouter: vars.TableActorSystem.Router(),
 		actorID:          actorID,
 	}
+	table.stopFunc = stop(cctx, table)
 
 	startTime := time.Now()
 	log.Info("spawn and start table actor",
@@ -126,7 +128,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
-		table.stop(ctx, err)
+		table.stopFunc(err)
 		return nil, errors.Trace(err)
 	}
 	err := vars.TableActorSystem.System().Spawn(mb, table)
@@ -152,12 +154,12 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 		case message.TypeBarrier:
 			t.sortNode.UpdateBarrierTs(msgs[i].BarrierTs)
 			if err := t.sinkNode.UpdateBarrierTs(ctx, msgs[i].BarrierTs); err != nil {
-				t.stop(ctx, err)
+				t.stopFunc(err)
 			}
 		case message.TypeTick:
 			_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
 			if err != nil {
-				t.stop(ctx, err)
+				t.stopFunc(err)
 			}
 		case message.TypeStopSink:
 			// async stop the sink
@@ -166,11 +168,11 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 					pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
 				)
 				if err != nil {
-					t.stop(ctx, err)
+					t.stopFunc(err)
 				}
 			}()
 		case message.TypeStop:
-			t.stop(ctx, nil)
+			t.stopFunc(msgs[i].Err)
 			return false
 		}
 		// process message for each node
@@ -179,7 +181,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
 					zap.Int64("tableID", t.tableID), zap.Error(err))
-				t.stop(ctx, err)
+				t.stopFunc(err)
 				break
 			}
 		}
@@ -294,26 +296,28 @@ func (t *tableActor) start(ctx context.Context) error {
 	return nil
 }
 
-func (t *tableActor) stop(ctx context.Context, err error) {
-	if t.stopped {
-		return
-	}
-	t.stopped = true
-	t.err = err
-	t.cancel()
-	t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
-	if err := t.sinkNode.ReleaseResource(ctx); err != nil {
-		log.Warn("close sink failed",
+func stop(ctx context.Context, t *tableActor) func(err error) {
+	return func(err error) {
+		if t.stopped {
+			return
+		}
+		t.stopped = true
+		t.err = err
+		t.cancel()
+		t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
+		if err := t.sinkNode.ReleaseResource(ctx); err != nil {
+			log.Warn("close sink failed",
+				zap.String("changefeed", t.changefeedID),
+				zap.String("tableName", t.tableName),
+				zap.Error(err), zap.Error(t.err))
+			t.err = err
+		}
+		log.Info("table actor will be stopped",
 			zap.String("changefeed", t.changefeedID),
 			zap.String("tableName", t.tableName),
-			zap.Error(err), zap.Error(t.err))
-		t.err = err
+			zap.Int64("tableID", t.tableID),
+			zap.Error(err))
 	}
-	log.Info("table actor will be stopped",
-		zap.String("changefeed", t.changefeedID),
-		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID),
-		zap.Error(err))
 }
 
 func (t *tableActor) checkError() {

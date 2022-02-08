@@ -43,6 +43,7 @@ type actorNodeContext struct {
 	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
 	noTickMessageCount int32
 	tableName          string
+	throw              func(error) error
 }
 
 func NewContext(stdCtx sdtContext.Context,
@@ -83,7 +84,7 @@ func (c *actorNodeContext) Throw(err error) {
 	log.Error("error occurred during message processing, stop table actor",
 		zap.String("changefeed", c.changefeedVars.ID),
 		zap.String("tableName", c.tableName), zap.Error(err))
-	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopMessage())
+	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopWithErrorMessage(err))
 }
 
 // SendToNextNode send msg to the outputCh and notify the actor system,
