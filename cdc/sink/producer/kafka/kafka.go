@@ -219,6 +219,7 @@ func (k *kafkaSaramaProducer) Close() error {
 		return nil
 	}
 	k.producersReleased = true
+
 	start := time.Now()
 	if err := k.client.Close(); err != nil {
 		log.Error("close sarama client with error", zap.Error(err),
