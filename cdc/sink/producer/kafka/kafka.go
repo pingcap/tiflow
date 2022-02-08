@@ -219,18 +219,6 @@ func (k *kafkaSaramaProducer) Close() error {
 		return nil
 	}
 	k.producersReleased = true
-<<<<<<< HEAD
-	// In fact close sarama sync client doesn't return any error.
-	// But close async client returns error if error channel is not empty, we
-	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
-	}
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
-=======
 
 	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
 	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
@@ -267,7 +255,6 @@ func (k *kafkaSaramaProducer) Close() error {
 	} else {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	}
 	return nil
 }

@@ -46,6 +46,11 @@ type Config struct {
 	SaslScram       *security.SaslScram
 	// control whether to create topic
 	AutoCreate bool
+
+	// Timeout for sarama `config.Net` configurations, default to `10s`
+	DialTimeout  time.Duration
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
 }
 
 // NewConfig returns a default Kafka configuration
@@ -59,6 +64,9 @@ func NewConfig() *Config {
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
+		DialTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadTimeout:       10 * time.Second,
 	}
 }
 
@@ -197,6 +205,33 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		opts["enable-tidb-extension"] = s
 	}
 
+	s = params.Get("dial-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.DialTimeout = a
+	}
+
+	s = params.Get("write-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.WriteTimeout = a
+	}
+
+	s = params.Get("read-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.ReadTimeout = a
+	}
+
 	return nil
 }
 
@@ -233,8 +268,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
 	config.Metadata.Timeout = 1 * time.Minute
 
-<<<<<<< HEAD
-=======
 	// Admin.Retry take effect on `ClusterAdmin` related operations,
 	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
 	config.Admin.Retry.Max = 5
@@ -258,7 +291,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Net.WriteTimeout = c.WriteTimeout
 	config.Net.ReadTimeout = c.ReadTimeout
 
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true

@@ -1048,17 +1048,6 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-<<<<<<< HEAD
-	// mark tables share the same cdcContext with its original table, don't need to cancel
-	failpoint.Inject("processorStopDelay", nil)
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-=======
 
 	if p.newSchedulerEnabled {
 		if p.agent == nil {
@@ -1071,7 +1060,6 @@ func (p *processor) Close() error {
 	}
 
 	// sink close might be time-consuming, do it the last.
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())

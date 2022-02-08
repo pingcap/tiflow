@@ -259,13 +259,9 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-<<<<<<< HEAD
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs), zap.Int32("partition", partition))
-=======
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
 		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
