@@ -16,8 +16,6 @@ package checker
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
@@ -28,11 +26,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
-
-	// printJSON := func(r *Result) {
-	// 	rawResult, _ := json.MarshalIndent(r, "", "\t")
-	// 	fmt.Println("\n" + string(rawResult))
-	// }
 
 	// 1. test a success check
 	mock = initShardingMock(mock)
@@ -76,7 +69,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 
 	result = checker.Check(ctx)
-	// printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
@@ -109,11 +101,6 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
-
-	printJSON := func(r *Result) {
-		rawResult, _ := json.MarshalIndent(r, "", "\t")
-		fmt.Println("\n" + string(rawResult))
-	}
 
 	// 1. test a success check
 	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -160,7 +147,6 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)

@@ -125,14 +125,12 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	c.wg.Add(1)
 	go c.handleOpts(ctx, r)
 	if err := eg.Wait(); err != nil {
-		c.reMu.Lock()
 		markCheckError(r, err)
-		c.reMu.Unlock()
 	}
 	close(c.optCh)
 	c.wg.Wait()
 
-	log.L().Logger.Info("check table structure over", zap.String("spend time", time.Since(startTime).String()))
+	log.L().Logger.Info("check table structure over", zap.Duration("spend time", time.Since(startTime)))
 	return r
 }
 
@@ -393,12 +391,10 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
 	if err := eg.Wait(); err != nil {
-		c.reMu.Lock()
 		markCheckError(r, err)
-		c.reMu.Unlock()
 	}
 
-	log.L().Logger.Info("check sharding table structure over", zap.String("spend time", time.Since(startTime).String()))
+	log.L().Logger.Info("check sharding table structure over", zap.Duration("spend time", time.Since(startTime)))
 	return r
 }
 
