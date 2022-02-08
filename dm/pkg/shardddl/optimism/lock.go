@@ -519,6 +519,20 @@ func (l *Lock) HasTables() bool {
 	return false
 }
 
+// UpdateTableAfterUnlock updates table's schema info after unlock exec action
+func (l *Lock) UpdateTableAfterUnlock(info Info) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var ok bool
+	if _, ok = l.tables[info.Source]; !ok {
+		l.tables[info.Source] = make(map[string]map[string]schemacmp.Table)
+	}
+	if _, ok = l.tables[info.Source][info.UpSchema]; !ok {
+		l.tables[info.Source][info.UpSchema] = make(map[string]schemacmp.Table)
+	}
+	l.tables[info.Source][info.UpSchema][info.UpTable] = schemacmp.Encode(info.TableInfosAfter[len(info.TableInfosAfter)-1])
+}
+
 // IsSynced returns whether the lock has synced.
 // In the optimistic mode, we call it `synced` if table info of all tables are the same,
 // and we define `remain` as the table count which have different table info with the joined one,

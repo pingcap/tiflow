@@ -235,15 +235,8 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 
 	// 2. check whether has resolved before (this often should not happen).
 	if lock.IsResolved() {
-		deleted, err := o.removeLock(lock)
-		if err != nil {
-			return err
-		}
-		deletedStr := "deleted"
-		if !deleted {
-			deletedStr = "not " + deletedStr
-		}
-		return terror.ErrMasterLockIsResolving.Generatef("the lock %s has been resolved before. It's %s in etcd now", id, deletedStr)
+		_, err := o.removeLock(lock)
+		return err
 	}
 
 	// 3. find out related info & operation
@@ -291,6 +284,9 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 	rev, succ, err := optimism.PutOperation(o.cli, false, ops[0], ops[0].Revision+1)
 	if err != nil {
 		return err
+	}
+	if action == pb.UnlockDDLLockOp_ExecLock {
+		lock.UpdateTableAfterUnlock(infos[0])
 	}
 	o.logger.Info("put shard DDL lock operation", zap.String("lock", id),
 		zap.Stringer("operation", ops[0]), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
