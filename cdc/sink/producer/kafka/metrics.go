@@ -40,7 +40,7 @@ var (
 				Name:      "kafka_producer_batch_size",
 				Help:      "Distribution of the number of bytes sent per partition per request for all topics",
 				Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-			}, []string{"capture", "topic", "partition"}),
+			}, []string{"capture", "changefeed", "topic", "partition"}),
 	}
 
 	recordSendRate = saramaMetrics{
@@ -51,7 +51,7 @@ var (
 				Subsystem: "sink",
 				Name:      "kafka_producer_record_send_rate",
 				Help:      "Records/second sent to all topics",
-			}, []string{}),
+			}, []string{"capture", "changefeed", "topic"}),
 	}
 
 	recordsPerRequest = saramaMetrics{
@@ -62,18 +62,7 @@ var (
 			Name:      "kafka_producer_records_per_request",
 			Help:      "Distribution of the number of records sent per request for all topics",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{}),
-	}
-
-	compressionRatio = saramaMetrics{
-		metricsName: "compression-ratio",
-		collector: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "kafka_producer_compression_ratio",
-			Help:      "Distribution of the compression ratio times 100 of record batches for all topics",
-			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{}),
+		}, []string{"capture", "changefeed", "topic"}),
 	}
 )
 
@@ -153,7 +142,6 @@ func printMetrics(w io.Writer, r metrics.Registry) {
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(batchSize.collector)
-	//registry.MustRegister(recordSendRateGauge)
-	//registry.MustRegister(recordsPerRequestHistogram)
-	//registry.MustRegister(compressionRatioHistogram)
+	registry.MustRegister(recordSendRate.collector)
+	registry.MustRegister(recordsPerRequest.collector)
 }
