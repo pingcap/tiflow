@@ -1748,11 +1748,24 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	}()
 	// wait s.Run start
 	time.Sleep(time.Second)
-	// s.Run will not exit unit we call cancel
+
+	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
 	require.Equal(t, 0, len(errCh))
 	require.NotNil(t, syncer.runCtx)
 	require.NotNil(t, syncer.runCancel)
 	syncer.runCancel() //this will make s.Run exit
 	wg.Wait()
 	require.Nil(t, <-errCh)
+
+	// test syncer wait time not more than maxPauseOrStopWaitTime
+	oldMaxPauseOrStopWaitTime := maxPauseOrStopWaitTime
+	maxPauseOrStopWaitTime = time.Second
+	ctx2, cancel := context.WithCancel(context.Background())
+	cancel()
+	runCtx, runCancel := context.WithCancel(context.Background())
+	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.runWg.Add(1)
+	syncer.waitBeforeRunExit(ctx2)
+	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
+	maxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
 }

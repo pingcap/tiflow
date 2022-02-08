@@ -461,7 +461,9 @@ func (s *Server) doClose() {
 func (s *Server) Close() {
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
-	s.etcdClient.Close()
+	if s.etcdClient != nil {
+		s.etcdClient.Close()
+	}
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
