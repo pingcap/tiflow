@@ -51,7 +51,7 @@ type Config struct {
 	// control whether to create topic
 	AutoCreate bool
 
-	// Timeout for sarama producer network configuration, default to `10s`
+	// Timeout for sarama `config.Net` configurations, default to `10s`
 	DialTimeout  time.Duration
 	WriteTimeout time.Duration
 	ReadTimeout  time.Duration
