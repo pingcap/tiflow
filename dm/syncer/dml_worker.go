@@ -114,6 +114,8 @@ func (w *DMLWorker) run() {
 	}
 	for {
 		select {
+		case <-w.syncCtx.Ctx.Done():
+			break
 		case j, ok := <-w.inCh:
 			if !ok {
 				return

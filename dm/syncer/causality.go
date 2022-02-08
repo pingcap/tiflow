@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/sessionctx"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
@@ -34,6 +35,7 @@ type causality struct {
 	outCh       chan *job
 	inCh        chan *job
 	logger      log.Logger
+	syncCtx     *tcontext.Context
 	sessCtx     sessionctx.Context
 	workerCount int
 
@@ -51,6 +53,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		logger:      syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
 		inCh:        inCh,
 		outCh:       make(chan *job, syncer.cfg.QueueSize),
+		syncCtx:     syncer.syncCtx, // this ctx can be used to cancel all the workers
 		sessCtx:     syncer.sessCtx,
 		workerCount: syncer.cfg.WorkerCount,
 	}
@@ -68,6 +71,8 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 func (c *causality) run() {
 	for {
 		select {
+		case <-c.syncCtx.Ctx.Done():
+			break
 		case j, ok := <-c.inCh:
 			if !ok {
 				return

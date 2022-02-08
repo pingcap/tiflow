@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
@@ -33,6 +34,7 @@ type compactor struct {
 	bufferSize int
 	logger     log.Logger
 	safeMode   bool
+	syncCtx    *tcontext.Context
 
 	keyMap map[string]map[string]int // table -> key(pk or (uk + not null)) -> index in buffer
 	buffer []*job
@@ -58,6 +60,7 @@ func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
 		task:         syncer.cfg.Name,
 		source:       syncer.cfg.SourceID,
 		addCountFunc: syncer.addCount,
+		syncCtx:      syncer.syncCtx, // this ctx can be used to cancel all the workers
 	}
 	go func() {
 		compactor.run()
@@ -70,6 +73,8 @@ func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
 func (c *compactor) run() {
 	for {
 		select {
+		case <-c.syncCtx.Ctx.Done():
+			break
 		case j, ok := <-c.inCh:
 			if !ok {
 				return
