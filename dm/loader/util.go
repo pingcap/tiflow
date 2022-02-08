@@ -148,7 +148,10 @@ func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerNa
 func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
 	failpoint.Inject("TestRemoveMetaFile", func() {
-		exstorage.RemoveAll(ctx, cfg.Dir, nil)
+		err := exstorage.RemoveAll(ctx, cfg.Dir, nil)
+		if err != nil {
+			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
+		}
 	})
 	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.Dir, metafile, cfg.Flavor)
 	if err != nil {

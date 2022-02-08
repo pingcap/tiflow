@@ -406,7 +406,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
 		}
 		// add suffix
-		dirSuffix := ""
+		var dirSuffix string
 		if isS3 {
 			dirSuffix = c.Name + "." + c.SourceID
 		} else {

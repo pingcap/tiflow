@@ -162,10 +162,10 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 	for _, fileName := range fileNames {
-		f, err := os.Create(path.Join(tempDir, fileName))
-		require.NoError(t, err)
-		err = f.Close()
-		require.NoError(t, err)
+		f, err1 := os.Create(path.Join(tempDir, fileName))
+		require.NoError(t, err1)
+		err1 = f.Close()
+		require.NoError(t, err1)
 	}
 	localRes, err = CollectDirFiles(context.Background(), "./"+path.Base(tempDir), nil)
 	require.NoError(t, err)
