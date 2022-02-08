@@ -220,6 +220,12 @@ func (k *kafkaSaramaProducer) Close() error {
 	}
 	k.producersReleased = true
 
+	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
+	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+	// that buffered messages flushed.
+	// Consider the situation that the broker does not respond, If the client is not
+	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+	// To prevent the scenario mentioned above, close client first.
 	start := time.Now()
 	if err := k.client.Close(); err != nil {
 		log.Error("close sarama client with error", zap.Error(err),
