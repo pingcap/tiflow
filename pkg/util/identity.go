@@ -20,6 +20,7 @@ const (
 	Processor
 	CDCClient
 	RedoLogApplier
+	KafkaConsumer
 	Tester
 )
 
@@ -31,6 +32,8 @@ func (r Role) String() string {
 		return "processor"
 	case CDCClient:
 		return "cdc-client"
+	case KafkaConsumer:
+		return "kafka-consumer"
 	case RedoLogApplier:
 		return "redo-applier"
 	}
