@@ -1285,7 +1285,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]
@@ -2382,6 +2382,12 @@ tags = ["internal", "high"]
 
 [error.DM-dm-master-38056]
 message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38057]
+message = "invalid cluster id: %v"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
