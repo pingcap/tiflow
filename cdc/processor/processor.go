@@ -92,6 +92,7 @@ type processor struct {
 	metricSyncTableNumGauge         prometheus.Gauge
 	metricSchemaStorageGcTsGauge    prometheus.Gauge
 	metricProcessorErrorCounter     prometheus.Counter
+	metricProcessorTickDuration     prometheus.Observer
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -246,6 +247,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorTickDuration:     processorTickDuration.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -280,6 +282,7 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	startTime := time.Now()
 	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -287,6 +290,14 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		Info: state.Info,
 	})
 	_, err := p.tick(ctx, state)
+
+	costTime := time.Since(startTime)
+	if costTime > processorLogsWarnDuration {
+		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID),
+			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
+	}
+	p.metricProcessorTickDuration.Observe(costTime.Seconds())
+
 	if err == nil {
 		return state, nil
 	}
@@ -1058,6 +1069,7 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorTickDuration.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	if p.sinkManager != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
