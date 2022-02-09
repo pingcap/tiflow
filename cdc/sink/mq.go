@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -60,11 +61,19 @@ type mqSink struct {
 	resolvedReceiver    *notify.Receiver
 
 	statistics *Statistics
+
+	role util.Role
+	id   model.ChangeFeedID
 }
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
+<<<<<<< HEAD
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+=======
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	errCh chan error,
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 ) (*mqSink, error) {
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
@@ -100,7 +109,14 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	k := &mqSink{
+=======
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
+
+	s := &mqSink{
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 		mqProducer:     mqProducer,
 		dispatcher:     d,
 		encoderBuilder: encoderBuilder,
@@ -115,6 +131,9 @@ func newMqSink(
 		resolvedReceiver:    resolvedReceiver,
 
 		statistics: NewStatistics(ctx, "MQ", opts),
+
+		role: role,
+		id:   changefeedID,
 	}
 
 	go func() {
@@ -124,7 +143,8 @@ func newMqSink(
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", changefeedID), zap.Any("role", s.role))
 			}
 		}
 	}()
@@ -135,7 +155,10 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored",
+				zap.Uint64("start-ts", row.StartTs),
+				zap.String("changefeed", k.id),
+				zap.Any("role", k.role))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -216,6 +239,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("query", ddl.Query),
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("changefeed", k.id),
+			zap.Any("role", k.role),
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
@@ -233,8 +258,15 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
+<<<<<<< HEAD
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
+=======
+	log.Debug("emit ddl event", zap.String("query", ddl.Query),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+		zap.String("changefeed", k.id), zap.Any("role", k.role))
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	return errors.Trace(err)
 }
 
@@ -294,7 +326,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 					return 0, err
 				}
 			}
-			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
+			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize),
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return thisBatchSize, nil
 		})
 	}
@@ -364,14 +397,25 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	log.Warn("writeToProducer called with no-op",
 		zap.ByteString("key", message.Key),
 		zap.ByteString("value", message.Value),
-		zap.Int32("partition", partition))
+		zap.Int32("partition", partition),
+		zap.String("changefeed", k.id),
+		zap.Any("role", k.role))
 	return nil
 }
 
+<<<<<<< HEAD
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" && scheme != "kafka+ssl" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
+=======
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
+	opts map[string]string, errCh chan error) (*mqSink, error) {
+	producerConfig := kafka.NewConfig()
+	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	}
 
 	config := kafka.NewConfig()
@@ -397,7 +441,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	return sink, nil
 }
 
-func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	producer, err := pulsar.NewProducer(sinkURI, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
