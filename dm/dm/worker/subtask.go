@@ -559,7 +559,11 @@ func (st *SubTask) Pause() error {
 // TODO: similar to Run, refactor later.
 func (st *SubTask) Resume(relay relay.Process) error {
 	if !st.initialized.Load() {
-		st.Run(pb.Stage_Running, pb.Stage_Running, relay)
+		expectValidatorStage, err := getExpectValidatorStage(st.cfg.ValidatorCfg, st.etcdClient, st.cfg.SourceID, st.cfg.Name, 0)
+		if err != nil {
+			return terror.Annotate(err, "fail to get validator stage from etcd")
+		}
+		st.Run(pb.Stage_Running, expectValidatorStage, relay)
 		return nil
 	}
 
@@ -797,7 +801,7 @@ func (st *SubTask) getValidatorStage() pb.Stage {
 	if st.validator != nil {
 		return st.validator.Stage()
 	}
-	return pb.Stage_Stopped
+	return pb.Stage_InvalidStage
 }
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {
