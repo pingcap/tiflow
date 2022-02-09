@@ -101,9 +101,9 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 }
 
 func (sm *saramaMetricsMonitor) Cleanup() {
-	//for _, item := range sm.metrics {
-	//	item.deleteLabelValues(labels)
-	//}
+	for _, item := range sm.metrics {
+		item.deleteLabelValues(sm.captureAddr, sm.changefeedID)
+	}
 }
 
 func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
@@ -122,6 +122,17 @@ func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
 	return saramaMetrics{
 		m.metricsName,
 		collector,
+	}
+}
+
+func (m saramaMetrics) deleteLabelValues(labels ...string) {
+	switch tp := m.collector.(type) {
+	case *prometheus.HistogramVec:
+		tp.DeleteLabelValues(labels...)
+	case *prometheus.GaugeVec:
+		tp.DeleteLabelValues(labels...)
+	case *prometheus.CounterVec:
+		tp.DeleteLabelValues(labels...)
 	}
 }
 
