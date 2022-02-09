@@ -79,27 +79,20 @@ func (sm *saramaMetricsMonitor) Refresh() {
 }
 
 func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
-	//monitor := &saramaMetricsMonitor{
-	//	registry: registry,
-	//}
-
-	//monitor.metrics = append(monitor.metrics,
-	//	&saramaMetrics{
-	//	batchSize.metricsName,
-	//	batchSize.collector.
-	//	})
-	//
-	//statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	//statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	//statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	//statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-
 	metrics := make([]saramaMetrics, 0)
 	metrics = append(metrics, batchSize.withLabelValues(captureAddr, changefeedID))
+	metrics = append(metrics, recordSendRate.withLabelValues(captureAddr, changefeedID))
+	metrics = append(metrics, recordsPerRequest.withLabelValues(captureAddr, changefeedID))
 	return &saramaMetricsMonitor{
 		registry: registry,
 		metrics:  metrics,
 	}
+}
+
+func (sm *saramaMetricsMonitor) Cleanup() {
+	//for _, item := range sm.metrics {
+	//	item.deleteLabelValues(labels)
+	//}
 }
 
 func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
@@ -107,6 +100,12 @@ func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
 	switch tp := m.collector.(type) {
 	case prometheus.HistogramVec:
 		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	case prometheus.GaugeVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	case prometheus.CounterVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	default:
+		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
 	}
 
 	return saramaMetrics{
@@ -151,7 +150,7 @@ func (m saramaMetrics) refresh(registry metrics.Registry) {
 	case prometheus.Gauge:
 		tp.Set(value)
 	default:
-		log.Panic("not support prometheus collector type")
+		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
 	}
 }
 
