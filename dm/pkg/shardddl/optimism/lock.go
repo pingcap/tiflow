@@ -52,10 +52,10 @@ type tableType int
 const (
 	// normalTables represents upstream table info record in checkpoint.
 	normalTables tableType = iota
-	// conflictTables represents upstream table info after execute conflict DDL.
+	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables
-	// finalTables combine normalTables and conflcitTables,
-	// which represents all upstream table infos after execute all conflict DDLs.
+	// finalTables combines normalTables and conflcitTables,
+	// which represents all upstream table infos after executing all conflict DDLs.
 	finalTables
 )
 
@@ -73,7 +73,7 @@ type Lock struct {
 	DownTable  string // downstream table name
 
 	// first prevTable when a lock created
-	// only use when fetchTableInfo return an error
+	// only use when fetchTableInfo return an error.
 	initTable schemacmp.Table
 	// per-table's table info,
 	// upstream source ID -> upstream schema name -> upstream table name -> table info.
