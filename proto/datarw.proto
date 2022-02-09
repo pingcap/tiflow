@@ -24,6 +24,7 @@ message ReadLinesRequest {
 
 message ReadLinesResponse {
     string  linestr = 1 ;
+     bool   isEof = 2;
 }
 
 message WriteLinesRequest {

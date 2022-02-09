@@ -2,7 +2,6 @@ package cvstask
 
 import (
 	"context"
-	"io"
 	"strings"
 	"time"
 
@@ -44,6 +43,7 @@ type cvsTask struct {
 	status   lib.WorkerStatusCode
 	cancelFn func()
 	buffer   chan strPair
+	isEOF    bool
 }
 
 func init() {
@@ -106,7 +106,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 
 // Status returns a short worker status to be periodically sent to the master.
 func (task *cvsTask) Status() lib.WorkerStatus {
-	return lib.WorkerStatus{Code: lib.WorkerStatusNormal, ErrorMessage: "", Ext: task.counter}
+	return lib.WorkerStatus{Code: task.status, ErrorMessage: "", Ext: task.counter}
 }
 
 // Workload returns the current workload of the worker.
@@ -139,16 +139,20 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 		return err
 	}
 	for {
-		linestr, err := reader.Recv()
+		reply, err := reader.Recv()
 		if err != nil {
-			if err == io.EOF {
-				task.cancelFn()
-				break
-			}
 			log.L().Info("read data failed", zap.Any("error:", err.Error()))
-			continue
+			if !task.isEOF {
+				task.cancelFn()
+			}
+			return err
 		}
-		strs := strings.Split(linestr.Linestr, ",")
+		if reply.IsEof {
+			log.L().Info("Reach the end of the file ", zap.Any("fileName:", task.srcDir))
+			task.isEOF = true
+			break
+		}
+		strs := strings.Split(reply.Linestr, ",")
 		if len(strs) < 2 {
 			continue
 		}
@@ -173,6 +177,8 @@ func (task *cvsTask) Send(ctx context.Context) error {
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
 		log.L().Info("call write data rpc failed ")
+		task.status = lib.WorkerStatusError
+		task.cancelFn()
 		return err
 	}
 	for {
@@ -182,11 +188,22 @@ func (task *cvsTask) Send(ctx context.Context) error {
 			task.counter++
 			if err != nil {
 				log.L().Info("call write data rpc failed ")
+				task.status = lib.WorkerStatusError
+				task.cancelFn()
+				return err
 			}
 		case <-ctx.Done():
+			task.status = lib.WorkerStatusError
 			return nil
 		default:
+			if task.isEOF {
+				log.L().Info("Reach the end of the file ")
+				task.status = lib.WorkerStatusFinished
+				err = writer.CloseSend()
+				return err
+			}
 			time.Sleep(time.Second)
+
 		}
 	}
 }

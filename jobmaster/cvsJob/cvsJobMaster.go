@@ -120,8 +120,10 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 				jm.counter += int64(num)
 				// todo : store the sync progress into the meta store for each file
 			}
-		} else {
+		} else if status.Code == lib.WorkerStatusFinished {
 			// todo : handle error case here
+			log.L().Info("sync file finished ", zap.Any("message", worker.file))
+		} else if status.Code == lib.WorkerStatusError {
 			log.L().Info("sync file failed ", zap.Any("message", worker.file))
 		}
 	}

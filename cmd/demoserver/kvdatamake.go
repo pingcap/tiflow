@@ -217,8 +217,10 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		default:
 			reply, err := reader.ReadString('\n')
 			if err == io.EOF {
+				fmt.Printf("reach the end of the file ")
+				err = stream.Send(&pb.ReadLinesResponse{Linestr: "", IsEof: true})
 				log.L().Info("reach the end of the file ")
-				break
+				return err
 			}
 			if i < int(req.LineNo) {
 				continue
@@ -227,7 +229,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 			if reply == "" {
 				continue
 			}
-			err = stream.Send(&pb.ReadLinesResponse{Linestr: reply})
+			err = stream.Send(&pb.ReadLinesResponse{Linestr: reply, IsEof: false})
 			i++
 			if err != nil {
 				return err
