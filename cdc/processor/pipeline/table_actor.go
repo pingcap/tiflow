@@ -74,6 +74,8 @@ type tableActor struct {
 	nodes    []*ActorNode
 	actorID  actor.ID
 	stopFunc func(err error)
+
+	lastFlushTime time.Time
 }
 
 // NewTableActor creates a table actor.
@@ -158,9 +160,13 @@ MSG:
 				t.stopFunc(err)
 			}
 		case message.TypeTick:
-			_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
-			if err != nil {
-				t.stopFunc(err)
+			// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
+			if time.Since(t.lastFlushTime) > 500*time.Millisecond {
+				_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
+				if err != nil {
+					t.stopFunc(err)
+				}
+				t.lastFlushTime = time.Now()
 			}
 		case message.TypeStopSink:
 			// async stop the sink
