@@ -157,7 +157,19 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		return nil, err
 	}
 
-	s.workerRtm.AddWorker(newWorker)
+	if err := s.workerRtm.SubmitTask(newWorker); err != nil {
+		errCode := pb.DispatchTaskErrorCode_Other
+		if errors.ErrRuntimeReachedCapacity.Equal(err) {
+			errCode = pb.DispatchTaskErrorCode_NoResource
+		}
+
+		return &pb.DispatchTaskResponse{
+			ErrorCode:    errCode,
+			ErrorMessage: err.Error(),
+			WorkerId:     req.GetWorkerId(),
+		}, nil
+	}
+
 	return &pb.DispatchTaskResponse{
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
 		WorkerId:  req.GetWorkerId(),
@@ -225,6 +237,10 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 	return nil
 }
 
+const (
+	defaultRuntimeCapacity = 65536 // TODO make this configurable
+)
+
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
@@ -239,8 +255,12 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	pollCon := s.cfg.PollConcurrency
-	s.workerRtm = worker.NewRuntime(ctx)
-	s.workerRtm.Start(pollCon)
+	s.workerRtm = worker.NewRuntime(ctx, defaultRuntimeCapacity)
+
+	wg.Go(func() error {
+		s.workerRtm.Start(ctx, pollCon)
+		return nil
+	})
 
 	err := s.selfRegister(ctx)
 	if err != nil {
