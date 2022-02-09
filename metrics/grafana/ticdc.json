@@ -1,46 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "6.1.6"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "heatmap",
-      "name": "Heatmap",
-      "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -60,7 +18,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "playground",
         "enable": true,
         "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, capture) > BOOL $spike_threshold",
         "hide": true,
@@ -75,7 +33,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "playground",
         "enable": false,
         "expr": "delta(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
         "hide": false,
@@ -91,7 +49,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "playground",
         "enable": false,
         "expr": "sum(ALERTS{tidb_cluster=\"$tidb_cluster\", alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
         "hide": false,
@@ -105,7 +63,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "playground",
         "enable": false,
         "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
         "hide": false,
@@ -124,12 +82,13 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": null,
-  "iteration": 1640792097028,
+  "id": 25,
+  "iteration": 1644402419117,
   "links": [],
   "panels": [
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -143,7 +102,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Uptime of TiCDC and TiKV",
           "fill": 1,
           "fillGradient": 0,
@@ -251,7 +210,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Goroutine count of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -353,7 +312,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The count of open FD count of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -449,7 +408,7 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "TiCDC cluster ownership status",
           "fontSize": "100%",
           "gridPos": {
@@ -471,6 +430,7 @@
           "styles": [
             {
               "alias": "Instance",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "#8AB8FF",
@@ -522,14 +482,14 @@
           "timeFrom": "1s",
           "title": "Ownership",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "CPU usage of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -638,7 +598,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Memory usage of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -740,7 +700,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The history of TiCDC cluster ownership, owner node has a value that is great than 0",
           "fill": 1,
           "gridPos": {
@@ -829,7 +789,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The history of PD cluster leadership, leader node has a value that is great than 0",
           "fill": 1,
           "gridPos": {
@@ -920,6 +880,7 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -935,14 +896,18 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of captured table of TiCDC nodes ",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fontSize": "100%",
           "gridPos": {
             "h": 5,
             "w": 7,
             "x": 0,
-            "y": 3
+            "y": 2
           },
           "id": 4,
           "links": [],
@@ -956,12 +921,14 @@
           "styles": [
             {
               "alias": "Time",
+              "align": "auto",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "pattern": "Time",
               "type": "date"
             },
             {
               "alias": "",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -989,7 +956,7 @@
           "timeShift": null,
           "title": "Changefeed table count",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "columns": [
@@ -998,14 +965,18 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Internal resolved ts of TiCDC nodes",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fontSize": "100%",
           "gridPos": {
             "h": 10,
             "w": 7,
             "x": 7,
-            "y": 3
+            "y": 2
           },
           "id": 90,
           "links": [],
@@ -1019,6 +990,7 @@
           "styles": [
             {
               "alias": "table",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -1035,6 +1007,7 @@
             },
             {
               "alias": "resolved ts",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -1071,19 +1044,24 @@
           "timeShift": null,
           "title": "Processor resolved ts",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The ID of the min resolved table of each TiCDC",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 10,
@@ -1091,6 +1069,7 @@
             "x": 14,
             "y": 2
           },
+          "hiddenSeries": false,
           "id": 394,
           "legend": {
             "alignAsTable": true,
@@ -1110,8 +1089,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -1177,12 +1160,17 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The ID of the min checkpoint table ID of each TiCDC",
           "editable": true,
           "error": false,
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "grid": {},
           "gridPos": {
             "h": 10,
@@ -1190,6 +1178,7 @@
             "x": 19,
             "y": 2
           },
+          "hiddenSeries": false,
           "id": 395,
           "legend": {
             "alignAsTable": true,
@@ -1209,8 +1198,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -1278,14 +1271,18 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of replicated tables maintained in owner",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fontSize": "100%",
           "gridPos": {
             "h": 5,
             "w": 7,
             "x": 0,
-            "y": 8
+            "y": 7
           },
           "id": 138,
           "links": [],
@@ -1342,7 +1339,7 @@
           "timeShift": null,
           "title": "Table count maintained by owner",
           "transform": "timeseries_aggregations",
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
@@ -1350,15 +1347,21 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The checkpoint ts of changefeeds.",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 0,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 9,
             "x": 0,
-            "y": 13
+            "y": 12
           },
+          "hiddenSeries": false,
           "id": 86,
           "legend": {
             "alignAsTable": true,
@@ -1376,7 +1379,11 @@
           "linewidth": 2,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1464,15 +1471,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Request count of etcd operation per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 8,
             "x": 9,
-            "y": 13
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 102,
@@ -1494,10 +1507,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1561,15 +1575,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of errors that interrupt changefeed per minute ",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 7,
             "x": 17,
-            "y": 13
+            "y": 12
           },
+          "hiddenSeries": false,
           "id": 82,
           "legend": {
             "alignAsTable": true,
@@ -1586,7 +1606,11 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1649,15 +1673,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The lag between changefeed checkpoint ts and the latest ts of upstream TiDB.",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 3,
@@ -1677,10 +1707,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1768,15 +1799,21 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The derivative of a changefeed checkpoint, ideally it should not be 0 (means the changefeed is stopped).",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 2,
@@ -1798,10 +1835,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 0.5,
           "points": false,
           "renderer": "flot",
@@ -1865,15 +1903,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 27
+            "y": 26
           },
+          "hiddenSeries": false,
           "id": 163,
           "legend": {
             "alignAsTable": true,
@@ -1889,7 +1933,11 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
@@ -1953,7 +2001,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Estimate the remaining time for a changefeed catch-up upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -1967,7 +2015,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 27
+            "y": 26
           },
           "hiddenSeries": false,
           "id": 253,
@@ -1993,6 +2041,7 @@
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2067,13 +2116,17 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Sink write duration of changefeeds",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 34
+            "y": 33
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2136,15 +2189,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of sink write duration of changefeeds",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 34
+            "y": 33
           },
           "hiddenSeries": false,
           "id": 35,
@@ -2164,10 +2223,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2244,15 +2304,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of changed rows that are written to  downstream per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 40
           },
           "hiddenSeries": false,
           "id": 34,
@@ -2272,10 +2338,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2347,15 +2414,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of sink batch size",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 40
           },
           "hiddenSeries": false,
           "id": 36,
@@ -2375,10 +2448,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2466,13 +2540,17 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Asynchronous flush sink duration of changefeeds",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 47
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2533,15 +2611,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of asynchronous flush sink duration of changefeeds",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 98,
@@ -2561,10 +2645,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2651,13 +2736,17 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The duration of detecting and waiting conflict of MySQL sink",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 55
+            "y": 54
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2719,15 +2808,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Distribution of MySQL worker loads",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 55
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 95,
@@ -2749,9 +2844,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -2870,13 +2966,17 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The duration of executing DDL in MySQL sink",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 61
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2938,15 +3038,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 62
+            "y": 61
           },
           "hiddenSeries": false,
           "id": 83,
@@ -2966,9 +3072,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3048,14 +3155,20 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 69
+            "y": 68
           },
+          "hiddenSeries": false,
           "id": 149,
           "legend": {
             "avg": false,
@@ -3070,7 +3183,11 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3133,15 +3250,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of executing DDL duration of MySQL sink",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 69
+            "y": 68
           },
           "hiddenSeries": false,
           "id": 166,
@@ -3161,9 +3284,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3239,151 +3363,18 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fill": 1,
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 76
-          },
-          "id": 164,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{ capture }}-{{ changefeed }}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Processor Memory Consumption Per Changefeed",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
           "columns": [],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "left",
-                "filterable": true
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "dateTimeAsSystem"
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "capture"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 191
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "changefeed"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 209
-                  }
-                ]
-              }
-            ]
+            "defaults": {},
+            "overrides": []
           },
           "fontSize": "100%",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 77
+            "y": 75
           },
           "id": 200,
           "options": {
@@ -3406,12 +3397,14 @@
           "styles": [
             {
               "alias": "Time",
+              "align": "auto",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "pattern": "Value",
               "type": "date"
             },
             {
               "alias": "",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -3474,7 +3467,102 @@
               }
             }
           ],
-          "type": "table"
+          "type": "table-old"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "playground",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 75
+          },
+          "hiddenSeries": false,
+          "id": 164,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{ capture }}-{{ changefeed }}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Processor Memory Consumption Per Changefeed",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         }
       ],
       "title": "Changefeed",
@@ -3482,6 +3570,7 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -3495,15 +3584,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that puller outputs to sorter \n per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 4
+            "y": 3
           },
           "hiddenSeries": false,
           "id": 218,
@@ -3523,10 +3618,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3589,15 +3685,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that puller outputs",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 4
+            "y": 3
           },
           "hiddenSeries": false,
           "id": 229,
@@ -3617,10 +3719,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3683,15 +3786,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that sorter outputs to puller \n per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 8
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 228,
@@ -3711,10 +3820,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3777,15 +3887,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that sorter outputs",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 8
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 220,
@@ -3805,10 +3921,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3871,15 +3988,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that mounter outputs to sink per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 219,
@@ -3899,10 +4022,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -3965,15 +4089,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that mounter outputs",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 224,
@@ -3993,10 +4123,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4059,15 +4190,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that table sorter outputs to buffer sink per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 16
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 223,
@@ -4087,10 +4224,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4153,15 +4291,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that table sinks emit",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 16
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 221,
@@ -4181,10 +4325,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4247,15 +4392,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that buffer sink outputs to backend sink per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 222,
@@ -4275,10 +4426,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4341,15 +4493,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total number of events that buffer sink emits",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 226,
@@ -4369,10 +4527,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4435,15 +4594,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of rows(events) that are processed by sink per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 24
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 227,
@@ -4465,9 +4630,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4531,15 +4697,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of rows(events) that are processed by sink",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 24
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 225,
@@ -4561,9 +4733,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4627,15 +4800,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of rows that sink flushes to downstream per second",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 27
           },
           "hiddenSeries": false,
           "id": 108,
@@ -4657,9 +4836,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4722,15 +4902,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of rows(events) that are flushed by sink",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 27
           },
           "hiddenSeries": false,
           "id": 240,
@@ -4752,9 +4938,10 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4819,6 +5006,7 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -4832,14 +5020,20 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
+          "fillGradient": 0,
           "gridPos": {
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 5
+            "y": 4
           },
+          "hiddenSeries": false,
           "id": 271,
           "legend": {
             "avg": false,
@@ -4853,7 +5047,11 @@
           "lines": true,
           "linewidth": 1,
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -4916,7 +5114,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4927,7 +5125,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 5
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 273,
@@ -4948,7 +5146,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5011,15 +5209,19 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The count of files of each levels",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 5
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 272,
@@ -5036,8 +5238,12 @@
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5109,7 +5315,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter write",
           "fieldConfig": {
             "defaults": {},
@@ -5119,7 +5325,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 11
+            "y": 10
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5184,7 +5390,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5195,7 +5401,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 11
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 288,
@@ -5218,7 +5424,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5309,15 +5515,21 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "CPU usage of LevelDB sorter",
+          "fieldConfig": {
+            "defaults": {
+              "links": []
+            },
+            "overrides": []
+          },
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 11
+            "y": 10
           },
           "hiddenSeries": false,
           "id": 286,
@@ -5338,10 +5550,11 @@
           "links": [],
           "nullPointMode": "null",
           "options": {
-            "dataLinks": []
+            "alertThreshold": true
           },
           "paceLength": 10,
           "percentage": false,
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5425,7 +5638,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter write",
           "fieldConfig": {
             "defaults": {},
@@ -5435,7 +5648,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 17
+            "y": 16
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5500,7 +5713,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5511,7 +5724,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 17
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 279,
@@ -5534,7 +5747,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5600,7 +5813,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The count and duration of write delay",
           "fieldConfig": {
             "defaults": {
@@ -5614,7 +5827,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 17
+            "y": 16
           },
           "hiddenSeries": false,
           "id": 275,
@@ -5638,7 +5851,7 @@
           },
           "paceLength": 10,
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -5727,7 +5940,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5737,7 +5950,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 23
+            "y": 22
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5811,7 +6024,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5821,7 +6034,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 23
+            "y": 22
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5895,7 +6108,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5905,7 +6118,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 23
+            "y": 22
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -5970,7 +6183,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5981,7 +6194,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 280,
@@ -6004,7 +6217,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6070,7 +6283,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6081,7 +6294,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 283,
@@ -6104,7 +6317,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6170,7 +6383,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6181,7 +6394,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 287,
@@ -6204,7 +6417,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.7",
+          "pluginVersion": "7.5.10",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -6279,7 +6492,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time of sorter compact",
           "fieldConfig": {
             "defaults": {},
@@ -6289,7 +6502,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 35
+            "y": 34
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -6355,11 +6568,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 4
       },
       "id": 13,
       "panels": [
@@ -6368,7 +6582,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of established Eventfeed RPC between TiCDC and TiKV",
           "fill": 1,
           "fillGradient": 0,
@@ -6491,7 +6705,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": null,
           "description": "Percentiles of Eventfeed message size",
           "fill": 1,
@@ -6593,7 +6807,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of errors that interrupt Eventfeed RPC",
           "fill": 1,
           "fillGradient": 0,
@@ -6708,7 +6922,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of KV client received events from TiKV per seconds",
           "fill": 1,
           "fillGradient": 0,
@@ -6804,7 +7018,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that puller outputs to sorter \n per second",
           "fill": 1,
           "fillGradient": 0,
@@ -6898,7 +7112,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of events that are buffered in Processor's output channel and Mounter input channel",
           "fill": 1,
           "fillGradient": 0,
@@ -7009,7 +7223,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Duration of sorting unsorted events",
           "gridPos": {
             "h": 7,
@@ -7076,7 +7290,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of sorting events duration",
           "fill": 1,
           "fillGradient": 0,
@@ -7188,7 +7402,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Duration of merging sorted events",
           "gridPos": {
             "h": 7,
@@ -7255,7 +7469,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of merging sorted events duration",
           "fill": 1,
           "fillGradient": 0,
@@ -7367,7 +7581,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Duration of unmarshal events from kv to SQL row",
           "gridPos": {
             "h": 7,
@@ -7434,7 +7648,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Percentiles of unmarshal events from kv to SQL row duration",
           "fill": 0,
           "fillGradient": 0,
@@ -7540,7 +7754,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of KV client dispatched event per second",
           "fill": 1,
           "fillGradient": 0,
@@ -7657,7 +7871,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The size of batch resolved ts message from TiKV",
           "gridPos": {
             "h": 7,
@@ -7724,7 +7938,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of regions that are being scanned",
           "fill": 1,
           "fillGradient": 0,
@@ -7820,7 +8034,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Active stream count of each gRPC connection",
           "fill": 1,
           "fillGradient": 0,
@@ -7916,7 +8130,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The number of regions that have not connected to TiKV",
           "fieldConfig": {
             "defaults": {
@@ -8020,7 +8234,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Estimate the remaining time for a changefeed initialization (on a specific capture)",
           "fieldConfig": {
             "defaults": {
@@ -8125,11 +8339,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 5
       },
       "id": 130,
       "panels": [
@@ -8138,7 +8353,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8223,7 +8438,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8308,7 +8523,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8393,7 +8608,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8488,7 +8703,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -8552,7 +8767,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -8609,11 +8824,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 6
       },
       "id": 266,
       "panels": [
@@ -8622,7 +8838,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "gridPos": {
             "h": 7,
@@ -8712,7 +8928,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -8830,7 +9046,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -8896,7 +9112,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9010,7 +9226,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9076,7 +9292,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {
@@ -9195,7 +9411,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9259,7 +9475,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9363,7 +9579,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time consumed of writing WAL into the persistent storage in .99",
           "editable": true,
           "error": false,
@@ -9461,7 +9677,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time consumed of handling etcd transactions in .99",
           "editable": true,
           "error": false,
@@ -9557,11 +9773,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 7
       },
       "id": 58,
       "panels": [
@@ -9570,7 +9787,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "CPU usage of TiKV CDC component",
           "fill": 1,
@@ -9693,7 +9910,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "Outbound network traffic of TiKV CDC component",
           "editable": true,
@@ -9804,7 +10021,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The count of different kinds of gRPC message",
           "fill": 1,
@@ -9900,7 +10117,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -10064,7 +10281,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The min resolved ts of each TiKV",
           "editable": true,
@@ -10195,7 +10412,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The ID of the min resolved region of each TiKV",
           "editable": true,
@@ -10294,7 +10511,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -10398,7 +10615,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time consumed to CDC incremental scan",
           "gridPos": {
             "h": 7,
@@ -10468,7 +10685,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -10563,7 +10780,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The number of incremental scan task in different status.",
           "fill": 1,
@@ -10672,7 +10889,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -10780,7 +10997,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
@@ -10881,7 +11098,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The total bytes of TiKV CDC incremental scan",
           "editable": true,
@@ -10982,7 +11199,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "",
           "fill": 4,
@@ -11109,7 +11326,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "The total number of cache entries in the old value cache.",
           "fill": 1,
@@ -11227,7 +11444,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "",
           "editable": true,
@@ -11337,7 +11554,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The time consumed to get an old value (both from cache and from disk)",
           "gridPos": {
             "h": 7,
@@ -11406,7 +11623,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -11516,11 +11733,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 8
       },
       "id": 294,
       "panels": [
@@ -11529,7 +11747,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11624,7 +11842,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11719,7 +11937,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11833,7 +12051,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {
               "unit": "short"
@@ -11946,7 +12164,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -12054,7 +12272,7 @@
         },
         {
           "columns": [],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -12123,12 +12341,14 @@
           "styles": [
             {
               "alias": "Time",
+              "align": "auto",
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "pattern": "Time",
               "type": "date"
             },
             {
               "alias": "",
+              "align": "auto",
               "colorMode": null,
               "colors": [
                 "rgba(245, 54, 54, 0.9)",
@@ -12178,14 +12398,14 @@
               }
             }
           ],
-          "type": "table"
+          "type": "table-old"
         },
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -12289,11 +12509,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 9
       },
       "id": 155,
       "panels": [
@@ -12303,7 +12524,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "TiCDC process rss memory usage. TiCDC heap memory size in use ",
           "editable": true,
           "error": false,
@@ -12489,7 +12710,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Count of live objects.",
           "editable": true,
           "error": false,
@@ -12602,7 +12823,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "TiCDC process Go garbage collection STW pause duration",
           "editable": true,
           "error": false,
@@ -12728,7 +12949,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The throughput of Go's memory allocator.",
           "fill": 1,
           "gridPos": {
@@ -12865,11 +13086,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 10
       },
       "id": 187,
       "panels": [
@@ -12887,7 +13109,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The latency distributions of fsync called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -12961,7 +13183,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The latency distributions of flushall called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -13026,7 +13248,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "The total count of rows that are processed by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -13136,7 +13358,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "playground",
           "description": "Total number of bytes redo log written",
           "fieldConfig": {
             "defaults": {},
@@ -13230,26 +13452,373 @@
       ],
       "title": "Redo",
       "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 397,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "playground",
+          "description": "the number of bytes sent per partition per request for all topics",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 12
+          },
+          "hiddenSeries": false,
+          "id": 399,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "interval": "",
+              "legendFormat": "{{changefeed}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{capture}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "batch size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "playground",
+          "description": "Records/second sent to all topics",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 12
+          },
+          "hiddenSeries": false,
+          "id": 401,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_sink_kafka_producer_record_send_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "interval": "",
+              "legendFormat": "{{changefeed}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(ticdc_sink_kafka_producer_record_send_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{capture}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "record send rate",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "playground",
+          "description": "the number of records sent per request for all topics",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 20
+          },
+          "hiddenSeries": false,
+          "id": 400,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_sink_kafka_producer_records_per_request{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "interval": "",
+              "legendFormat": "{{changefeed}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(ticdc_sink_kafka_producer_records_per_request{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{capture}}",
+              "refId": "B"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "records per request",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Kafka Producer",
+      "type": "row"
     }
   ],
   "refresh": "1m",
-  "schemaVersion": 18,
+  "schemaVersion": 27,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
         "allValue": null,
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "current": {
+          "isNone": true,
+          "selected": false,
+          "text": "None",
+          "value": ""
+        },
+        "datasource": "playground",
         "definition": "",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": false,
         "label": "tidb_cluster",
         "multi": false,
         "name": "tidb_cluster",
         "options": [],
-        "query": "label_values(go_goroutines, tidb_cluster)",
+        "query": {
+          "query": "label_values(go_goroutines, tidb_cluster)",
+          "refId": "playground-tidb_cluster-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -13262,16 +13831,29 @@
       },
       {
         "allValue": ".*",
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "playground",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "Changefeed",
         "multi": true,
         "name": "changefeed",
         "options": [],
-        "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+        "query": {
+          "query": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
+          "refId": "playground-changefeed-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -13284,16 +13866,29 @@
       },
       {
         "allValue": ".*",
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "playground",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "TiCDC",
         "multi": true,
         "name": "capture",
         "options": [],
-        "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "query": {
+          "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+          "refId": "playground-capture-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -13306,16 +13901,29 @@
       },
       {
         "allValue": ".*",
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "playground",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "TiKV",
         "multi": false,
         "name": "tikv_instance",
         "options": [],
-        "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+        "query": {
+          "query": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
+          "refId": "playground-tikv_instance-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -13333,6 +13941,8 @@
           "text": "All",
           "value": "$__all"
         },
+        "description": null,
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Latency spike (s) >",
@@ -13381,16 +13991,29 @@
       },
       {
         "allValue": "",
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "playground",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "Runtime metrics",
         "multi": false,
         "name": "runtime_instance",
         "options": [],
-        "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+        "query": {
+          "query": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
+          "refId": "playground-runtime_instance-Variable-Query"
+        },
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -13434,6 +14057,6 @@
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
-  "uid": "YiGL8hBZ1",
-  "version": 32
+  "uid": "YiGL8hBZ1x",
+  "version": 6
 }
