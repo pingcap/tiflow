@@ -450,6 +450,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
@@ -1047,6 +1048,7 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
+<<<<<<< HEAD
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
@@ -1056,14 +1058,8 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	if p.sinkManager != nil {
-		// pass a canceled context is ok here, since we don't need to wait Close
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		if err := p.sinkManager.Close(ctx); err != nil {
-			return errors.Trace(err)
-		}
-	}
+=======
+
 	if p.newSchedulerEnabled {
 		if p.agent == nil {
 			return nil
@@ -1073,6 +1069,27 @@ func (p *processor) Close() error {
 		}
 		p.agent = nil
 	}
+
+	// sink close might be time-consuming, do it the last.
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
+	if p.sinkManager != nil {
+		// pass a canceled context is ok here, since we don't need to wait Close
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := p.sinkManager.Close(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// mark tables share the same cdcContext with its original table, don't need to cancel
+	failpoint.Inject("processorStopDelay", nil)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 
 	return nil
 }
