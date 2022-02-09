@@ -54,7 +54,7 @@ var (
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_batch_size",
-				Help:      "the number of bytes sent per partition per request for all topics",
+				Help:      "the number of bytes sent per partition per request for a given topic",
 			}, []string{"capture", "changefeed"}),
 	}
 
@@ -66,7 +66,7 @@ var (
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_record_send_rate",
-				Help:      "Records/second sent to all topics",
+				Help:      "Records/second sent to a given topic",
 			}, []string{"capture", "changefeed"}),
 	}
 
@@ -78,7 +78,18 @@ var (
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_records_per_request",
-				Help:      "the number of records sent per request for all topics",
+				Help:      "the number of records sent per request for a given topic",
+			}, []string{"capture", "changefeed"}),
+	}
+
+	compressionRatio = rawSaramaMetrics{
+		metricNamePrefix: "compression-ratio-for-topic-",
+		collector: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "ticdc",
+				Subsystem: "sink",
+				Name:      "kafka_producer_compression_ratio",
+				Help:      "the compression ratio times 100 of record batches for a given topic",
 			}, []string{"capture", "changefeed"}),
 	}
 )
@@ -88,6 +99,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(batchSize.collector)
 	registry.MustRegister(recordSendRate.collector)
 	registry.MustRegister(recordsPerRequest.collector)
+	registry.MustRegister(compressionRatio.collector)
 }
 
 type saramaMetricsMonitor struct {
@@ -112,6 +124,7 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 		metrics = append(metrics, batchSize.newSaramaMetric(item, captureAddr, changefeedID))
 		metrics = append(metrics, recordSendRate.newSaramaMetric(item, captureAddr, changefeedID))
 		metrics = append(metrics, recordsPerRequest.newSaramaMetric(item, captureAddr, changefeedID))
+		metrics = append(metrics, compressionRatio.newSaramaMetric(item, captureAddr, changefeedID))
 	}
 
 	return &saramaMetricsMonitor{
@@ -124,7 +137,7 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 
 func (sm *saramaMetricsMonitor) Cleanup() {
 	for _, item := range sm.metrics {
-		item.deleteLabelValues(sm.captureAddr, sm.changefeedID)
+		item.drop(sm.captureAddr, sm.changefeedID)
 	}
 }
 
@@ -135,7 +148,7 @@ type saramaMetric struct {
 	collector  prometheus.Collector
 }
 
-func (m saramaMetric) deleteLabelValues(labels ...string) {
+func (m saramaMetric) drop(labels ...string) {
 	switch tp := m.collector.(type) {
 	case *prometheus.HistogramVec:
 		tp.DeleteLabelValues(labels...)
