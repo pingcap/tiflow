@@ -231,68 +231,18 @@ function DM_RESTART_TASK_MASTER_WORKER() {
 function random_restart() {
 	mod=$(($RANDOM % 4))
 	if [[ "$mod" == "0" ]]; then
+		echo "restart master"
 		restart_master
 	elif [[ "$mod" == "1" ]]; then
+		echo "restart worker1"
 		restart_worker1
 	elif [[ "$mod" == "2" ]]; then
+		echo "restart worker2"
 		restart_worker2
 	else
+		echo "restart task"
 		restart_task $cur/conf/double-source-optimistic.yaml
 	fi
-}
-
-function DM_STOP_TASK_FOR_A_SOURCE_CASE() {
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
-	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(4);"
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
-	run_sql_source1 "alter table ${shardddl1}.${tb2} add column b varchar(10);"
-	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
-	run_sql_source2 "alter table ${shardddl1}.${tb2} add column b varchar(10);"
-
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(5,'aaa');"
-	run_sql_source1 "insert into ${shardddl1}.${tb2} values(6,'bbb');"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,'ccc');"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,'ddd');"
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c text;"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(9,'eee','eee');"
-	run_sql_source1 "alter table ${shardddl1}.${tb2} drop column b;"
-	run_sql_source1 "insert into ${shardddl1}.${tb2} values(10);"
-	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c text;"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'fff','fff');"
-	run_sql_source2 "alter table ${shardddl1}.${tb2} drop column b;"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12);"
-
-	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 12"
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test -s mysql-replica-02" \
-		"\"result\": true" 2
-
-	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,'ggg');"
-	run_sql_source1 "alter table ${shardddl1}.${tb2} add column c text;"
-	run_sql_source1 "insert into ${shardddl1}.${tb2} values(14,'hhh');"
-
-	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 14"
-	run_sql_tidb_with_retry "select count(1) from INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA='${shardddl}' AND TABLE_NAME='${tb}';" \
-		"count(1): 2"
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $cur/conf/double-source-optimistic.yaml -s mysql-replica-02" \
-		"\"result\": true" 2
-
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(15,'iii');"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(16,'jjj');"
-	run_sql_source2 "alter table ${shardddl1}.${tb1} drop column b;"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(17,'kkk');"
-	run_sql_source2 "alter table ${shardddl1}.${tb2} add column c text;"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(18,'lll');"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
 function DM_STOP_TASK_FOR_A_SOURCE_CASE() {

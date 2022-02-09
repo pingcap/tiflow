@@ -2,6 +2,8 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/dm/ui"
+    schedule:
+      interval: "weekly"
     # Specify labels for npm pull requests.
     labels:
       - "dependencies"
