@@ -21,7 +21,7 @@ const defaultJobMasterCost = 1
 
 // JobManagerImplV2 is a special job master that manages all the job masters, and notify the offline executor to them.
 type JobManagerImplV2 struct {
-	*lib.BaseMaster
+	lib.BaseMaster
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender

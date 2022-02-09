@@ -18,7 +18,7 @@ type MockMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
-	*BaseMaster
+	*DefaultBaseMaster
 	id MasterID
 
 	tickCount         atomic.Int64
@@ -43,7 +43,7 @@ func NewMockMasterImpl(id MasterID) *MockMasterImpl {
 		executorClientManager: client.NewClientManager(),
 		serverMasterClient:    &client.MockServerMasterClient{},
 	}
-	ret.BaseMaster = NewBaseMaster(
+	ret.DefaultBaseMaster = NewBaseMaster(
 		// ctx is nil for now
 		// TODO refine this
 		nil,
@@ -53,7 +53,7 @@ func NewMockMasterImpl(id MasterID) *MockMasterImpl {
 		ret.messageSender,
 		ret.metaKVClient,
 		ret.executorClientManager,
-		ret.serverMasterClient)
+		ret.serverMasterClient).(*DefaultBaseMaster)
 
 	return ret
 }
@@ -65,7 +65,7 @@ func (m *MockMasterImpl) Reset() {
 	m.Mock.ExpectedCalls = nil
 	m.Mock.Calls = nil
 
-	m.BaseMaster = NewBaseMaster(
+	m.DefaultBaseMaster = NewBaseMaster(
 		nil,
 		m,
 		m.id,
@@ -73,7 +73,7 @@ func (m *MockMasterImpl) Reset() {
 		m.messageSender,
 		m.metaKVClient,
 		m.executorClientManager,
-		m.serverMasterClient)
+		m.serverMasterClient).(*DefaultBaseMaster)
 }
 
 func (m *MockMasterImpl) TickCount() int64 {

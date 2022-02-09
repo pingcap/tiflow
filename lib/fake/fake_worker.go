@@ -17,7 +17,7 @@ var _ lib.Worker = (*dummyWorker)(nil)
 type (
 	Worker      = dummyWorker
 	dummyWorker struct {
-		*lib.BaseWorker
+		lib.BaseWorker
 
 		init   bool
 		closed int32

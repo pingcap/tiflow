@@ -68,7 +68,19 @@ const (
 	maxCreateWorkerConcurrency = 100
 )
 
-type BaseMaster struct {
+type BaseMaster interface {
+	MetaKVClient() metadata.MetaKV
+	Init(ctx context.Context) error
+	Poll(ctx context.Context) error
+	MasterID() MasterID
+	GetWorkers() map[WorkerID]WorkerHandle
+	Close(ctx context.Context) error
+	OnError(err error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	GetWorkerStatusExtTypeInfo() interface{}
+}
+
+type DefaultBaseMaster struct {
 	Impl MasterImpl
 
 	// dependencies
@@ -113,7 +125,7 @@ func NewBaseMaster(
 	metaKVClient metadata.MetaKV,
 	executorClientManager client.ClientsManager,
 	serverMasterClient client.MasterClient,
-) *BaseMaster {
+) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
@@ -122,7 +134,7 @@ func NewBaseMaster(
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 	}
-	return &BaseMaster{
+	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: messageHandlerManager,
 		messageRouter:         messageRouter,
@@ -146,11 +158,11 @@ func NewBaseMaster(
 	}
 }
 
-func (m *BaseMaster) MetaKVClient() metadata.MetaKV {
+func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
 	return m.metaKVClient
 }
 
-func (m *BaseMaster) Init(ctx context.Context) error {
+func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	isInit, epoch, err := m.initMetadata(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -176,7 +188,7 @@ func (m *BaseMaster) Init(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) Poll(ctx context.Context) error {
+func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -198,15 +210,15 @@ func (m *BaseMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) MasterID() MasterID {
+func (m *DefaultBaseMaster) MasterID() MasterID {
 	return m.id
 }
 
-func (m *BaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
 
-func (m *BaseMaster) Close(ctx context.Context) error {
+func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -219,7 +231,7 @@ func (m *BaseMaster) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) startBackgroundTasks() {
+func (m *DefaultBaseMaster) startBackgroundTasks() {
 	cctx, cancel := context.WithCancel(context.Background())
 	m.wg.Add(1)
 	go func() {
@@ -245,7 +257,7 @@ func (m *BaseMaster) startBackgroundTasks() {
 	}()
 }
 
-func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
+func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 	ticker := time.NewTicker(m.timeoutConfig.masterHeartbeatCheckLoopInterval)
 	for {
 		select {
@@ -278,7 +290,7 @@ func (m *BaseMaster) runWorkerCheck(ctx context.Context) error {
 	}
 }
 
-func (m *BaseMaster) OnError(err error) {
+func (m *DefaultBaseMaster) OnError(err error) {
 	if errors.Cause(err) == context.Canceled {
 		// TODO think about how to gracefully handle cancellation here.
 		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
@@ -290,7 +302,7 @@ func (m *BaseMaster) OnError(err error) {
 	}
 }
 
-func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	// TODO refine this logic to make it correct and easier to understand.
 
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
@@ -325,7 +337,7 @@ func (m *BaseMaster) initMetadata(ctx context.Context) (isInit bool, epoch Epoch
 	return
 }
 
-func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
+func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	metaClient := NewMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -340,7 +352,7 @@ func (m *BaseMaster) markInitializedInMetadata(ctx context.Context) error {
 	return nil
 }
 
-func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
+func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {
 	topic := HeartbeatPingTopic(m.id, workerID)
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
@@ -393,7 +405,7 @@ func (m *BaseMaster) registerHandlerForWorker(ctx context.Context, workerID Work
 	return nil
 }
 
-func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config))
@@ -493,7 +505,7 @@ func (m *BaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, co
 	return workerID, nil
 }
 
-func (m *BaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
+func (m *DefaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	// This function provides a trivial default implementation of
 	// GetWorkerStatusExtTypeInfo.
 	info := int64(0)

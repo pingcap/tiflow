@@ -14,7 +14,7 @@ type mockWorkerImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
-	*BaseWorker
+	*DefaultBaseWorker
 	id WorkerID
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
@@ -39,7 +39,7 @@ func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 		ret.metaKVClient,
 		workerID,
 		masterID)
-	ret.BaseWorker = base
+	ret.DefaultBaseWorker = base.(*DefaultBaseWorker)
 	return ret
 }
 

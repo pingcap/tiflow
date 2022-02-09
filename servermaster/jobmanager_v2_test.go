@@ -25,7 +25,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster: mockMaster.BaseMaster,
+		BaseMaster: mockMaster.DefaultBaseMaster,
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr

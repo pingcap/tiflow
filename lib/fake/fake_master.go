@@ -28,7 +28,7 @@ const (
 )
 
 type Master struct {
-	*lib.BaseMaster
+	lib.BaseMaster
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID lib.WorkerID
@@ -44,10 +44,6 @@ func (m *Master) ID() worker.RunnableID {
 
 func (m *Master) Workload() model.RescUnit {
 	return 0
-}
-
-func (m *Master) Close(ctx context.Context) error {
-	return m.Impl.CloseImpl(ctx)
 }
 
 func (m *Master) InitImpl(ctx context.Context) error {

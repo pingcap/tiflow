@@ -140,7 +140,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	MockBaseMasterCreateWorker(
 		t,
-		master.BaseMaster,
+		master.DefaultBaseMaster,
 		workerTypePlaceholder,
 		&dummyConfig{param: 1},
 		100,
@@ -157,7 +157,7 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	master.On("OnWorkerOnline", mock.AnythingOfType("*lib.workerHandleImpl")).Return(nil)
 
-	MockBaseMasterWorkerHeartbeat(t, master.BaseMaster, masterName, workerID1, executorNodeID1)
+	MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterName, workerID1, executorNodeID1)
 
 	master.On("Tick", mock.Anything).Return(nil)
 	err = master.Poll(ctx)

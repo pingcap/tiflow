@@ -39,7 +39,7 @@ func (e *errorInfo) Error() string {
 }
 
 type JobMaster struct {
-	*lib.BaseMaster
+	lib.BaseMaster
 	syncInfo      *Config
 	syncFilesInfo map[lib.WorkerID]*workerInfo
 	counter       int64

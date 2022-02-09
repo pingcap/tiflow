@@ -19,7 +19,7 @@ const (
 var _ lib.Master = &exampleMaster{}
 
 type exampleMaster struct {
-	*lib.BaseMaster
+	*lib.DefaultBaseMaster
 
 	worker struct {
 		mu sync.Mutex
