@@ -28,11 +28,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/security"
+=======
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -174,13 +178,15 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 }
 
 type kafkaSaramaProducer struct {
-	// clientLock is used to protect concurrent access of asyncClient and syncClient.
+	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock  sync.RWMutex
-	asyncClient sarama.AsyncProducer
-	syncClient  sarama.SyncProducer
-	// producersReleased records whether asyncClient and syncClient have been closed properly
+	clientLock    sync.RWMutex
+	client        sarama.Client
+	asyncProducer sarama.AsyncProducer
+	syncProducer  sarama.SyncProducer
+
+	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
 	topic             string
 	partitionNum      int32
@@ -197,6 +203,9 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+
+	role util.Role
+	id   model.ChangeFeedID
 }
 
 type kafkaProducerClosingFlag = int32
@@ -227,14 +236,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
-		log.Info("failpoint error injected")
+		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
 
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Panic("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic",
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
 
 	select {
@@ -242,7 +252,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	case k.asyncClient.Input() <- msg:
+	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
 }
@@ -265,7 +275,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncClient.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(msgs)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -327,11 +337,16 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+<<<<<<< HEAD
+=======
+	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.Any("role", k.role))
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	close(k.closeCh)
 }
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
+	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	k.stop()
 
 	k.clientLock.Lock()
@@ -343,6 +358,7 @@ func (k *kafkaSaramaProducer) Close() error {
 		return nil
 	}
 	k.producersReleased = true
+<<<<<<< HEAD
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
@@ -353,6 +369,44 @@ func (k *kafkaSaramaProducer) Close() error {
 	}
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
+=======
+
+	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
+	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+	// that buffered messages flushed.
+	// Consider the situation that the broker does not respond, If the client is not
+	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+	// To prevent the scenario mentioned above, close client first.
+	start := time.Now()
+	if err := k.client.Close(); err != nil {
+		log.Error("close sarama client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+
+	start = time.Now()
+	err := k.asyncProducer.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+	start = time.Now()
+	err = k.syncProducer.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	}
 	return nil
 }
@@ -360,6 +414,8 @@ func (k *kafkaSaramaProducer) Close() error {
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
+		log.Info("stop the kafka producer",
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
 	for {
@@ -369,16 +425,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case <-k.closeCh:
 			return nil
 		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err))
+			log.Warn("receive from failpoint chan", zap.Error(err),
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
-		case msg := <-k.asyncClient.Successes():
+		case msg := <-k.asyncProducer.Successes():
 			if msg == nil || msg.Metadata == nil {
 				continue
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
-		case err := <-k.asyncClient.Errors():
+		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
 			// which will cause the pkg/error library to malfunction.
@@ -390,21 +447,125 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
+<<<<<<< HEAD
 func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) error {
 	// FIXME: find a way to remove this failpoint for workload the unit test
 	failpoint.Inject("SkipTopicAutoCreate", func() {
 		failpoint.Return(nil)
 	})
 	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+=======
+var (
+	newSaramaConfigImpl                                 = newSaramaConfig
+	NewAdminClientImpl  kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+)
+
+// NewKafkaSaramaProducer creates a kafka sarama producer
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
+	opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
+	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
+		zap.String("changefeed", changefeedID), zap.Any("role", role))
+
+	cfg, err := newSaramaConfigImpl(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	admin, err := NewAdminClientImpl(config.BrokerEndpoints, cfg)
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	defer func() {
 		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
+			log.Warn("close kafka cluster admin failed", zap.Error(err),
+				zap.String("changefeed", changefeedID), zap.Any("role", role))
 		}
 	}()
 
+<<<<<<< HEAD
+=======
+	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	syncProducer, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	k := &kafkaSaramaProducer{
+		client:        client,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
+		topic:         topic,
+		partitionNum:  config.PartitionNum,
+		partitionOffset: make([]struct {
+			flushed uint64
+			sent    uint64
+		}, config.PartitionNum),
+		flushedNotifier: notifier,
+		flushedReceiver: flushedReceiver,
+		closeCh:         make(chan struct{}),
+		failpointCh:     make(chan error, 1),
+		closing:         kafkaProducerRunning,
+
+		id:   changefeedID,
+		role: role,
+	}
+	go func() {
+		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", k.id), zap.Any("role", role))
+			}
+		}
+	}()
+	return k, nil
+}
+
+var (
+	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
+)
+
+func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (clientID string, err error) {
+	if configuredClientID != "" {
+		clientID = configuredClientID
+	} else {
+		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
+		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+	}
+	if !validClientID.MatchString(clientID) {
+		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
+	}
+	return
+}
+
+func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
+	opts map[string]string) error {
+>>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -420,7 +581,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
@@ -455,7 +616,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
