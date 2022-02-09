@@ -230,6 +230,8 @@ func (k *kafkaSaramaProducer) Close() error {
 	} else {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
+
+	k.metricsMonitor.Cleanup()
 	return nil
 }
 

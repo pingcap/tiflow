@@ -66,7 +66,17 @@ var (
 	}
 )
 
+// InitMetrics registers all metrics in this file
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(batchSize.collector)
+	registry.MustRegister(recordSendRate.collector)
+	registry.MustRegister(recordsPerRequest.collector)
+}
+
 type saramaMetricsMonitor struct {
+	captureAddr  string
+	changefeedID string
+
 	registry metrics.Registry
 	metrics  []saramaMetrics
 }
@@ -84,8 +94,10 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 	metrics = append(metrics, recordSendRate.withLabelValues(captureAddr, changefeedID))
 	metrics = append(metrics, recordsPerRequest.withLabelValues(captureAddr, changefeedID))
 	return &saramaMetricsMonitor{
-		registry: registry,
-		metrics:  metrics,
+		captureAddr:  captureAddr,
+		changefeedID: changefeedID,
+		registry:     registry,
+		metrics:      metrics,
 	}
 }
 
@@ -185,11 +197,4 @@ func printMetrics(w io.Writer, r metrics.Registry) {
 		requestLatencyPercentiles[4],
 		requestsInFlight,
 	)
-}
-
-// InitMetrics registers all metrics in this file
-func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(batchSize.collector)
-	registry.MustRegister(recordSendRate.collector)
-	registry.MustRegister(recordsPerRequest.collector)
 }
