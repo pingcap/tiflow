@@ -17,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/srvdiscovery"
+	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -52,11 +53,10 @@ type Server struct {
 
 	// etcdCli connects to server master embed etcd, it should be used in service
 	// discovery only.
-	etcdCli             *clientv3.Client
-	metastore           metadata.MetaKV
-	discoveryRunner     srvdiscovery.DiscoveryRunner
-	initDiscoveryRunner func() error
-	p2pMsgRouter        p2pImpl.MessageRouter
+	etcdCli         *clientv3.Client
+	metastore       metadata.MetaKV
+	p2pMsgRouter    p2pImpl.MessageRouter
+	discoveryKeeper *serverutils.DiscoveryKeepaliver
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -65,7 +65,6 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		testCtx:     ctx,
 		cliUpdateCh: make(chan []string),
 	}
-	s.initDiscoveryRunner = s.initDiscoveryRunnerImpl
 	return &s
 }
 
@@ -266,9 +265,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+		s.info, s.etcdCli, s.cfg.SessionTTL, defaultDiscoverTicker,
+		s.p2pMsgRouter,
+	)
 	// connects to metastore and maintains a etcd session
 	wg.Go(func() error {
-		return s.discoveryKeepalive(ctx)
+		return s.discoveryKeeper.Keepalive(ctx)
 	})
 
 	wg.Go(func() error {
@@ -358,79 +361,6 @@ func (s *Server) connectToMetaStore(ctx context.Context) error {
 	return err
 }
 
-func (s *Server) initDiscoveryRunnerImpl() error {
-	value, err := s.info.ToJSON()
-	if err != nil {
-		return err
-	}
-	s.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
-		s.etcdCli, s.metastore, s.cfg.SessionTTL, defaultDiscoverTicker,
-		s.info.EtcdKey(), value)
-	return nil
-}
-
-func (s *Server) discoveryKeepalive(ctx context.Context) error {
-	var (
-		session srvdiscovery.Session
-		err     error
-	)
-
-	err = s.initDiscoveryRunner()
-	if err != nil {
-		return err
-	}
-	session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
-	if err != nil {
-		return err
-	}
-	executors := s.discoveryRunner.GetSnapshot()
-	for uuid, exec := range executors {
-		if s.p2pMsgRouter != nil {
-			log.L().Info("add peer",
-				zap.String("uuid", uuid),
-				zap.Any("exec", exec))
-			s.p2pMsgRouter.AddPeer(uuid, exec.Addr)
-		}
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-session.Done():
-			log.L().Warn("metastore session is done", zap.String("executor-id", string(s.info.ID)))
-			session, err = s.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
-			if err != nil {
-				return err
-			}
-		case resp := <-s.discoveryRunner.GetWatcher():
-			if resp.Err != nil {
-				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
-				_, err = s.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			for uuid, add := range resp.AddSet {
-				if s.p2pMsgRouter != nil {
-					log.L().Info("add peer",
-						zap.String("uuid", uuid),
-						zap.Any("exec", add))
-					s.p2pMsgRouter.AddPeer(uuid, add.Addr)
-				}
-			}
-			for uuid := range resp.DelSet {
-				if s.p2pMsgRouter != nil {
-					log.L().Info("remove peer",
-						zap.String("uuid", uuid))
-					s.p2pMsgRouter.RemovePeer(uuid)
-				}
-			}
-			s.discoveryRunner.ApplyWatchResult(resp)
-		}
-	}
-}
-
 func (s *Server) selfRegister(ctx context.Context) (err error) {
 	// Register myself
 	s.cli, err = client.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
@@ -469,6 +399,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			})
 		}
 	}()
+	rl := rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/)
 	for {
 		select {
 		case <-ctx.Done():
@@ -508,7 +439,9 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// later than master's, which might cause that master wait for less time than executor.
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
-			log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			if rl.Allow() {
+				log.L().Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+			}
 			// update master client could cost long time, we make it a background
 			// job and if there is running update task, we ignore once since more
 			// heartbeats will be called later.

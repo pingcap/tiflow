@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
@@ -35,7 +34,6 @@ func (s Snapshot) Clone() Snapshot {
 // DiscoveryRunnerImpl implements DiscoveryRunner
 type DiscoveryRunnerImpl struct {
 	etcdCli    *clientv3.Client
-	metastore  metadata.MetaKV
 	sessionTTL int
 	watchDur   time.Duration
 	key        string
@@ -49,7 +47,6 @@ type DiscoveryRunnerImpl struct {
 // NewDiscoveryRunnerImpl creates a new DiscoveryRunnerImpl
 func NewDiscoveryRunnerImpl(
 	etcdCli *clientv3.Client,
-	metastore metadata.MetaKV,
 	sessionTTL int,
 	watchDur time.Duration,
 	key string,
@@ -57,7 +54,6 @@ func NewDiscoveryRunnerImpl(
 ) *DiscoveryRunnerImpl {
 	return &DiscoveryRunnerImpl{
 		etcdCli:    etcdCli,
-		metastore:  metastore,
 		sessionTTL: sessionTTL,
 		watchDur:   watchDur,
 		key:        key,
@@ -107,7 +103,7 @@ func (dr *DiscoveryRunnerImpl) createSession(ctx context.Context, etcdCli *clien
 	if err != nil {
 		return nil, err
 	}
-	_, err = dr.metastore.Put(ctx, dr.key, dr.value, clientv3.WithLease(session.Lease()))
+	_, err = etcdCli.Put(ctx, dr.key, dr.value, clientv3.WithLease(session.Lease()))
 	if err != nil {
 		return nil, err
 	}

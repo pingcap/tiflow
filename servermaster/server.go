@@ -15,10 +15,12 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -31,6 +33,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
@@ -62,7 +65,10 @@ type Server struct {
 	cfg  *Config
 	info *model.NodeInfo
 
-	msgService *p2p.MessageRPCService
+	msgService      *p2p.MessageRPCService
+	p2pMsgRouter    p2p.MessageRouter
+	rpcLogRL        *rate.Limiter
+	discoveryKeeper *serverutils.DiscoveryKeepaliver
 
 	initialized atomic.Bool
 
@@ -90,6 +96,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		ID:   model.DeployNodeID(cfg.Etcd.Name),
 		Addr: cfg.AdvertiseAddr,
 	}
+	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
 		cfg:             cfg,
@@ -98,6 +105,8 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		initialized:     *atomic.NewBool(false),
 		testCtx:         ctx,
 		leader:          atomic.Value{},
+		p2pMsgRouter:    p2pMsgRouter,
+		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
@@ -345,6 +354,14 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
+	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
+		defaultDiscoverTicker, s.p2pMsgRouter,
+	)
+	wg.Go(func() error {
+		return s.discoveryKeeper.Keepalive(ctx)
+	})
+
 	return wg.Wait()
 }
 
@@ -458,8 +475,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.jobManager, err = NewJobManagerImplV2(ctx, s.name(),
-		s.msgService.MakeHandlerManager(), clients, metadata.NewMetaEtcd(s.etcdClient))
+	dctx := dcontext.NewContext(ctx, log.L())
+	dctx.Environ.Addr = s.cfg.AdvertiseAddr
+	dctx.Environ.NodeID = s.name()
+	s.jobManager, err = NewJobManagerImplV2(dctx, "", s.name(),
+		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
+		clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {
 		return
 	}
@@ -539,7 +560,10 @@ func (s *Server) rpcForwardIfNeeded(ctx context.Context, req interface{}, respPo
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	// TODO: rate limiter based on different sender
+	if s.rpcLogRL.Allow() {
+		log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	}
 
 	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
 	if isLeader {

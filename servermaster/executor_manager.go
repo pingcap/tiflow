@@ -14,6 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -40,6 +41,7 @@ type ExecutorManagerImpl struct {
 	haStore ha.HAStore // nolint:structcheck,unused
 
 	rescMgr resource.RescMgr
+	logRL   *rate.Limiter
 }
 
 func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, ctx *test.Context) *ExecutorManagerImpl {
@@ -50,6 +52,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 		initHeartbeatTTL:  initHeartbeatTTL,
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
+		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 }
 
@@ -80,7 +83,9 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 
 // HandleHeartbeat implements pb interface,
 func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
+	if e.logRL.Allow() {
+		log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
+	}
 	e.mu.Lock()
 	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
 
@@ -120,6 +125,7 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
 		Status:         model.Initing,
+		logRL:          rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 	e.mu.Lock()
 	e.executors[info.ID] = exec
@@ -161,10 +167,13 @@ type Executor struct {
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
+	logRL          *rate.Limiter
 }
 
 func (e *Executor) checkAlive() bool {
-	log.L().Logger.Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
+	if e.logRL.Allow() {
+		log.L().Logger.Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
+	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()

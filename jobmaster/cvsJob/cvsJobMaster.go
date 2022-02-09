@@ -63,6 +63,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib
 	base := lib.NewBaseMaster(
 		ctx,
 		jm,
+		"fake-job-manager",
 		masterID,
 		deps.MessageHandlerManager,
 		deps.MessageRouter,

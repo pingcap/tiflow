@@ -18,7 +18,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl(lib.MasterID("submit-job-test"))
+	mockMaster := lib.NewMockMasterImpl("", "submit-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().On(
 		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(

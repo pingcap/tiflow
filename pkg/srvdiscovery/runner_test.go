@@ -8,7 +8,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +30,6 @@ func TestDiscoveryRunner(t *testing.T) {
 		require.Nil(t, err)
 		return NewDiscoveryRunnerImpl(
 			client,
-			metadata.NewMetaEtcd(client),
 			3,
 			time.Millisecond*50,
 			adapter.NodeInfoKeyAdapter.Encode(string(res.ID)),

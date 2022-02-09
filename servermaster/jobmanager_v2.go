@@ -77,23 +77,26 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
-	ctx context.Context,
+	dctx *dcontext.Context,
+	masterID lib.MasterID,
 	id lib.MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
+	messageSender p2p.MessageSender,
 	clients client.ClientsManager,
 	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
 	impl := &JobManagerImplV2{
 		messageHandlerManager: messageHandlerManager,
+		messageSender:         messageSender,
 		executorClientManager: clients,
 		serverMasterClient:    clients.MasterClient(),
 		metaKVClient:          metaKVClient,
 		workers:               make(map[lib.WorkerID]lib.WorkerHandle),
 	}
-	dctx := dcontext.NewContext(ctx, log.L())
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
+		masterID,
 		id,
 		impl.messageHandlerManager,
 		impl.messageSender,
@@ -101,7 +104,7 @@ func NewJobManagerImplV2(
 		impl.executorClientManager,
 		impl.serverMasterClient,
 	)
-	err := impl.BaseMaster.Init(ctx)
+	err := impl.BaseMaster.Init(dctx.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -138,16 +141,19 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result e
 
 // OnWorkerOnline implements lib.MasterImpl.OnWorkerOnline
 func (jm *JobManagerImplV2) OnWorkerOnline(worker lib.WorkerHandle) error {
+	log.L().Info("on worker online", zap.Any("id", worker.ID()))
 	return nil
 }
 
 // OnWorkerOffline implements lib.MasterImpl.OnWorkerOffline
 func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+	log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
 	return nil
 }
 
 // OnWorkerMessage implements lib.MasterImpl.OnWorkerMessage
 func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
 	return nil
 }
 
