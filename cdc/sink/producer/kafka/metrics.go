@@ -14,9 +14,6 @@
 package kafka
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
@@ -31,18 +28,19 @@ type saramaMetrics struct {
 }
 
 var (
+	// `Histogram`
 	batchSize = saramaMetrics{
 		metricsName: "batch-size",
-		collector: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
+		collector: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_batch_size",
-				Help:      "Distribution of the number of bytes sent per partition per request for all topics",
-				Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-			}, []string{"capture", "changefeed", "topic", "partition"}),
+				Help:      "the number of bytes sent per partition per request for all topics",
+			}, []string{"capture", "changefeed"}),
 	}
 
+	// `Meter`
 	recordSendRate = saramaMetrics{
 		metricsName: "record-send-rate",
 		collector: prometheus.NewGaugeVec(
@@ -51,18 +49,19 @@ var (
 				Subsystem: "sink",
 				Name:      "kafka_producer_record_send_rate",
 				Help:      "Records/second sent to all topics",
-			}, []string{"capture", "changefeed", "topic"}),
+			}, []string{"capture", "changefeed"}),
 	}
 
+	// `Histogram`
 	recordsPerRequest = saramaMetrics{
 		metricsName: "records-per-request",
-		collector: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "kafka_producer_records_per_request",
-			Help:      "Distribution of the number of records sent per request for all topics",
-			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{"capture", "changefeed", "topic"}),
+		collector: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "ticdc",
+				Subsystem: "sink",
+				Name:      "kafka_producer_records_per_request",
+				Help:      "the number of records sent per request for all topics",
+			}, []string{"capture", "changefeed"}),
 	}
 )
 
@@ -110,11 +109,11 @@ func (sm *saramaMetricsMonitor) Cleanup() {
 func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
 	var collector prometheus.Collector
 	switch tp := m.collector.(type) {
-	case prometheus.HistogramVec:
+	case *prometheus.HistogramVec:
 		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
-	case prometheus.GaugeVec:
+	case *prometheus.GaugeVec:
 		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
-	case prometheus.CounterVec:
+	case *prometheus.CounterVec:
 		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
 	default:
 		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
@@ -130,29 +129,23 @@ func (m saramaMetrics) refresh(registry metrics.Registry) {
 	// fetch sarama metrics
 	rawMetric := registry.Get(m.metricsName)
 	if rawMetric == nil {
-		log.Warn("sarama metrics not found", zap.String("metricName", m.metricsName))
 		return
 	}
 
 	var value float64
 	switch tp := rawMetric.(type) {
 	case metrics.Meter:
-		snapshot := tp.Snapshot()
-		value = snapshot.RateMean()
-		//rate1 := snapshot.Rate1()
-		//rate5 := snapshot.Rate5()
-		//rate15 := snapshot.Rate15()
-		//rateMean := snapshot.RateMean()
+		// `Meter` record the moving average of all recorded values.
+		// use `Rate1` the `one-minute moving average rate of events per second`
+		value = tp.Snapshot().Rate1()
 	case metrics.Histogram:
-		snapshot := tp.Snapshot()
-		value = snapshot.Mean()
-		snapshot.Mean()
-	case metrics.Counter:
-		snapshot := tp.Snapshot()
-		value = float64(snapshot.Count())
-	case metrics.Gauge:
-		snapshot := tp.Snapshot()
-		value = float64(snapshot.Value())
+		// `Histogram` record the distribution of recorded values.
+		// use `Mean` at the moment.
+		value = tp.Snapshot().Mean()
+		//case metrics.Counter:
+		//	value = float64(tp.Snapshot().Count())
+		//case metrics.Gauge:
+		//	value = float64(tp.Snapshot().Value())
 	}
 
 	// update prometheus metrics
@@ -166,35 +159,35 @@ func (m saramaMetrics) refresh(registry metrics.Registry) {
 	}
 }
 
-func printMetrics(w io.Writer, r metrics.Registry) {
-	recordSendRateMetric := r.Get("record-send-rate")
-	requestLatencyMetric := r.Get("request-latency-in-ms")
-	outgoingByteRateMetric := r.Get("outgoing-byte-rate")
-	requestsInFlightMetric := r.Get("requests-in-flight")
-
-	if recordSendRateMetric == nil || requestLatencyMetric == nil || outgoingByteRateMetric == nil ||
-		requestsInFlightMetric == nil {
-		return
-	}
-	recordSendRate := recordSendRateMetric.(metrics.Meter).Snapshot()
-	requestLatency := requestLatencyMetric.(metrics.Histogram).Snapshot()
-	requestLatencyPercentiles := requestLatency.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999})
-	outgoingByteRate := outgoingByteRateMetric.(metrics.Meter).Snapshot()
-	requestsInFlight := requestsInFlightMetric.(metrics.Counter).Count()
-	fmt.Fprintf(w, "%d records sent, %.1f records/sec (%.2f MiB/sec ingress, %.2f MiB/sec egress), "+
-		"%.1f ms avg latency, %.1f ms stddev, %.1f ms 50th, %.1f ms 75th, "+
-		"%.1f ms 95th, %.1f ms 99th, %.1f ms 99.9th, %d total req. in flight\n",
-		recordSendRate.Count(),
-		recordSendRate.RateMean(),
-		recordSendRate.RateMean()*float64(1000)/1024/1024,
-		outgoingByteRate.RateMean()/1024/1024,
-		requestLatency.Mean(),
-		requestLatency.StdDev(),
-		requestLatencyPercentiles[0],
-		requestLatencyPercentiles[1],
-		requestLatencyPercentiles[2],
-		requestLatencyPercentiles[3],
-		requestLatencyPercentiles[4],
-		requestsInFlight,
-	)
-}
+//func printMetrics(w io.Writer, r metrics.Registry) {
+//	recordSendRateMetric := r.Get("record-send-rate")
+//	requestLatencyMetric := r.Get("request-latency-in-ms")
+//	outgoingByteRateMetric := r.Get("outgoing-byte-rate")
+//	requestsInFlightMetric := r.Get("requests-in-flight")
+//
+//	if recordSendRateMetric == nil || requestLatencyMetric == nil || outgoingByteRateMetric == nil ||
+//		requestsInFlightMetric == nil {
+//		return
+//	}
+//	recordSendRate := recordSendRateMetric.(metrics.Meter).Snapshot()
+//	requestLatency := requestLatencyMetric.(metrics.Histogram).Snapshot()
+//	requestLatencyPercentiles := requestLatency.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999})
+//	outgoingByteRate := outgoingByteRateMetric.(metrics.Meter).Snapshot()
+//	requestsInFlight := requestsInFlightMetric.(metrics.Counter).Count()
+//	fmt.Fprintf(w, "%d records sent, %.1f records/sec (%.2f MiB/sec ingress, %.2f MiB/sec egress), "+
+//		"%.1f ms avg latency, %.1f ms stddev, %.1f ms 50th, %.1f ms 75th, "+
+//		"%.1f ms 95th, %.1f ms 99th, %.1f ms 99.9th, %d total req. in flight\n",
+//		recordSendRate.Count(),
+//		recordSendRate.RateMean(),
+//		recordSendRate.RateMean()*float64(1000)/1024/1024,
+//		outgoingByteRate.RateMean()/1024/1024,
+//		requestLatency.Mean(),
+//		requestLatency.StdDev(),
+//		requestLatencyPercentiles[0],
+//		requestLatencyPercentiles[1],
+//		requestLatencyPercentiles[2],
+//		requestLatencyPercentiles[3],
+//		requestLatencyPercentiles[4],
+//		requestsInFlight,
+//	)
+//}
