@@ -303,10 +303,12 @@ var (
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
-	opts map[string]string, errCh chan error, role util.Role) (*kafkaSaramaProducer, error) {
+	opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.Any("role", role))
+
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err

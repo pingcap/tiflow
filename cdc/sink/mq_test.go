@@ -29,7 +29,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -70,7 +69,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh, util.Tester)
+	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
 	encoder, err := sink.encoderBuilder.Build(ctx)
@@ -177,7 +176,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh, util.Tester)
+	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
 	row := &model.RowChangedEvent{
@@ -228,7 +227,7 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
-	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh, util.Tester)
+	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
 	encoder, err := sink.encoderBuilder.Build(ctx)
@@ -273,7 +272,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh, util.Tester)
+	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
 	// mock kafka broker processes 1 row changed event

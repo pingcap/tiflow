@@ -84,7 +84,7 @@ type mqSink struct {
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
-	errCh chan error, role util.Role,
+	errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
 	err := protocol.FromString(replicaConfig.Sink.Protocol)
@@ -118,6 +118,7 @@ func newMqSink(
 	}
 
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
@@ -461,7 +462,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error, role util.Role) (*mqSink, error) {
+	opts map[string]string, errCh chan error) (*mqSink, error) {
 	producerConfig := kafka.NewConfig()
 	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -479,11 +480,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh, role)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh, role)
+	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -491,7 +492,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error, role util.Role) (*mqSink, error) {
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	producer, err := pulsar.NewProducer(sinkURI, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -517,7 +518,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh, role)
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

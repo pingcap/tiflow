@@ -13,29 +13,35 @@
 
 package util
 
+// Role is the operator role, mainly used for logging at the moment.
 type Role int
 
 const (
-	Owner Role = iota
-	Processor
-	CDCClient
-	RedoLogApplier
-	KafkaConsumer
-	Tester
+	RoleOwner Role = iota
+	RoleProcessor
+	RoleClient
+	RoleRedoLogApplier
+	RoleKafkaConsumer
+	RoleTester
+	RoleUnknown
 )
 
 func (r Role) String() string {
 	switch r {
-	case Owner:
+	case RoleOwner:
 		return "owner"
-	case Processor:
+	case RoleProcessor:
 		return "processor"
-	case CDCClient:
+	case RoleClient:
 		return "cdc-client"
-	case KafkaConsumer:
+	case RoleKafkaConsumer:
 		return "kafka-consumer"
-	case RedoLogApplier:
+	case RoleRedoLogApplier:
 		return "redo-applier"
+	case RoleTester:
+		return "tester"
+	case RoleUnknown:
+		return "unknown"
 	}
 	return "unknown"
 }
