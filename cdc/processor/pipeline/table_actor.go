@@ -311,7 +311,6 @@ func stop(ctx context.Context, t *tableActor) func(err error) {
 				zap.String("changefeed", t.changefeedID),
 				zap.String("tableName", t.tableName),
 				zap.Error(err), zap.Error(t.err))
-			t.err = err
 		}
 		log.Info("table actor will be stopped",
 			zap.String("changefeed", t.changefeedID),

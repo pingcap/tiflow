@@ -17,10 +17,12 @@ import (
 	sdtContext "context"
 	"sync/atomic"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
@@ -79,6 +81,10 @@ func (c *actorNodeContext) ChangefeedVars() *context.ChangefeedVars {
 
 func (c *actorNodeContext) Throw(err error) {
 	if err == nil {
+		return
+	}
+	if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
+		errors.Cause(err) == sdtContext.Canceled {
 		return
 	}
 	log.Error("error occurred during message processing, stop table actor",
