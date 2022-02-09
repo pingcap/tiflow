@@ -19,13 +19,12 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
-func MockBaseMaster(masterID MasterID, id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
+func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ret := NewBaseMaster(
 		// ctx is nil for now
 		// TODO refine this
 		nil,
 		masterImpl,
-		masterID,
 		id,
 		p2p.NewMockMessageHandlerManager(),
 		p2p.NewMockMessageSender(),

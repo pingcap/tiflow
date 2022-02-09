@@ -96,7 +96,6 @@ func NewJobManagerImplV2(
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
-		masterID,
 		id,
 		impl.messageHandlerManager,
 		impl.messageSender,

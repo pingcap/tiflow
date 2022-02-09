@@ -92,9 +92,7 @@ type DefaultBaseMaster struct {
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
 
-	// used to communicate with job manager in server master
-	masterClient *masterClient
-	clock        clock.Clock
+	clock clock.Clock
 
 	// workerManager maintains the list of all workers and
 	// their statuses.
@@ -108,10 +106,6 @@ type DefaultBaseMaster struct {
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
 
-	// read-only fields
-	// if this master is job master, masterID represents job manager id
-	// if this master is job manager, master ID is ""
-	masterID      MasterID
 	id            MasterID // id of this master
 	advertiseAddr string
 	nodeID        p2p.NodeID
@@ -127,7 +121,6 @@ type DefaultBaseMaster struct {
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
-	masterID MasterID,
 	id MasterID,
 	messageHandlerManager p2p.MessageHandlerManager,
 	messageRouter p2p.MessageSender,
@@ -151,7 +144,6 @@ func NewBaseMaster(
 		executorClientManager: executorClientManager,
 		serverMasterClient:    serverMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
-		masterID:              masterID,
 		id:                    id,
 		clock:                 clock.New(),
 
@@ -180,29 +172,6 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	}
 	m.currentEpoch.Store(epoch)
 	m.workerManager = newWorkerManager(m.id, !isInit, epoch)
-
-	// job manager doesn't need to send heartbeat to anybody
-	if !m.isJobManager() {
-		m.masterClient = newMasterClient(
-			m.masterID,
-			m.id,
-			m.messageRouter,
-			m.metaKVClient,
-			m.clock.Mono(),
-			func() error {
-				// TODO: support job manager failover
-				return nil
-			},
-		)
-		err = m.registerHandlerForMaster(ctx)
-		if err != nil {
-			return err
-		}
-		err = m.masterClient.InitMasterInfoFromMeta(ctx)
-		if err != nil {
-			return err
-		}
-	}
 
 	m.startBackgroundTasks()
 
@@ -289,29 +258,6 @@ func (m *DefaultBaseMaster) startBackgroundTasks() {
 			m.OnError(err)
 		}
 	}()
-
-	// TODO: extract a heartbeat manager and reuses it in both lib/master and lib/worker
-	if !m.isJobManager() {
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
-			if err := m.runHeartbeatWorker(cctx); err != nil {
-				m.OnError(err)
-			}
-		}()
-
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
-			if err := m.runWatchDog(cctx); err != nil {
-				m.OnError(err)
-			}
-		}()
-	}
-}
-
-func (m *DefaultBaseMaster) isJobManager() bool {
-	return m.masterID == ""
 }
 
 func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
@@ -406,29 +352,6 @@ func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error
 		return errors.Trace(err)
 	}
 
-	return nil
-}
-
-func (m *DefaultBaseMaster) registerHandlerForMaster(ctx context.Context) error {
-	topic := HeartbeatPongTopic(m.masterClient.masterID, m.id)
-	ok, err := m.messageHandlerManager.RegisterHandler(
-		ctx,
-		topic,
-		&HeartbeatPongMessage{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*HeartbeatPongMessage)
-			log.L().Debug("heartbeat pong received",
-				zap.Any("msg", msg))
-			m.masterClient.HandleHeartbeat(sender, msg)
-			return nil
-		})
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		log.L().Panic("duplicate handler",
-			zap.String("topic", topic))
-	}
 	return nil
 }
 
@@ -590,37 +513,4 @@ func (m *DefaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	// GetWorkerStatusExtTypeInfo.
 	info := int64(0)
 	return &info
-}
-
-func (m *DefaultBaseMaster) runHeartbeatWorker(ctx context.Context) error {
-	ticker := m.clock.Ticker(m.timeoutConfig.workerHeartbeatInterval)
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-			if err := m.masterClient.SendHeartBeat(ctx, m.clock); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-}
-
-func (m *DefaultBaseMaster) runWatchDog(ctx context.Context) error {
-	ticker := m.clock.Ticker(m.timeoutConfig.workerHeartbeatInterval)
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-		}
-
-		isNormal, err := m.masterClient.CheckMasterTimeout(ctx, m.clock)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !isNormal {
-			return derror.ErrWorkerSuicide.GenWithStackByArgs()
-		}
-	}
 }

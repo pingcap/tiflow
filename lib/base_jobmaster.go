@@ -39,11 +39,11 @@ func NewBaseJobMaster(
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, masterImpl, masterID, workerID, messageHandlerManager, messageRouter,
-		metaKVClient, executorClientManager, serverMasterClient)
+		ctx, masterImpl, workerID, messageHandlerManager,
+		messageRouter, metaKVClient, executorClientManager, serverMasterClient)
 	baseWorker := NewBaseWorker(
-		workerImpl, messageHandlerManager, messageRouter, metaKVClient, workerID,
-		"" /* masterID, job manager uses empty string */)
+		workerImpl, messageHandlerManager, messageRouter, metaKVClient,
+		workerID, masterID)
 	return &defaultBaseJobMaster{
 		master: baseMaster,
 		worker: baseWorker,

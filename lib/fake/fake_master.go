@@ -21,14 +21,14 @@ const (
 
 type Config struct{}
 
-var _ lib.Master = (*Master)(nil)
+var _ lib.BaseJobMaster = (*Master)(nil)
 
 const (
 	fakeWorkerCount = 20
 )
 
 type Master struct {
-	lib.BaseMaster
+	lib.BaseJobMaster
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID lib.WorkerID
@@ -140,13 +140,23 @@ func (m *Master) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
+func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
+	log.L().Info("FakeMaster: OnMasterFailover", zap.Stack("stack"))
+	return nil
+}
+
+func (m *Master) Status() lib.WorkerStatus {
+	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
+}
+
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
 	ret := &Master{
 		pendingWorkerSet: make(map[lib.WorkerID]int),
 	}
 	deps := ctx.Dependencies
-	base := lib.NewBaseMaster(
+	base := lib.NewBaseJobMaster(
 		ctx,
+		ret,
 		ret,
 		masterID,
 		workerID,
@@ -154,7 +164,8 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		deps.MessageRouter,
 		deps.MetaKVClient,
 		deps.ExecutorClientManager,
-		deps.ServerMasterClient)
-	ret.BaseMaster = base
+		deps.ServerMasterClient,
+	)
+	ret.BaseJobMaster = base
 	return ret
 }

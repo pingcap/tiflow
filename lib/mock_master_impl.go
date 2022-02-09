@@ -50,7 +50,6 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 		// TODO refine this
 		nil,
 		ret,
-		masterID,
 		id,
 		ret.messageHandlerManager,
 		ret.messageSender,
@@ -71,7 +70,6 @@ func (m *MockMasterImpl) Reset() {
 	m.DefaultBaseMaster = NewBaseMaster(
 		nil,
 		m,
-		m.masterID,
 		m.id,
 		m.messageHandlerManager,
 		m.messageSender,
