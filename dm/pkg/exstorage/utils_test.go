@@ -39,12 +39,14 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		"/tmp/storage",
 		"./tmp/storage",
 		"./tmp/storage.mysql-replica-01",
+		"./tmp/storage.t-Ë!s`t",
 		"tmp/storage",
 		"s3:///bucket/more/prefix",
 		"s3://bucket2/prefix",
 		"s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
 		"s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
 		"s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+		"s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
 	}
 
 	testIsS3Results := []struct {
@@ -59,6 +61,8 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		{false, false, ""},
 		{false, false, ""},
 		{false, false, ""},
+		{false, false, ""},
+		{false, true, ""},
 		{false, true, ""},
 		{false, true, ""},
 		{false, true, ""},
@@ -87,16 +91,50 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		{false, "/tmp/storage.mysql-replica-01"},
 		{false, "./tmp/storage.mysql-replica-01"},
 		{false, "./tmp/storage.mysql-replica-01"},
+		{false, "./tmp/storage.t-Ë!s`t.mysql-replica-01"},
 		{false, "tmp/storage.mysql-replica-01"},
 		{false, "s3:///bucket/more/prefix.mysql-replica-01"},
 		{false, "s3://bucket2/prefix.mysql-replica-01"},
 		{false, "s3://bucket3/prefix/path.mysql-replica-01?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc"},
 		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
 		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{false, "s3://bucket4/prefix/path.t-Ë!s`t.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
 	}
 
 	for i, testPath := range testPaths {
 		newDir, err := AdjustPath(testPath, "mysql-replica-01")
+		if testAjustResults[i].hasErr {
+			require.Error(t, err)
+			require.Regexp(t, testAjustResults[i].res, err.Error())
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, testAjustResults[i].res, newDir)
+		}
+	}
+
+	// special suffix
+	testAjustResults = []struct {
+		hasErr bool
+		res    string
+	}{
+		{false, ""},
+		{true, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
+		{false, "file:///tmp/storage.t-Ë!s`t"},
+		{false, "/tmp/storage.t-Ë!s`t"},
+		{false, "./tmp/storage.t-Ë!s`t"},
+		{false, "./tmp/storage.mysql-replica-01.t-Ë!s`t"},
+		{false, "./tmp/storage.t-Ë!s`t"},
+		{false, "tmp/storage.t-Ë!s`t"},
+		{false, "s3:///bucket/more/prefix.t-Ë!s`t"},
+		{false, "s3://bucket2/prefix.t-Ë!s`t"},
+		{false, "s3://bucket3/prefix/path.t-Ë!s`t?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc"},
+		{false, "s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{false, "s3://bucket4/prefix/path.mysql-replica-01.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{false, "s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+	}
+
+	for i, testPath := range testPaths {
+		newDir, err := AdjustPath(testPath, "t-Ë!s`t")
 		if testAjustResults[i].hasErr {
 			require.Error(t, err)
 			require.Regexp(t, testAjustResults[i].res, err.Error())

@@ -32,7 +32,7 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" {
 		return rawURL, nil
 	}
-	u, err := url.Parse(rawURL)
+	u, err := storage.ParseRawURL(rawURL)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -40,7 +40,11 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	// avoid duplicate add uniqueID
 	if uniqueID != "" && !strings.HasSuffix(trimPath, uniqueID) {
 		u.Path = trimPath + "." + uniqueID
-		return u.String(), nil
+		newURL, err := url.QueryUnescape(u.String())
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		return newURL, nil
 	}
 
 	return rawURL, nil
