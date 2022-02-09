@@ -36,6 +36,12 @@ body:
              (paste TiDB cluster version here)
              ```
 
+             Upstream TiKV version (execute `tikv-server --version`):
+
+             ```console
+             (paste TiKV version here)
+             ```
+
              TiCDC version (execute `cdc version`):
 
              ```console
