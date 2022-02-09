@@ -50,7 +50,7 @@ type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock sync.RWMutex
+	clientLock    sync.RWMutex
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
 	syncProducer  sarama.SyncProducer
