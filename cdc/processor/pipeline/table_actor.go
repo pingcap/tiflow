@@ -144,6 +144,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 }
 
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
+MSG:
 	for i := range msgs {
 		if t.stopped {
 			// No need to handle remaining messages.
@@ -173,7 +174,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			}()
 		case message.TypeStop:
 			t.stopFunc(msgs[i].Err)
-			return false
+			break
 		}
 		// process message for each node
 		for _, n := range t.nodes {
@@ -182,7 +183,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 					zap.String("tableName", t.tableName),
 					zap.Int64("tableID", t.tableID), zap.Error(err))
 				t.stopFunc(err)
-				break
+				break MSG
 			}
 		}
 	}
