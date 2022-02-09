@@ -4,9 +4,11 @@ services:
                 image: dataflow:test
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df:/tmp/df
+                        - /tmp/df0:/tmp/df
                 command:
                         - "./bin/master"
+                        - "--name"
+                        - "master0"
                         - "--config"
                         - "/config.toml"
                         - "--master-addr"
@@ -14,18 +16,20 @@ services:
                         - "--advertise-addr"
                         - "server-master-0:10240"
                         - "--peer-urls"
-                        - "http://127.0.0.1:8291"
+                        - "http://0.0.0.0:8291"
                         - "--advertise-peer-urls"
                         - "http://server-master-0:8291"
                         - "--initial-cluster"
-                        - "http://server-master-0:8291,http://server-master-1:8291,http://server-master-2:8291"
+                        - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
         server-master-1:
                 image: dataflow:test
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df:/tmp/df
+                        - /tmp/df1:/tmp/df
                 command:
                         - "./bin/master"
+                        - "--name"
+                        - "master1"
                         - "--config"
                         - "/config.toml"
                         - "--master-addr"
@@ -33,18 +37,20 @@ services:
                         - "--advertise-addr"
                         - "server-master-1:10240"
                         - "--peer-urls"
-                        - "http://127.0.0.1:8291"
+                        - "http://0.0.0.0:8291"
                         - "--advertise-peer-urls"
                         - "http://server-master-1:8291"
                         - "--initial-cluster"
-                        - "http://server-master-0:8291,http://server-master-1:8291,http://server-master-2:8291"
+                        - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
         server-master-2:
                 image: dataflow:test
                 volumes:
                         - ./config/master.toml:/config.toml
-                        - /tmp/df:/tmp/df
+                        - /tmp/df2:/tmp/df
                 command:
                         - "./bin/master"
+                        - "--name"
+                        - "master2"
                         - "--config"
                         - "/config.toml"
                         - "--master-addr"
@@ -52,11 +58,11 @@ services:
                         - "--advertise-addr"
                         - "server-master-2:10240"
                         - "--peer-urls"
-                        - "http://127.0.0.1:8291"
+                        - "http://0.0.0.0:8291"
                         - "--advertise-peer-urls"
                         - "http://server-master-2:8291"
                         - "--initial-cluster"
-                        - "http://server-master-0:8291,http://server-master-1:8291,http://server-master-2:8291"
+                        - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
         server-executor-0:
                 image: dataflow:test
                 volumes:
