@@ -262,6 +262,10 @@ func (st *SubTask) run() {
 }
 
 func (st *SubTask) StartValidator(expect pb.Stage) {
+	// when validator mode=none
+	if expect == pb.Stage_InvalidStage {
+		return
+	}
 	st.Lock()
 	defer st.Unlock()
 	if st.cfg.ValidatorCfg.Mode != config.ValidationFast && st.cfg.ValidatorCfg.Mode != config.ValidationFull {
