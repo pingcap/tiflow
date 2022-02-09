@@ -31,6 +31,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -324,7 +325,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
 
-		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry),
+		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry, util.CaptureAddrFromCtx(ctx), util.ChangefeedIDFromCtx(ctx)),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

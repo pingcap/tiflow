@@ -68,19 +68,50 @@ var (
 
 type saramaMetricsMonitor struct {
 	registry metrics.Registry
-	metrics  []*saramaMetrics
+	metrics  []saramaMetrics
 }
 
-// Refresh monitored metrics from sarama
+// Refresh all monitored metrics
 func (sm *saramaMetricsMonitor) Refresh() {
 	for _, m := range sm.metrics {
 		m.refresh(sm.registry)
 	}
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry) *saramaMetricsMonitor {
+func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
+	//monitor := &saramaMetricsMonitor{
+	//	registry: registry,
+	//}
+
+	//monitor.metrics = append(monitor.metrics,
+	//	&saramaMetrics{
+	//	batchSize.metricsName,
+	//	batchSize.collector.
+	//	})
+	//
+	//statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	//statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	//statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	//statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+
+	metrics := make([]saramaMetrics, 0)
+	metrics = append(metrics, batchSize.withLabelValues(captureAddr, changefeedID))
 	return &saramaMetricsMonitor{
 		registry: registry,
+		metrics:  metrics,
+	}
+}
+
+func (m saramaMetrics) withLabelValues(labels ...string) saramaMetrics {
+	var collector prometheus.Collector
+	switch tp := m.collector.(type) {
+	case prometheus.HistogramVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	}
+
+	return saramaMetrics{
+		m.metricsName,
+		collector,
 	}
 }
 
