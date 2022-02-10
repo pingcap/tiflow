@@ -1301,6 +1301,9 @@ components:
         dump_status:
           nullable: true
           $ref: "#/components/schemas/DumpStatus"
+        error_msg:
+          type: string
+          description: "error message when something wrong"
       required:
         - "name"
         - "source_name"

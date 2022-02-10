@@ -188,7 +188,7 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test(false)
+	server.capture = capture.NewCapture4Test(nil)
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
@@ -264,7 +264,7 @@ func TestServerTLSWithCommonName(t *testing.T) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := NewServer([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test(false)
+	server.capture = capture.NewCapture4Test(nil)
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
