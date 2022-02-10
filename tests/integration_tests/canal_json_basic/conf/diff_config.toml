@@ -30,6 +30,7 @@ port = 3306
 user = "root"
 password = ""
 
+[table-configs]
 [table-configs.config1]
 target-tables = ["test.multi_data_type"]
 # TiDB currently has a default collation of utf8mb4_bin.
