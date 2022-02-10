@@ -385,32 +385,33 @@ function test_task_templates() {
 
 function test_noshard_task_dump_status() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: NO SHARD TASK DUMP STATUS"
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever=return()"
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	prepare_database
 
-	task_name="test-no-shard"
+	task_name="test-no-shard-dump-status"
 	target_table_name="" # empty means no route
 
-	# create source succesfully
 	openapi_source_check "create_source1_success"
 	openapi_source_check "list_source_success" 1
-
-	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
-
-	# create source succesfully
 	openapi_source_check "create_source2_success"
-	# get source list success
 	openapi_source_check "list_source_success" 2
-
-	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
-
-	# start task success: not vaild task create request
 	openapi_task_check "start_task_failed"
 
-	# start no shard task success
 	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"unit\": \"Dump\"" 2
@@ -418,8 +419,24 @@ function test_noshard_task_dump_status() {
 	# check noshard task dump status success
 	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
 
-	# delete source success and clean data for other test
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	openapi_task_check "get_task_status_success_but_worker_meet_error" "$task_name" 2
 	clean_cluster_sources_and_tasks
+
+	export GO_FAILPOINTS=""
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
 }
 
@@ -457,40 +474,14 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	test_source
 	test_relay
+	test_source
 
 	test_shard_task
 	test_multi_tasks
-
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever=return()"
-	kill_dm_worker
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-
-	# run dm-worker1
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	# run dm-worker2
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	test_noshard_task_dump_status
-
-	export GO_FAILPOINTS=""
-	kill_dm_worker
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-
-	# run dm-worker1
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	# run dm-worker2
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
 	test_noshard_task
 	test_task_templates
+	test_noshard_task_dump_status
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
