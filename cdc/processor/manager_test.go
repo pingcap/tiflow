@@ -15,6 +15,7 @@ package processor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -170,8 +171,10 @@ func TestDebugInfo(t *testing.T) {
 			s.tester.MustApplyPatches()
 		}
 	}()
+	doneM := make(chan error, 1)
 	buf := bytes.NewBufferString("")
-	s.manager.WriteDebugInfo(buf)
+	s.manager.WriteDebugInfo(ctx, buf, doneM)
+	<-doneM
 	require.Greater(t, len(buf.String()), 0)
 	s.manager.AsyncClose()
 	<-done
@@ -217,4 +220,20 @@ func TestClose(t *testing.T) {
 	require.True(t, cerrors.ErrReactorFinished.Equal(errors.Cause(err)))
 	s.tester.MustApplyPatches()
 	require.Len(t, s.manager.processors, 0)
+}
+
+func TestSendCommandError(t *testing.T) {
+	m := NewManager()
+	ctx, cancel := context.WithCancel(context.TODO())
+	cancel()
+	// Use unbuffered channel to stable test.
+	m.commandQueue = make(chan *command)
+	done := make(chan error, 1)
+	err := m.sendCommand(ctx, commandTpClose, nil, done)
+	require.Error(t, err)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		require.FailNow(t, "done must be closed")
+	}
 }
