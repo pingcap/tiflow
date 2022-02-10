@@ -112,7 +112,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
-	defer cancel() // this cancel mast call before s.Close() to avoid deadlock
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 
 	// wait the second master ready
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -155,7 +155,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	defer cancel() // this cancel mast call before s.Close() to avoid deadlock
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
