@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -36,6 +37,7 @@ const (
 	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
+	processorLogsWarnDuration = 1 * time.Second
 )
 
 type command struct {
@@ -53,16 +55,19 @@ type Manager struct {
 	newProcessor func(cdcContext.Context) *processor
 
 	enableNewScheduler bool
+
+	metricProcessorCloseDuration prometheus.Observer
 }
 
 // NewManager creates a new processor manager
 func NewManager() *Manager {
 	conf := config.GetGlobalServerConfig()
 	return &Manager{
-		processors:         make(map[model.ChangeFeedID]*processor),
-		commandQueue:       make(chan *command, 4),
-		newProcessor:       newProcessor,
-		enableNewScheduler: conf.Debug.EnableNewScheduler,
+		processors:                   make(map[model.ChangeFeedID]*processor),
+		commandQueue:                 make(chan *command, 4),
+		newProcessor:                 newProcessor,
+		enableNewScheduler:           conf.Debug.EnableNewScheduler,
+		metricProcessorCloseDuration: processorCloseDuration.WithLabelValues(conf.AdvertiseAddr),
 	}
 }
 
@@ -129,7 +134,15 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 
 func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
+		startTime := time.Now()
+		captureID := processor.captureInfo.ID
 		err := processor.Close()
+		costTime := time.Since(startTime)
+		if costTime > processorLogsWarnDuration {
+			log.Warn("processor close took too long", zap.String("changefeed", changefeedID),
+				zap.String("capture", captureID), zap.Duration("duration", costTime))
+		}
+		m.metricProcessorCloseDuration.Observe(costTime.Seconds())
 		if err != nil {
 			log.Warn("failed to close processor",
 				zap.String("changefeed", changefeedID),

@@ -496,6 +496,8 @@ const (
 	codeMasterFailToImportFromV10x
 	codeMasterInconsistentOptimistDDLsAndInfo
 	codeMasterOptimisticTableInfobeforeNotExist
+	codeMasterOptimisticDownstreamMetaNotFound
+	codeMasterInvalidClusterID
 )
 
 // DM-worker error code.
@@ -652,6 +654,7 @@ const (
 	codeSchedulerStartRelayOnBound
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
+	codeSchedulerWorkerNotFree
 )
 
 // dmctl error code.
@@ -945,7 +948,7 @@ var (
 	ErrRelayNoCurrentUUID                = New(codeRelayNoCurrentUUID, ClassRelayUnit, ScopeInternal, LevelHigh, "no current UUID set", "")
 	ErrRelayFlushLocalMeta               = New(codeRelayFlushLocalMeta, ClassRelayUnit, ScopeInternal, LevelHigh, "flush local meta", "")
 	ErrRelayUpdateIndexFile              = New(codeRelayUpdateIndexFile, ClassRelayUnit, ScopeInternal, LevelHigh, "update UUID index file %s", "")
-	ErrRelayLogDirpathEmpty              = New(codeRelayLogDirpathEmpty, ClassRelayUnit, ScopeInternal, LevelHigh, "dirpath is empty", "Please check the `relay-dir` config in source config file.")
+	ErrRelayLogDirpathEmpty              = New(codeRelayLogDirpathEmpty, ClassRelayUnit, ScopeInternal, LevelHigh, "dirpath is empty", "Please check the `relay-dir` config in source config file or dm-worker config file.")
 	ErrRelayReaderNotStateNew            = New(codeRelayReaderNotStateNew, ClassRelayUnit, ScopeInternal, LevelHigh, "stage %s, expect %s, already started", "")
 	ErrRelayReaderStateCannotClose       = New(codeRelayReaderStateCannotClose, ClassRelayUnit, ScopeInternal, LevelHigh, "stage %s, expect %s, can not close", "")
 	ErrRelayReaderNeedStart              = New(codeRelayReaderNeedStart, ClassRelayUnit, ScopeInternal, LevelHigh, "stage %s, expect %s", "")
@@ -1142,6 +1145,8 @@ var (
 
 	ErrMasterInconsistentOptimisticDDLsAndInfo = New(codeMasterInconsistentOptimistDDLsAndInfo, ClassDMMaster, ScopeInternal, LevelHigh, "inconsistent count of optimistic ddls and table infos, ddls: %d, table info: %d", "")
 	ErrMasterOptimisticTableInfoBeforeNotExist = New(codeMasterOptimisticTableInfobeforeNotExist, ClassDMMaster, ScopeInternal, LevelHigh, "table-info-before not exist in optimistic ddls: %v", "")
+	ErrMasterOptimisticDownstreamMetaNotFound  = New(codeMasterOptimisticDownstreamMetaNotFound, ClassDMMaster, ScopeInternal, LevelHigh, "downstream database config and meta for task %s not found", "")
+	ErrMasterInvalidClusterID                  = New(codeMasterInvalidClusterID, ClassDMMaster, ScopeInternal, LevelHigh, "invalid cluster id: %v", "")
 
 	// DM-worker error.
 	ErrWorkerParseFlagSet            = New(codeWorkerParseFlagSet, ClassDMWorker, ScopeInternal, LevelMedium, "parse dm-worker config flag set", "")
@@ -1303,7 +1308,7 @@ var (
 	ErrSchedulerStartRelayOnBound            = New(codeSchedulerStartRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now", "Please stop relay by `stop-relay` without worker name first.")
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
-
+	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
 	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")

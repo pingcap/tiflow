@@ -224,7 +224,7 @@ func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
 
 		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
 		assert(err, IsNil)
-		dti := schema.GetDownStreamTi(ti, ti)
+		dti := schema.GetDownStreamTI(ti, ti)
 		assert(dti, NotNil)
 		keys := genMultipleKeys(sessCtx, dti, ti, tc.values, "table")
 		assert(keys, DeepEquals, tc.keys)
@@ -619,7 +619,7 @@ func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
 		}
 		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
 		assert(err, IsNil)
-		dti := schema.GetDownStreamTi(ti, ti)
+		dti := schema.GetDownStreamTI(ti, ti)
 		assert(dti, NotNil)
 		assert(dti.AvailableUKIndexList, NotNil)
 		cols := make([]*model.ColumnInfo, 0, len(dti.AvailableUKIndexList[0].Columns))
