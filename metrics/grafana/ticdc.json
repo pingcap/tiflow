@@ -14203,7 +14203,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max(ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+          "expr": "max(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -14211,7 +14211,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+          "expr": "sum(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
