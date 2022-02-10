@@ -14,7 +14,10 @@ There are several configure files to use. The file name suggests the number of r
 
 Use `./stop.sh 1m1e.yaml` to destroy the cluster.
 
-## Client
+## Run Demo
 
-`client.sh` is used to send command to server-master. For old workload, we can use `./client.sh submit-job --master-addr server-master:10240 --config ./cmd/master-client/bench-example.toml` to run the simple workload.
-Note that although we can successfully send the job, the job can't run as expected right now because the chaos of normal address and advertise address. We should manage to prove that the new worker-master framework can launch successfully.
+docker-compose -f ./3m3e.yaml -f ./demo.yaml up
+
+## Use Master Client to Run Demo workload
+
+./client.sh run-fake --master-addr server-master-0:10240 --job-config ./sample/config/demo.json --executor-id="random" --executor-addr="server-executor-0:10241"

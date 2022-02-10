@@ -138,6 +138,7 @@ message ScheduleResult {
 
 message TaskSchedulerResponse {
     map<int64, ScheduleResult> schedule = 1;
+    Error err = 2;
 }
 
 message ExecWorkload {

@@ -2,17 +2,31 @@
 
 This repo implements a new prototype of distributed task scheduler.
 
-# Develop
+# Build
+
+## Prepare for building
+
+**Go** version no less than 1.16
 
 ## Build
 
-Please run `make check` to build tools and format the code.
+Please run `make tools_setup` to build tools
 
 Simply run `make` to compile.
+
+# Develop
+
+## Prepare
+
+**protoc** version no less than 3.8.0
 
 ## Run Test
 
 Use `make unit_test` to run unit test and integrated test.
+
+## Contribute
+
+Run `make dev` before submitting pr.
 
 # Run it 
 
@@ -22,56 +36,54 @@ Master is set to process the requests from outside and to schedule and dispatch 
 
 ## Executor
 
-Executor is the worker process to run the tasks. It receives `submit tasks` request from Master.
+Executor is the worker process to run the tasks.
 
 ## Master-Client
 
-Master-Client is set to interact with master. Right now it only supports `submit-job` command.
+Master-Client is set to interact with master.
 
 ## Demo
 
-the job of demo workload is devided to two parts:
+TODO
 
-- Producer
-  - **Producer task** produces data continously. Every record has a table-id, ddl-version and a mark indicating whether it is a ddl record or data record. `Producer Task` shuffles records to different `Binlog task` to downstream side.
-  - **Binlog task** serves as a server to provide recorder. It is only in charge to data transferring.
-- Consumer
-  - **receive task** receives records from a single grpc stream which connects to a **Binlog task**. It passes on data to `Syncer Task`.
-  - **Syncer task** processes `DDL` record. It is supposed to wait all the other DDL with same version compeleted.
-  - **Sink task** writes the record to a local file, and records the ending time.
+# Deploy Demonstration
 
-### demonstration
+## Single Master and Single Executor on Two Nodes
 
-#### Start Master
+### Start Master on Single Node
 
 ```[shell]
-./bin/master --config ./cmd/master/example.toml
+./bin/master --config=./sample/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240 
 ```
 
-We can also start multiple masters
+Replace **ip0** with your advertising ip.
+
+### Start Executor
 
 ```[shell]
-# start two server masters
-./bin/master --config ./cmd/master/example1.toml &
-./bin/master --config ./cmd/master/example2.toml &
-# join a new one
-./bin/master --config ./cmd/master/example3.toml &
+./bin/executor --config=./sample/config/executor.toml --join ${ip0}:10240 --worker-addr 0.0.0.0:10241 --advertise-addr ${ip1}:10241
 ```
 
-#### Start Executor 1, 2
+Replace **ip1** with your advertising executor ip.
+
+## Three Master and One Executor on Three Nodes
+
+Scaling out executor is quite simple. Right now we only support static config of masters, without scaling in and out dynamically.
+
+In this case, we assume three node ips are ip0, ip1 and ip2. Replace them with real ip or hostname when operating.
+
+### Start Master on Node (ip0)
 
 ```[shell]
-./bin/executor --config ./cmd/executor/example.toml
+./bin/master --name=ip0 --config=./sample/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240 --peer-urls 0.0.0.0:8291 --advertise-peer-urls http://${ip0}:8291 --initial-cluster ip0=http://${ip0}:8291,ip1=http://${ip1}:8291,ip2=http://${ip2}:8291
 ```
 
-change the `worker-addr` field in toml, and start another executor.
+Note that --name can be any names, but has to be different from other two masters.
 
-#### submit a job
+Deploying masters for ip1 and ip2 are similar.
+
+### Start Executor on Node (ip0)
 
 ```[shell]
-./bin/master-client submit-job --master-addr 127.0.0.1:10240 --config ./cmd/master-client/bench-example.toml
+./bin/executor --config=./sample/config/executor.toml --join ${ip0}:10240,${ip1}:10240,${ip2}:10240 --worker-addr 0.0.0.0:10241 --advertise-addr ${ip0}:10241
 ```
-
-#### kill an executor
-
-Then the tasks will be scheduled automatically.

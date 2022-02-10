@@ -1,0 +1,11 @@
+version: "2.3"
+services:
+        demo-server:
+                image: dataflow:test
+                volumes:
+                        - /tmp/data:/data
+                        - /tmp/data1:/data1
+                command:
+                        - ./bin/demoserver
+                        - "/data"
+                        - "1000000"

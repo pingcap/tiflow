@@ -21,7 +21,6 @@ func main() {
 	ctx := context.Background()
 	addr := ""
 	err := log.InitLogger(&log.Config{
-		File:  "master-client.log",
 		Level: "info",
 	})
 	if err != nil {

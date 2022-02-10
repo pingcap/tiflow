@@ -3,6 +3,7 @@ package ctl
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/google/uuid"
@@ -23,7 +24,17 @@ func NewRunFake() *cobra.Command {
 	}
 	cmd.Flags().StringP("executor-addr", "", "", "the targeted executor address")
 	cmd.Flags().StringP("executor-id", "", "", "the targeted executor id")
+	cmd.Flags().StringP("job-config", "", "", "config file for the demo job")
 	return cmd
+}
+
+func openFileAndReadString(path string) (content []byte, err error) {
+	fp, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close()
+	return ioutil.ReadAll(fp)
 }
 
 func runFakeFunc(cmd *cobra.Command, _ []string) error {
@@ -37,6 +48,16 @@ func runFakeFunc(cmd *cobra.Command, _ []string) error {
 		fmt.Print("error in parse `--executor-id`")
 		return err
 	}
+	path, err := cmd.Flags().GetString("job-config")
+	if err != nil {
+		fmt.Print("error in parse `--job-config`")
+		return err
+	}
+	jobConfig, err := openFileAndReadString(path)
+	if err != nil {
+		fmt.Print("error in parse job-config")
+		return err
+	}
 	err = cltManager.AddExecutor(model.ExecutorID(execID), execAddr)
 	if err != nil {
 		return err
@@ -44,11 +65,12 @@ func runFakeFunc(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 
+	log.L().Info("sending request to executor", zap.String("address", execAddr))
 	resp, err := cltManager.ExecutorClient(model.ExecutorID(execID)).Send(ctx, &client.ExecutorRequest{
 		Cmd: client.CmdDispatchTask,
 		Req: &pb.DispatchTaskRequest{
 			TaskTypeId: int64(lib.CvsJobMaster),
-			TaskConfig: []byte(`{"srcHost":"127.0.0.1:1234","srcDir":"data","dstHost":"127.0.0.1:1234","dstDir":"data2"}`),
+			TaskConfig: jobConfig,
 			MasterId:   uuid.New().String(), //  use a unique ID to force Init the master each time,
 			WorkerId:   uuid.New().String(),
 		},

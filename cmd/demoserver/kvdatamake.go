@@ -9,9 +9,11 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -24,54 +26,53 @@ const (
 	FILENUM     = 50
 	RECORDERNUM = 1000000
 	FLUSHLEN    = 10
-	PORT        = "127.0.0.1:1234"
+	PORT        = "0.0.0.0:1234"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
 
-	fmt.Println("Listening the client call ..")
-
-	go DataService(ctx)
-	fmt.Printf("type q if expected to quit .\n")
-	fmt.Printf("create the files in the format : d dir [100000]\n")
-	for {
-		var cmd string
-		reader := bufio.NewReader(os.Stdin)
-		cmd, err = reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-		cmd = strings.TrimSpace(cmd)
-		if cmd == "" {
-			continue
-		}
-		strs := strings.Fields(cmd)
-		switch strs[0] {
-		case "q":
-			cancel()
-			return
-		case "d":
-
-			if len(strs) >= 2 {
-				folder := strs[1]
-				recorderNum := RECORDERNUM
-				if len(strs) > 2 {
-					recorderNum, err = strconv.Atoi(strs[2])
-					if err != nil {
-						fmt.Printf("the third parameter should be an interger,the format is : d dir [100000]\n")
-					}
-				}
-				go generateData(folder, recorderNum)
-			} else {
-				fmt.Printf("the format is : d dir [100000]\n")
-			}
-		default:
-
-		}
-
+	err = log.InitLogger(&log.Config{
+		Level: "info",
+	})
+	if err != nil {
+		fmt.Printf("err: %v", err)
+		os.Exit(1)
 	}
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case sig := <-sc:
+			log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+			cancel()
+		}
+	}()
+
+	args := os.Args
+	if len(args) >= 2 {
+		folder := args[1]
+		recorderNum := RECORDERNUM
+		if len(args) > 2 {
+			recorderNum, err = strconv.Atoi(args[2])
+			if err != nil {
+				fmt.Printf("the third parameter should be an interger")
+			}
+		}
+		generateData(folder, recorderNum)
+	} else {
+		fmt.Printf("the args should be : dir [100000]")
+	}
+
+	StartDataService(ctx)
+	log.L().Info("server exits normally")
 }
 
 type ErrorInfo struct {
@@ -104,25 +105,21 @@ func generateData(folderName string, recorders int) int {
 		}
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	var fileNum int
-	for fileNum = r.Intn(FILENUM); fileNum == 0; {
-		fileNum = r.Intn(FILENUM)
-	}
+	fileNum := r.Intn(FILENUM) + 1
 	fileWriterMap := make(map[int]*bufio.Writer)
 	for i := 0; i < fileNum; i++ {
 		fileName := folderName + "/" + strconv.Itoa(i) + ".txt"
 		file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
-			// if create file failed ,just ingore this file
-			fileNum = fileNum - 1
-			continue
+			// We don't allow failure of creating files for simplicity.
+			log.L().Logger.Panic("fail to generate file", zap.String("name", fileName), zap.Error(err))
 		}
 		defer file.Close()
 		writer := bufio.NewWriter(file)
 		fileWriterMap[i] = writer
 	}
 	shouldFlush := false
-	for k := 0; (k < recorders) && fileNum > 0; k++ {
+	for k := 0; k < recorders; k++ {
 		if (k % FLUSHLEN) == 0 {
 			shouldFlush = true
 		}
@@ -148,14 +145,15 @@ func generateData(folderName string, recorders int) int {
 	return fileNum
 }
 
-func DataService(ctx context.Context) {
+func StartDataService(ctx context.Context) {
 	grpcServer := grpc.NewServer()
 	pb.RegisterDataRWServiceServer(grpcServer, NewDataRWServer(ctx))
-	lis, err := net.Listen("tcp", PORT)
+	lis, err := net.Listen("tcp", PORT) //nolint:gosec
 	if err != nil {
 		log.L().Panic("listen the port failed",
 			zap.String("error:", err.Error()))
 	}
+	log.L().Info("grpc serving ..")
 	err = grpcServer.Serve(lis)
 	if err != nil {
 		log.L().Panic("init the server failed",

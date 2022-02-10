@@ -147,10 +147,12 @@ func Init(ctx context.Context, cfg *Config) error {
 	endpoints := strings.Split(cfg.MasterAddrs, ",")
 	ctx1, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
+	log.L().Info("dialing master", zap.Any("addr", endpoints))
 	err := cltManager.AddMasterClient(ctx1, endpoints)
 	if err != nil {
 		return err
 	}
+	log.L().Info("dialing master successfully")
 	return nil
 }
 

@@ -82,7 +82,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
-	log.L().Info("enter the cvs jobmaster  ", zap.Any("id :", jm.workerID))
+	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	fileNames, err := jm.listSrcFiles(ctx)
 	if err != nil {
 		return err
@@ -100,6 +100,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10 /* TODO add cost */)
 		if err != nil {
 			// todo : handle the error case
+			return err
 		}
 		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
 	}
