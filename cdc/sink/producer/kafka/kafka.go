@@ -269,7 +269,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		log.Info("stop the kafka producer",
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
-
 	}()
 
 	ticker := time.NewTicker(5 * time.Second)
