@@ -73,17 +73,25 @@ type saramaMetricsMonitor struct {
 
 // CollectMetrics collect all monitored metrics
 func (sm *saramaMetricsMonitor) CollectMetrics() {
-	batchSizeMetric := sm.registry.Get("batch-size").(metrics.Histogram)
-	batchSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(batchSizeMetric.Mean())
+	batchSizeMetric := sm.registry.Get("batch-size")
+	if histogram, ok := batchSizeMetric.(metrics.Histogram); ok {
+		batchSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
+	}
 
-	recordSendRateMetric := sm.registry.Get("record-send-rate").(metrics.Meter)
-	recordSendRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(recordSendRateMetric.Rate1())
+	recordSendRateMetric := sm.registry.Get("record-send-rate")
+	if meter, ok := recordSendRateMetric.(metrics.Meter); ok {
+		recordSendRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Rate1())
+	}
 
-	recordPerRequestMetric := sm.registry.Get("records-per-request").(metrics.Histogram)
-	recordPerRequestGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(recordPerRequestMetric.Mean())
+	recordPerRequestMetric := sm.registry.Get("records-per-request")
+	if histogram, ok := recordPerRequestMetric.(metrics.Histogram); ok {
+		recordPerRequestGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
+	}
 
-	compressionRatioMetric := sm.registry.Get("compression-ratio").(metrics.Histogram)
-	compressionRatioGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(compressionRatioMetric.Mean())
+	compressionRatioMetric := sm.registry.Get("compression-ratio")
+	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
+		compressionRatioGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
+	}
 }
 
 func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
