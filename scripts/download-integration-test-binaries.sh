@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 20201 PingCAP, Inc.
+# Copyright 2021 PingCAP, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,8 @@ branch=$1
 
 # PingCAP file server URL.
 file_server_url="http://fileserver.pingcap.net"
+# PingCAP download center URL.
+download_center_url="https://download.pingcap.org"
 
 # Get sha1 based on branch name.
 tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
@@ -48,7 +50,7 @@ tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branc
 minio_download_url="${file_server_url}/download/minio.tar.gz"
 go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/new_sync_diff_inspector.tar.gz"
+sync_diff_inspector_url="${download_center_url}/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
 jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 
 # Some temporary dir.
@@ -73,7 +75,8 @@ mv third_bin/_tiflash/* third_bin
 curl "${go_ycsb_download_url}" -o third_bin/go-ycsb
 curl -L "${etcd_download_url}" | tar xz -C tmp
 mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
-curl "${sync_diff_inspector_url}" | tar xz -C third_bin
+curl -L "${sync_diff_inspector_url}" | tar xz -C tmp
+mv tmp/tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector third_bin
 curl -L "${jq_download_url}" -o third_bin/jq
 chmod a+x third_bin/*
 
