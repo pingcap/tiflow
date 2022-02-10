@@ -312,6 +312,9 @@ type SubTaskStatus struct {
 	// status of dump unit
 	DumpStatus *DumpStatus `json:"dump_status,omitempty"`
 
+	// error message when something wrong
+	ErrorMsg *string `json:"error_msg,omitempty"`
+
 	// status of load unit
 	LoadStatus *LoadStatus `json:"load_status,omitempty"`
 
