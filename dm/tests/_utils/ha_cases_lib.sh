@@ -154,6 +154,7 @@ function cleanup() {
 		$(mysql -h127.0.0.1 -p123456 -P${i} -uroot -e "drop database if exists ha_test2;")
 		sleep 1
 	done
+	export GO_FAILPOINTS=""
 	cleanup_process $*
 }
 

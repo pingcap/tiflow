@@ -269,7 +269,11 @@ func WatchSourceBound(ctx context.Context, cli *clientv3.Client, worker string, 
 		case <-ctx.Done():
 			return
 		case resp, ok := <-ch:
+			failpoint.Inject("WatchSourceBoundChanClosed", func() {
+				ok = false
+			})
 			if !ok {
+				log.L().Info("WatchSourceBound chan closed! observeSourceBound will exit！")
 				return
 			}
 			if resp.Canceled {

@@ -48,8 +48,9 @@ function test_multi_task_running() {
 
 function test_isolate_master_and_worker() {
 	echo "[$(date)] <<<<<< start test_isolate_master_and_worker >>>>>>"
-
-	test_multi_task_running
+	cleanup
+	prepare_sql_multi_task
+	start_multi_tasks_cluster
 
 	# join master4 and master5
 	run_dm_master $WORK_DIR/master-join4 $MASTER_PORT4 $cur/conf/dm-master-join4.toml
@@ -129,8 +130,23 @@ function test_isolate_master_and_worker() {
 	echo "[$(date)] <<<<<< finish test_isolate_master_and_worker >>>>>>"
 }
 
+function test_watch_source_bound_exit() {
+	echo "[$(date)] <<<<<< start test_watch_source_bound_exit >>>>>>"
+	cleanup
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/ha/WatchSourceBoundChanClosed=return()"
+	start_standalone_cluster
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
+		"list-member --name worker1" \
+		"\"source\": \"mysql-replica-01\"" 1
+
+	echo "[$(date)] <<<<<< finish test_watch_source_bound_exit >>>>>>"
+}
+
 function run() {
+	test_multi_task_running
 	test_isolate_master_and_worker # TICASE-934, 935, 936, 987, 992, 998, 999
+	test_watch_source_bound_exit
 }
 
 cleanup_data $ha_test
