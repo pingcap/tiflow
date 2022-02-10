@@ -20,19 +20,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 type bankReactorState struct {
-	c            *check.C
+	t            *testing.T
 	account      []int
 	pendingPatch [][]DataPatch
 	index        int
@@ -42,7 +42,7 @@ type bankReactorState struct {
 const bankTestPrefix = "/ticdc/test/bank/"
 
 func (b *bankReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	b.c.Assert(strings.HasPrefix(key.String(), bankTestPrefix), check.IsTrue)
+	require.True(b.t, strings.HasPrefix(key.String(), bankTestPrefix))
 	indexStr := key.String()[len(bankTestPrefix):]
 	b.account[b.atoi(indexStr)] = b.atoi(string(value))
 	return nil
@@ -62,12 +62,12 @@ func (b *bankReactorState) Check() {
 	if sum != 0 {
 		log.Info("show account", zap.Int("index", b.index), zap.Int("sum", sum), zap.Ints("account", b.account))
 	}
-	b.c.Assert(sum, check.Equals, 0, check.Commentf("not ft:%t", b.notFirstTick))
+	require.Equal(b.t, sum, 0, fmt.Sprintf("not ft:%t", b.notFirstTick))
 }
 
 func (b *bankReactorState) atoi(value string) int {
 	i, err := strconv.Atoi(value)
-	b.c.Assert(err, check.IsNil)
+	require.Nil(b.t, err)
 	return i
 }
 
@@ -120,9 +120,7 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 	return state, err
 }
 
-func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestEtcdBank(t *testing.T) {
 	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit", "10%return(true)")
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/orchestrator/InjectProgressRequestAfterCommit")
@@ -134,7 +132,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	newClient, closer := setUpTest(c)
+	newClient, closer := setUpTest(t)
 	defer closer()
 
 	cli := newClient()
@@ -144,7 +142,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 
 	for i := 0; i < totalAccountNumber; i++ {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	for i := 0; i < workerNumber; i++ {
@@ -155,13 +153,13 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 			for {
 				worker, err := NewEtcdWorker(cli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
-				}, &bankReactorState{c: c, index: i, account: make([]int, totalAccountNumber)})
-				c.Assert(err, check.IsNil)
+				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)})
+				require.Nil(t, err)
 				err = worker.Run(ctx, nil, 100*time.Millisecond, "127.0.0.1", "")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}
-				c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
+				require.Contains(t, err.Error(), "context deadline exceeded")
 				return
 			}
 		}()

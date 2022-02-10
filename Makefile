@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl
+unit_test: check_failpoint_ctl generate_mock
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -234,6 +234,9 @@ data-flow-diagram: docs/data-flow.dot
 swagger-spec: tools/bin/swag
 	tools/bin/swag init --parseVendor -generalInfo cdc/api/open.go --output docs/swagger
 
+generate_mock: tools/bin/mockgen
+	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+
 clean:
 	go clean -i ./...
 	rm -rf *.out
@@ -277,13 +280,22 @@ dm_generate_openapi: tools/bin/oapi-codegen
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/types-gen-cfg.yaml openapi/spec/dm.yaml
 	cd dm && ../tools/bin/oapi-codegen --config=openapi/spec/client-gen-cfg.yaml openapi/spec/dm.yaml
 
-dm_unit_test: check_failpoint_ctl
+define run_dm_unit_test
+	@echo "running unit test for packages:" $(1)
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
+	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(1) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
+endef
+
+dm_unit_test: check_failpoint_ctl
+	$(call run_dm_unit_test,$(DM_PACKAGES))
+
+# run unit test for the specified pkg only, like `make dm_unit_test_pkg PKG=github.com/pingcap/tiflow/dm/dm/master`
+dm_unit_test_pkg: check_failpoint_ctl
+	$(call run_dm_unit_test,$(PKG))
 
 dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
 	mkdir -p $(DM_TEST_DIR)
