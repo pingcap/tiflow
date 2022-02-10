@@ -72,7 +72,7 @@ func (c *causality) run() {
 	for {
 		select {
 		case <-c.syncCtx.Ctx.Done():
-			break
+			return
 		case j, ok := <-c.inCh:
 			if !ok {
 				return

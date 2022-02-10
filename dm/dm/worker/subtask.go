@@ -394,8 +394,10 @@ func (st *SubTask) closeUnits() {
 
 func (st *SubTask) killCurrentUnit() {
 	if st.CurrUnit() != nil {
-		st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", st.CurrUnit().Type()))
+		ut := st.CurrUnit().Type()
+		st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
 		st.CurrUnit().Kill()
+		st.l.Info("kill unit done", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
 	}
 }
 
