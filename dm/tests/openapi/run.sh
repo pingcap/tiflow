@@ -400,7 +400,7 @@ function test_noshard_task_dump_status() {
 
 	prepare_database
 
-	task_name="test-no-shard"
+	task_name="test-no-shard-dump-status"
 	target_table_name="" # empty means no route
 
 	openapi_source_check "create_source1_success"
