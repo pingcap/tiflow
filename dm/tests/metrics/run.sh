@@ -19,7 +19,7 @@ function run() {
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
-		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 beacuse we inject BlockDDLJob(ddl) to sleep(1)
+		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 because we inject BlockDDLJob(ddl) to sleep(1)
 		"github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
@@ -70,6 +70,12 @@ function run() {
 
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 0 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 0 999
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# check the after ddl query-status lag should be set to 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"secondsBehindMaster\": \"0\"" 2
 	echo "check ddl lag done!"
 
 	# check new metric dm_syncer_flush_checkpoints_time_interval exists
