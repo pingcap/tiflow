@@ -139,27 +139,3 @@ func TestBuildDDLEvent(t *testing.T) {
 		},
 	})
 }
-
-func TestSinkTableInfos(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
-	require.Nil(t, err)
-	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	tableIDT1 := job.BinlogInfo.TableInfo.ID
-	require.Nil(t, schema.HandleDDL(job))
-	// add ineligible table
-	job = helper.DDL2Job("create table test.t2(id int)")
-	require.Nil(t, schema.HandleDDL(job))
-	require.Equal(t, schema.SinkTableInfos(), []*model.SimpleTableInfo{
-		{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    tableIDT1,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
-		},
-	})
-}
