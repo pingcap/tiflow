@@ -17,6 +17,12 @@ target-check-tables = ["test.multi_data_type", "test.test_ddl", "test.test_ddl2"
 
 target-configs = ["config1"]
 
+[table-configs.config1]
+target-tables = ["test.multi_data_type"]
+# TiDB currently has a default collation of utf8mb4_bin.
+# So we need to specify it explicitly.
+collation = "utf8_bin"
+
 [data-sources]
 [data-sources.mysql1]
 host = "127.0.0.1"
@@ -30,9 +36,3 @@ port = 3306
 user = "root"
 password = ""
 
-[table-configs]
-[table-configs.config1]
-target-tables = ["test.multi_data_type"]
-# TiDB currently has a default collation of utf8mb4_bin.
-# So we need to specify it explicitly.
-collation = "utf8_bin"
