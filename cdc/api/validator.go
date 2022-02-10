@@ -117,10 +117,13 @@ func verifyCreateChangefeedConfig(
 		}
 	}
 
+	opts := make(map[string]string)
+	opts[sink.OptChangefeedID] = changefeedConfig.ID
+
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
 		SinkURI:           changefeedConfig.SinkURI,
-		Opts:              make(map[string]string),
+		Opts:              opts,
 		CreateTime:        time.Now(),
 		StartTs:           changefeedConfig.StartTS,
 		TargetTs:          changefeedConfig.TargetTS,
