@@ -375,7 +375,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		role: role,
 
 		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
-			util.CaptureAddrFromCtx(ctx), util.ChangefeedIDFromCtx(ctx), []string{topic}),
+			util.CaptureAddrFromCtx(ctx), util.ChangefeedIDFromCtx(ctx)),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

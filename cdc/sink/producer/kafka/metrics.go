@@ -189,36 +189,3 @@ func (m saramaMetric) refresh(registry metrics.Registry) {
 		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
 	}
 }
-
-//func printMetrics(w io.Writer, r metrics.Registry) {
-//	recordSendRateMetric := r.Get("record-send-rate")
-//	requestLatencyMetric := r.Get("request-latency-in-ms")
-//	outgoingByteRateMetric := r.Get("outgoing-byte-rate")
-//	requestsInFlightMetric := r.Get("requests-in-flight")
-//
-//	if recordSendRateMetric == nil || requestLatencyMetric == nil || outgoingByteRateMetric == nil ||
-//		requestsInFlightMetric == nil {
-//		return
-//	}
-//	recordSendRate := recordSendRateMetric.(metrics.Meter).Snapshot()
-//	requestLatency := requestLatencyMetric.(metrics.Histogram).Snapshot()
-//	requestLatencyPercentiles := requestLatency.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999})
-//	outgoingByteRate := outgoingByteRateMetric.(metrics.Meter).Snapshot()
-//	requestsInFlight := requestsInFlightMetric.(metrics.Counter).Count()
-//	fmt.Fprintf(w, "%d records sent, %.1f records/sec (%.2f MiB/sec ingress, %.2f MiB/sec egress), "+
-//		"%.1f ms avg latency, %.1f ms stddev, %.1f ms 50th, %.1f ms 75th, "+
-//		"%.1f ms 95th, %.1f ms 99th, %.1f ms 99.9th, %d total req. in flight\n",
-//		recordSendRate.Count(),
-//		recordSendRate.RateMean(),
-//		recordSendRate.RateMean()*float64(1000)/1024/1024,
-//		outgoingByteRate.RateMean()/1024/1024,
-//		requestLatency.Mean(),
-//		requestLatency.StdDev(),
-//		requestLatencyPercentiles[0],
-//		requestLatencyPercentiles[1],
-//		requestLatencyPercentiles[2],
-//		requestLatencyPercentiles[3],
-//		requestLatencyPercentiles[4],
-//		requestsInFlight,
-//	)
-//}
