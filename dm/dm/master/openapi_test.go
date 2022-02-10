@@ -96,7 +96,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -113,6 +113,11 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
 
 	baseURL := "/api/v1/sources"
 	// list source from leader
