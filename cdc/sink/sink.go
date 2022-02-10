@@ -124,6 +124,7 @@ func New(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
+		ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
