@@ -131,14 +131,39 @@ function test_isolate_master_and_worker() {
 }
 
 function test_watch_source_bound_exit() {
+	# TODO FIXME this is a negative test case, dm should not let this happen
+
 	echo "[$(date)] <<<<<< start test_watch_source_bound_exit >>>>>>"
 	cleanup
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/ha/WatchSourceBoundChanClosed=return()"
-	start_standalone_cluster
 
+	echo "start DM worker and master cluster"
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $cur/conf/dm-master2.toml
+	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $cur/conf/dm-master3.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT3
+
+	echo "start worker and operate mysql config to worker"
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 1 \
+		"fail to get expected result" 1
+
+	# master think worker1 is online and bound source1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"list-member --name worker1" \
 		"\"source\": \"mysql-replica-01\"" 1
+
+	# but worker1 is not handling this source because worker watch source bound thread is exited
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
+		"query-status" \
+		"no mysql source is being handled in the worker" 1
 
 	echo "[$(date)] <<<<<< finish test_watch_source_bound_exit >>>>>>"
 }
