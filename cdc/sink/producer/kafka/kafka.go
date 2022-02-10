@@ -270,7 +270,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():

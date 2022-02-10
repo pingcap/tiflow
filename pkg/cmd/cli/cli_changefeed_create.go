@@ -433,7 +433,6 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	ctx = ticdcutil.PutTimezoneInCtx(ctx, tz)
-	ctx = ticdcutil.PutChangefeedIDInCtx(ctx, id)
 	err = o.validateSink(ctx, info.Config, info.Opts)
 	if err != nil {
 		return err

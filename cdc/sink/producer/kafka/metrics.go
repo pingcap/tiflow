@@ -108,9 +108,10 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 }
 
 func (sm *saramaMetricsMonitor) Cleanup() {
-	for _, item := range sm.metrics {
-		item.drop(sm.captureAddr, sm.changefeedID)
-	}
+	batchSize.deleteLabelValues(sm.captureAddr, sm.changefeedID)
+	recordSendRate.deleteLabelValues(sm.captureAddr, sm.changefeedID)
+	recordsPerRequest.deleteLabelValues(sm.captureAddr, sm.changefeedID)
+	compressionRatio.deleteLabelValues(sm.captureAddr, sm.changefeedID)
 }
 
 // rawSaramaMetric is prometheus metric without label values.
@@ -138,22 +139,24 @@ func (rsm rawSaramaMetric) withLabelValues(labels ...string) saramaMetric {
 	}
 }
 
+func (rsm rawSaramaMetric) deleteLabelValues(labels ...string) {
+	switch tp := rsm.collector.(type) {
+	case *prometheus.HistogramVec:
+		tp.WithLabelValues(labels...)
+	case *prometheus.GaugeVec:
+		tp.WithLabelValues(labels...)
+	case *prometheus.CounterVec:
+		tp.WithLabelValues(labels...)
+	default:
+		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
+	}
+}
+
 // saramaMetric wrap prometheus metrics, update value from sarama metrics.
 type saramaMetric struct {
 	// metricName is used to fetch sarama metrics
 	metricName string
 	collector  prometheus.Collector
-}
-
-func (m saramaMetric) drop(labels ...string) {
-	switch tp := m.collector.(type) {
-	case *prometheus.HistogramVec:
-		tp.DeleteLabelValues(labels...)
-	case *prometheus.GaugeVec:
-		tp.DeleteLabelValues(labels...)
-	case *prometheus.CounterVec:
-		tp.DeleteLabelValues(labels...)
-	}
 }
 
 func (m saramaMetric) refresh(registry metrics.Registry) {
