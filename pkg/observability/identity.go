@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package observability
 
 // Role is the operator role, mainly used for logging at the moment.
 type Role int
@@ -44,4 +44,12 @@ func (r Role) String() string {
 		return "unknown"
 	}
 	return "unknown"
+}
+
+// Identity identify a specific component,
+// mainly used for logging and monitoring, make debugging easier.
+type Identity struct {
+	captureAddr  string
+	changefeedID string
+	role         Role
 }
