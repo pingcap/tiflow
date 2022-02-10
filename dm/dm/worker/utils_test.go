@@ -58,6 +58,6 @@ func TestGetExpectValidatorStage(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, pb.Stage_InvalidStage, validatorStage)
 
-	validatorStage, err = getExpectValidatorStage(cfg.ValidatorCfg, etcdTestCli, source, task+"not exist", rev+1)
+	_, err = getExpectValidatorStage(cfg.ValidatorCfg, etcdTestCli, source, task+"not exist", rev+1)
 	require.NotNil(t, err)
 }
