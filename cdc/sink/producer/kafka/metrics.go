@@ -20,76 +20,51 @@ import (
 	"go.uber.org/zap"
 )
 
-type rawSaramaMetrics struct {
-	metricNamePrefix string
-	collector        prometheus.Collector
-}
-
-func (rsm rawSaramaMetrics) newSaramaMetric(suffix string, labels ...string) saramaMetric {
-	metricName := rsm.metricNamePrefix + suffix
-	var collector prometheus.Collector
-	switch tp := rsm.collector.(type) {
-	case *prometheus.HistogramVec:
-		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
-	case *prometheus.GaugeVec:
-		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
-	case *prometheus.CounterVec:
-		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
-	default:
-		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
-	}
-
-	return saramaMetric{
-		metricName,
-		collector,
-	}
-}
-
 var (
 	// `Histogram`
-	batchSize = rawSaramaMetrics{
-		metricNamePrefix: "batch-size-for-topic-",
+	batchSize = rawSaramaMetric{
+		metricName: "batch-size",
 		collector: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_batch_size",
-				Help:      "the number of bytes sent per partition per request for a given topic",
+				Help:      "the number of bytes sent per partition per request for all topics",
 			}, []string{"capture", "changefeed"}),
 	}
 
 	// `Meter`
-	recordSendRate = rawSaramaMetrics{
-		metricNamePrefix: "record-send-rate-for-topic-",
+	recordSendRate = rawSaramaMetric{
+		metricName: "record-send-rate",
 		collector: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_record_send_rate",
-				Help:      "Records/second sent to a given topic",
+				Help:      "Records/second sent to all topics",
 			}, []string{"capture", "changefeed"}),
 	}
 
 	// `Histogram`
-	recordsPerRequest = rawSaramaMetrics{
-		metricNamePrefix: "records-per-request-for-topic-",
+	recordsPerRequest = rawSaramaMetric{
+		metricName: "records-per-request",
 		collector: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_records_per_request",
-				Help:      "the number of records sent per request for a given topic",
+				Help:      "the number of records sent per request for all topics",
 			}, []string{"capture", "changefeed"}),
 	}
 
-	compressionRatio = rawSaramaMetrics{
-		metricNamePrefix: "compression-ratio-for-topic-",
+	compressionRatio = rawSaramaMetric{
+		metricName: "compression-ratio",
 		collector: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "ticdc",
 				Subsystem: "sink",
 				Name:      "kafka_producer_compression_ratio",
-				Help:      "the compression ratio times 100 of record batches for a given topic",
+				Help:      "the compression ratio times 100 of record batches for all topics",
 			}, []string{"capture", "changefeed"}),
 	}
 )
@@ -117,15 +92,12 @@ func (sm *saramaMetricsMonitor) Refresh() {
 	}
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, suffixes []string) *saramaMetricsMonitor {
+func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
 	metrics := make([]saramaMetric, 0)
-
-	for _, item := range suffixes {
-		metrics = append(metrics, batchSize.newSaramaMetric(item, captureAddr, changefeedID))
-		metrics = append(metrics, recordSendRate.newSaramaMetric(item, captureAddr, changefeedID))
-		metrics = append(metrics, recordsPerRequest.newSaramaMetric(item, captureAddr, changefeedID))
-		metrics = append(metrics, compressionRatio.newSaramaMetric(item, captureAddr, changefeedID))
-	}
+	metrics = append(metrics, batchSize.withLabelValues(captureAddr, changefeedID))
+	metrics = append(metrics, recordSendRate.withLabelValues(captureAddr, changefeedID))
+	metrics = append(metrics, recordsPerRequest.withLabelValues(captureAddr, changefeedID))
+	metrics = append(metrics, compressionRatio.withLabelValues(captureAddr, changefeedID))
 
 	return &saramaMetricsMonitor{
 		captureAddr:  captureAddr,
@@ -138,6 +110,31 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 func (sm *saramaMetricsMonitor) Cleanup() {
 	for _, item := range sm.metrics {
 		item.drop(sm.captureAddr, sm.changefeedID)
+	}
+}
+
+// rawSaramaMetric is prometheus metric without label values.
+type rawSaramaMetric struct {
+	metricName string
+	collector  prometheus.Collector
+}
+
+func (rsm rawSaramaMetric) withLabelValues(labels ...string) saramaMetric {
+	var collector prometheus.Collector
+	switch tp := rsm.collector.(type) {
+	case *prometheus.HistogramVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	case *prometheus.GaugeVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	case *prometheus.CounterVec:
+		collector = tp.WithLabelValues(labels...).(prometheus.Collector)
+	default:
+		log.Panic("unsupported prometheus collector type", zap.Any("tp", tp))
+	}
+
+	return saramaMetric{
+		rsm.metricName,
+		collector,
 	}
 }
 
