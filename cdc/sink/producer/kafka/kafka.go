@@ -278,7 +278,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case <-k.closeCh:
 			return nil
 		case <-ticker.C:
-			k.metricsMonitor.Refresh()
+			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
