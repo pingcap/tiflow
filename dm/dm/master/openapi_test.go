@@ -77,7 +77,6 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 
 func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -113,6 +112,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	defer cancel() // this cancel mast call before s.Close() to avoid deadlock
 
 	// wait the second master ready
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -133,7 +133,6 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	// list source not from leader will get a redirect
 	result2 := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s2.openapiHandles)
 	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
-	cancel()
 }
 
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
@@ -156,7 +155,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	cancel()
+	defer cancel() // this cancel mast call before s.Close() to avoid deadlock
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
