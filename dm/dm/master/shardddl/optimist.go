@@ -259,6 +259,7 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 	l = 0
 	for j, op := range ops {
 		if op.Task == task && op.Source == source && op.UpSchema == upstreamSchema && op.UpTable == upstreamTable {
+			// TODO: adjust waiting for redirect conflict status
 			if op.ConflictStage != optimism.ConflictDetected {
 				return terror.ErrMasterLockIsResolving.Generatef("lock %s is in %s status, not conflicted", id, op.ConflictStage)
 			}

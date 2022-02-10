@@ -320,7 +320,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				return newDDLs, cols, err2
 			} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
 				return newDDLs, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
-					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
+					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream which may cause data inconsistent. ddl: %s", col, ddls[idx]))
 			}
 			newDDLs = append(newDDLs, ddls[idx])
 			continue
@@ -355,7 +355,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 					return ddls, cols, err2
 				} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
 					return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
-						l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
+						l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream which may cause data inconsistent. ddl: %s", col, ddls[idx]))
 				}
 			} else {
 				if col, err2 := GetColumnName(l.ID, ddls[idx], ast.AlterTableDropColumn); err2 != nil {
@@ -397,7 +397,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				return ddls, cols, err2
 			} else if len(col) > 0 && l.IsDroppedColumn(info.Source, info.UpSchema, info.UpTable, col) {
 				return ddls, cols, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
-					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddls[idx]))
+					l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream which may cause data inconsistent. ddl: %s", col, ddls[idx]))
 			}
 			// let every table to replicate the DDL.
 			newDDLs = append(newDDLs, ddls[idx])
@@ -856,7 +856,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 		newCol, ok2 := newJoinedCols[col]
 		if ok1 && ok2 && newCol.Flen != oldCol.Flen {
 			return col, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
-				lockID, fmt.Sprintf("add columns with different field lengths."+
+				lockID, fmt.Sprintf("add columns with different field lengths which may cause data inconsistent."+
 					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.Flen, newCol.Flen))
 		}
 	}
