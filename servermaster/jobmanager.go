@@ -2,25 +2,22 @@ package servermaster
 
 import (
 	"context"
-	"encoding/json"
-	"strconv"
 	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/jobmaster/system"
+	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/autoid"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 
 // JobManager defines manager of job master
-// TODO: this will be refactored after new master-worker model is applied
 type JobManager interface {
 	Start(ctx context.Context, metaKV metadata.MetaKV) error
 	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse
@@ -28,151 +25,146 @@ type JobManager interface {
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 }
 
-// JobMasterID is special and has no use.
-const JobMasterID model.ID = -1
+const defaultJobMasterCost = 1
 
-// JobManagerImpl is a special job master that manages all the job masters, and notify the offline executor to them.
-type JobManagerImpl struct {
-	*system.Master
+// JobManagerImplV2 is a special job master that manages all the job masters, and notify the offline executor to them.
+type JobManagerImplV2 struct {
+	lib.BaseMaster
 
-	mu          sync.Mutex
-	jobMasters  map[model.ID]*model.Task
-	idAllocator autoid.JobIDAllocator
-	clients     *client.Manager
-	masterAddrs []string
+	messageHandlerManager p2p.MessageHandlerManager
+	messageSender         p2p.MessageSender
+	metaKVClient          metadata.MetaKV
+	executorClientManager client.ClientsManager
+	serverMasterClient    client.MasterClient
+
+	workerMu sync.Mutex
+	workers  map[lib.WorkerID]lib.WorkerHandle
 }
 
-func (j *JobManagerImpl) recover(ctx context.Context) error {
-	resp, err := j.MetaKV.Get(ctx, adapter.JobKeyAdapter.Path())
-	if err != nil {
-		return err
-	}
-	result := resp.(*clientv3.GetResponse)
-	for _, kv := range result.Kvs {
-		jobID, err := strconv.Atoi(string(kv.Key))
-		if err != nil {
-			return err
-		}
-		jobTask := &model.Task{
-			ID:   model.ID(jobID),
-			OpTp: model.JobMasterType,
-			Op:   kv.Value,
-			Cost: 1,
-		}
-		err = j.RestoreTask(ctx, jobTask)
-		if err != nil {
-			return err
-		}
-		j.jobMasters[model.ID(jobID)] = jobTask
-	}
+func (jm *JobManagerImplV2) Start(ctx context.Context, metaKV metadata.MetaKV) error {
 	return nil
 }
 
-func (j *JobManagerImpl) persistJobInfo(ctx context.Context, jobID model.ID, jobBytes []byte) error {
-	_, err := j.MetaKV.Put(ctx, adapter.JobKeyAdapter.Encode(strconv.Itoa(int(jobID))), string(jobBytes))
-	return err
+func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
+	panic("not implemented")
 }
 
-func (j *JobManagerImpl) Start(ctx context.Context, metaKV metadata.MetaKV) error {
-	j.MetaKV = metaKV
-	err := j.clients.AddMasterClient(ctx, j.masterAddrs)
-	if err != nil {
-		return err
-	}
-	err = j.recover(ctx)
-	if err != nil {
-		return err
-	}
-	j.Master.StartInternal(ctx)
-	return nil
-}
-
-func (j *JobManagerImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	task, ok := j.jobMasters[model.ID(req.JobId)]
-	if !ok {
-		return &pb.PauseJobResponse{Err: &pb.Error{Message: "No such job"}}
-	}
-	err := j.Master.AsyncPauseTasks(task)
-	if err != nil {
-		return &pb.PauseJobResponse{Err: &pb.Error{Message: err.Error()}}
-	}
-	return &pb.PauseJobResponse{}
-}
-
-func (j *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	task, ok := j.jobMasters[model.ID(req.JobId)]
-	if !ok {
-		return &pb.CancelJobResponse{Err: &pb.Error{Message: "No such job"}}
-	}
-	err := j.Master.StopTasks(ctx, []*model.Task{task})
-	if err != nil {
-		return &pb.CancelJobResponse{Err: &pb.Error{Message: err.Error()}}
-	}
-	delete(j.jobMasters, model.ID(req.JobId))
-	return &pb.CancelJobResponse{}
+func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
+	panic("not implemented")
 }
 
 // SubmitJob processes "SubmitJobRequest".
-func (j *JobManagerImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
-	var jobTask *model.Task
+func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
+	var masterConfig *model.JobMaster
 	switch req.Tp {
 	case pb.JobType_Benchmark:
-		id := j.idAllocator.AllocJobID()
-		// TODO: supposing job master will be running independently, then the
-		// addresses of server can change because of failover, the job master
-		// should have ways to detect and adapt automatically.
-		masterConfig := &model.JobMaster{
-			ID:          model.ID(id),
-			Tp:          model.Benchmark,
-			Config:      req.Config,
-			MasterAddrs: j.masterAddrs,
-		}
-		masterConfigBytes, err := json.Marshal(masterConfig)
-		if err != nil {
-			resp.Err = errors.ToPBError(err)
-			return resp
-		}
-		err = j.persistJobInfo(ctx, masterConfig.ID, masterConfigBytes)
-		if err != nil {
-			resp.Err = errors.ToPBError(err)
-			return resp
-		}
-		jobTask = &model.Task{
-			ID:   model.ID(id),
-			OpTp: model.JobMasterType,
-			Op:   masterConfigBytes,
-			Cost: 1,
+		masterConfig = &model.JobMaster{
+			Tp:     model.Benchmark,
+			Config: req.Config,
 		}
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.jobMasters[jobTask.ID] = jobTask
-	resp.JobId = int32(jobTask.ID)
-	j.Master.DispatchTasks(jobTask)
-	log.L().Logger.Info("finished dispatch job")
+	// CreateWorker here is to create job master actually
+	// TODO: use correct worker type and worker cost
+	id, err := jm.BaseMaster.CreateWorker(
+		registry.WorkerTypeFakeMaster, masterConfig, defaultJobMasterCost)
+	if err != nil {
+		log.L().Error("create job master met error", zap.Error(err))
+		resp.Err = errors.ToPBError(err)
+		return resp
+	}
+	resp.JobIdStr = id
+
 	return resp
 }
 
-// NewJobManagerImpl creates a new JobManagerImpl instance
-func NewJobManagerImpl(
-	masterAddrs []string,
-) *JobManagerImpl {
-	clients := client.NewClientManager()
-	return &JobManagerImpl{
-		Master:      system.New(JobMasterID, clients),
-		jobMasters:  make(map[model.ID]*model.Task),
-		idAllocator: autoid.NewJobIDAllocator(),
-		clients:     clients,
-		masterAddrs: masterAddrs,
+// NewJobManagerImplV2 creates a new JobManagerImplV2 instance
+func NewJobManagerImplV2(
+	dctx *dcontext.Context,
+	masterID lib.MasterID,
+	id lib.MasterID,
+	messageHandlerManager p2p.MessageHandlerManager,
+	messageSender p2p.MessageSender,
+	clients client.ClientsManager,
+	metaKVClient metadata.MetaKV,
+) (*JobManagerImplV2, error) {
+	impl := &JobManagerImplV2{
+		messageHandlerManager: messageHandlerManager,
+		messageSender:         messageSender,
+		executorClientManager: clients,
+		serverMasterClient:    clients.MasterClient(),
+		metaKVClient:          metaKVClient,
+		workers:               make(map[lib.WorkerID]lib.WorkerHandle),
 	}
+	impl.BaseMaster = lib.NewBaseMaster(
+		dctx,
+		impl,
+		id,
+		impl.messageHandlerManager,
+		impl.messageSender,
+		impl.metaKVClient,
+		impl.executorClientManager,
+		impl.serverMasterClient,
+	)
+	err := impl.BaseMaster.Init(dctx.Context())
+	if err != nil {
+		return nil, err
+	}
+	return impl, nil
+}
+
+// InitImpl implements lib.MasterImpl.InitImpl
+func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
+	// TODO: recover existing job masters from metastore
+	return nil
+}
+
+// Tick implements lib.MasterImpl.Tick
+func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
+	return nil
+}
+
+// OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
+func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
+	return nil
+}
+
+// OnWorkerDispatched implements lib.MasterImpl.OnWorkerDispatched
+func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+	if result != nil {
+		log.L().Warn("dispatch worker met error", zap.Error(result))
+		return nil
+	}
+	jm.workerMu.Lock()
+	defer jm.workerMu.Unlock()
+	jm.workers[worker.ID()] = worker
+	return nil
+}
+
+// OnWorkerOnline implements lib.MasterImpl.OnWorkerOnline
+func (jm *JobManagerImplV2) OnWorkerOnline(worker lib.WorkerHandle) error {
+	log.L().Info("on worker online", zap.Any("id", worker.ID()))
+	return nil
+}
+
+// OnWorkerOffline implements lib.MasterImpl.OnWorkerOffline
+func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+	log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
+	return nil
+}
+
+// OnWorkerMessage implements lib.MasterImpl.OnWorkerMessage
+func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
+	return nil
+}
+
+// CloseImpl implements lib.MasterImpl.CloseImpl
+func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
+	return nil
 }

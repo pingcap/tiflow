@@ -295,11 +295,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 
 	s.executorManager.Start(ctx)
-	s.jobManager = NewJobManagerImpl([]string{s.cfg.MasterAddr})
-	err = s.jobManager.Start(ctx, s.testCtx.GetMetaKV())
-	if err != nil {
-		return
-	}
+	// TODO: start job manager
 	s.leader.Store(&Member{Name: s.name(), IsServLeader: true, IsEtcdLeader: true})
 	s.initialized.Store(true)
 	return
