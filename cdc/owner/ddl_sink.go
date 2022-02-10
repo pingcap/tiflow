@@ -166,7 +166,10 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
 				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-					log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
+					log.Info("Execute DDL succeeded",
+						zap.String("changefeed", ctx.ChangefeedVars().ID),
+						zap.Bool("ignored", err != nil),
+						zap.Reflect("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}

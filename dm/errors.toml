@@ -1102,6 +1102,18 @@ description = ""
 workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 tags = ["internal", "medium"]
 
+[error.DM-config-20053]
+message = "invalid load mode '%s'"
+description = ""
+workaround = "Please choose a valid value in ['sql', 'loader']"
+tags = ["internal", "medium"]
+
+[error.DM-config-20054]
+message = "invalid load on-duplicate '%s'"
+description = ""
+workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -1273,7 +1285,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]
@@ -1622,12 +1634,6 @@ tags = ["internal", "high"]
 message = "inconsistent checkpoints between loader and target database"
 description = ""
 workaround = "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command."
-tags = ["internal", "high"]
-
-[error.DM-functional-34019]
-message = "DM do not support backend %s "
-description = ""
-workaround = "If you do not understand the configure `tidb.backend` you can just delete it."
 tags = ["internal", "high"]
 
 [error.DM-sync-unit-36001]
@@ -2370,6 +2376,18 @@ tags = ["internal", "high"]
 
 [error.DM-dm-master-38055]
 message = "table-info-before not exist in optimistic ddls: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38057]
+message = "invalid cluster id: %v"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -3212,6 +3230,12 @@ tags = ["internal", "low"]
 message = "failed to auto pause tasks %s when transfer-source"
 description = ""
 workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46033]
+message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]

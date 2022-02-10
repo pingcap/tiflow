@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -61,6 +62,7 @@ var (
 	globalCpSchema       = "" // global checkpoint's cp_schema
 	globalCpTable        = "" // global checkpoint's cp_table
 	maxCheckPointTimeout = "1m"
+	batchFlushPoints     = 100
 )
 
 type tablePoint struct {
@@ -229,7 +231,7 @@ type CheckPoint interface {
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
 	// IsOlderThanTablePoint checks whether job's checkpoint is older than previous saved checkpoint
-	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, useLE bool) bool
+	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, isDDL bool) bool
 
 	// SaveGlobalPoint saves the global binlog stream's checkpoint
 	// corresponding to Meta.Save
@@ -245,8 +247,8 @@ type CheckPoint interface {
 	// corresponding to Meta.Flush
 	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]interface{}) error
 
-	// FlushPointWithTableInfo flushed the table point with given table info
-	FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error
+	// FlushPointsWithTableInfos flushed the table points with given table infos
+	FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error
 
 	// FlushSafeModeExitPoint flushed the global checkpoint's with given table info
 	FlushSafeModeExitPoint(tctx *tcontext.Context) error
@@ -575,14 +577,12 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 }
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
-// For GTID replication, go-mysql will only update GTID set in a XID event after the rows event, for example, the binlog events are:
-//   - Query event e1, location is gset1
-//   - Rows event e2, location is gset1
-//   - XID event, location is gset2
-// We should note that e1 is not older than e2
-// For binlog position replication, currently DM will split rows changes of an event to jobs, so some job may has save position.
-// if useLE is true, we use less than or equal.
-func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, useLE bool) bool {
+// This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
+// - For GTID based and position based replication, DML handling is different. When using position based, each event has
+//   unique position so we have confident to skip event which is <= table checkpoint. When using GTID based, there may
+//   be more than one event with same GTID, so we can only skip event which is < table checkpoint.
+// - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
+func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, isDDL bool) bool {
 	cp.RLock()
 	defer cp.RUnlock()
 	sourceSchema, sourceTable := table.Schema, table.Name
@@ -597,7 +597,7 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 	oldLocation := point.MySQLLocation()
 	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
 
-	if useLE {
+	if isDDL || !cp.cfg.EnableGTID {
 		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
 	}
 	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) < 0
@@ -702,7 +702,9 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 
 	if snapshotCp.globalPoint != nil {
 		cp.globalPoint.flushBy(*snapshotCp.globalPoint)
+		cp.Lock()
 		cp.globalPointSaveTime = snapshotCp.globalPointSaveTime
+		cp.Unlock()
 	}
 
 	for _, point := range points {
@@ -712,45 +714,63 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	return nil
 }
 
-// FlushPointWithTableInfo implements CheckPoint.FlushPointWithTableInfo.
-func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error {
+// FlushPointsWithTableInfos implements CheckPoint.FlushPointsWithTableInfos.
+func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error {
 	cp.Lock()
 	defer cp.Unlock()
-	sourceSchema, sourceTable := table.Schema, table.Name
-	sqls := make([]string, 0, 1)
-	args := make([][]interface{}, 0, 10)
-	point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	// should not happened
+	if len(tables) != len(tis) {
+		return errors.Errorf("the length of the tables is not equal to the length of the table infos, left: %d, right: %d", len(tables), len(tis))
+	}
 
-	if tablePoints, ok := cp.points[sourceSchema]; ok {
-		if p, ok2 := tablePoints[sourceTable]; ok2 {
-			point = p
+	for i := 0; i < len(tables); i += batchFlushPoints {
+		end := i + batchFlushPoints
+		if end > len(tables) {
+			end = len(tables)
+		}
+
+		sqls := make([]string, 0, batchFlushPoints)
+		args := make([][]interface{}, 0, batchFlushPoints)
+		points := make([]*binlogPoint, 0, batchFlushPoints)
+		for j := i; j < end; j++ {
+			table := tables[j]
+			ti := tis[j]
+			sourceSchema, sourceTable := table.Schema, table.Name
+
+			var point *binlogPoint
+			// if point already in memory, use it
+			if tablePoints, ok := cp.points[sourceSchema]; ok {
+				if p, ok2 := tablePoints[sourceTable]; ok2 {
+					point = p
+				}
+			}
+			// create new point
+			if point == nil {
+				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
+				point = cp.points[sourceSchema][sourceTable]
+			}
+			tiBytes, err := json.Marshal(ti)
+			if err != nil {
+				return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
+			}
+			location := point.MySQLLocation()
+			sql, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
+			sqls = append(sqls, sql)
+			args = append(args, arg)
+			points = append(points, point)
+		}
+		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
+		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
+		defer cancel()
+		_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+		if err != nil {
+			return err
+		}
+
+		for _, point := range points {
+			point.flush()
 		}
 	}
-
-	tiBytes, err := json.Marshal(ti)
-	if err != nil {
-		return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
-	}
-
-	location := point.MySQLLocation()
-	sql2, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
-	sqls = append(sqls, sql2)
-	args = append(args, arg)
-
-	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
-	defer cancel()
-	_, err = cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
-	if err != nil {
-		return err
-	}
-
-	err = point.save(point.savedPoint.location, ti)
-	if err != nil {
-		return err
-	}
-	point.flush()
-
 	return nil
 }
 
@@ -844,6 +864,7 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 	cp.RLock()
 	defer cp.RUnlock()
 	cp.globalPoint.rollback(schemaTracker, "")
+	tablesToCreate := make(map[string]map[string]*model.TableInfo)
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
 			table := &filter.Table{
@@ -864,12 +885,17 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
 						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
 					}
-					if err := schemaTracker.CreateTableIfNotExists(table, point.savedPoint.ti); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
+					if _, ok := tablesToCreate[schemaName]; !ok {
+						tablesToCreate[schemaName] = map[string]*model.TableInfo{}
 					}
+					tablesToCreate[schemaName][tableName] = point.savedPoint.ti
 				}
 			}
 		}
+	}
+	logger := cp.logCtx.L().WithFields(zap.Reflect("batch create table", tablesToCreate))
+	if err := schemaTracker.BatchCreateTableIfNotExist(tablesToCreate); err != nil {
+		logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
 	}
 
 	// drop any tables in the tracker if no corresponding checkpoint exists.

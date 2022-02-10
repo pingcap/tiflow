@@ -132,6 +132,7 @@ type processor struct {
 	metricSyncTableNumGauge         prometheus.Gauge
 	metricSchemaStorageGcTsGauge    prometheus.Gauge
 	metricProcessorErrorCounter     prometheus.Counter
+	metricProcessorTickDuration     prometheus.Observer
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -289,6 +290,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorTickDuration:     processorTickDuration.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -323,13 +325,22 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	startTime := time.Now()
 	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
 		Info: state.Info,
 	})
+
 	err := p.tick(ctx, state)
+	costTime := time.Since(startTime)
+	if costTime > processorLogsWarnDuration {
+		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID),
+			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
+	}
+	p.metricProcessorTickDuration.Observe(costTime.Seconds())
+
 	if err == nil {
 		return state, nil
 	}
@@ -435,6 +446,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		p.handleWorkload()
 	}
 	p.doGCSchemaStorage(ctx)
+	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
@@ -562,6 +574,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
@@ -1093,17 +1106,6 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
-	p.wg.Add(1)
-	p.metricSyncTableNumGauge.Inc()
-	go func() {
-		table.Wait()
-		p.wg.Done()
-		p.metricSyncTableNumGauge.Dec()
-		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
-			cdcContext.ZapFieldChangefeed(ctx),
-			zap.String("name", table.Name()),
-			zap.Any("replicaInfo", replicaInfo))
-	}()
 
 	if p.redoManager.Enabled() {
 		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
@@ -1178,15 +1180,18 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-	// mark tables share the same cdcContext with its original table, don't need to cancel
-	failpoint.Inject("processorStopDelay", nil)
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+
+	if p.newSchedulerEnabled {
+		if p.agent == nil {
+			return nil
+		}
+		if err := p.agent.Close(); err != nil {
+			return errors.Trace(err)
+		}
+		p.agent = nil
+	}
+
+	// sink close might be time-consuming, do it the last.
 	if p.sinkManager != nil {
 		go func() {
 			// pass a canceled context is ok here, since we don't need to wait Close
@@ -1209,15 +1214,16 @@ func (p *processor) Close() error {
 			close(p.sinkClosedCh)
 		}()
 	}
-	if p.newSchedulerEnabled {
-		if p.agent == nil {
-			return nil
-		}
-		if err := p.agent.Close(); err != nil {
-			return errors.Trace(err)
-		}
-		p.agent = nil
-	}
+
+	// mark tables share the same cdcContext with its original table, don't need to cancel
+	failpoint.Inject("processorStopDelay", nil)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 
 	p.runningStatus = processorClosing
 	log.Info("processor is closing",
