@@ -17,10 +17,12 @@ import (
 	sdtContext "context"
 	"sync/atomic"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	"go.uber.org/zap"
 )
 
 // send a tick message to actor if we get 32 pipeline messages
@@ -84,8 +86,16 @@ func (c *actorNodeContext) Throw(err error) {
 // SendToNextNode send msg to the outputCh and notify the actor system,
 // to reduce the  actor message, only send tick message per threshold
 func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
-	c.outputCh <- msg
-	c.trySendTickMessage()
+	select {
+	// if the processor context is cancelled, return directly
+	// otherwise processor tick loop will be blocked if the chan is full， because actor is topped
+	case <-c.Context.Done():
+		log.Info("context is canceled",
+			zap.String("tableName", c.tableName),
+			zap.String("changefeed", c.changefeedVars.ID))
+	case c.outputCh <- msg:
+		c.trySendTickMessage()
+	}
 }
 
 func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {

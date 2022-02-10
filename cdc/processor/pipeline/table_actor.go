@@ -15,6 +15,8 @@ package pipeline
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -39,6 +41,8 @@ var (
 	_ actor.Actor   = (*tableActor)(nil)
 )
 
+var stopped = uint32(1)
+
 type tableActor struct {
 	cancel    context.CancelFunc
 	wg        *errgroup.Group
@@ -59,8 +63,7 @@ type tableActor struct {
 	targetTs      model.Ts
 
 	started bool
-	stopped bool
-	err     error
+	stopped uint32
 
 	changefeedVars   *cdcContext.ChangefeedVars
 	globalVars       *cdcContext.GlobalVars
@@ -76,6 +79,7 @@ type tableActor struct {
 	stopFunc func(err error)
 
 	lastFlushTime time.Time
+	lck           sync.Mutex
 }
 
 // NewTableActor creates a table actor.
@@ -148,7 +152,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 MSG:
 	for i := range msgs {
-		if t.stopped {
+		if atomic.LoadUint32(&t.stopped) == stopped {
 			// No need to handle remaining messages.
 			break
 		}
@@ -157,7 +161,8 @@ MSG:
 		case message.TypeBarrier:
 			t.sortNode.UpdateBarrierTs(msgs[i].BarrierTs)
 			if err := t.sinkNode.UpdateBarrierTs(ctx, msgs[i].BarrierTs); err != nil {
-				t.stopFunc(err)
+				t.checkError(err)
+				break
 			}
 		case message.TypeTick:
 			// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
@@ -175,11 +180,11 @@ MSG:
 					pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
 				)
 				if err != nil {
-					t.stopFunc(err)
+					t.checkError(err)
 				}
 			}()
 		case message.TypeStop:
-			t.stopFunc(msgs[i].Err)
+			t.stopFunc(nil)
 			break
 		}
 		// process message for each node
@@ -188,14 +193,12 @@ MSG:
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
 					zap.Int64("tableID", t.tableID), zap.Error(err))
-				t.stopFunc(err)
+				t.checkError(err)
 				break MSG
 			}
 		}
 	}
-	// Report error to processor if there is any.
-	t.checkError()
-	return !t.stopped
+	return atomic.LoadUint32(&t.stopped) != stopped
 }
 
 func (t *tableActor) start(ctx context.Context) error {
@@ -305,18 +308,24 @@ func (t *tableActor) start(ctx context.Context) error {
 
 func stop(ctx context.Context, t *tableActor) func(err error) {
 	return func(err error) {
-		if t.stopped {
+		t.lck.Lock()
+		defer t.lck.Unlock()
+
+		if atomic.LoadUint32(&t.stopped) == stopped {
 			return
 		}
-		t.stopped = true
-		t.err = err
+		atomic.StoreUint32(&t.stopped, stopped)
 		t.cancel()
-		t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
-		if err := t.sinkNode.ReleaseResource(ctx); err != nil {
-			log.Warn("close sink failed",
-				zap.String("changefeed", t.changefeedID),
-				zap.String("tableName", t.tableName),
-				zap.Error(err), zap.Error(t.err))
+		if t.sortNode != nil {
+			t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
+		}
+		if t.sinkNode != nil {
+			if err := t.sinkNode.ReleaseResource(ctx); err != nil {
+				log.Warn("close sink failed",
+					zap.String("changefeed", t.changefeedID),
+					zap.String("tableName", t.tableName),
+					zap.Error(err), zap.Error(err))
+			}
 		}
 		log.Info("table actor will be stopped",
 			zap.String("changefeed", t.changefeedID),
@@ -326,11 +335,9 @@ func stop(ctx context.Context, t *tableActor) func(err error) {
 	}
 }
 
-func (t *tableActor) checkError() {
-	if t.err != nil {
-		t.reportErr(t.err)
-		t.err = nil
-	}
+func (t *tableActor) checkError(err error) {
+	t.stopFunc(err)
+	t.reportErr(err)
 }
 
 // ============ Implement TablePipline, must be threadsafe ============
@@ -409,7 +416,9 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	if err := t.tableActorRouter.SendB(context.TODO(), t.mb.ID(), message.StopMessage()); err != nil {
+	t.stopFunc(nil)
+	//actor is closed, tick actor to remove this actor router
+	if err := t.tableActorRouter.Send(t.mb.ID(), message.TickMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),

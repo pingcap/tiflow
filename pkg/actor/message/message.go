@@ -45,7 +45,6 @@ type Message struct {
 	//       memory allocation.
 	// See https://cs.opensource.google/go/go/+/refs/tags/go1.17.2:src/runtime/iface.go;l=325
 	SorterTask sorter.Task
-	Err        error
 }
 
 // TickMessage creates the message of Tick

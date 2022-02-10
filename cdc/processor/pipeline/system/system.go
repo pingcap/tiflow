@@ -15,7 +15,6 @@ package system
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -67,12 +66,7 @@ func (s *System) ActorID(changefeedID string, tableID model.TableID) actor.ID {
 	s.actorIDGeneratorLck.Lock()
 	defer s.actorIDGeneratorLck.Unlock()
 
-	key := fmt.Sprintf("%s-%d", changefeedID, tableID)
-	id, ok := s.actorIDMap[key]
-	if !ok {
-		s.lastID++
-		id = s.lastID
-		s.actorIDMap[key] = id
-	}
+	s.lastID++
+	id := s.lastID
 	return actor.ID(id)
 }
