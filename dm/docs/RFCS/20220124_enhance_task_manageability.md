@@ -15,7 +15,7 @@ The main purpose of this change is to address the root cause of problems like [#
 
 ![dm new task lifecycle](../media/dm-new-task-lifecycle.png)
 
-This is mainly achieved by adding a new `create task` action to create a new task in a stopped state, rather than directly creating and starting a task with `start-task` action.
+This is mainly achieved by adding a new command `dmctl task create` , which creates a stopped task instead of creating and starting a new task with single command `dmctl start-task`.
 
 ## Goals
 
@@ -44,7 +44,7 @@ where `resource type`, `command` and `flags` are:
 | update  | `dmctl task update --config-file="dm.yaml"`                                                                                                   | --config-file                                                                  | update a stopped task with config file.                                  |
 | delete  | `dmctl task delete --task-name="test" --yes`                                                                                                  | --task-name, --yes                                                             | delete a not running task and remove all meta data for this task.        |
 | get     | `dmctl task get --task-name="test" --output="new_task.yaml"`                                                                                  | --task-name, --output                                                          | show the task config in yaml format, also support output to file.        |
-| list    | `dmctl task list --status="running" --source="source1,source2"`                                                                               | --status, --source                                                             | list all tasks in current cluster, support filter by status and sources. |
+| list    | `dmctl task list --stage="running" --source="source1,source2"`                                                                                | --stage, --source                                                              | list all tasks in current cluster, support filter by status and sources. |
 | status  | `dmctl task status --task-name="test" --source="source1,source2"`                                                                             | --task-name --source                                                           | show task detail status.                                                 |
 | start   | `dmctl task start --task-name="test" --source="source1,source2" --remove-meta=false --start-time="2021-01-01 00:00:00" --safe-mode-time="1s"` | --task-name, --status, --source, --remove-meta, --start-time, --safe-mode-time | start a stopped task with many flags.                                    |
 | stop    | `dmctl task stop --task-name="test" --source="source1,source2" --timeout="60s"`                                                               | --task-name, --source, --timeout                                               | stop a running task with many flags.                                     |
@@ -110,9 +110,11 @@ Here is a simple prototype demo:
 
 This phase is mainly about implementing the DM-Master/DM-Worker internal logic.
 
-For tasks, the DM-Master's internal scheduling module needs to support the creation of a subtask in a stopped state, in addition to adapting additional parameters like `-start-time`,`--time-out` and so on.
+For tasks, the DM-Master's internal scheduling module needs to support the creation of a subtask in a stopped state, in addition to adapting additional parameters like `-start-time`,`--time-out` and so on. the DM-Worker need to watch the task stage from etcd and operate the subtask according the stage.
 
-And for Sources, when the DM-Master receives a `disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask. Note that all changes to the internal logic at this stage do not have any effect on existing dmctl.
+And for Sources, when the DM-Master receives a `disable source` request from a user, it will **synchronously** notify the DM-Worker and tell the DM-Worker to stop processing the subtask.
+
+Note that all changes to the internal logic at this stage do not have any effect on existing dmctl.
 
 ### Milestone 2 - Defining the new OpenAPI Spec and implementing specific features
 
