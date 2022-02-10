@@ -203,7 +203,7 @@ func TestCyclicMarkNode(t *testing.T) {
 					},
 				},
 			},
-		}, nil))
+		}, nil, throwDoNothing))
 		n := newCyclicMarkNode(markTableID)
 		err := n.Init(ctx)
 		require.Nil(t, err)

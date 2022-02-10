@@ -17,14 +17,10 @@ import (
 	sdtContext "context"
 	"sync/atomic"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/context"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
-	"go.uber.org/zap"
 )
 
 // send a tick message to actor if we get 32 pipeline messages
@@ -45,7 +41,7 @@ type actorNodeContext struct {
 	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
 	noTickMessageCount int32
 	tableName          string
-	throw              func(error) error
+	throw              func(error)
 }
 
 func NewContext(stdCtx sdtContext.Context,
@@ -53,7 +49,8 @@ func NewContext(stdCtx sdtContext.Context,
 	tableActorRouter *actor.Router,
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
-	globalVars *context.GlobalVars) *actorNodeContext {
+	globalVars *context.GlobalVars,
+	throw func(error)) *actorNodeContext {
 	return &actorNodeContext{
 		Context:              stdCtx,
 		outputCh:             make(chan pipeline.Message, defaultOutputChannelSize),
@@ -64,6 +61,7 @@ func NewContext(stdCtx sdtContext.Context,
 		tickMessageThreshold: messagesPerTick,
 		noTickMessageCount:   0,
 		tableName:            tableName,
+		throw:                throw,
 	}
 }
 
@@ -80,17 +78,7 @@ func (c *actorNodeContext) ChangefeedVars() *context.ChangefeedVars {
 }
 
 func (c *actorNodeContext) Throw(err error) {
-	if err == nil {
-		return
-	}
-	if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
-		errors.Cause(err) == sdtContext.Canceled {
-		return
-	}
-	log.Error("error occurred during message processing, stop table actor",
-		zap.String("changefeed", c.changefeedVars.ID),
-		zap.String("tableName", c.tableName), zap.Error(err))
-	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopWithErrorMessage(err))
+	c.throw(err)
 }
 
 // SendToNextNode send msg to the outputCh and notify the actor system,

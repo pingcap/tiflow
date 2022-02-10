@@ -215,7 +215,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	pCtx := NewContext(ctx,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars)
+		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
 	if err := pullerNode.Init(pCtx); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
@@ -232,7 +232,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	)
 	sCtx := NewContext(ctx, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars)
+		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
 	if err := sorterNode.StartActorNode(sCtx, true, t.wg); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
@@ -254,7 +254,7 @@ func (t *tableActor) start(ctx context.Context) error {
 			NewContext(ctx, t.tableName,
 				t.globalVars.TableActorSystem.Router(),
 				t.actorID, t.changefeedVars,
-				t.globalVars))
+				t.globalVars, t.reportErr))
 		if err := cyclicNode.Init(cCtx); err != nil {
 			log.Error("sink fails to start",
 				zap.String("tableName", t.tableName),

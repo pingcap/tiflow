@@ -62,14 +62,6 @@ func StopMessage() Message {
 	}
 }
 
-// StopWithErrorMessage creates the message of Stop with error
-func StopWithErrorMessage(err error) Message {
-	return Message{
-		Tp:  TypeStop,
-		Err: err,
-	}
-}
-
 // BarrierMessage creates the message of Command
 func BarrierMessage(barrierTs model.Ts) Message {
 	return Message{
