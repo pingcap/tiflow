@@ -103,7 +103,7 @@ campaign owner failed
 
 ["CDC:ErrCaptureNotExist"]
 error = '''
-capture not exists, key: %s
+capture not exists, %s
 '''
 
 ["CDC:ErrCaptureRegister"]
@@ -123,12 +123,12 @@ capture suicide
 
 ["CDC:ErrChangeFeedAlreadyExists"]
 error = '''
-changefeed already exists, key: %s
+changefeed already exists, %s
 '''
 
 ["CDC:ErrChangeFeedNotExists"]
 error = '''
-changefeed not exists, key: %s
+changefeed not exists, %s
 '''
 
 ["CDC:ErrChangefeedAbnormalState"]
@@ -978,12 +978,12 @@ fail to create changefeed because target-ts %d is earlier than start-ts %d
 
 ["CDC:ErrTaskPositionNotExists"]
 error = '''
-task position not exists, key: %s
+task position not exists, %s
 '''
 
 ["CDC:ErrTaskStatusNotExists"]
 error = '''
-task status not exists, key: %s
+task status not exists, %s
 '''
 
 ["CDC:ErrTiKVEventFeed"]
