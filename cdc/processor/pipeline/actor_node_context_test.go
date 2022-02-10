@@ -84,7 +84,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	}()
 
 	require.Nil(t, sys.Start(ctx))
-	actorID := sys.ActorID("abc", 1)
+	actorID := sys.ActorID()
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
@@ -141,5 +141,4 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 }
 
 func throwDoNothing(_ error) {
-
 }

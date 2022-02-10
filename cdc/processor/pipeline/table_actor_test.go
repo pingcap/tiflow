@@ -31,7 +31,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:          false,
+		stopped:          0,
 		tableID:          1,
 		tableActorRouter: tableActorRouter,
 		cancel:           func() {},

@@ -37,11 +37,12 @@ import (
 )
 
 var (
-	_ TablePipeline = (*tableActor)(nil)
-	_ actor.Actor   = (*tableActor)(nil)
+	_       TablePipeline = (*tableActor)(nil)
+	_       actor.Actor   = (*tableActor)(nil)
+	stopped               = uint32(1)
 )
 
-var stopped = uint32(1)
+const sinkFlushInterval = 500 * time.Millisecond
 
 type tableActor struct {
 	cancel    context.CancelFunc
@@ -96,7 +97,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	info := cdcCtx.ChangefeedVars()
 	vars := cdcCtx.GlobalVars()
 
-	actorID := vars.TableActorSystem.ActorID(info.ID, tableID)
+	actorID := vars.TableActorSystem.ActorID()
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	// Cancel should be able to release all sub-goroutines in this actor.
 	ctx, cancel := context.WithCancel(cdcCtx)
@@ -166,14 +167,14 @@ MSG:
 			}
 		case message.TypeTick:
 			// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
-			if time.Since(t.lastFlushTime) > 500*time.Millisecond {
+			if time.Since(t.lastFlushTime) > sinkFlushInterval {
 				_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
 				if err != nil {
 					t.stopFunc(err)
 				}
 				t.lastFlushTime = time.Now()
 			}
-		case message.TypeStopSink:
+		case message.TypeStop:
 			// async stop the sink
 			go func() {
 				_, err := t.sinkNode.HandleMessage(ctx,
@@ -183,9 +184,6 @@ MSG:
 					t.checkError(err)
 				}
 			}()
-		case message.TypeStop:
-			t.stopFunc(nil)
-			break
 		}
 		// process message for each node
 		for _, n := range t.nodes {
@@ -374,7 +372,9 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
-	msg := message.StopSinkMessage()
+	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
+	// and then stop the whole table pipeline by call Cancel
+	msg := message.StopMessage()
 	err := t.tableActorRouter.Send(t.actorID, msg)
 	log.Info("send async stop signal to table",
 		zap.String("tableName", t.tableName),
@@ -417,7 +417,7 @@ func (t *tableActor) Name() string {
 // created by this table pipeline
 func (t *tableActor) Cancel() {
 	t.stopFunc(nil)
-	//actor is closed, tick actor to remove this actor router
+	// actor is closed, tick actor to remove this actor router
 	if err := t.tableActorRouter.Send(t.mb.ID(), message.TickMessage()); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.String("tableName", t.tableName),

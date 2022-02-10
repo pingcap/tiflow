@@ -17,7 +17,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/actor"
 )
 
@@ -26,8 +25,6 @@ type System struct {
 	tableActorSystem *actor.System
 	tableActorRouter *actor.Router
 
-	// actorIDMap store all allocated ID for changefeed-table  -> ID pair
-	actorIDMap          map[string]uint64
 	actorIDGeneratorLck sync.Mutex
 	lastID              uint64
 }
@@ -35,8 +32,7 @@ type System struct {
 // NewSystem returns a system.
 func NewSystem() *System {
 	return &System{
-		actorIDMap: map[string]uint64{},
-		lastID:     1,
+		lastID: 1,
 	}
 }
 
@@ -62,11 +58,9 @@ func (s *System) System() *actor.System {
 }
 
 // ActorID returns an ActorID correspond with tableID.
-func (s *System) ActorID(changefeedID string, tableID model.TableID) actor.ID {
+func (s *System) ActorID() actor.ID {
 	s.actorIDGeneratorLck.Lock()
 	defer s.actorIDGeneratorLck.Unlock()
-
 	s.lastID++
-	id := s.lastID
-	return actor.ID(id)
+	return actor.ID(s.lastID)
 }
