@@ -99,7 +99,7 @@ func (c *compactor) run() {
 
 			// if update job update its identify keys, turn it into delete + insert
 			if j.dml.IsIdentityUpdated() {
-				delDML, insertDML := j.dml.Split()
+				delDML, insertDML := j.dml.SplitUpdate()
 				delJob := j.clone()
 				delJob.dml = delDML
 
