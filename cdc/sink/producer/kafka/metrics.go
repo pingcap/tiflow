@@ -57,6 +57,7 @@ var (
 			}, []string{"capture", "changefeed"}),
 	}
 
+	// `Histogram`
 	compressionRatio = rawSaramaMetric{
 		metricName: "compression-ratio",
 		collector: prometheus.NewGaugeVec(
@@ -180,6 +181,8 @@ func (m saramaMetric) refresh(registry metrics.Registry) {
 		//	value = float64(tp.Snapshot().Count())
 		//case metrics.Gauge:
 		//	value = float64(tp.Snapshot().Value())
+	default:
+		log.Panic("unsupported go-metrics metric type", zap.Any("tp", tp))
 	}
 
 	// update prometheus metrics
