@@ -158,7 +158,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	err := c.tick(ctx, state, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
-	if c.initialized {
+	if c.runningStatus == changeFeedRunning {
 		costTime := time.Since(startTime)
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
