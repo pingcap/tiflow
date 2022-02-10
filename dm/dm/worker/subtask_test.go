@@ -409,9 +409,11 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 
 func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	cfg := &config.SubTaskConfig{
-		Name: "testSubtaskScene",
-		Mode: config.ModeFull,
+		SourceID: "source",
+		Name:     "testSubtaskScene",
+		Mode:     config.ModeFull,
 	}
+	c.Assert(cfg.Adjust(false), IsNil)
 
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	c.Assert(st.Stage(), DeepEquals, pb.Stage_Paused)
