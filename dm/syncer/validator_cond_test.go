@@ -35,8 +35,6 @@ func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *Tab
 		parser2   *parser.Parser
 		tableInfo *model.TableInfo
 	)
-	// ctx := context.Background()
-	// parser2, err = utils.GetParser(ctx, db)
 	parser2 = parser.New()
 	c.Assert(err, IsNil)
 	tableInfo, err = dbutil.GetTableInfoBySQL(creatSQL, parser2)
@@ -52,13 +50,21 @@ func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *Tab
 		}
 	}
 	tableDiff := &TableDiff{
-		Schema:     "test_cond",
-		Table:      "test1",
+		Schema:     schemaName,
+		Table:      tableName,
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
 		ColumnMap:  columnMap,
 	}
 	return tableDiff
+}
+
+func formatCond(c *C, db *sql.DB, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
+	tblDiff := getTableDiff(c, db, schemaName, tblName, creatSQL)
+	return &Cond{
+		Table:    tblDiff,
+		PkValues: pkvs,
+	}
 }
 
 func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
@@ -75,25 +81,22 @@ func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
 		"primary key(a, b)" +
 		");"
 	// get table diff
-	tableDiff := getTableDiff(c, db, "test_cond", "test1", creatTbl)
 	pkValues := make([][]string, 0)
 	for i := 0; i < 3; i++ {
 		// 3 primary key
 		key1, key2 := strconv.Itoa(i+1), strconv.Itoa(i+2)
 		pkValues = append(pkValues, []string{key1, key2})
 	}
-	cond := &Cond{
-		Table:    tableDiff,
-		PkValues: pkValues,
-	}
+	cond := formatCond(c, db, "test_cond", "test1", creatTbl, pkValues)
 	// format query string
 	rowsQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s;", "`test_cond`.`test1`", cond.GetWhere())
-	mock.ExpectPrepare("SELECT COUNT\\(\\*\\) FROM `test_cond`.`test1` WHERE \\(a,b\\) in \\(\\(\\?,\\?\\), \\(\\?,\\?\\), \\(\\?,\\?\\)\\);").ExpectQuery().WithArgs(
+	mock.ExpectQuery(
+		"SELECT COUNT\\(\\*\\) FROM `test_cond`.`test1` WHERE \\(a,b\\) in \\(\\(\\?,\\?\\),\\(\\?,\\?\\),\\(\\?,\\?\\)\\);",
+	).WithArgs(
 		"1", "2", "2", "3", "3", "4",
 	).WillReturnRows(mock.NewRows([]string{"COUNT(*)"}).AddRow("3"))
-	prepare, err := db.Prepare(rowsQuery)
 	c.Assert(err, IsNil)
-	res, err = prepare.Query(cond.GetArgs()...)
+	res, err = db.Query(rowsQuery, cond.GetArgs()...)
 	c.Assert(err, IsNil)
 	var cnt int
 	if res.Next() {
@@ -101,4 +104,64 @@ func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
 	}
 	c.Assert(err, IsNil)
 	c.Assert(cnt, Equals, 3)
+}
+
+func (s *testCondSuite) TestCondGetWhereArgs(c *C) {
+	db, _, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	type testCase struct {
+		creatTbl   string
+		pks        [][]string
+		tblName    string
+		schemaName string
+		args       []string
+		where      string
+	}
+	cases := []testCase{
+		{
+			creatTbl: `create table if not exists test_cond.test2(
+				a char(10),
+				b int,
+				c int,
+				primary key(a)
+				);`, // single primary key,
+			pks: [][]string{
+				{"10a0"}, {"200"}, {"abc"},
+			},
+			tblName:    "test2",
+			schemaName: "test_cond",
+			where:      "a in (?,?,?)",
+			args: []string{
+				"10a0", "200", "abc",
+			},
+		},
+		{
+			creatTbl: `create table if not exists test_cond.test3(
+				a int,
+				b char(10),
+				c varchar(10),
+				primary key(a, b, c)
+				);`, // multi primary key
+			pks: [][]string{
+				{"10", "abc", "ef"},
+				{"9897", "afdkiefkjg", "acdee"},
+			},
+			tblName:    "test3",
+			schemaName: "test_cond",
+			where:      "(a,b,c) in ((?,?,?),(?,?,?))",
+			args: []string{
+				"10", "abc", "ef", "9897", "afdkiefkjg", "acdee",
+			},
+		},
+	}
+	for i := 0; i < len(cases); i++ {
+		cond := formatCond(c, db, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
+		c.Assert(cond.GetWhere(), Equals, cases[i].where)
+		rawArgs := cond.GetArgs()
+		for j := 0; j < 3; j++ {
+			curData := fmt.Sprintf("%v", rawArgs[j])
+			c.Assert(curData, Equals, cases[i].args[j])
+		}
+	}
 }

@@ -15,8 +15,6 @@ package syncer
 
 import (
 	"strings"
-
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 )
 
 type Cond struct {
@@ -37,45 +35,38 @@ func (c *Cond) GetArgs() []interface{} {
 func (c *Cond) GetWhere() string {
 	var b strings.Builder
 	pk := c.Table.PrimaryKey
-	b.WriteString("(")
+	isOneKey := len(pk.Columns) == 1
+	if !isOneKey {
+		b.WriteString("(")
+	}
 	for i := 0; i < len(pk.Columns); i++ {
 		if i != 0 {
 			b.WriteString(",")
 		}
 		b.WriteString(pk.Columns[i].Name.O)
 	}
-	b.WriteString(") in (")
+	if !isOneKey {
+		b.WriteString(") in (")
+	} else {
+		b.WriteString(" in (")
+	}
 	for i := range c.PkValues {
 		if i != 0 {
-			b.WriteString(", ")
+			b.WriteString(",")
 		}
-		b.WriteString("(")
-		for j := 0; j < len(pk.Columns); j++ {
-			if j != 0 {
-				b.WriteString(",")
+		if !isOneKey {
+			b.WriteString("(")
+			for j := 0; j < len(pk.Columns); j++ {
+				if j != 0 {
+					b.WriteString(",")
+				}
+				b.WriteString("?")
 			}
+			b.WriteString(")")
+		} else {
 			b.WriteString("?")
 		}
-		b.WriteString(")")
 	}
 	b.WriteString(")")
 	return b.String()
-}
-
-type SimpleRowsIterator struct {
-	Rows []map[string]*dbutil.ColumnData
-	Idx  int
-}
-
-func (b *SimpleRowsIterator) Next() (map[string]*dbutil.ColumnData, error) {
-	if b.Idx >= len(b.Rows) {
-		return nil, nil
-	}
-	row := b.Rows[b.Idx]
-	b.Idx++
-	return row, nil
-}
-
-func (b *SimpleRowsIterator) Close() {
-	// skip
 }

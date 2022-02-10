@@ -177,7 +177,6 @@ type DataValidator struct {
 	workerCnt          int
 	pendingChangeChs   map[int]chan map[string]*tableChange // replace pendingChangeCh
 	failedChangesMap   map[int]map[string]*tableChange      // replace failedChanges
-	workerLocks        map[int]*sync.RWMutex                // lock for each worker
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -232,7 +231,6 @@ func (v *DataValidator) initialize() error {
 	for i := 0; i < v.workerCnt; i++ {
 		v.pendingChangeChs[i] = make(chan map[string]*tableChange)
 		v.failedChangesMap[i] = make(map[string]*tableChange)
-		v.workerLocks[i] = &sync.RWMutex{}
 	}
 	return nil
 }
@@ -304,10 +302,6 @@ func (v *DataValidator) doValidate() {
 	v.wg.Add(2)
 	go v.rowsEventProcessRoutine()
 	go v.validateTaskDispatchRoutine()
-	v.wg.Add(v.workerCnt)
-	for i := 0; i < v.workerCnt; i++ {
-		go v.retryFailedRowsByWorker(i)
-	}
 	var latestPos mysql.Position
 	for {
 		e, err := v.streamerController.GetEvent(tctx)
@@ -369,24 +363,6 @@ func (v *DataValidator) Stage() pb.Stage {
 	return v.stage
 }
 
-func (v *DataValidator) retryFailedRowsByWorker(workerID int) {
-	v.wg.Done()
-	for {
-		v.workerLocks[workerID].Lock()
-		retryChange := v.failedChangesMap[workerID]
-		failed := v.validateTableChange(retryChange)
-		deltaFailed := v.updateFailedChangesByWorker(retryChange, failed, workerID)
-		v.failedRowCnt.Add(int64(deltaFailed))
-		v.workerLocks[workerID].Unlock()
-		// todo: print validation summary
-		select {
-		case <-v.ctx.Done():
-			return
-		case <-time.After(retryInterval):
-		}
-	}
-}
-
 func (v *DataValidator) rowsEventProcessRoutine() {
 	v.wg.Done()
 	for {
@@ -413,7 +389,6 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 	for {
 		select {
 		case change := <-v.pendingChangeChs[workerID]:
-			v.workerLocks[workerID].Lock()
 			// 1. validate table change
 			// 2. update failed rows
 			// 3. update pending row count
@@ -422,11 +397,14 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 			deltaFailed := v.updateFailedChangesByWorker(change, failed, workerID)
 			v.pendingRowCnt.Sub(int64(v.getRowCount(change))) // atomic value
 			v.failedRowCnt.Add(int64(deltaFailed))            // atomic value
-			v.workerLocks[workerID].Unlock()
 		case <-v.ctx.Done():
 			return
+		case <-time.After(retryInterval):
+			retryChange := v.failedChangesMap[workerID]
+			failed := v.validateTableChange(retryChange)
+			deltaFailed := v.updateFailedChangesByWorker(retryChange, failed, workerID)
+			v.failedRowCnt.Add(int64(deltaFailed))
 		}
-
 	}
 }
 
@@ -715,8 +693,9 @@ func (v *DataValidator) updateFailedChangesByWorker(all, failed map[string]*tabl
 }
 
 func (v *DataValidator) validateDeletedRows(cond *Cond) ([][]string, error) {
-	downstreamRowsIterator, err := v.getRowsFrom(cond, v.toDBConn)
+	downstreamRowsIterator, err := getRowsFrom(cond, v.toDBConn)
 	if err != nil {
+		// todo: cancel all routine
 		return nil, errors.Trace(err)
 	}
 	defer downstreamRowsIterator.Close()
@@ -730,7 +709,7 @@ func (v *DataValidator) validateDeletedRows(cond *Cond) ([][]string, error) {
 		if data == nil {
 			break
 		}
-		failedRows = append(failedRows, getPkValues(data, cond))
+		failedRows = append(failedRows, getPKValues(data, cond))
 	}
 	return failedRows, nil
 }
@@ -739,13 +718,14 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 	var failedRows [][]string
 	var upstreamRowsIterator, downstreamRowsIterator RowDataIterator
 	var err error
-	upstreamRowsIterator, err = v.getRowChangeIterator(cond.Table, rows)
+	upstreamRowsIterator, err = getRowChangeIterator(cond.Table, rows)
 	if err != nil {
 		return nil, errors.New("")
 	}
 	defer upstreamRowsIterator.Close()
-	downstreamRowsIterator, err = v.getRowsFrom(cond, v.toDBConn)
+	downstreamRowsIterator, err = getRowsFrom(cond, v.toDBConn)
 	if err != nil {
+		// todo: cancel all routine
 		return nil, errors.New("")
 	}
 	defer downstreamRowsIterator.Close()
@@ -780,7 +760,7 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 		if lastDownstreamData == nil {
 			// target lack some data, should insert the last source datas
 			for lastUpstreamData != nil {
-				failedRows = append(failedRows, getPkValues(lastUpstreamData, cond))
+				failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
 
 				lastUpstreamData, err = upstreamRowsIterator.Next()
 				if err != nil {
@@ -790,7 +770,7 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 			break
 		}
 
-		eq, cmp, err := v.CompareData(lastUpstreamData, lastDownstreamData, orderKeyCols, tableInfo.Columns)
+		eq, cmp, err := v.compareData(lastUpstreamData, lastDownstreamData, orderKeyCols, tableInfo.Columns)
 		if err != nil {
 			return nil, errors.New("")
 		}
@@ -808,10 +788,10 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 			v.L.Debug("more data on downstream, may come from other client, skip it", zap.Reflect("data", lastDownstreamData))
 			lastDownstreamData = nil
 		case -1:
-			failedRows = append(failedRows, getPkValues(lastUpstreamData, cond))
+			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
 			lastUpstreamData = nil
 		case 0:
-			failedRows = append(failedRows, getPkValues(lastUpstreamData, cond))
+			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
 			lastUpstreamData = nil
 			lastDownstreamData = nil
 		}
@@ -819,8 +799,8 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 	return failedRows, nil
 }
 
-func (v *DataValidator) getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIterator, error) {
-	tctx := tcontext.NewContext(v.ctx, v.L)
+func getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIterator, error) {
+	tctx := tcontext.NewContext(context.Background(), log.L())
 	fullTableName := dbutil.TableName(cond.Table.Schema, cond.Table.Table)
 	orderKeys, _ := dbutil.SelectUniqueOrderKey(cond.Table.Info)
 	columnNames := make([]string, 0, len(cond.Table.Info.Columns))
@@ -840,7 +820,7 @@ func (v *DataValidator) getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIte
 	return newRowDataIter, nil
 }
 
-func (v *DataValidator) getRowChangeIterator(table *TableDiff, rows []*rowChange) (RowDataIterator, error) {
+func getRowChangeIterator(table *TableDiff, rows []*rowChange) (RowDataIterator, error) {
 	sort.Slice(rows, func(i, j int) bool {
 		left, right := rows[i], rows[j]
 		for idx := range left.pk {
@@ -868,7 +848,7 @@ func (v *DataValidator) getRowChangeIterator(table *TableDiff, rows []*rowChange
 	return it, nil
 }
 
-func getPkValues(data map[string]*dbutil.ColumnData, cond *Cond) []string {
+func getPKValues(data map[string]*dbutil.ColumnData, cond *Cond) []string {
 	var pkValues []string
 	for _, pkColumn := range cond.Table.PrimaryKey.Columns {
 		// TODO primary key cannot be null, if we uses unique key should make sure all columns are not null
@@ -877,7 +857,7 @@ func getPkValues(data map[string]*dbutil.ColumnData, cond *Cond) []string {
 	return pkValues
 }
 
-func (v *DataValidator) CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
+func (v *DataValidator) compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
 	var (
 		data1, data2 *dbutil.ColumnData
 		str1, str2   string
