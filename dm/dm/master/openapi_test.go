@@ -155,7 +155,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	cancel()
+	defer cancel()
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
