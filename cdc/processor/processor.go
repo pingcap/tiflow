@@ -945,7 +945,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
-	// todo: remove this feature flag after table actor is GA
+	// TODO: remove this feature flag after table actor is GA
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
 		var markTableID model.TableID

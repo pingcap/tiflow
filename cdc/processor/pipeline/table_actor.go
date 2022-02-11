@@ -80,7 +80,7 @@ type tableActor struct {
 	stopFunc func(err error)
 
 	lastFlushTime time.Time
-	lck           sync.Mutex
+	mu            sync.Mutex
 }
 
 // NewTableActor creates a table actor.
@@ -218,7 +218,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.Init(pullerActorNodeContext); err != nil {
+	if err := pullerNode.InitWithWaitGroup(pullerActorNodeContext, t.wg); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -308,8 +308,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 // stop the actor, it's idempotent
 func stop(ctx context.Context, t *tableActor) func(err error) {
 	return func(err error) {
-		t.lck.Lock()
-		defer t.lck.Unlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 
 		if atomic.LoadUint32(&t.stopped) == stopped {
 			return
@@ -387,7 +387,7 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 		if cerror.ErrMailboxFull.Equal(err) {
 			return false
 		}
-		if cerror.ErrSendToClosedPipeline.Equal(err) {
+		if cerror.ErrActorNotFound.Equal(err) {
 			return true
 		}
 		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
