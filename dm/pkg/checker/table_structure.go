@@ -569,8 +569,7 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table,
 			case <-ctx.Done():
 				log.L().Logger.Warn("ctx canceled before input tables completely")
 				return
-			default:
-				inCh <- &checkItem{table, sourceID}
+			case inCh <- &checkItem{table, sourceID}:
 			}
 		}
 	}
