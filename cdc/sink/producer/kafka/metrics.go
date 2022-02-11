@@ -275,15 +275,17 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 }
 
 func (sm *saramaMetricsMonitor) Cleanup() {
+	sm.cleanUpProducerMetrics()
+	if err := sm.cleanUpBrokerMetrics(); err != nil {
+		log.Warn("clean up broker metrics failed", zap.Error(err))
+	}
+}
+
+func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
 	batchSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
 	recordSendRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
 	recordPerRequestGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
 	compressionRatioGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-
-	if err := sm.cleanUpBrokerMetrics(); err != nil {
-		log.Warn("clean up broker metrics failed", zap.Error(err))
-	}
-
 }
 
 func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
