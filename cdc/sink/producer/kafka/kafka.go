@@ -37,7 +37,17 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
 const defaultPartitionNum = 3
+=======
+const (
+	// defaultPartitionNum specifies the default number of partitions when we create the topic.
+	defaultPartitionNum = 3
+
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
+)
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 
 // Config stores user specified Kafka producer configuration
 type Config struct {
@@ -194,6 +204,14 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+<<<<<<< HEAD
+=======
+
+	role util.Role
+	id   model.ChangeFeedID
+
+	metricsMonitor *saramaMetricsMonitor
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }
 
 type kafkaProducerClosingFlag = int32
@@ -351,6 +369,8 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 	}
+
+	k.metricsMonitor.Cleanup()
 	return nil
 }
 
@@ -359,12 +379,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.flushedReceiver.Stop()
 		k.stop()
 	}()
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
+		case <-ticker.C:
+			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err))
 			return err
@@ -398,7 +423,71 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	}
 	defer func() {
 		if err := admin.Close(); err != nil {
+<<<<<<< HEAD
 			log.Warn("close kafka cluster admin failed", zap.Error(err))
+=======
+			log.Warn("close kafka cluster admin failed", zap.Error(err),
+				zap.String("changefeed", changefeedID), zap.Any("role", role))
+		}
+	}()
+
+	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	syncProducer, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	notifier := new(notify.Notifier)
+	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+	k := &kafkaSaramaProducer{
+		client:        client,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
+		topic:         topic,
+		partitionNum:  config.PartitionNum,
+		partitionOffset: make([]struct {
+			flushed uint64
+			sent    uint64
+		}, config.PartitionNum),
+		flushedNotifier: notifier,
+		flushedReceiver: flushedReceiver,
+		closeCh:         make(chan struct{}),
+		failpointCh:     make(chan error, 1),
+		closing:         kafkaProducerRunning,
+
+		id:   changefeedID,
+		role: role,
+
+		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+			util.CaptureAddrFromCtx(ctx), changefeedID),
+	}
+	go func() {
+		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", k.id), zap.Any("role", role))
+			}
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 		}
 	}()
 

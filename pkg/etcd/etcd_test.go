@@ -357,6 +357,82 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	err = s.client.RevokeAllLeases(ctx, leases)
 	c.Assert(err, check.IsNil)
 	queryLeases, err = s.client.GetCaptureLeases(ctx)
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	c.Check(queryLeases, check.DeepEquals, map[string]int64{})
+=======
+	require.NoError(t, err)
+	require.Equal(t, queryLeases, map[string]int64{})
+}
+
+const (
+	testOwnerRevisionForMaxEpochs = 16
+)
+
+func TestGetOwnerRevision(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// First we check that GetOwnerRevision correctly reports errors
+	// Note that there is no owner for now.
+	_, err := s.client.GetOwnerRevision(ctx, "fake-capture-id")
+	require.Contains(t, err.Error(), "ErrOwnerNotFound")
+
+	var (
+		ownerRev int64
+		epoch    int32
+		wg       sync.WaitGroup
+	)
+
+	// We will create 3 mock captures and they take turns to be the owner.
+	// While each is the owner, it tries to get its owner revision, and
+	// checks that the global monotonicity is guaranteed.
+
+	wg.Add(3)
+	for i := 0; i < 3; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
+				concurrency.WithTTL(10 /* seconds */))
+			require.Nil(t, err)
+			election := concurrency.NewElection(sess, CaptureOwnerKey)
+
+			mockCaptureID := fmt.Sprintf("capture-%d", i)
+
+			for {
+				err = election.Campaign(ctx, mockCaptureID)
+				if err != nil {
+					require.Contains(t, err.Error(), "context canceled")
+					return
+				}
+
+				rev, err := s.client.GetOwnerRevision(ctx, mockCaptureID)
+				require.NoError(t, err)
+
+				_, err = s.client.GetOwnerRevision(ctx, "fake-capture-id")
+				require.Contains(t, err.Error(), "ErrNotOwner")
+
+				lastRev := atomic.SwapInt64(&ownerRev, rev)
+				require.Less(t, lastRev, rev)
+
+				err = election.Resign(ctx)
+				if err != nil {
+					require.Contains(t, err.Error(), "context canceled")
+					return
+				}
+
+				if atomic.AddInt32(&epoch, 1) >= testOwnerRevisionForMaxEpochs {
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }
