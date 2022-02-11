@@ -252,25 +252,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// Not check the sharding tables’ schema when the mode is increment.
 	// Because the table schema obtained from `show create table` is not the schema at the point of binlog.
 	if checkingShard && instance.cfg.Mode != config.ModeIncrement {
-		checkpointSQLs := []string{
-			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
-			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name))),
-			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name))),
+		isFresh, err := c.IsFreshTask()
+		if err != nil {
+			return err
 		}
-		var existCheckpoint bool
-		for _, sql := range checkpointSQLs {
-			c.tctx.Logger.Info("exec query", zap.String("sql", sql))
-			_, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
-			if err != nil && !utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
-				return err
-			}
-			if err == nil {
-				existCheckpoint = true
-				c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
-				break
-			}
-		}
-		if !existCheckpoint {
+		if isFresh {
 			for targetTableID, shardingSet := range sharding {
 				if shardingCounter[targetTableID] <= 1 {
 					continue
@@ -479,7 +465,26 @@ func (c *Checker) Type() pb.UnitType {
 
 // IsFreshTask implements Unit.IsFreshTask.
 func (c *Checker) IsFreshTask() (bool, error) {
-	return true, nil
+	instance := c.instances[0]
+	checkpointSQLs := []string{
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name))),
+	}
+	var existCheckpoint bool
+	for _, sql := range checkpointSQLs {
+		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
+		_, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
+		if err != nil && !utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+			return false, err
+		}
+		if err == nil {
+			existCheckpoint = true
+			c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
+			break
+		}
+	}
+	return !existCheckpoint, nil
 }
 
 // Status implements Unit interface.
