@@ -170,7 +170,8 @@ MSG:
 			if time.Since(t.lastFlushTime) > sinkFlushInterval {
 				_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
 				if err != nil {
-					t.stopFunc(err)
+					t.checkError(err)
+					break
 				}
 				t.lastFlushTime = time.Now()
 			}
