@@ -241,12 +241,14 @@ func (t *tableActor) start(ctx context.Context) error {
 			zap.Error(err))
 		return err
 	}
+
+	// construct sort actor node, it gets message from pullerNode chan, and send it to sorter
 	t.sortNode = sorterNode
-	var c AsyncMessageHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
-	var d AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var messageFetchFunc AsyncMessageHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
+	var messageProcessFunc AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return sorterNode.TryHandleDataMessage(sCtx, msg)
 	}
-	t.nodes = append(t.nodes, NewActorNode(c, d))
+	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
 	var cCtx *cyclicNodeContext
 	if t.cyclicEnabled {
@@ -263,13 +265,13 @@ func (t *tableActor) start(ctx context.Context) error {
 				zap.Error(err))
 			return err
 		}
-		c = func() *pipeline.Message {
-			return sCtx.tryGetProcessedMessage()
-		}
-		d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+
+		// construct cyclic actor node if it's enabled, it gets message from sortNode chan
+		messageFetchFunc = func() *pipeline.Message { return sCtx.tryGetProcessedMessage() }
+		messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 			return cyclicNode.TryHandleDataMessage(cCtx, msg)
 		}
-		t.nodes = append(t.nodes, NewActorNode(c, d))
+		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.sink,
@@ -283,19 +285,17 @@ func (t *tableActor) start(ctx context.Context) error {
 		return err
 	}
 	t.sinkNode = actorSinkNode
+
+	// construct sink actor node, it gets message from sortNode chan or cyclicNode
 	if t.cyclicEnabled {
-		c = func() *pipeline.Message {
-			return cCtx.tryGetProcessedMessage()
-		}
+		messageFetchFunc = func() *pipeline.Message { return cCtx.tryGetProcessedMessage() }
 	} else {
-		c = func() *pipeline.Message {
-			return sCtx.tryGetProcessedMessage()
-		}
+		messageFetchFunc = func() *pipeline.Message { return sCtx.tryGetProcessedMessage() }
 	}
-	d = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return actorSinkNode.HandleMessage(sCtx, msg)
 	}
-	t.nodes = append(t.nodes, NewActorNode(c, d))
+	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
 	t.started = true
 	log.Info("table actor is started",
@@ -304,6 +304,7 @@ func (t *tableActor) start(ctx context.Context) error {
 	return nil
 }
 
+// stop the actor, it's idempotent
 func stop(ctx context.Context, t *tableActor) func(err error) {
 	return func(err error) {
 		t.lck.Lock()
@@ -333,6 +334,7 @@ func stop(ctx context.Context, t *tableActor) func(err error) {
 	}
 }
 
+// any error will be reported to processor
 func (t *tableActor) checkError(err error) {
 	t.stopFunc(err)
 	t.reportErr(err)
@@ -416,6 +418,7 @@ func (t *tableActor) Name() string {
 // Cancel stops this table actor immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
+	// cancel wait group, release resource and mark the status as stopped
 	t.stopFunc(nil)
 	// actor is closed, tick actor to remove this actor router
 	if err := t.tableActorRouter.Send(t.mb.ID(), message.TickMessage()); err != nil {

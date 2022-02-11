@@ -80,6 +80,7 @@ func (c *actorNodeContext) ChangefeedVars() *context.ChangefeedVars {
 }
 
 func (c *actorNodeContext) Throw(err error) {
+	// node error will be reported to processor, and then processor cancel table
 	c.throw(err)
 }
 
