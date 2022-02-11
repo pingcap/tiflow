@@ -33,8 +33,6 @@ branch=$1
 
 # PingCAP file server URL.
 file_server_url="http://fileserver.pingcap.net"
-# PingCAP download center URL.
-download_center_url="https://download.pingcap.org"
 
 # Get sha1 based on branch name.
 tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
@@ -50,7 +48,7 @@ tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branc
 minio_download_url="${file_server_url}/download/minio.tar.gz"
 go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
 etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-sync_diff_inspector_url="${download_center_url}/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
+sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/new_sync_diff_inspector.tar.gz"
 jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
 
 # Some temporary dir.
