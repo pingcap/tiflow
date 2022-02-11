@@ -552,7 +552,7 @@ func (c *ShardingTablesChecker) Name() string {
 }
 
 // ShardingTablesChecker checks consistency of table structures of one sharding group
-// * check whether they have same column list
+// * check whether they have compatible column list
 // * check whether they have auto_increment key.
 type OptimisticShardingTablesChecker struct {
 	targetTableID string
@@ -571,7 +571,7 @@ func NewOptimisticShardingTablesChecker(targetTableID string, dbs map[string]*sq
 
 // Name implements Checker interface.
 func (c *OptimisticShardingTablesChecker) Name() string {
-	return fmt.Sprintf("sharding table %s consistency checking", c.targetTableID)
+	return fmt.Sprintf("optimistic sharding table %s consistency checking", c.targetTableID)
 }
 
 // Check implements RealChecker interface.
