@@ -114,7 +114,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 
 	defer close(s.closeCh)
 
-	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
+	finish, startCancel := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
 	ctx = context.WithValue(ctx, ctxKey{}, s)
@@ -163,6 +163,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 
 		select {
 		case <-subctx.Done():
+			startCancel()
 			return errors.Trace(subctx.Err())
 		case err := <-heapSorterErrCh:
 			return errors.Trace(err)

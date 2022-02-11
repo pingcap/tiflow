@@ -219,7 +219,7 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
-	handleJobFunc func(*job) error
+	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
@@ -735,14 +735,6 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return ti, nil
 	}
 
-	// in optimistic shard mode, we should try to get the init schema (the one before modified by other tables) first.
-	if s.cfg.ShardMode == config.ShardOptimistic {
-		ti, err = s.trackInitTableInfoOptimistic(sourceTable, targetTable)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
 	if ti == nil {
 		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
@@ -874,12 +866,19 @@ func (s *Syncer) updateReplicationLagMetric() {
 	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
 		s.workerJobTSArray[skipJobIdx].Store(0)
 	}
+
+	// reset ddl job TS in case of ddl job TS is never updated
+	if minTS == s.workerJobTSArray[ddlJobIdx].Load() {
+		s.workerJobTSArray[ddlJobIdx].Store(0)
+	}
 }
 
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 	ti, err := s.schemaTracker.GetTableInfo(table)
 	if err != nil && table.Name != "" {
-		s.tctx.L().DPanic("table info missing from schema tracker",
+		// TODO: if we RENAME tb1 TO tb2, the tracker will remove TableInfo of tb1 but we still save the table
+		// checkpoint for tb1. We can delete the table checkpoint in future.
+		s.tctx.L().Warn("table info missing from schema tracker",
 			zap.Stringer("table", table),
 			zap.Stringer("location", location),
 			zap.Error(err))
@@ -991,7 +990,7 @@ func (s *Syncer) checkShouldFlush() error {
 
 // TODO: move to syncer/job.go
 // handleJob will do many actions based on job type.
-func (s *Syncer) handleJob(job *job) (err error) {
+func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
@@ -1012,7 +1011,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 
 	if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete && job.tp != flush {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
-		return nil
+		return
 	}
 
 	switch job.tp {
@@ -1020,15 +1019,16 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
 		s.isTransactionEnd = true
-		return nil
+		return
 	case skip:
 		s.updateReplicationJobTS(job, skipJobIdx)
-		return nil
+		return
 	}
 
 	// 2. send the job to queue
 
 	s.addJob(job)
+	added2Queue = true
 
 	// 3. after job is sent to queue
 
@@ -1038,14 +1038,14 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		// caller
 		s.isTransactionEnd = false
 		skipCheckFlush = true
-		return nil
+		return
 	case ddl:
 		s.jobWg.Wait()
 
 		// skip rest logic when downstream error
 		if s.execError.Load() != nil {
 			// nolint:nilerr
-			return nil
+			return
 		}
 
 		s.updateReplicationJobTS(job, ddlJobIdx)
@@ -1058,7 +1058,7 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err = handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
 			if err != nil {
-				failpoint.Return(err)
+				failpoint.Return()
 			}
 		})
 		// save global checkpoint for DDL
@@ -1078,19 +1078,22 @@ func (s *Syncer) handleJob(job *job) (err error) {
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
 			if err != nil {
-				failpoint.Return(err)
+				failpoint.Return()
 			}
 		})
 		skipCheckFlush = true
-		return s.flushCheckPoints()
+		err = s.flushCheckPoints()
+		return
 	case flush:
 		s.jobWg.Wait()
 		skipCheckFlush = true
-		return s.flushCheckPoints()
+		err = s.flushCheckPoints()
+		return
 	case asyncFlush:
 		skipCheckFlush = true
 	}
-	return err
+	// nolint:nakedret
+	return
 }
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
@@ -1222,7 +1225,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
 		s.addJob(newGCJob(task.asyncflushJob.flushSeq))
 	} else {
-		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
+		s.tctx.L().Info("after sync flushed checkpoint, gc all causality keys")
 		s.addJob(newGCJob(math.MaxInt64))
 	}
 
@@ -1488,7 +1491,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if s.cfg.Mode == config.ModeAll && fresh {
+	if fresh && s.cfg.Mode == config.ModeAll {
 		delLoadTask = true
 		flushCheckpoint = true
 		err = s.loadTableStructureFromDump(ctx)
@@ -1496,7 +1499,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
 			cleanDumpFile = false
 		}
-	} else {
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(tctx)
+		}
+	}
+
+	if s.cfg.Mode == config.ModeIncrement || !fresh {
 		cleanDumpFile = false
 	}
 
@@ -1870,11 +1878,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
 
-		// TODO: support all event
+		// support QueryEvent and RowsEvent
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
-		if ev, ok := e.Event.(*replication.QueryEvent); ok {
+		switch ev := e.Event.(type) {
+		case *replication.QueryEvent, *replication.RowsEvent:
 			startLocation = binlog.InitLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -1897,19 +1906,22 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			currentLocation.Suffix = endSuffix
 
-			err = currentLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
+			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
+				err = currentLocation.SetGTID(queryEvent.GSet)
+				if err != nil {
+					return terror.Annotatef(err, "fail to record GTID %v", queryEvent.GSet)
+				}
 			}
 
 			if !s.isReplacingOrInjectingErr {
-				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e.Header.Timestamp)
+				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e)
 				if apply {
 					if op == pb.ErrorOp_Replace || op == pb.ErrorOp_Inject {
 						s.isReplacingOrInjectingErr = true
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
+						queryEvent := ev.(*replication.QueryEvent)
 						ec := eventContext{
 							tctx:            tctx,
 							header:          e.Header,
@@ -1918,9 +1930,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 							lastLocation:    &lastLocation,
 						}
 						var sourceTbls map[string]map[string]struct{}
-						sourceTbls, err = s.trackOriginDDL(ev, ec)
+						sourceTbls, err = s.trackOriginDDL(queryEvent, ec)
 						if err != nil {
-							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", ev.Query))
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", queryEvent.Query))
 						}
 
 						s.saveGlobalPoint(currentLocation)
@@ -1944,21 +1956,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 			// set endLocation.Suffix=0 of last replace or inject event
-			// also redirect stream to next event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
 				s.locations.reset(currentLocation)
-				if s.errOperatorHolder.IsInject(startLocation) {
-					s.errOperatorHolder.SetHasAllInjected(startLocation)
-					// reset event as startLocation, avoid to be marked in checkpoint
-					currentLocation.Position.Pos = startLocation.Position.Pos
-					err = s.streamerController.RedirectStreamer(tctx, startLocation)
-				} else {
-					err = s.streamerController.RedirectStreamer(tctx, currentLocation)
-				}
-				if err != nil {
-					return err
+				if !s.errOperatorHolder.IsInject(startLocation) {
+					// replace operator need redirect to currentLocation
+					if err = s.streamerController.RedirectStreamer(tctx, currentLocation); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -2049,7 +2055,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
-			err2 = s.handleJobFunc(job)
+			_, err2 = s.handleJobFunc(job)
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
@@ -2321,9 +2327,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	startTime := time.Now()
 	for i := range dmls {
 		job := newDMLJob(jobType, sourceTable, targetTable, dmls[i], &ec)
-		err = s.handleJobFunc(job)
-		if err != nil {
-			return err
+		added2Queue, err2 := s.handleJobFunc(job)
+		if err2 != nil || !added2Queue {
+			return err2
 		}
 	}
 	metrics.DispatchBinlogDurationHistogram.WithLabelValues(jobType.String(), s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
@@ -2688,7 +2694,7 @@ func (s *Syncer) handleQueryEventNoSharding(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err := s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -2910,7 +2916,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 	})
 
 	job := newDDLJob(qec)
-	err = s.handleJobFunc(job)
+	_, err = s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -3164,7 +3170,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			continue
 		}
 	}
-	logger.Info("fetch table structure form dump files",
+	logger.Info("fetch table structure from dump files",
 		zap.Strings("database", dbs),
 		zap.Any("tables", tables))
 	for _, db := range dbs {
@@ -3295,7 +3301,8 @@ func (s *Syncer) closeDBs() {
 // make newJob's sql argument empty to distinguish normal sql and skips sql.
 func (s *Syncer) recordSkipSQLsLocation(ec *eventContext) error {
 	job := newSkipJob(ec)
-	return s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
+	return err
 }
 
 // flushJobs add a flush job and wait for all jobs finished.
@@ -3304,7 +3311,8 @@ func (s *Syncer) flushJobs() error {
 	flushJobSeq := s.getFlushSeq()
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint), zap.Int64("flush job seq", flushJobSeq))
 	job := newFlushJob(s.cfg.WorkerCount, flushJobSeq)
-	return s.handleJobFunc(job)
+	_, err := s.handleJobFunc(job)
+	return err
 }
 
 func (s *Syncer) reSyncBinlog(tctx tcontext.Context, location binlog.Location) error {
@@ -3751,4 +3759,24 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 		chanSize /= 2
 	}
 	return chanSize
+}
+
+func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
+	tbls := s.optimist.Tables()
+	sourceTables := make([]*filter.Table, 0, len(tbls))
+	tableInfos := make([]*model.TableInfo, 0, len(tbls))
+	for _, tbl := range tbls {
+		sourceTable := tbl[0]
+		targetTable := tbl[1]
+		tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
+		if err != nil {
+			tctx.L().Error("failed to get table  infos", log.ShortError(err))
+			continue
+		}
+		sourceTables = append(sourceTables, &sourceTable)
+		tableInfos = append(tableInfos, tableInfo)
+	}
+	if err := s.checkpoint.FlushPointsWithTableInfos(tctx, sourceTables, tableInfos); err != nil {
+		tctx.L().Error("failed to flush table points with table infos", log.ShortError(err))
+	}
 }

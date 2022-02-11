@@ -37,6 +37,7 @@ func NewStartTaskCmd() *cobra.Command {
 		RunE:  startTaskFunc,
 	}
 	cmd.Flags().BoolP("remove-meta", "", false, "whether to remove task's meta data")
+	cmd.Flags().String("start-time", "", "specify the start time of binlog replication, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
 }
 
@@ -76,6 +77,11 @@ func startTaskFunc(cmd *cobra.Command, _ []string) error {
 		common.PrintLinesf("error in parse `--remove-meta`")
 		return err
 	}
+	startTime, err := cmd.Flags().GetString("start-time")
+	if err != nil {
+		common.PrintLinesf("error in parse `--start-time`")
+		return err
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -89,6 +95,7 @@ func startTaskFunc(cmd *cobra.Command, _ []string) error {
 			Task:       string(content),
 			Sources:    sources,
 			RemoveMeta: removeMeta,
+			StartTime:  startTime,
 		},
 		&resp,
 	)
