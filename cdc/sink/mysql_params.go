@@ -286,7 +286,7 @@ func generateDSNByParams(
 	}
 
 	// Since we don't need select, just set default isolation level to read-committed
-	// transaction_isolation is mysql newly introduced vairable and will vary from MySQL5.7/MySQL8.0/Mariadb
+	// transaction_isolation is mysql newly introduced variable and will vary from MySQL5.7/MySQL8.0/Mariadb
 	isolation, err := checkTiDBVariable(ctx, testDB, "transaction_isolation", defaultTxnIsolationRC)
 	if err != nil {
 		return "", err

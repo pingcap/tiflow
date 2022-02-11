@@ -133,7 +133,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
 		params := defaultParams.Clone()
-		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
+		var dsnStr string
+		_, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Error(t, err)
 
 		// simulate no transaction_isolation
@@ -145,6 +146,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 		)
 		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Nil(t, err)
 		expectedParams := []string{
 			"tx_isolation=%22READ-COMMITTED%22",
 		}
