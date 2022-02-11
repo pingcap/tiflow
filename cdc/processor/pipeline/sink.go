@@ -104,13 +104,13 @@ func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
-	return n.InitWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	n.InitWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	return nil
 }
 
-func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) error {
-	n.replicaConfig = replicaConfig
+func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) {
 	n.isTableActorMode = isTableActorMode
-	return nil
+	n.replicaConfig = replicaConfig
 }
 
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.

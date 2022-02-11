@@ -31,11 +31,11 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:          0,
-		tableID:          1,
-		tableActorRouter: tableActorRouter,
-		cancel:           func() {},
-		reportErr:        func(err error) {},
+		stopped:   0,
+		tableID:   1,
+		router:    tableActorRouter,
+		cancel:    func() {},
+		reportErr: func(err error) {},
 	}
 	require.Panics(t, func() { tbl.AsyncStop(1) })
 
