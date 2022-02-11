@@ -22,6 +22,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/puller/sorter"
 	"github.com/pingcap/tiflow/cdc/sink"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/pkg/actor"
+	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/etcd"
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -42,4 +53,18 @@ func init() {
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	initServerMetrics(registry)
+<<<<<<< HEAD
+=======
+	actor.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
+	p2p.InitMetrics(registry)
+	// Sorter metrics
+	sorter.InitMetrics(registry)
+	memory.InitMetrics(registry)
+	unified.InitMetrics(registry)
+	leveldb.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
+	db.InitMetrics(registry)
+	kafka.InitMetrics(registry)
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }
