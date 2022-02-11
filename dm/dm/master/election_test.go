@@ -66,11 +66,11 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 	// wait the second master ready
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s2.election.IsLeader()
 	}), check.IsFalse)
-	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 
 	client, err := etcdutil.CreateClient(strings.Split(cfg1.AdvertisePeerUrls, ","), nil)
 	c.Assert(err, check.IsNil)
