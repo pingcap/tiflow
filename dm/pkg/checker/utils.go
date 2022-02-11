@@ -138,6 +138,7 @@ func markCheckError(result *Result, err error) {
 		} else {
 			state = StateFailure
 		}
+		// `StateWarning` can't cover `StateFailure`.
 		if result.State != StateFailure {
 			result.State = state
 		}

@@ -438,8 +438,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				return err
 			}
 
-			has := c.hasAutoIncrementKey(ctStmt)
-			if has {
+			if has := c.hasAutoIncrementKey(ctStmt); has {
 				c.reMu.Lock()
 				if r.State == StateSuccess {
 					r.State = StateWarning
@@ -450,8 +449,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				c.reMu.Unlock()
 			}
 
-			checkErr := c.checkConsistency(c.firstCreateTableStmtNode, ctStmt, c.firstTable.String(), table.String(), c.firstSourceID, sourceID)
-			if checkErr != nil {
+			if checkErr := c.checkConsistency(ctStmt, table.String(), sourceID); checkErr != nil {
 				c.reMu.Lock()
 				r.State = StateFailure
 				r.Errors = append(r.Errors, checkErr)
@@ -505,8 +503,8 @@ func (cs briefColumnInfos) String() string {
 	return strings.Join(colStrs, "\n")
 }
 
-func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStmt, selfTable, otherTable, selfsourceID, othersourceID string) *Error {
-	selfColumnList := getBriefColumnList(self)
+func (c *ShardingTablesChecker) checkConsistency(other *ast.CreateTableStmt, otherTable, othersourceID string) *Error {
+	selfColumnList := getBriefColumnList(c.firstCreateTableStmtNode)
 	otherColumnList := getBriefColumnList(other)
 
 	if len(selfColumnList) != len(otherColumnList) {
@@ -518,7 +516,7 @@ func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStm
 			}
 			return ret
 		}
-		e.Self = fmt.Sprintf("sourceID %s table %s columns %v", selfsourceID, selfTable, getColumnNames(selfColumnList))
+		e.Self = fmt.Sprintf("sourceID %s table %v columns %v", c.firstSourceID, c.firstTable, getColumnNames(selfColumnList))
 		e.Other = fmt.Sprintf("sourceID %s table %s columns %v", othersourceID, otherTable, getColumnNames(otherColumnList))
 		return e
 	}
@@ -526,7 +524,7 @@ func (c *ShardingTablesChecker) checkConsistency(self, other *ast.CreateTableStm
 	for i := range selfColumnList {
 		if *selfColumnList[i] != *otherColumnList[i] {
 			e := NewError("different column definition")
-			e.Self = fmt.Sprintf("sourceID %s table %s column %s", selfsourceID, selfTable, selfColumnList[i])
+			e.Self = fmt.Sprintf("sourceID %s table %s column %s", c.firstSourceID, c.firstTable, selfColumnList[i])
 			e.Other = fmt.Sprintf("sourceID %s table %s column %s", othersourceID, otherTable, otherColumnList[i])
 			return e
 		}
