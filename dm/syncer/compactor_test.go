@@ -251,8 +251,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 
 	inCh := make(chan *job, 100)
 	syncer := &Syncer{
-		tctx:    tcontext.NewContext(context.Background(), log.L()),
-		syncCtx: tcontext.Background(),
+		tctx: tcontext.NewContext(context.Background(), log.L()),
 		cfg: &config.SubTaskConfig{
 			Name:     "task",
 			SourceID: "source",

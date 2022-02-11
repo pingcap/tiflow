@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/sessionctx"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
@@ -35,7 +34,6 @@ type causality struct {
 	outCh       chan *job
 	inCh        chan *job
 	logger      log.Logger
-	syncCtx     *tcontext.Context
 	sessCtx     sessionctx.Context
 	workerCount int
 
@@ -53,7 +51,6 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		logger:      syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
 		inCh:        inCh,
 		outCh:       make(chan *job, syncer.cfg.QueueSize),
-		syncCtx:     syncer.syncCtx, // this ctx can be used to cancel all the workers
 		sessCtx:     syncer.sessCtx,
 		workerCount: syncer.cfg.WorkerCount,
 	}
@@ -69,37 +66,33 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 // run receives dml jobs and send causality jobs by adding causality key.
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
-	for {
-		select {
-		case <-c.syncCtx.Ctx.Done():
-			return
-		case j, ok := <-c.inCh:
-			if !ok {
-				return
+	for j := range c.inCh {
+		metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
+
+		startTime := time.Now()
+
+		switch j.tp {
+		case flush, asyncFlush:
+			c.relation.rotate(j.flushSeq)
+		case gc:
+			// gc is only used on inner-causality logic
+			c.relation.gc(j.flushSeq)
+			continue
+		default:
+			keys := j.dml.identifyKeys(c.sessCtx)
+
+			// detectConflict before add
+			if c.detectConflict(keys) {
+				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
+				c.outCh <- newConflictJob(c.workerCount)
+				c.relation.clear()
 			}
-			metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
-			startTime := time.Now()
-			switch j.tp {
-			case flush, asyncFlush:
-				c.relation.rotate(j.flushSeq)
-			case gc:
-				// gc is only used on inner-causality logic
-				c.relation.gc(j.flushSeq)
-				continue
-			default:
-				keys := j.dml.identifyKeys(c.sessCtx)
-				// detectConflict before add
-				if c.detectConflict(keys) {
-					c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
-					c.outCh <- newConflictJob(c.workerCount)
-					c.relation.clear()
-				}
-				j.dml.key = c.add(keys)
-				c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
-			}
-			metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
-			c.outCh <- j
+			j.dml.key = c.add(keys)
+			c.logger.Debug("key for keys", zap.String("key", j.dml.key), zap.Strings("keys", keys))
 		}
+		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
+
+		c.outCh <- j
 	}
 }
 

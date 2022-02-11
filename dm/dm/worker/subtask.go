@@ -504,7 +504,7 @@ func (st *SubTask) Close() {
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
 }
 
-// kill kill running unit and stop the sub task.
+// Kill kill running unit and stop the sub task.
 func (st *SubTask) Kill() {
 	st.l.Info("killing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {

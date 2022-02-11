@@ -112,39 +112,31 @@ func (w *DMLWorker) run() {
 	for i := 0; i < w.workerCount; i++ {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
-	for {
-		select {
-		case <-w.syncCtx.Ctx.Done():
-			return
-		case j, ok := <-w.inCh:
-			if !ok {
-				return
-			}
-			metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
-			switch j.tp {
-			case flush:
-				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-				w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-				j.flushWg.Wait()
-				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
-				w.flushCh <- j
-			case asyncFlush:
-				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-				w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-				w.flushCh <- j
-			case conflict:
-				w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
-				w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
-				j.flushWg.Wait()
-				w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
-			default:
-				queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
-				w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
-				startTime := time.Now()
-				w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dml.key))
-				jobChs[queueBucket] <- j
-				metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
-			}
+	for j := range w.inCh {
+		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
+		switch j.tp {
+		case flush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			j.flushWg.Wait()
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.flushCh <- j
+		case asyncFlush:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			w.flushCh <- j
+		case conflict:
+			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
+			j.flushWg.Wait()
+			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+		default:
+			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
+			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
+			startTime := time.Now()
+			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dml.key))
+			jobChs[queueBucket] <- j
+			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
 	}
 }

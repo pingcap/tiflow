@@ -289,6 +289,13 @@ func (s *Syncer) newJobChans() {
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
+	s.checkpointFlushWorker = &checkpointFlushWorker{
+		input:        make(chan *checkpointFlushTask, 16),
+		cp:           s.checkpoint,
+		execError:    &s.execError,
+		afterFlushFn: s.afterFlushCheckpoint,
+		addCountFunc: s.addCount,
+	}
 	s.jobsClosed.Store(false)
 }
 
@@ -300,6 +307,7 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
+	s.checkpointFlushWorker.Close()
 	s.jobsClosed.Store(true)
 }
 
@@ -441,7 +449,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
-
 	s.reset()
 	return nil
 }
@@ -1431,6 +1438,7 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		case <-s.runCtx.Ctx.Done():
 			s.tctx.L().Info("syncer run exit so runCtx done")
 		case <-time.After(maxPauseOrStopWaitTime):
+			// TODO: maxPauseOrStopWaitTime should also count the time of waiting waitTransactionLock
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
 		}
@@ -1483,23 +1491,13 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
-	s.Lock()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
 	s.syncCtx, s.syncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
-	s.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           s.checkpoint,
-		execError:    &s.execError,
-		afterFlushFn: s.afterFlushCheckpoint,
-		addCountFunc: s.addCount,
-	}
-	s.Unlock()
 	defer func() {
 		s.runCancel()
 		s.closeJobChans()
-		s.checkpointFlushWorker.Close()
 		s.runWg.Wait()
 	}()
 
@@ -1555,7 +1553,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.runWg.Add(1)
 	go s.syncDML()
 	s.runWg.Add(1)
-	// start flush checkpoints worker. this worker must start before s.flushCheckPoints()
 	go func() {
 		defer s.runWg.Done()
 		// also need to use a different ctx. checkpointFlushWorker worker will be closed in the first defer
@@ -3377,6 +3374,7 @@ func (s *Syncer) Close() {
 	// when closing syncer by `stop-task`, remove active relay log from hub
 	s.removeActiveRelayLog()
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
+	s.runWg.Wait()
 	s.closed.Store(true)
 }
 
