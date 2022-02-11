@@ -397,7 +397,11 @@ func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
 			defer wg.Done()
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
+<<<<<<< HEAD
 			c.Check(err, check.IsNil)
+=======
+			require.Nil(t, err)
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 			election := concurrency.NewElection(sess, CaptureOwnerKey)
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)

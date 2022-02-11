@@ -37,6 +37,9 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
 )
 
 const (
@@ -68,6 +71,14 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+<<<<<<< HEAD
+=======
+
+	role util.Role
+	id   model.ChangeFeedID
+
+	metricsMonitor *saramaMetricsMonitor
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }
 
 type kafkaProducerClosingFlag = int32
@@ -221,6 +232,8 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 	}
+
+	k.metricsMonitor.Cleanup()
 	return nil
 }
 
@@ -229,12 +242,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.flushedReceiver.Stop()
 		k.stop()
 	}()
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
+		case <-ticker.C:
+			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err))
 			return err
@@ -312,6 +330,15 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
+<<<<<<< HEAD
+=======
+
+		id:   changefeedID,
+		role: role,
+
+		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+			util.CaptureAddrFromCtx(ctx), changefeedID),
+>>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
