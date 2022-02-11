@@ -303,7 +303,7 @@ func TestRevisionNotFallBack(t *testing.T) {
 	mockClock.Add(time.Second * 30)
 	// make sure watchCh has been reset since timeout
 	require.True(t, atomic.LoadInt32(watcher.resetCount) > 1)
-	// make suer revision in WatchWitchChan does not fall back
+	// make sure revision in WatchWitchChan does not fall back
 	// even if there has not any response been received from WatchCh
 	// while WatchCh was reset
 	require.Equal(t, atomic.LoadInt64(watcher.rev), revision)
