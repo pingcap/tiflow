@@ -128,15 +128,26 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 		return
 	}
 
-	if l.curEndLocation.GetGTID() == nil {
-		gset, _ := gtid.ParserGTID("", gtidStr)
+	gset := l.curEndLocation.GetGTID()
+
+	if gset == nil {
+		gset, _ = gtid.ParserGTID("", gtidStr)
 		_ = l.curEndLocation.SetGTID(gset.Origin())
 		return
 	}
 
-	err = l.curEndLocation.GetGTID().Update(gtidStr)
+	clone := gset.Clone()
+	err = clone.Update(gtidStr)
 	if err != nil {
 		log.L().DPanic("failed to update GTID set",
+			zap.String("GTID", gtidStr),
+			zap.Error(err))
+		return
+	}
+
+	err = l.curEndLocation.SetGTID(clone.Origin())
+	if err != nil {
+		log.L().DPanic("failed to set GTID set",
 			zap.String("GTID", gtidStr),
 			zap.Error(err))
 	}
