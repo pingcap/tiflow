@@ -474,15 +474,20 @@ func (c *Checker) IsFreshTask() (bool, error) {
 	var existCheckpoint bool
 	for _, sql := range checkpointSQLs {
 		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
-		_, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
-		if err != nil && !utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
+		if err != nil {
+			if utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+				continue
+			}
 			return false, err
 		}
-		if err == nil {
-			existCheckpoint = true
-			c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
-			break
+		defer rows.Close()
+		if rows.Err() != nil {
+			return false, rows.Err()
 		}
+		existCheckpoint = true
+		c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
+		break
 	}
 	return !existCheckpoint, nil
 }
