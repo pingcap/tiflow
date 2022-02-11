@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
@@ -1462,9 +1463,9 @@ eventLoop:
 // TestStreamRecvWithErrorAndResolvedGoBack mainly tests the scenario that the `Recv` call of a gPRC
 // stream in kv client meets error, and kv client reconnection with tikv with the current tso
 func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
-	// if !util.FailpointBuild {
-	// 	c.Skip("skip when this is not a failpoint build")
-	// }
+	if !util.FailpointBuild {
+		t.Skip("skip when this is not a failpoint build")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
