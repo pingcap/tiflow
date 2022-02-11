@@ -1717,7 +1717,7 @@ func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
 }
 
 func TestWaitBeforeRunExit(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	cfg := genDefaultSubTaskConfig4Test()
 	cfg.WorkerCount = 0
 	syncer := NewSyncer(cfg, nil, nil)
@@ -1746,18 +1746,15 @@ func TestWaitBeforeRunExit(t *testing.T) {
 		defer wg.Done()
 		errCh <- syncer.Run(ctx)
 	}()
-	// wait s.Run start
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) // wait s.Run start
 
 	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
-	require.Equal(t, 0, len(errCh))
-	syncer.Lock()
-	require.NotNil(t, syncer.runCtx)
-	require.NotNil(t, syncer.runCancel)
-	syncer.Unlock()
-	syncer.runCancel() // this will make s.Run exit
+	cancel() // this will make s.Run exit
 	wg.Wait()
 	require.Nil(t, <-errCh)
+	require.Equal(t, 0, len(errCh))
+	require.NotNil(t, syncer.runCtx)
+	require.NotNil(t, syncer.runCancel)
 
 	// test syncer wait time not more than maxPauseOrStopWaitTime
 	oldMaxPauseOrStopWaitTime := maxPauseOrStopWaitTime
