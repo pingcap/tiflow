@@ -281,12 +281,29 @@ func (sm *saramaMetricsMonitor) Cleanup() {
 	recordPerRequestGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
 	compressionRatioGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
 
-	incomingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	outgoingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	requestRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	requestSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	requestLatencyInMsGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	requestsInFlightGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	responseRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	responseSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
+	if err := sm.cleanUpBrokerMetrics(); err != nil {
+		log.Warn("clean up broker metrics failed", zap.Error(err))
+	}
+
+}
+
+func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
+	brokers, _, err := sm.admin.DescribeCluster()
+	if err != nil {
+		return err
+	}
+
+	for _, b := range brokers {
+		brokerID := strconv.Itoa(int(b.ID()))
+
+		incomingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		outgoingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		requestRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		requestSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		requestLatencyInMsGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		requestsInFlightGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		responseRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+		responseSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
+	}
+	return nil
 }
