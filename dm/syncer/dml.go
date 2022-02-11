@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
-// genDMLParam stores pruned columns, data as well as the original columns, data, index.
+// genDMLParam stores original data and table structure.
 type genDMLParam struct {
 	sourceTable     *filter.Table // origin table
 	targetTable     *filter.Table

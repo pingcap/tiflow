@@ -285,23 +285,21 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLInsert)
 			}
-			appendQueryAndArg()
 
 		case sqlmodel.RowChangeUpdate:
 			if j.safeMode {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
 				appendQueryAndArg()
 				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
-				appendQueryAndArg()
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
-				appendQueryAndArg()
 			}
 
 		case sqlmodel.RowChangeDelete:
 			query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
-			appendQueryAndArg()
 		}
+
+		appendQueryAndArg()
 	}
 	return queries, args
 }

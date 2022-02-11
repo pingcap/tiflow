@@ -241,16 +241,6 @@ func newCompactJob(targetTable *filter.Table) *job {
 	}
 }
 
-// newDummyJob is only used in tests.
-func newDummyJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
-	return &job{
-		tp:          tp,
-		targetTable: targetTable,
-		ddls:        ddls,
-		dml:         &sqlmodel.RowChange{},
-	}
-}
-
 // put queues into bucket to monitor them.
 func queueBucketName(queueID int) string {
 	return fmt.Sprintf("q_%d", queueID%defaultBucketCount)

@@ -1494,6 +1494,15 @@ var testJobs struct {
 	jobs []*job
 }
 
+func newDummyJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
+	return &job{
+		tp:          tp,
+		targetTable: targetTable,
+		ddls:        ddls,
+		dml:         &sqlmodel.RowChange{},
+	}
+}
+
 func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	for _, job := range jobs {
 		switch job.tp {
