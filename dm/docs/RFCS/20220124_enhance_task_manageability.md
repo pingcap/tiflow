@@ -93,7 +93,7 @@ The current interaction of dmctl still has room for optimization, and I hope to 
 
 Here is a simple prototype demo:
 
-[![asciicast](https://asciinema.org/a/AVnOlghSu5d0YqjdOw9iruFdW.svg)](https://asciinema.org/a/AVnOlghSu5d0YqjdOw9iruFdW)
+![dmctl](../media/new-dmctl.svg)
 
 ## Breaking Changes for OpenAPI
 
