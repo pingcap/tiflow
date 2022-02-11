@@ -53,7 +53,7 @@ func TestSplit(t *testing.T) {
 
 	change := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI1, nil, nil)
 	require.True(t, change.IsIdentityUpdated())
-	del, ins := change.Split()
+	del, ins := change.SplitUpdate()
 	delIDKey := del.IdentityKey()
 	require.NotZero(t, delIDKey)
 	insIDKey := ins.IdentityKey()
