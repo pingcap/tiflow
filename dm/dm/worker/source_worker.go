@@ -1231,7 +1231,10 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 
 	subtask := w.subTaskHolder.findSubTask(stage.Task)
 	if subtask == nil {
-		return terror.ErrWorkerSubTaskNotFound.Generate(stage.Task)
+		// when a new subtask start with validator, both subtask and validator stage observer will observe it,
+		// if validator observe it first, we may not have the subtask.
+		log.L().Info("cannot find subtask. maybe it's a new task, let subtask stage observer handles it")
+		return nil
 	}
 
 	// stage of validator can only be Running or Stopped

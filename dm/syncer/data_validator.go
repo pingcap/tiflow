@@ -32,6 +32,14 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
+// DataValidator
+// validator can be start when there's syncer unit in the subtask and validation mode is not none,
+// it's terminated when the subtask is terminated.
+// stage of validator is independent of subtask, pause/resume subtask doesn't affect the stage of validator.
+//
+// validator can be in running or stopped stage
+// - in running when it's started with subtask or started later on the fly
+// - in stopped when validation stop is executed
 type DataValidator struct {
 	sync.RWMutex
 	cfg    *config.SubTaskConfig
