@@ -15,7 +15,9 @@ package master
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -121,6 +123,8 @@ type Server struct {
 	closed atomic.Bool
 
 	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
+
+	clusterID atomic.Uint64
 }
 
 // NewServer creates a new Server.
@@ -132,7 +136,7 @@ func NewServer(cfg *Config) *Server {
 		ap:        NewAgentPool(&RateLimitConfig{rate: cfg.RPCRateLimit, burst: cfg.RPCRateBurst}),
 	}
 	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskResources)
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 	server.closed.Store(true)
 	setUseTLS(&cfg.Security)
 
@@ -405,6 +409,45 @@ func subtaskCfgPointersToInstances(stCfgPointers ...*config.SubTaskConfig) []con
 	return stCfgs
 }
 
+func (s *Server) initClusterID(ctx context.Context) error {
+	log.L().Info("init cluster id begin")
+	ctx1, cancel := context.WithTimeout(ctx, etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	resp, err := s.etcdClient.Get(ctx1, dmcommon.ClusterIDKey)
+	if err != nil {
+		return err
+	}
+
+	// New cluster, generate a cluster id and backfill it to etcd
+	if len(resp.Kvs) == 0 {
+		ts := uint64(time.Now().Unix())
+		clusterID := (ts << 32) + uint64(rand.Uint32())
+		clusterIDBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(clusterIDBytes, clusterID)
+		_, err = s.etcdClient.Put(ctx1, dmcommon.ClusterIDKey, string(clusterIDBytes))
+		if err != nil {
+			return err
+		}
+		s.clusterID.Store(clusterID)
+		log.L().Info("generate and init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+		return nil
+	}
+
+	if len(resp.Kvs[0].Value) != 8 {
+		return terror.ErrMasterInvalidClusterID.Generate(resp.Kvs[0].Value)
+	}
+
+	s.clusterID.Store(binary.BigEndian.Uint64(resp.Kvs[0].Value))
+	log.L().Info("init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+	return nil
+}
+
+// ClusterID return correct cluster id when as leader.
+func (s *Server) ClusterID() uint64 {
+	return s.clusterID.Load()
+}
+
 // StartTask implements MasterServer.StartTask.
 func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.StartTaskResponse, error) {
 	var (
@@ -590,6 +633,18 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 
 	resp.Result = true
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
+
+	if expect == pb.Stage_Stopped {
+		// delete meta data for optimist
+		if len(req.Sources) == 0 {
+			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
+		} else {
+			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
+		}
+		if err2 != nil {
+			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
+		}
+	}
 	return resp, nil
 }
 
@@ -1558,7 +1613,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
-	err = s.optimist.RemoveMetaData(taskName)
+	err = s.optimist.RemoveMetaDataWithTask(taskName)
 	if err != nil {
 		return err
 	}
