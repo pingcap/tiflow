@@ -60,9 +60,10 @@ func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, 
 }
 
 func (h *statusAPI) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	h.capture.WriteDebugInfo(w)
+	ctx := req.Context()
+	h.capture.WriteDebugInfo(ctx, w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	h.writeEtcdInfo(req.Context(), h.capture.EtcdClient, w)
+	h.writeEtcdInfo(ctx, h.capture.EtcdClient, w)
 }
 
 func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
