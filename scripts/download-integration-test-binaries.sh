@@ -73,8 +73,7 @@ mv third_bin/_tiflash/* third_bin
 curl "${go_ycsb_download_url}" -o third_bin/go-ycsb
 curl -L "${etcd_download_url}" | tar xz -C tmp
 mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
-curl -L "${sync_diff_inspector_url}" | tar xz -C tmp
-mv tmp/tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector third_bin
+curl "${sync_diff_inspector_url}" | tar xz -C third_bin
 curl -L "${jq_download_url}" -o third_bin/jq
 chmod a+x third_bin/*
 
