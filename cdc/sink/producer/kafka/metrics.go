@@ -14,8 +14,13 @@
 package kafka
 
 import (
+	"strconv"
+
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
+	"go.uber.org/zap"
 )
 
 var (
@@ -65,7 +70,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_incoming_byte_rate",
 			Help:      "Bytes/second read off all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark for each request's size in bytes
 	outgoingByteRateGauge = prometheus.NewGaugeVec(
@@ -74,7 +79,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_outgoing_byte_rate",
 			Help:      "Bytes/second written off all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark by 1 for each request
 	requestRateGauge = prometheus.NewGaugeVec(
@@ -83,7 +88,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_rate",
 			Help:      "Requests/second sent to all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark for each request's size in bytes
 	requestSizeGauge = prometheus.NewGaugeVec(
@@ -92,7 +97,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_size",
 			Help:      "the request size in bytes for all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// histogram update for each received response, requestLatency := time.Since(response.requestTime)
 	requestLatencyInMsGauge = prometheus.NewGaugeVec(
@@ -101,7 +106,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_latency",
 			Help:      "the request latency in ms for all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// counter inc by 1 once a request send, dec by 1 for a response received.
 	requestsInFlightGauge = prometheus.NewGaugeVec(
@@ -110,7 +115,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_in_flight_requests",
 			Help:      "the current number of in-flight requests awaiting a response for all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark by 1 once a response received.
 	responseRateGauge = prometheus.NewGaugeVec(
@@ -119,7 +124,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_response_rate",
 			Help:      "Responses/second received from all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark by each read response size
 	responseSizeGauge = prometheus.NewGaugeVec(
@@ -128,7 +133,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_response_size",
 			Help:      "the response size in bytes for all brokers",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "broker"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -172,12 +177,15 @@ type saramaMetricsMonitor struct {
 	changefeedID string
 
 	registry metrics.Registry
+	admin    kafka.ClusterAdminClient
 }
 
 // CollectMetrics collect all monitored metrics
 func (sm *saramaMetricsMonitor) CollectMetrics() {
 	sm.collectProducerMetrics()
-	sm.collectBrokerMetrics()
+	if err := sm.collectBrokerMetrics(); err != nil {
+		log.Warn("collect broker metrics failed", zap.Error(err))
+	}
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
@@ -202,53 +210,63 @@ func (sm *saramaMetricsMonitor) collectProducerMetrics() {
 	}
 }
 
-func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
-	incomingByteRateMetric := sm.registry.Get(incomingByteRateMetricName)
-	if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
-		incomingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Snapshot().Rate1())
+func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
+	brokers, _, err := sm.admin.DescribeCluster()
+	if err != nil {
+		return err
 	}
 
-	outgoingByteRateMetric := sm.registry.Get(outgoingByteRateMetricName)
-	if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
-		outgoingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Snapshot().Rate1())
-	}
+	for _, b := range brokers {
+		brokerID := strconv.Itoa(int(b.ID()))
+		incomingByteRateMetric := sm.registry.Get(incomingByteRateMetricName)
+		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
+			incomingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+		}
 
-	requestRateMetric := sm.registry.Get(requestRateMetricName)
-	if meter, ok := requestRateMetric.(metrics.Meter); ok {
-		requestRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Snapshot().Rate1())
-	}
+		outgoingByteRateMetric := sm.registry.Get(outgoingByteRateMetricName)
+		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
+			outgoingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+		}
 
-	requestSizeMetric := sm.registry.Get(requestSizeMetricName)
-	if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
-		requestSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
-	}
+		requestRateMetric := sm.registry.Get(requestRateMetricName)
+		if meter, ok := requestRateMetric.(metrics.Meter); ok {
+			requestRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+		}
 
-	requestLatencyMetric := sm.registry.Get(requestLatencyInMsMetricName)
-	if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-		requestLatencyInMsGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
-	}
+		requestSizeMetric := sm.registry.Get(requestSizeMetricName)
+		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
+			requestSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+		}
 
-	requestsInFlightMetric := sm.registry.Get(requestsInFlightMetricName)
-	if counter, ok := requestsInFlightMetric.(metrics.Counter); ok {
-		requestsInFlightGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(float64(counter.Snapshot().Count()))
-	}
+		requestLatencyMetric := sm.registry.Get(requestLatencyInMsMetricName)
+		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
+			requestLatencyInMsGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+		}
 
-	responseRateMetric := sm.registry.Get(responseRateMetricName)
-	if meter, ok := responseRateMetric.(metrics.Meter); ok {
-		responseRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Snapshot().Rate1())
-	}
+		requestsInFlightMetric := sm.registry.Get(requestsInFlightMetricName)
+		if counter, ok := requestsInFlightMetric.(metrics.Counter); ok {
+			requestsInFlightGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(float64(counter.Snapshot().Count()))
+		}
 
-	responseSizeMetric := sm.registry.Get(responseSizeMetricName)
-	if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
-		responseSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
+		responseRateMetric := sm.registry.Get(responseRateMetricName)
+		if meter, ok := responseRateMetric.(metrics.Meter); ok {
+			responseRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+		}
+
+		responseSizeMetric := sm.registry.Get(responseSizeMetricName)
+		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
+			responseSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+		}
 	}
+	return nil
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
+func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
 	return &saramaMetricsMonitor{
 		captureAddr:  captureAddr,
 		changefeedID: changefeedID,
 		registry:     registry,
+		admin:        admin,
 	}
 }
 
