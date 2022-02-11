@@ -40,9 +40,11 @@ type testCheckerSuite struct{}
 var _ = tc.Suite(&testCheckerSuite{})
 
 var (
-	schema = "db_1"
-	tb1    = "t_1"
-	tb2    = "t_2"
+	schema     = "db_1"
+	tb1        = "t_1"
+	tb2        = "t_2"
+	metaSchema = "dm_meta"
+	taskName   = "test"
 )
 
 func ignoreExcept(itemMap map[string]struct{}) []string {
@@ -289,7 +291,9 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
 func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	cfgs := []*config.SubTaskConfig{
 		{
-			ShardMode: config.ShardPessimistic,
+			MetaSchema: metaSchema,
+			Name:       taskName,
+			ShardMode:  config.ShardPessimistic,
 			RouteRules: []*router.TableRule{
 				{
 					SchemaPattern: schema,
@@ -312,12 +316,11 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 	errNoSuchTable := &gmysql.MySQLError{Number: mysql.ErrNoSuchTable}
 	createTableSQL := "SHOW CREATE TABLE `%s`.`%s`"
-	mock := conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.LoaderCheckpoint(""))).WillReturnError(errNoSuchTable)
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.LightningCheckpoint(""))).WillReturnError(errNoSuchTable)
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.SyncerCheckpoint(""))).WillReturnError(errNoSuchTable)
+	// test different column definition
+	mock := initMockDB(c)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LoaderCheckpoint(taskName))).WillReturnError(errNoSuchTable)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LightningCheckpoint(taskName))).WillReturnError(errNoSuchTable)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.SyncerCheckpoint(taskName))).WillReturnError(errNoSuchTable)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
@@ -325,13 +328,26 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*different column definition(.|\n)*")
 
+	// test success check
 	mock = initMockDB(c)
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.LoaderCheckpoint(""))).WillReturnError(errNoSuchTable)
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.LightningCheckpoint(""))).WillReturnError(errNoSuchTable)
-	mock.ExpectQuery(fmt.Sprintf(createTableSQL, "", cputil.SyncerCheckpoint(""))).WillReturnError(errNoSuchTable)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LoaderCheckpoint(taskName))).WillReturnError(errNoSuchTable)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LightningCheckpoint(taskName))).WillReturnError(errNoSuchTable)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.SyncerCheckpoint(taskName))).WillReturnError(errNoSuchTable)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
+	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+	c.Assert(err, tc.IsNil)
+
+	// test exist checkpoint
+	mock = initMockDB(c)
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LoaderCheckpoint(taskName))).WillReturnRows(sqlmock.
+		NewRows([]string{"Table", "Create Table"}).AddRow(cputil.LoaderCheckpoint(taskName), ""))
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.LightningCheckpoint(taskName))).WillReturnRows(sqlmock.
+		NewRows([]string{"Table", "Create Table"}).AddRow(cputil.LightningCheckpoint(taskName), ""))
+	mock.ExpectQuery(fmt.Sprintf(createTableSQL, metaSchema, cputil.SyncerCheckpoint(taskName))).WillReturnRows(sqlmock.
+		NewRows([]string{"Table", "Create Table"}).AddRow(cputil.SyncerCheckpoint(taskName), ""))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 	c.Assert(err, tc.IsNil)

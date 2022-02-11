@@ -249,6 +249,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	instance := c.instances[0]
+	// Not check the sharding tables’ schema when the mode is increment.
+	// Because the table schema obtained from `show create table` is not the schema at the point of binlog.
 	if checkingShard && instance.cfg.Mode != config.ModeIncrement {
 		checkpointSQLs := []string{
 			fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
