@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
@@ -59,4 +60,5 @@ func init() {
 	leveldb.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
 	db.InitMetrics(registry)
+	kafka.InitMetrics(registry)
 }
