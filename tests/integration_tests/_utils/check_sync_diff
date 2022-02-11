@@ -21,7 +21,7 @@ cd $workdir
 i=0
 while [ $i -lt $check_time ]; do
 	rm -rf $workdir/sync_diff/
-	$binary --config=$conf >>$LOG 2>&1
+	$binary --log-level=debug --config=$conf >>$LOG 2>&1
 	ret=$?
 	if [ "$ret" == 0 ]; then
 		echo "check diff successfully"
