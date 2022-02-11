@@ -64,6 +64,14 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(compressionRatioGauge)
 }
 
+// sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview
+const (
+	batchSizeMetricName        = "batch-size"
+	recordSendRateMetricName   = "record-send-rate"
+	recordPerRequestMetricName = "records-per-request"
+	compressionRatioMetricName = "compression-ratio"
+)
+
 type saramaMetricsMonitor struct {
 	captureAddr  string
 	changefeedID string
@@ -73,22 +81,22 @@ type saramaMetricsMonitor struct {
 
 // CollectMetrics collect all monitored metrics
 func (sm *saramaMetricsMonitor) CollectMetrics() {
-	batchSizeMetric := sm.registry.Get("batch-size")
+	batchSizeMetric := sm.registry.Get(batchSizeMetricName)
 	if histogram, ok := batchSizeMetric.(metrics.Histogram); ok {
 		batchSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
 	}
 
-	recordSendRateMetric := sm.registry.Get("record-send-rate")
+	recordSendRateMetric := sm.registry.Get(recordSendRateMetricName)
 	if meter, ok := recordSendRateMetric.(metrics.Meter); ok {
 		recordSendRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Rate1())
 	}
 
-	recordPerRequestMetric := sm.registry.Get("records-per-request")
+	recordPerRequestMetric := sm.registry.Get(recordPerRequestMetricName)
 	if histogram, ok := recordPerRequestMetric.(metrics.Histogram); ok {
 		recordPerRequestGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
 	}
 
-	compressionRatioMetric := sm.registry.Get("compression-ratio")
+	compressionRatioMetric := sm.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Mean())
 	}

@@ -39,6 +39,9 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
 )
 
 const (
@@ -271,7 +274,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(flushMetricsInterval)
 	defer ticker.Stop()
 	for {
 		select {
