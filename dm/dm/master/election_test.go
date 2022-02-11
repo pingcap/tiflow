@@ -33,7 +33,6 @@ type testElectionSuite struct{}
 
 func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -51,7 +50,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -67,6 +66,11 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 
 	client, err := etcdutil.CreateClient(strings.Split(cfg1.AdvertisePeerUrls, ","), nil)
 	c.Assert(err, check.IsNil)
