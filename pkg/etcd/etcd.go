@@ -226,7 +226,6 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 	if err != nil {
 		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
-
 	revision := resp.Header.Revision
 	infos := make([]*model.CaptureInfo, 0, resp.Count)
 	for _, kv := range resp.Kvs {
