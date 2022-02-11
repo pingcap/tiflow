@@ -24,8 +24,7 @@ import (
 )
 
 var (
-	// producer metrics
-	// histogram update by each request batch
+	// batch-size
 	batchSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
