@@ -14,14 +14,15 @@
 package syncer
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/util/mock"
+	"github.com/stretchr/testify/require"
 
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 var _ = Suite(&testJobSuite{})
@@ -37,14 +38,8 @@ func (t *testJobSuite) TestJobTypeString(c *C) {
 			null,
 			"",
 		}, {
-			insert,
-			"insert",
-		}, {
-			update,
-			"update",
-		}, {
-			del,
-			"delete",
+			dml,
+			"dml",
 		}, {
 			ddl,
 			"ddl",
@@ -69,14 +64,16 @@ func (t *testJobSuite) TestJobTypeString(c *C) {
 	}
 }
 
-func (t *testJobSuite) TestJob(c *C) {
+func TestJob(t *testing.T) {
+	t.Parallel()
+
 	ddlInfo := &ddlInfo{
 		sourceTables: []*filter.Table{{Schema: "test1", Name: "t1"}},
 		targetTables: []*filter.Table{{Schema: "test2", Name: "t2"}},
 	}
-	table := &filter.Table{Schema: "test", Name: "t1"}
+	table := &cdcmodel.TableName{Schema: "test", Table: "t1"}
 	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location, safeMode: true}
 	qec := &queryEventContext{
 		eventContext:    ec,
 		originSQL:       "create database test",
@@ -85,47 +82,34 @@ func (t *testJobSuite) TestJob(c *C) {
 	}
 
 	schema := "create table test.tb(id int primary key, col1 int unique not null)"
-	p := parser.New()
-	se := mock.NewContext()
-	ti, err := createTableInfo(p, se, 0, schema)
-	c.Assert(err, IsNil)
-	tiIndex := &model.IndexInfo{
-		Table:   ti.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti.Columns[0].Name,
-			Offset: ti.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
+	ti := mockTableInfo(t, schema)
+
+	exampleChange := sqlmodel.NewRowChange(table, nil, nil, []interface{}{2, 2}, ti, nil, nil)
 
 	testCases := []struct {
 		job    *job
 		jobStr string
 	}{
 		{
-			newDMLJob(insert, table, table, newDML(insert, true, "targetTable", table, nil, []interface{}{2, 2}, nil, []interface{}{2, 2}, ti.Columns, ti, tiIndex, nil), ec),
-			"tp: insert, flushSeq: 0, dml: [safemode: true, targetTableID: targetTable, op: insert, columns: [id col1], oldValues: [], values: [2 2]], ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
+			newDMLJob(exampleChange, ec),
+			"tp: dml, flushSeq: 0, dml: [type: ChangeInsert, source table: test.t1, target table: test.t1, preValues: [], postValues: [2 2]], safemode: true, ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
 			newDDLJob(qec),
-			"tp: ddl, flushSeq: 0, dml: , ddls: [create database test], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
+			"tp: ddl, flushSeq: 0, dml: [], safemode: false, ddls: [create database test], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
 			newXIDJob(binlog.NewLocation(""), binlog.NewLocation(""), binlog.NewLocation("")),
-			"tp: xid, flushSeq: 0, dml: , ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
+			"tp: xid, flushSeq: 0, dml: [], safemode: false, ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
 			newFlushJob(16, 1),
-			"tp: flush, flushSeq: 1, dml: , ddls: [], last_location: position: (, 0), gtid-set: , start_location: position: (, 0), gtid-set: , current_location: position: (, 0), gtid-set: ",
+			"tp: flush, flushSeq: 1, dml: [], safemode: false, ddls: [], last_location: position: (, 0), gtid-set: , start_location: position: (, 0), gtid-set: , current_location: position: (, 0), gtid-set: ",
 		}, {
 			newSkipJob(ec),
-			"tp: skip, flushSeq: 0, dml: , ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 0), gtid-set: , current_location: position: (, 0), gtid-set: ",
+			"tp: skip, flushSeq: 0, dml: [], safemode: false, ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 0), gtid-set: , current_location: position: (, 0), gtid-set: ",
 		},
 	}
 
 	for _, testCase := range testCases {
-		c.Assert(testCase.job.String(), Equals, testCase.jobStr)
+		require.Equal(t, testCase.jobStr, testCase.job.String())
 	}
 }
 
