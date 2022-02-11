@@ -131,8 +131,6 @@ function test_isolate_master_and_worker() {
 }
 
 function test_watch_source_bound_exit() {
-	# TODO FIXME this is a negative test case, dm should not let this happen
-
 	echo "[$(date)] <<<<<< start test_watch_source_bound_exit >>>>>>"
 	cleanup
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/ha/WatchSourceBoundChanClosed=return()"
@@ -165,13 +163,16 @@ function test_watch_source_bound_exit() {
 		"query-status" \
 		"no mysql source is being handled in the worker" 1
 
+	# dm-worker will retry watch source bound again and agin
+	check_log_contain_with_retry 'observeSourceBound meet error will retry and restart keepalive' $WORK_DIR/worker1/log/dm-worker.log
+
 	echo "[$(date)] <<<<<< finish test_watch_source_bound_exit >>>>>>"
 }
 
 function run() {
-	test_multi_task_running
-	test_isolate_master_and_worker # TICASE-934, 935, 936, 987, 992, 998, 999
+	# test_multi_task_running
 	test_watch_source_bound_exit
+	# test_isolate_master_and_worker # TICASE-934, 935, 936, 987, 992, 998, 999
 }
 
 cleanup_data $ha_test

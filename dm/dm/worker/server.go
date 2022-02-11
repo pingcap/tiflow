@@ -141,9 +141,15 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go func(ctx context.Context) {
 		defer s.wg.Done()
-		// TODO: handle fatal error from observeRelayConfig
-		//nolint:errcheck
-		s.observeRelayConfig(ctx, revRelay)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// relay don't affects sync, so no need to restart keepalive
+				log.L().Error("observeRelayConfig meet error will retry now", zap.Error(s.observeRelayConfig(ctx, revRelay)))
+			}
+		}
 	}(s.ctx)
 
 	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
@@ -162,11 +168,14 @@ func (s *Server) Start() error {
 	go func(ctx context.Context) {
 		defer s.wg.Done()
 		for {
-			err1 := s.observeSourceBound(ctx, revBound)
-			if err1 == nil {
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				log.L().Error("observeSourceBound meet error will retry and restart keepalive",
+					zap.Error(s.observeSourceBound(ctx, revBound)))
+				s.restartKeepAlive()
 			}
-			s.restartKeepAlive()
 		}
 	}(s.ctx)
 
@@ -239,8 +248,8 @@ func (s *Server) Start() error {
 // worker keepalive with master
 // If worker loses connect from master, it would stop all task and try to connect master again.
 func (s *Server) startKeepAlive() {
-	s.kaWg.Add(1)
 	s.kaCtx, s.kaCancel = context.WithCancel(s.ctx)
+	s.kaWg.Add(1)
 	go s.doStartKeepAlive()
 }
 
@@ -459,8 +468,8 @@ func (s *Server) doClose() {
 
 // Close close the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
-	s.stopKeepAlive()
 	s.doClose()
+	s.stopKeepAlive()
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
