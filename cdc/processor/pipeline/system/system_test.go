@@ -31,14 +31,14 @@ func TestStartAndStopSystem(t *testing.T) {
 
 func TestActorID(t *testing.T) {
 	sys := NewSystem()
-	var ids [100]uint64
+	var ids [10000]uint64
 	group := sync.WaitGroup{}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		group.Add(1)
 		go func(idx int) {
-			for j := 0; j < 10; j++ {
+			for j := 0; j < 100; j++ {
 				id := sys.ActorID()
-				ids[idx*10+j] = uint64(id)
+				ids[idx*100+j] = uint64(id)
 			}
 			group.Done()
 		}(i)

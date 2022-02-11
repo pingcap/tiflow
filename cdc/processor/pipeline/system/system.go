@@ -15,7 +15,7 @@ package system
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/tiflow/pkg/actor"
 )
@@ -25,8 +25,7 @@ type System struct {
 	tableActorSystem *actor.System
 	tableActorRouter *actor.Router
 
-	actorIDGeneratorLck sync.Mutex
-	lastID              uint64
+	lastID uint64
 }
 
 // NewSystem returns a system.
@@ -59,8 +58,5 @@ func (s *System) System() *actor.System {
 
 // ActorID returns an ActorID correspond with tableID.
 func (s *System) ActorID() actor.ID {
-	s.actorIDGeneratorLck.Lock()
-	defer s.actorIDGeneratorLck.Unlock()
-	s.lastID++
-	return actor.ID(s.lastID)
+	return actor.ID(atomic.AddUint64(&s.lastID, 1))
 }

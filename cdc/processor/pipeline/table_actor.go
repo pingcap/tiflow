@@ -227,7 +227,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.Init(pullerActorNodeContext); err != nil {
+	if err := pullerNode.InitWithWaitGroup(pullerActorNodeContext, t.wg); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
