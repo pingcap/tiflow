@@ -200,7 +200,7 @@ MSG:
 	return atomic.LoadUint32(&t.stopped) != stopped
 }
 
-func (t *tableActor) start(ctx context.Context) error {
+func (t *tableActor) start(sdtTableContext context.Context) error {
 	if t.started {
 		log.Panic("start an already started table",
 			zap.String("changefeedID", t.changefeedID),
@@ -214,11 +214,11 @@ func (t *tableActor) start(ctx context.Context) error {
 		zap.Uint64("quota", t.memoryQuota))
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
-	pCtx := NewContext(ctx,
+	pullerActorNodeContext := NewContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.Init(pCtx); err != nil {
+	if err := pullerNode.Init(pullerActorNodeContext); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -232,10 +232,10 @@ func (t *tableActor) start(ctx context.Context) error {
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replConfig,
 	)
-	sCtx := NewContext(ctx, t.tableName,
+	sortActorNodeContext := NewContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := sorterNode.StartActorNode(sCtx, true, t.wg); err != nil {
+	if err := sorterNode.StartActorNode(sortActorNodeContext, true, t.wg); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -245,21 +245,21 @@ func (t *tableActor) start(ctx context.Context) error {
 
 	// construct sort actor node, it gets message from pullerNode chan, and send it to sorter
 	t.sortNode = sorterNode
-	var messageFetchFunc AsyncMessageHolderFunc = func() *pipeline.Message { return pCtx.tryGetProcessedMessage() }
+	var messageFetchFunc AsyncMessageHolderFunc = func() *pipeline.Message { return pullerActorNodeContext.tryGetProcessedMessage() }
 	var messageProcessFunc AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
-		return sorterNode.TryHandleDataMessage(sCtx, msg)
+		return sorterNode.TryHandleDataMessage(sortActorNodeContext, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
-	var cCtx *cyclicNodeContext
+	var cyclicActorNodeContext *cyclicNodeContext
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cCtx = NewCyclicNodeContext(
-			NewContext(ctx, t.tableName,
+		cyclicActorNodeContext = NewCyclicNodeContext(
+			NewContext(sdtTableContext, t.tableName,
 				t.globalVars.TableActorSystem.Router(),
 				t.actorID, t.changefeedVars,
 				t.globalVars, t.reportErr))
-		if err := cyclicNode.Init(cCtx); err != nil {
+		if err := cyclicNode.Init(cyclicActorNodeContext); err != nil {
 			log.Error("sink fails to start",
 				zap.String("tableName", t.tableName),
 				zap.Int64("tableID", t.tableID),
@@ -268,9 +268,9 @@ func (t *tableActor) start(ctx context.Context) error {
 		}
 
 		// construct cyclic actor node if it's enabled, it gets message from sortNode chan
-		messageFetchFunc = func() *pipeline.Message { return sCtx.tryGetProcessedMessage() }
+		messageFetchFunc = func() *pipeline.Message { return sortActorNodeContext.tryGetProcessedMessage() }
 		messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
-			return cyclicNode.TryHandleDataMessage(cCtx, msg)
+			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
 		}
 		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 	}
@@ -289,12 +289,12 @@ func (t *tableActor) start(ctx context.Context) error {
 
 	// construct sink actor node, it gets message from sortNode chan or cyclicNode
 	if t.cyclicEnabled {
-		messageFetchFunc = func() *pipeline.Message { return cCtx.tryGetProcessedMessage() }
+		messageFetchFunc = func() *pipeline.Message { return cyclicActorNodeContext.tryGetProcessedMessage() }
 	} else {
-		messageFetchFunc = func() *pipeline.Message { return sCtx.tryGetProcessedMessage() }
+		messageFetchFunc = func() *pipeline.Message { return sortActorNodeContext.tryGetProcessedMessage() }
 	}
 	messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
-		return actorSinkNode.HandleMessage(sCtx, msg)
+		return actorSinkNode.HandleMessage(sdtTableContext, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
 
@@ -315,7 +315,6 @@ func stop(ctx context.Context, t *tableActor) func(err error) {
 			return
 		}
 		atomic.StoreUint32(&t.stopped, stopped)
-		t.cancel()
 		if t.sortNode != nil {
 			t.sortNode.ReleaseResource(ctx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
 		}
@@ -327,6 +326,7 @@ func stop(ctx context.Context, t *tableActor) func(err error) {
 					zap.Error(err), zap.Error(err))
 			}
 		}
+		t.cancel()
 		log.Info("table actor will be stopped",
 			zap.String("changefeed", t.changefeedID),
 			zap.String("tableName", t.tableName),
