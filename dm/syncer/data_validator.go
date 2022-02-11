@@ -164,7 +164,9 @@ type DataValidator struct {
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
 
-	result pb.ProcessResult
+	result        pb.ProcessResult
+	batchRowCnt   int
+	retryInterval time.Duration
 
 	failedRowCnt       atomic.Int64
 	accumulatedChanges map[string]*tableChange
@@ -201,9 +203,24 @@ func (v *DataValidator) initialize() error {
 		}
 	}()
 
+	v.workerCnt = defaultWorkerCnt
+	v.pendingChangeChs = make(map[int]chan map[string]*tableChange)
+	v.failedChangesMap = make(map[int]map[string]*tableChange)
+	for i := 0; i < v.workerCnt; i++ {
+		v.pendingChangeChs[i] = make(chan map[string]*tableChange)
+		v.failedChangesMap[i] = make(map[string]*tableChange)
+	}
+	v.batchRowCnt = batchRowCount
+	v.validationTimer = time.NewTimer(validationInterval)
+	v.rowsEventChan = make(chan *replication.BinlogEvent)
+	v.pendingChangeCh = make(chan map[string]*tableChange)
+	v.diffTables = make(map[string]*TableDiff)
+	v.changeEventCount = make([]int, 4)
+	v.accumulatedChanges = make(map[string]*tableChange)
+	v.retryInterval = retryInterval
+
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	// v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
 	var fromDBConns, toDBConns []*dbconn.DBConn
 	v.fromDB, fromDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 1)
 	if err != nil {
@@ -226,12 +243,6 @@ func (v *DataValidator) initialize() error {
 	}
 
 	v.streamerController = NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
-
-	v.workerCnt = defaultWorkerCnt
-	for i := 0; i < v.workerCnt; i++ {
-		v.pendingChangeChs[i] = make(chan map[string]*tableChange)
-		v.failedChangesMap[i] = make(map[string]*tableChange)
-	}
 	return nil
 }
 
@@ -292,10 +303,12 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) doValidate() {
 	tctx := tcontext.NewContext(v.ctx, v.L)
-	err := v.streamerController.Start(tctx, lastLocation)
-	if err != nil {
-		v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
-		return
+	if v.streamerController.IsClosed() {
+		err := v.streamerController.Start(tctx, lastLocation)
+		if err != nil {
+			v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
+			return
+		}
 	}
 
 	v.L.Info("start continuous validation")
@@ -306,7 +319,8 @@ func (v *DataValidator) doValidate() {
 	for {
 		e, err := v.streamerController.GetEvent(tctx)
 		if err != nil {
-			v.L.Fatal("getting event from streamer controller failed")
+			// todo: validation paused?
+			v.fillResult(errors.New("getting binlog event failed"), true)
 			return
 		}
 		// todo: configuring the time or use checkpoint
@@ -364,10 +378,11 @@ func (v *DataValidator) Stage() pb.Stage {
 }
 
 func (v *DataValidator) rowsEventProcessRoutine() {
-	v.wg.Done()
 	for {
 		select {
 		case <-v.ctx.Done():
+			fmt.Printf("rowsEventProcessRoutine Done\n")
+			v.wg.Done()
 			return
 		case e := <-v.rowsEventChan:
 			if err := v.processEventRows(e.Header, e.Event.(*replication.RowsEvent)); err != nil {
@@ -385,7 +400,6 @@ func (v *DataValidator) rowsEventProcessRoutine() {
 }
 
 func (v *DataValidator) workerValidateTableChange(workerID int) {
-	v.wg.Done()
 	for {
 		select {
 		case change := <-v.pendingChangeChs[workerID]:
@@ -398,8 +412,10 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 			v.pendingRowCnt.Sub(int64(v.getRowCount(change))) // atomic value
 			v.failedRowCnt.Add(int64(deltaFailed))            // atomic value
 		case <-v.ctx.Done():
+			fmt.Printf("workerValidateTableChange %d Done\n", workerID)
+			v.wg.Done()
 			return
-		case <-time.After(retryInterval):
+		case <-time.After(v.retryInterval):
 			retryChange := v.failedChangesMap[workerID]
 			failed := v.validateTableChange(retryChange)
 			deltaFailed := v.updateFailedChangesByWorker(retryChange, failed, workerID)
@@ -409,7 +425,6 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 }
 
 func (v *DataValidator) validateTaskDispatchRoutine() {
-	v.wg.Done()
 	// start workers here
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
@@ -420,6 +435,8 @@ func (v *DataValidator) validateTaskDispatchRoutine() {
 		case change := <-v.pendingChangeCh:
 			v.dispatchRowChange(change) // dispatch change to worker
 		case <-v.ctx.Done():
+			fmt.Printf("validateTaskDispatchRoutine Done\n")
+			v.wg.Done()
 			return
 		}
 	}
@@ -463,8 +480,11 @@ func (v *DataValidator) dispatchRowChange(change map[string]*tableChange) {
 func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *replication.RowsEvent) error {
 	schemaName, tableName := string(ev.Table.Schema), string(ev.Table.Table)
 	fullTableName := fmt.Sprintf("%s.%s", schemaName, tableName)
-	var table *TableDiff
-	if _, ok := v.diffTables[fullTableName]; !ok {
+	var (
+		table *TableDiff
+		ok    bool
+	)
+	if table, ok = v.diffTables[fullTableName]; !ok {
 		// table not found in cache
 		// try getting table info from the upstream
 		tctx := tcontext.NewContext(v.ctx, v.L)
@@ -560,7 +580,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		val.theType = changeType
 		val.lastMeetTs = int64(header.Timestamp)
 
-		if rowCount >= batchRowCount {
+		if rowCount >= v.batchRowCnt {
 			v.pendingChangeCh <- v.accumulatedChanges
 			v.accumulatedChanges = make(map[string]*tableChange)
 
@@ -647,7 +667,8 @@ func (v *DataValidator) validateChanges(table *TableDiff, rows []*rowChange, del
 		failedRows, err = v.validateInsertAndUpdateRows(rows, cond)
 	}
 	if err != nil {
-		panic(err)
+		v.fillResult(err, false)
+		return [][]string{}
 	}
 	return failedRows
 }
@@ -695,8 +716,7 @@ func (v *DataValidator) updateFailedChangesByWorker(all, failed map[string]*tabl
 func (v *DataValidator) validateDeletedRows(cond *Cond) ([][]string, error) {
 	downstreamRowsIterator, err := getRowsFrom(cond, v.toDBConn)
 	if err != nil {
-		// todo: cancel all routine
-		return nil, errors.Trace(err)
+		return [][]string{}, err
 	}
 	defer downstreamRowsIterator.Close()
 
@@ -720,13 +740,14 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 	var err error
 	upstreamRowsIterator, err = getRowChangeIterator(cond.Table, rows)
 	if err != nil {
-		return nil, errors.New("")
+		return nil, errors.New("get row change iter fails")
 	}
 	defer upstreamRowsIterator.Close()
+	fmt.Printf("cond: %v\n", cond)
 	downstreamRowsIterator, err = getRowsFrom(cond, v.toDBConn)
 	if err != nil {
-		// todo: cancel all routine
-		return nil, errors.New("")
+		fmt.Printf("get row fails: %s\n", err.Error())
+		return nil, errors.New("get rows fails")
 	}
 	defer downstreamRowsIterator.Close()
 

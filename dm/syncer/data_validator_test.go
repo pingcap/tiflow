@@ -17,15 +17,20 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	parsermysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -354,12 +359,12 @@ func (d *testDataValidatorSuite) TestRowToString(c *C) {
 		},
 	}
 	expectedStr := []string{
-		"{ pk-1: some data, pk-2: simple data,  }",
-		"{ pk-3: IsNull, pk-4: data,  }",
+		"({ pk-1: some data, pk-2: simple data,  }|{ pk-2: simple data, pk-1: some data,  })",
+		"({ pk-3: IsNull, pk-4: data,  }|{ pk-4: data, pk-3: IsNull,  })",
 	}
 	for i, testCase := range testCases {
 		ret := rowToString(testCase)
-		c.Assert(ret, Equals, expectedStr[i])
+		c.Assert(ret, Matches, expectedStr[i])
 	}
 }
 
@@ -457,6 +462,228 @@ func (d *testDataValidatorSuite) TestGetPKValues(c *C) {
 	}
 }
 
-func (d *testDataValidatorSuite) TestDoValidate(c *C) {
+func (d *testDataValidatorSuite) generateEvents(binlogEvents mockBinlogEvents, c *C) []*replication.BinlogEvent {
+	events := make([]*replication.BinlogEvent, 0, 1024)
+	for _, e := range binlogEvents {
+		switch e.typ {
+		case DBCreate:
+			evs, _, err := d.eventsGenerator.GenCreateDatabaseEvents(e.args[0].(string))
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+		case DBDrop:
+			evs, _, err := d.eventsGenerator.GenDropDatabaseEvents(e.args[0].(string))
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+		case TableCreate:
+			evs, _, err := d.eventsGenerator.GenCreateTableEvents(e.args[0].(string), e.args[1].(string))
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+		case TableDrop:
+			evs, _, err := d.eventsGenerator.GenDropTableEvents(e.args[0].(string), e.args[1].(string))
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
 
+		case DDL:
+			evs, _, err := d.eventsGenerator.GenDDLEvents(e.args[0].(string), e.args[1].(string), 0)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+
+		case Write, Update, Delete:
+			dmlData := []*event.DMLData{
+				{
+					TableID:    e.args[0].(uint64),
+					Schema:     e.args[1].(string),
+					Table:      e.args[2].(string),
+					ColumnType: e.args[3].([]byte),
+					Rows:       e.args[4].([][]interface{}),
+				},
+			}
+			var eventType replication.EventType
+			switch e.typ {
+			case Write:
+				eventType = replication.WRITE_ROWS_EVENTv2
+			case Update:
+				eventType = replication.UPDATE_ROWS_EVENTv2
+			case Delete:
+				eventType = replication.DELETE_ROWS_EVENTv2
+			default:
+				c.Fatal(fmt.Sprintf("mock event generator don't support event type: %d", e.typ))
+			}
+			evs, _, err := d.eventsGenerator.GenDMLEvents(eventType, dmlData, 0)
+			c.Assert(err, IsNil)
+			events = append(events, evs...)
+		}
+	}
+	return events
+}
+
+// func (d *testDataValidatorSuite) TestMock(c *C) {
+// 	db, mock, err := sqlmock.New()
+// 	c.Assert(err, IsNil)
+// 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
+// 	rows, err := db.Query("SELECT * FROM test;")
+// 	c.Assert(err, IsNil)
+// 	iter := &RowDataIteratorImpl{
+// 		Rows: rows,
+// 	}
+// 	res, err := iter.Next()
+// 	c.Assert(res, IsNil)
+// 	c.Assert(err, IsNil)
+// }
+
+func (d *testDataValidatorSuite) TestDoValidate(c *C) {
+	type testCase struct {
+		schemaName string
+		tblName    string
+		creatSQL   string
+		binlogEvs  []mockBinlogEvent
+		selectSQLs []string // mock in toDB
+		selectArgs [][]string
+		retRows    [][][]string
+		colNames   []string
+		failRowCnt int
+		failRowPKs []string
+	}
+	batchSize := 2
+	testCases := []testCase{
+		{
+			// test case 1:
+			schemaName: "test1",
+			tblName:    "tbl1",
+			creatSQL: `create table if not exists test1.tbl1(
+				a int,
+				b int,
+				c text,
+				primary key(a, b));`,
+			binlogEvs: []mockBinlogEvent{
+				{typ: Write, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), int32(2), "some data1"}}}},
+				{typ: Write, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), int32(4), "some data2"}}}},
+
+				{typ: Update, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), int32(2), "some data1"}, {int32(1), int32(3), "some data3"}}}},
+				{typ: Delete, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), int32(4), "some data2"}}}},
+
+				{typ: Write, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(5), int32(6), "some data4"}}}},
+				{typ: Update, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(5), int32(6), "some data4"}, {int32(5), int32(7), "some data4"}}}},
+			},
+			selectSQLs: []string{
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\),\\(\\?,\\?\\)\\).*", // batch1: insert row1, row2
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\)\\).*",               // batch2: update row1
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\)\\).*",               // batch2: delete row2
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\),\\(\\?,\\?\\)\\).*", // batch3: insert and update row3. pk changed and probably caused false negative
+			},
+			selectArgs: [][]string{
+				{"1", "2", "3", "4"},
+				{"1", "3"},
+				{"3", "4"},
+				{"5", "6", "5", "7"},
+			},
+			retRows: [][][]string{
+				{
+					{"1", "2", "some data1"}, // insert
+					{"3", "4", "some data2"},
+				},
+				{
+					{"1", "3", "some data3"}, // update
+				},
+				{
+					{}, // delete
+				},
+				{
+					{"5", "7", "some data4"},
+				},
+			},
+			colNames:   []string{"a", "b", "c"},
+			failRowCnt: 1, // one false negative
+			failRowPKs: []string{"5-6"},
+		},
+	}
+	for _, testCase := range testCases {
+		var (
+			fromDB, toDB     *sql.DB
+			fromMock, toMock sqlmock.Sqlmock
+			err              error
+		)
+		fromDB, fromMock, err = sqlmock.New()
+		c.Assert(err, IsNil)
+		toDB, toMock, err = sqlmock.New()
+		c.Assert(err, IsNil)
+		syncerObj := NewSyncer(d.cfg, nil, nil)
+		c.Assert(syncerObj, NotNil)
+		validator := NewContinuousDataValidator(d.cfg, syncerObj)
+		validator.Start(pb.Stage_Paused)      // init but will return soon
+		validator.result = pb.ProcessResult{} // clear error
+		validator.workerCnt = 1
+		validator.retryInterval = 100 // never retry
+		events1 := testCase.binlogEvs
+		mockStreamerProducer := &MockStreamProducer{d.generateEvents(events1, c)}
+		mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+		c.Assert(err, IsNil)
+		validator.streamerController = &StreamerController{
+			streamerProducer: mockStreamerProducer,
+			streamer:         mockStreamer,
+			closed:           false,
+		}
+		// validate every 2 rows updated
+		validator.batchRowCnt = batchSize
+		validator.fromDB = conn.NewBaseDB(fromDB, func() {})
+		validator.fromDBConn = d.genDBConn(c, fromDB)
+		validator.toDB = conn.NewBaseDB(toDB, func() {})
+		validator.toDBConn = d.genDBConn(c, toDB)
+		fromMock.ExpectQuery("SHOW CREATE TABLE " + fmt.Sprintf("`%s`.`%s`", testCase.schemaName, testCase.tblName)).WillReturnRows(
+			sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(
+				"tbl1", testCase.creatSQL,
+			),
+		)
+		fromMock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+			fromMock.NewRows([]string{"Variable_name", "Value"}).AddRow(
+				"sql_mode", "",
+			),
+		)
+		for i := range testCase.selectSQLs {
+			rawRetRows := testCase.retRows[i]
+			rows := sqlmock.NewRows(testCase.colNames)
+			for j := range rawRetRows {
+				if len(rawRetRows[j]) == 0 {
+					break // for delete query
+				}
+				rowVals := []driver.Value{}
+				for k := range rawRetRows[j] {
+					rowVals = append(rowVals, rawRetRows[j][k])
+				}
+				rows.AddRow(rowVals...)
+			}
+			args := []driver.Value{}
+			for _, arg := range testCase.selectArgs[i] {
+				args = append(args, arg)
+			}
+			toMock.ExpectQuery(testCase.selectSQLs[i]).WithArgs(args...).WillReturnRows(rows)
+		}
+		validator.doValidate()
+		// wait for all routine finished
+		validator.cancel()
+		// validator.wg.Wait()
+		time.Sleep(5 * time.Second)
+		fmt.Printf("results: %v\n", validator.result.Errors)
+		// failed row
+		c.Assert(int(validator.failedRowCnt.Load()), Equals, testCase.failRowCnt)
+		// valid table
+		fullTableName := testCase.schemaName + "." + testCase.tblName
+		table, ok := validator.diffTables[fullTableName]
+		c.Assert(ok, IsTrue)
+		c.Assert(len(table.Info.Columns), Equals, len(testCase.colNames))
+		if testCase.failRowCnt > 0 {
+			// validate failed rows
+			_, ok := validator.failedChangesMap[0][fullTableName]
+			c.Assert(ok, IsTrue)
+			allRowsPKs := []string{}
+			for key := range validator.failedChangesMap[0][fullTableName].rows {
+				allRowsPKs = append(allRowsPKs, key)
+			}
+			sort.Slice(allRowsPKs, func(l, r int) bool {
+				return allRowsPKs[l] < allRowsPKs[r]
+			})
+			c.Assert(allRowsPKs, DeepEquals, testCase.failRowPKs)
+		}
+		c.Assert(len(validator.result.Errors), Equals, 1)
+	}
 }
