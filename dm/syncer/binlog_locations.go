@@ -66,9 +66,11 @@ type locationRecorder struct {
 func (l *locationRecorder) reset(loc binlog.Location) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.curStartLocation = loc
-	l.curEndLocation = loc
-	l.txnEndLocation = loc
+	// need to clone location to avoid the modification leaking outside
+	clone := loc.Clone()
+	l.curStartLocation = clone
+	l.curEndLocation = clone
+	l.txnEndLocation = clone
 }
 
 //nolint:unused
