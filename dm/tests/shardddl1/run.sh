@@ -394,9 +394,16 @@ function DM_UpdateBARule_CASE() {
 	sed -i 's/do-dbs: \["shardddl1","shardddl2"\]/do-dbs: \["shardddl1"\]/g' $WORK_DIR/task.yaml
 	echo 'ignore-checking-items: ["schema_of_shard_tables"]' >>$WORK_DIR/task.yaml
 
+	# source1: db1.tb1(id,new_col1,new_col3)
+	# source2: db1.tb1(id)
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/task.yaml" \
 		"\"result\": true" 3
+
+	# no lock exist when task begin
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"show-ddl-locks" \
+		"no DDL lock exists" 1
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14);"
@@ -406,7 +413,7 @@ function DM_UpdateBARule_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"show-ddl-locks" \
-		"\"ID\": \"test-\`shardddl\`.\`tb\`\"" 1
+		"no DDL lock exists" 1
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column new_col1"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col3 int"
@@ -703,10 +710,10 @@ function DM_MULTIPLE_ROWS_CASE() {
 
 	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb} where a>100 and a<=200;" "count(1): 100"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
-	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=insert\]' | wc -l)
-	replaceMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=replace\]' | wc -l)
-	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op="insert on duplicate update"\]' | wc -l)
-	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=delete\]' | wc -l)
+	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLInsert\]' | wc -l)
+	replaceMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLReplace\]' | wc -l)
+	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLInsertOnDuplicateUpdate\]' | wc -l)
+	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLDelete\]' | wc -l)
 	echo $insertMergeCnt $replaceMergeCnt $updateMergeCnt $deleteMergeCnt
 	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 || "$replaceMergeCnt" -le 5 ]]; then
 		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, replaceMergeCnt: $replaceMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"

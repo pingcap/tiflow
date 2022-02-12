@@ -184,6 +184,18 @@ def get_task_status_success(task_name, total):
     assert data["total"] == int(total)
 
 
+def get_task_status_success_but_worker_meet_error(task_name, total):
+    url = API_ENDPOINT + "/" + task_name + "/status"
+    resp = requests.get(url=url)
+    data = resp.json()
+    assert resp.status_code == 200
+    print("get_task_status_success_but_worker_meet_error resp=", data)
+    assert data["total"] == int(total)
+    for status in data["data"]:
+        assert status["name"] == task_name
+        assert status["error_msg"] is not None
+
+
 def get_task_list(task_count):
     url = API_ENDPOINT
     resp = requests.get(url=url)
@@ -457,6 +469,7 @@ if __name__ == "__main__":
         "get_task_status_failed": get_task_status_failed,
         "get_illegal_char_task_status_failed": get_illegal_char_task_status_failed,
         "get_task_status_success": get_task_status_success,
+        "get_task_status_success_but_worker_meet_error": get_task_status_success_but_worker_meet_error,
         "operate_schema_and_table_success": operate_schema_and_table_success,
         "create_task_template_success": create_task_template_success,
         "create_task_template_failed": create_task_template_failed,

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Sink options keys
@@ -41,6 +42,7 @@ type Sink interface {
 
 	// TryEmitRowChangedEvents is thread-safety and non-blocking.
 	TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
+
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
 	//
@@ -134,6 +136,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 		return err
 	}
 	errCh := make(chan error)
+	ctx = util.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
 	s, err := New(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
