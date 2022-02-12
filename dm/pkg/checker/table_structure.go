@@ -125,7 +125,9 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 	c.wg.Add(1)
 	go c.handleOpts(ctx, r)
 	if err := eg.Wait(); err != nil {
+		c.reMu.Lock()
 		markCheckError(r, err)
+		c.reMu.Unlock()
 	}
 	close(c.optCh)
 	c.wg.Wait()
