@@ -15,6 +15,13 @@ package etcd
 
 import (
 	"context"
+<<<<<<< HEAD
+=======
+	"io/ioutil"
+	"os"
+	"sync/atomic"
+	"testing"
+>>>>>>> fc3b5ad53 (etcd (ticdc): fix a data race in unit test (#4551))
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -49,23 +56,23 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 type mockWatcher struct {
 	clientv3.Watcher
 	watchCh      chan clientv3.WatchResponse
-	resetCount   *int
-	requestCount *int
+	resetCount   *int32
+	requestCount *int32
 	rev          *int64
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	*m.resetCount++
+	atomic.AddInt32(m.resetCount, 1)
 	op := &clientv3.Op{}
 	for _, opt := range opts {
 		opt(op)
 	}
-	*m.rev = op.Rev()
+	atomic.StoreInt64(m.rev, op.Rev())
 	return m.watchCh
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
-	*m.requestCount++
+	atomic.AddInt32(m.requestCount, 1)
 	return nil
 }
 
@@ -120,8 +127,8 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
@@ -171,9 +178,15 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 	// make sure watchCh has been reset since timeout
+<<<<<<< HEAD
 	c.Assert(*watcher.resetCount > 1, check.IsTrue)
 	// make sure RequestProgress has been call since timeout
 	c.Assert(*watcher.requestCount > 1, check.IsTrue)
+=======
+	require.True(t, atomic.LoadInt32(watcher.resetCount) > 1)
+	// make sure RequestProgress has been call since timeout
+	require.True(t, atomic.LoadInt32(watcher.requestCount) > 1)
+>>>>>>> fc3b5ad53 (etcd (ticdc): fix a data race in unit test (#4551))
 	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
 	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
 }
@@ -183,8 +196,8 @@ func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
@@ -237,8 +250,8 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cli := clientv3.NewCtxClient(context.TODO())
 
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
@@ -272,9 +285,58 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	// move time forward
 	mockClock.Add(time.Second * 30)
 	// make sure watchCh has been reset since timeout
+<<<<<<< HEAD
 	c.Assert(*watcher.resetCount > 1, check.IsTrue)
 	// make suer revision in WatchWitchChan does not fall back
 	// even if there has not any response been received from WatchCh
 	// while WatchCh was reset
 	c.Assert(*watcher.rev, check.Equals, revision)
+=======
+	require.True(t, atomic.LoadInt32(watcher.resetCount) > 1)
+	// make sure revision in WatchWitchChan does not fall back
+	// even if there has not any response been received from WatchCh
+	// while WatchCh was reset
+	require.Equal(t, atomic.LoadInt64(watcher.rev), revision)
+}
+
+type mockTxn struct {
+	ctx  context.Context
+	mode int
+}
+
+func (txn *mockTxn) If(cs ...clientv3.Cmp) clientv3.Txn {
+	if cs != nil {
+		txn.mode += 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Then(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Else(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 2
+	}
+	return txn
+}
+
+func (txn *mockTxn) Commit() (*clientv3.TxnResponse, error) {
+	switch txn.mode {
+	case 0:
+		return &clientv3.TxnResponse{}, nil
+	case 1:
+		return nil, rpctypes.ErrNoSpace
+	case 2:
+		return nil, rpctypes.ErrTimeoutDueToLeaderFail
+	case 3:
+		return nil, context.DeadlineExceeded
+	default:
+		return nil, errors.New("mock error")
+	}
+>>>>>>> fc3b5ad53 (etcd (ticdc): fix a data race in unit test (#4551))
 }
