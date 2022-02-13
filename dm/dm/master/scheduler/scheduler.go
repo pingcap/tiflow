@@ -1020,6 +1020,19 @@ func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTa
 	return &clone
 }
 
+// GetDownstreamMetaByTask gets downstream db config and meta config by task name.
+func (s *Scheduler) GetDownstreamMetaByTask(task string) (*config.DBConfig, string) {
+	v, ok := s.subTaskCfgs.Load(task)
+	if !ok {
+		return nil, ""
+	}
+	cfgM := v.(map[string]config.SubTaskConfig)
+	for _, cfg := range cfgM {
+		return cfg.To.Clone(), cfg.MetaSchema
+	}
+	return nil, ""
+}
+
 // GetSubTaskCfgsByTask gets subtask configs' map by task name.
 func (s *Scheduler) GetSubTaskCfgsByTask(task string) map[string]*config.SubTaskConfig {
 	v, ok := s.subTaskCfgs.Load(task)

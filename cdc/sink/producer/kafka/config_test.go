@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
@@ -35,7 +36,6 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	config.Version = "invalid"
 	_, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
@@ -84,8 +84,41 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
+func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	cfg := NewConfig()
+	c.Assert(cfg.DialTimeout, check.Equals, 10*time.Second)
+	c.Assert(cfg.ReadTimeout, check.Equals, 10*time.Second)
+	c.Assert(cfg.WriteTimeout, check.Equals, 10*time.Second)
+
+	saramaConfig, err := newSaramaConfig(context.Background(), cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, cfg.DialTimeout)
+	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, cfg.WriteTimeout)
+	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, cfg.ReadTimeout)
+
+	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
+		"&write-timeout=2m"
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	opts := make(map[string]string)
+	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cfg.DialTimeout, check.Equals, 5*time.Second)
+	c.Assert(cfg.ReadTimeout, check.Equals, 1000*time.Millisecond)
+	c.Assert(cfg.WriteTimeout, check.Equals, 2*time.Minute)
+
+	saramaConfig, err = newSaramaConfig(context.Background(), cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, 5*time.Second)
+	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, 1000*time.Millisecond)
+	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, 2*time.Minute)
+}
+
 func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
-	defer testleak.AfterTest(c)
+	defer testleak.AfterTest(c)()
 	cfg := NewConfig()
 
 	// Normal config.

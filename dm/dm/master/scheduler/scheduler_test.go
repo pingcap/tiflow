@@ -254,12 +254,15 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(s.AddSubTasks(false, pb.Stage_Running), IsNil) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(c, s, taskName1, sourceID1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_InvalidStage)
+	t.downstreamMetaNotExist(c, s, taskName1)
 	// start the task.
 	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1), IsNil)
 	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue) // add again.
 	// subtask config and stage exist.
 	t.subTaskCfgExist(c, s, subtaskCfg1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_Running)
+	t.downstreamMetaExist(c, s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
+	t.downstreamMetaNotExist(c, s, taskName2)
 
 	// update source config when task already started will failed
 	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
@@ -627,6 +630,19 @@ func (t *testScheduler) subTaskCfgExist(c *C, s *Scheduler, expectCfg config.Sub
 	c.Assert(err, IsNil)
 	c.Assert(cfgM, HasLen, 1)
 	c.Assert(cfgM[expectCfg.Name], DeepEquals, expectCfg)
+}
+
+func (t *testScheduler) downstreamMetaNotExist(c *C, s *Scheduler, task string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, IsNil)
+	c.Assert(metaConfig, Equals, "")
+}
+
+func (t *testScheduler) downstreamMetaExist(c *C, s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, NotNil)
+	c.Assert(dbConfig, DeepEquals, &expectDBCfg)
+	c.Assert(metaConfig, Equals, expectMetaConfig)
 }
 
 func (t *testScheduler) workerNotExist(c *C, s *Scheduler, worker string) {
