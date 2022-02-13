@@ -16,7 +16,6 @@
 package master
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -178,11 +177,18 @@ func (s *Server) DMAPICreateSource(c *gin.Context) {
 		return
 	}
 	cfg := config.OpenAPISourceToSourceCfg(createSourceReq)
-	if err := checkAndAdjustSourceConfigFunc(c.Request.Context(), cfg); err != nil {
+
+	ctx := c.Request.Context()
+	if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if err := s.scheduler.AddSourceCfg(cfg); err != nil {
+	if err := s.createSource(ctx, cfg); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	// TODO support specify worker name
+	if err := s.enableSource(ctx, createSourceReq.SourceName, ""); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -191,16 +197,16 @@ func (s *Server) DMAPICreateSource(c *gin.Context) {
 
 // DMAPIGetSourceList url is:(GET /api/v1/sources).
 func (s *Server) DMAPIGetSourceList(c *gin.Context, params openapi.DMAPIGetSourceListParams) {
-	sourceMap := s.scheduler.GetSourceCfgs()
+	ctx := c.Request.Context()
+	// todo support filter
 	sourceList := []openapi.Source{}
-	for key := range sourceMap {
-		sourceList = append(sourceList, config.SourceCfgToOpenAPISource((sourceMap[key])))
+	for _, cfg := range s.listSource(ctx, nil) {
+		sourceList = append(sourceList, config.SourceCfgToOpenAPISource((cfg)))
 	}
 	// fill status
 	if params.WithStatus != nil && *params.WithStatus {
-		nexCtx := c.Request.Context()
 		for idx := range sourceList {
-			sourceStatusList, err := s.getSourceStatusListFromWorker(nexCtx, sourceList[idx].SourceName, true)
+			sourceStatusList, err := s.getSourceStatus(ctx, sourceList[idx].SourceName)
 			if err != nil {
 				_ = c.Error(err)
 				return
@@ -214,22 +220,16 @@ func (s *Server) DMAPIGetSourceList(c *gin.Context, params openapi.DMAPIGetSourc
 
 // DMAPIDeleteSource url is:(DELETE /api/v1/sources).
 func (s *Server) DMAPIDeleteSource(c *gin.Context, sourceName string, params openapi.DMAPIDeleteSourceParams) {
+	ctx := c.Request.Context()
+
 	// force means delete source and stop all task of this source
 	if params.Force != nil && *params.Force {
-		// TODO(ehco) stop task concurrently
-		newCtx := c.Request.Context()
-		for _, taskName := range s.scheduler.GetTaskNameListBySourceName(sourceName) {
-			if _, err := s.OperateTask(newCtx, &pb.OperateTaskRequest{
-				Op:      pb.TaskOp_Stop,
-				Name:    taskName,
-				Sources: []string{sourceName},
-			}); err != nil {
-				_ = c.Error(terror.ErrOpenAPICommonError.Delegate(err, "failed to stop source related task %s", taskName))
-				return
-			}
+		if err := s.disableSource(ctx, sourceName); err != nil {
+			_ = c.Error(terror.ErrOpenAPICommonError.Delegate(err))
+			return
 		}
 	}
-	if err := s.scheduler.RemoveSourceCfg(sourceName); err != nil {
+	if err := s.deleteSource(ctx, sourceName); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -341,32 +341,6 @@ func (s *Server) DMAPIGetSourceTableList(c *gin.Context, sourceName string, sche
 	c.IndentedJSON(http.StatusOK, tableList)
 }
 
-func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string, specifiedSource bool) ([]openapi.SourceStatus, error) {
-	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", specifiedSource)
-	sourceStatusList := make([]openapi.SourceStatus, len(workerStatusList))
-	for i, workerStatus := range workerStatusList {
-		if workerStatus == nil {
-			// this should not happen unless the rpc in the worker server has been modified
-			return nil, terror.ErrOpenAPICommonError.New("worker's query-status response is nil")
-		}
-		sourceStatus := openapi.SourceStatus{SourceName: sourceName, WorkerName: workerStatus.SourceStatus.Worker}
-		if !workerStatus.Result {
-			sourceStatus.ErrorMsg = &workerStatus.Msg
-		} else if relayStatus := workerStatus.SourceStatus.GetRelayStatus(); relayStatus != nil {
-			sourceStatus.RelayStatus = &openapi.RelayStatus{
-				MasterBinlog:       relayStatus.MasterBinlog,
-				MasterBinlogGtid:   relayStatus.MasterBinlogGtid,
-				RelayBinlogGtid:    relayStatus.RelayBinlogGtid,
-				RelayCatchUpMaster: relayStatus.RelayCatchUpMaster,
-				RelayDir:           relayStatus.RelaySubDir,
-				Stage:              relayStatus.Stage.String(),
-			}
-		}
-		sourceStatusList[i] = sourceStatus
-	}
-	return sourceStatusList, nil
-}
-
 // DMAPIGetSourceStatus url is: (GET /api/v1/sources/{source-id}/status).
 func (s *Server) DMAPIGetSourceStatus(c *gin.Context, sourceName string) {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
@@ -383,7 +357,7 @@ func (s *Server) DMAPIGetSourceStatus(c *gin.Context, sourceName string) {
 		c.IndentedJSON(http.StatusOK, resp)
 		return
 	}
-	sourceStatusList, err := s.getSourceStatusListFromWorker(c.Request.Context(), sourceName, true)
+	sourceStatusList, err := s.getSourceStatus(c.Request.Context(), sourceName)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -400,7 +374,7 @@ func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 		_ = c.Error(err)
 		return
 	}
-	if err := s.scheduler.TransferSource(c.Request.Context(), sourceName, req.WorkerName); err != nil {
+	if err := s.transferSource(c.Request.Context(), sourceName, req.WorkerName); err != nil {
 		_ = c.Error(err)
 	}
 }

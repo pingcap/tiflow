@@ -337,6 +337,17 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	return err
 }
 
+// AddSourceCfg only adds the upstream source config to the cluster
+func (s *Scheduler) AddSourceConfig(cfg *config.SourceConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+	return s.addSource(cfg)
+}
+
 // AddSourceCfgWithWorker adds the upstream source config to the cluster, and try to bound source to specify worker
 // NOTE: please verify the config before call this.
 func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName string) error {
@@ -660,6 +671,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
+// if input worker is emptry means try bound this source to a free worker
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
@@ -670,15 +682,24 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.mu.RUnlock()
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
-	w, ok := s.workers[worker]
-	if !ok {
-		s.mu.RUnlock()
-		return terror.ErrSchedulerWorkerNotExist.Generate(worker)
-	}
+
 	oldWorker, hasOldWorker := s.bounds[source]
 	if hasOldWorker && oldWorker.BaseInfo().Name == worker {
 		s.mu.RUnlock()
 		return nil
+	}
+	if worker == "" {
+		s.mu.RUnlock()
+		s.mu.Lock()
+		_, err := s.tryBoundForSource(source)
+		s.mu.Unlock()
+		return err
+	}
+
+	w, ok := s.workers[worker]
+	if !ok {
+		s.mu.RUnlock()
+		return terror.ErrSchedulerWorkerNotExist.Generate(worker)
 	}
 	s.mu.RUnlock()
 
@@ -727,14 +748,14 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			}
 		}
 		// pause running tasks
-		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
+		if batchPauseErr := s.BatchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
 			return batchPauseErr
 		}
 		// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
 		// just logging this message and let user handle it manually
 		defer func() {
 			go func() {
-				if err := s.batchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
+				if err := s.BatchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
 					s.logger.Warn(
 						"auto resume task failed", zap.Any("tasks", runningTasks),
 						zap.String("source", source), zap.String("worker", worker), zap.Error(err))
@@ -768,8 +789,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	return nil
 }
 
-// batchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
-func (s *Scheduler) batchOperateTaskOnWorker(
+// BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
+func (s *Scheduler) BatchOperateTaskOnWorker(
 	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {

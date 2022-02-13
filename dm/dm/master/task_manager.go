@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -62,9 +61,6 @@ func (s *Server) checkTask(ctx context.Context, taskCfg *config.TaskConfig, errC
 
 // createTask convert task to subtasks and put these subtasks with stopped stage to etcd.
 func (s *Server) createTask(ctx context.Context, taskCfg *config.TaskConfig) error {
-	if _, checkErr := s.checkTask(ctx, taskCfg, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt); checkErr != nil {
-		return checkErr
-	}
 	subtaskCfgList, err := s.generateSubTaskConfigs(taskCfg)
 	if err != nil {
 		return err
@@ -92,7 +88,7 @@ func (s *Server) listTask(ctx context.Context, req interface{}) error {
 	return nil
 }
 
-func (s *Server) listTaskStats(ctx context.Context, req interface{}) error {
+func (s *Server) listTaskStatus(ctx context.Context, req interface{}) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
 }
