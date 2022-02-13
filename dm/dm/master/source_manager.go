@@ -86,13 +86,11 @@ func (s *Server) enableSource(ctx context.Context, sourceName, workerName string
 func (s *Server) disableSource(ctx context.Context, sourceName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart
+		// no need to stop task if the source is not running
+		return nil
 	}
 	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName)
-	if err := s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Stopped, true); err != nil {
-		return err
-	}
-	return s.scheduler.RemoveSourceCfg(sourceName)
+	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Stopped, true)
 }
 
 func (s *Server) transferSource(ctx context.Context, sourceName, workerName string) error {
