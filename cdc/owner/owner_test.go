@@ -44,7 +44,7 @@ func (m *mockManager) CheckStaleCheckpointTs(
 
 var _ gc.Manager = (*mockManager)(nil)
 
-func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*Owner, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
@@ -68,7 +68,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*Owner, *orchestrat
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return owner, state, tester
+	return owner.(*ownerImpl), state, tester
 }
 
 func TestCreateRemoveChangefeed(t *testing.T) {
@@ -128,9 +128,11 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
-	owner.EnqueueJob(removeJob)
+	done := make(chan error, 1)
+	owner.EnqueueJob(removeJob, done)
 	_, err = owner.Tick(ctx, state)
 	require.Nil(t, err)
+	require.Nil(t, <-done)
 
 	// apply patches and update owner's in memory changefeed states
 	tester.MustApplyPatches()
@@ -162,17 +164,20 @@ func TestStopChangefeed(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, owner.changefeeds, changefeedID)
 	// remove changefeed forcibly
+	done := make(chan error, 1)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
 		Opts: &model.AdminJobOption{
 			ForceRemove: true,
 		},
-	})
+	}, done)
 
 	// this tick to clean the leak info fo the removed changefeed
 	_, err = owner.Tick(ctx, state)
 	require.Nil(t, err)
+	require.Nil(t, <-done)
+
 	// this tick to remove the changefeed state in memory
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
@@ -301,15 +306,19 @@ func TestAdminJob(t *testing.T) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
+	done1 := make(chan error, 1)
 	owner, _, _ := createOwner4Test(ctx, t)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
 		Type: model.AdminResume,
-	})
-	owner.TriggerRebalance("test-changefeed2")
-	owner.ManualSchedule("test-changefeed3", "test-caputre1", 10)
+	}, done1)
+	done2 := make(chan error, 1)
+	owner.RebalanceTables("test-changefeed2", done2)
+	done3 := make(chan error, 1)
+	owner.ScheduleTable("test-changefeed3", "test-caputre1", 10, done3)
+	done4 := make(chan error, 1)
 	var buf bytes.Buffer
-	owner.WriteDebugInfo(&buf)
+	owner.WriteDebugInfo(&buf, done4)
 
 	// remove job.done, it's hard to check deep equals
 	jobs := owner.takeOwnerJobs()
@@ -320,22 +329,22 @@ func TestAdminJob(t *testing.T) {
 	}
 	require.Equal(t, jobs, []*ownerJob{
 		{
-			tp: ownerJobTypeAdminJob,
-			adminJob: &model.AdminJob{
+			Tp: ownerJobTypeAdminJob,
+			AdminJob: &model.AdminJob{
 				CfID: "test-changefeed1",
 				Type: model.AdminResume,
 			},
-			changefeedID: "test-changefeed1",
+			ChangefeedID: "test-changefeed1",
 		}, {
-			tp:           ownerJobTypeRebalance,
-			changefeedID: "test-changefeed2",
+			Tp:           ownerJobTypeRebalance,
+			ChangefeedID: "test-changefeed2",
 		}, {
-			tp:              ownerJobTypeManualSchedule,
-			changefeedID:    "test-changefeed3",
-			targetCaptureID: "test-caputre1",
-			tableID:         10,
+			Tp:              ownerJobTypeScheduleTable,
+			ChangefeedID:    "test-changefeed3",
+			TargetCaptureID: "test-caputre1",
+			TableID:         10,
 		}, {
-			tp:              ownerJobTypeDebugInfo,
+			Tp:              ownerJobTypeDebugInfo,
 			debugInfoWriter: &buf,
 		},
 	})
@@ -344,7 +353,7 @@ func TestAdminJob(t *testing.T) {
 
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
-	o := NewOwner(mockPDClient)
+	o := NewOwner(mockPDClient).(*ownerImpl)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
