@@ -110,7 +110,11 @@ func shouldUpdatePos(e *replication.BinlogEvent) bool {
 }
 
 func (l *locationRecorder) updateCurStartGTID() {
-	gset := l.curEndLocation.GetGTID().Origin()
+	gsetWrapped := l.curEndLocation.GetGTID()
+	if gsetWrapped == nil {
+		return
+	}
+	gset := gsetWrapped.Origin()
 	err := l.curStartLocation.SetGTID(gset)
 	if err != nil {
 		log.L().DPanic("failed to set GTID set",
