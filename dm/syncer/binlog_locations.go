@@ -57,7 +57,7 @@ type locationRecorder struct {
 	// distinguish DML query event.
 	inDML bool
 
-	// we assign startGTID := endGTID when COMMIT, but DDL doesn't have commit event, so we do this in next event.
+	// we assign startGTID := endGTID after COMMIT, so at COMMIT we turn on the flag.
 	needUpdateStartGTID bool
 
 	mu sync.Mutex // guard curEndLocation because Syncer.printStatus is reading it from another goroutine.
@@ -195,9 +195,9 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		}
 	case *replication.XIDEvent:
 		// for transactional engines like InnoDB, COMMIT is xid event
-		l.updateCurStartGTID()
 		l.saveTxnEndLocation()
 		l.inDML = false
+		l.needUpdateStartGTID = true
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
 		switch query {
@@ -211,10 +211,10 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			l.inDML = false
 		}
 
-		l.needUpdateStartGTID = true
 		if l.inDML {
 			return
 		}
+		l.needUpdateStartGTID = true
 
 		l.saveTxnEndLocation()
 	}
