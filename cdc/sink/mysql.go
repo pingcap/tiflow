@@ -633,10 +633,17 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 
 		preValues := make([]interface{}, 0, len(row.PreColumns))
 		for _, col := range row.PreColumns {
+			if col == nil {
+				// represent what?
+				continue
+			}
 			preValues = append(preValues, col.Value)
 		}
 		postValues := make([]interface{}, 0, len(row.Columns))
 		for _, col := range row.Columns {
+			if col == nil {
+				continue
+			}
 			postValues = append(postValues, col.Value)
 		}
 
