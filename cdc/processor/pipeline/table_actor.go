@@ -160,53 +160,78 @@ func NewTableActor(cdcCtx cdcContext.Context,
 }
 
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
-MSG:
 	for i := range msgs {
 		if atomic.LoadUint32(&t.stopped) == stopped {
 			// No need to handle remaining messages.
 			return false
 		}
 
+		var err error
 		switch msgs[i].Tp {
 		case message.TypeBarrier:
-			t.sortNode.UpdateBarrierTs(msgs[i].BarrierTs)
-			if err := t.sinkNode.UpdateBarrierTs(ctx, msgs[i].BarrierTs); err != nil {
-				t.handleError(err)
-				break
-			}
+			err = t.handleBarrierMsg(ctx, msgs[i].BarrierTs)
 		case message.TypeTick:
-			// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
-			if time.Since(t.lastFlushSinkTime) > sinkFlushInterval {
-				_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
-				if err != nil {
-					t.handleError(err)
-					break
-				}
-				t.lastFlushSinkTime = time.Now()
-			}
+			err = t.handleTickMsg(ctx)
 		case message.TypeStop:
-			// async stops sinkNode and tableSink
-			go func() {
-				_, err := t.sinkNode.HandleMessage(ctx,
-					pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
-				)
-				if err != nil {
-					t.handleError(err)
-				}
-			}()
+			t.handleStopMsg(ctx)
 		}
-		// process message for each node
-		for _, n := range t.nodes {
-			if err := n.TryRun(ctx); err != nil {
-				log.Error("failed to process message, stop table actor ",
-					zap.String("tableName", t.tableName),
-					zap.Int64("tableID", t.tableID), zap.Error(err))
-				t.handleError(err)
-				break MSG
-			}
+		if err != nil {
+			log.Error("failed to process message, stop table actor ",
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID),
+				zap.Any("message", msgs[i]),
+				zap.Error(err))
+			break
+		}
+
+		// process message for each node, pull message from parent node and then send it to next node
+		if err := t.handleDataMsg(ctx); err != nil {
+			log.Error("failed to process message, stop table actor ",
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID), zap.Error(err))
+			t.handleError(err)
+			break
 		}
 	}
 	return atomic.LoadUint32(&t.stopped) != stopped
+}
+
+func (t *tableActor) handleDataMsg(ctx context.Context) error {
+	for _, n := range t.nodes {
+		if err := n.TryRun(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *tableActor) handleBarrierMsg(ctx context.Context, barrierTs model.Ts) error {
+	t.sortNode.UpdateBarrierTs(barrierTs)
+	return t.sinkNode.UpdateBarrierTs(ctx, barrierTs)
+}
+
+func (t *tableActor) handleTickMsg(ctx context.Context) error {
+	// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
+	if time.Since(t.lastFlushSinkTime) > sinkFlushInterval {
+		_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
+		if err != nil {
+			return err
+		}
+		t.lastFlushSinkTime = time.Now()
+	}
+	return nil
+}
+
+func (t *tableActor) handleStopMsg(ctx context.Context) {
+	// async stops sinkNode and tableSink
+	go func() {
+		_, err := t.sinkNode.HandleMessage(ctx,
+			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
+		)
+		if err != nil {
+			t.handleError(err)
+		}
+	}()
 }
 
 func (t *tableActor) start(sdtTableContext context.Context) error {
