@@ -261,7 +261,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				if instance.cfg.ShardMode == config.ShardPessimistic {
 					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
 				} else {
-					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet))
+					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
 				}
 			}
 		}

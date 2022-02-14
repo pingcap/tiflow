@@ -571,15 +571,26 @@ type OptimisticShardingTablesChecker struct {
 	targetTableID string
 	dbs           map[string]*sql.DB
 	tableMap      map[string][]*filter.Table // sourceID => [table1, table2, ...]
+	reMu          sync.Mutex
+	joinedMu      sync.Mutex
+	inCh          chan *checkItem
+	dumpThreads   int
+	joined        *schemacmp.Table
 }
 
 // NewOptimisticShardingTablesChecker returns a RealChecker.
-func NewOptimisticShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table) RealChecker {
-	return &OptimisticShardingTablesChecker{
+func NewOptimisticShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, dumpThreads int) RealChecker {
+	if dumpThreads == 0 {
+		dumpThreads = 1
+	}
+	c := &OptimisticShardingTablesChecker{
 		targetTableID: targetTableID,
 		dbs:           dbs,
 		tableMap:      tableMap,
+		dumpThreads:   dumpThreads,
 	}
+	c.inCh = make(chan *checkItem, dumpThreads)
+	return c
 }
 
 // Name implements Checker interface.
@@ -592,61 +603,93 @@ func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
 	r := &Result{
 		Name:  c.Name(),
 		Desc:  "check consistency of sharding table structures for Optimistic Sharding Merge",
-		State: StateFailure,
+		State: StateSuccess,
 		Extra: fmt.Sprintf("sharding %s", c.targetTableID),
 	}
 
-	var joined *schemacmp.Table
-	for instance, tables := range c.tableMap {
-		db, ok := c.dbs[instance]
-		if !ok {
-			markCheckError(r, errors.NotFoundf("client for instance %s", instance))
-			return r
-		}
+	startTime := time.Now()
+	concurrency, err := getConcurrency(ctx, c.tableMap, c.dbs, c.dumpThreads)
+	if err != nil {
+		markCheckError(r, err)
+		return r
+	}
+	eg, checkCtx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		eg.Go(func() error {
+			return c.checkTable(checkCtx, r)
+		})
+	}
 
-		parser2, err := dbutil.GetParserForDB(ctx, db)
-		if err != nil {
-			markCheckError(r, err)
-			r.Extra = fmt.Sprintf("fail to get parser for instance %s on sharding %s", instance, c.targetTableID)
-			return r
-		}
+	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
+	if err := eg.Wait(); err != nil {
+		markCheckError(r, err)
+	}
 
-		for _, table := range tables {
-			statement, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
+	log.L().Logger.Info("check optimistic sharding table structure over", zap.Duration("spend time", time.Since(startTime)))
+	return r
+}
+
+func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Result) error {
+	var (
+		sourceID string
+		p        *parser.Parser
+		err      error
+	)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case checkItem, ok := <-c.inCh:
+			if !ok {
+				return nil
+			}
+			table := checkItem.table
+			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
+				sourceID = checkItem.sourceID
+				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
+				if err != nil {
+					c.reMu.Lock()
+					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
+					c.reMu.Unlock()
+					return err
+				}
+			}
+
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
 					continue
 				}
-				markCheckError(r, err)
-				r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-				return r
+				return err
 			}
 
-			ti, err := dbutil.GetTableInfoBySQL(statement, parser2)
+			ti, err := dbutil.GetTableInfoBySQL(statement, p)
 			if err != nil {
-				markCheckError(r, err)
-				r.Extra = fmt.Sprintf("instance %s on sharding %s", instance, c.targetTableID)
-				return r
+				return err
 			}
 			encodeTi := schemacmp.Encode(ti)
-			log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", joined), zap.Bool("pk is handle", ti.PKIsHandle))
-			if joined == nil {
-				joined = &encodeTi
+			c.joinedMu.Lock()
+			log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", c.joined), zap.Bool("pk is handle", ti.PKIsHandle))
+			if c.joined == nil {
+				c.joined = &encodeTi
+				c.joinedMu.Unlock()
 				continue
 			}
-			newJoined, err2 := joined.Join(encodeTi)
+			newJoined, err2 := c.joined.Join(encodeTi)
 			if err2 != nil {
 				// NOTE: conflict detected.
-				markCheckError(r, err2)
-				r.Extra = fmt.Sprintf("fail to join table info %s with %s", joined, encodeTi)
-				return r
+				c.reMu.Lock()
+				r.Extra = fmt.Sprintf("fail to join table info %s with %s", c.joined, encodeTi)
+				c.reMu.Unlock()
+				c.joinedMu.Unlock()
+				return err2
 			}
-			joined = &newJoined
+			c.joined = &newJoined
+			c.joinedMu.Unlock()
 		}
 	}
-	r.State = StateSuccess
-	return r
+
 }
 
 func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table, inCh chan *checkItem) {

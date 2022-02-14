@@ -190,6 +190,9 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 	}
 
 	// optimistic check different column number
+	maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
 	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
@@ -211,7 +214,8 @@ PRIMARY KEY ("c")
 		map[string][]*filter.Table{"test-source": {
 			&filter.Table{Schema: "test-db", Name: "test-table-1"},
 			&filter.Table{Schema: "test-db", Name: "test-table-2"},
-		}})
+		}},
+		0)
 	result := checker.Check(ctx)
 	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
