@@ -41,7 +41,7 @@ const (
 	defaultPartitionNum = 3
 
 	// flushMetricsInterval specifies the interval of refresh sarama metrics.
-	flushMetricsInterval = 5 * time.Second
+	flushMetricsInterval = 1 * time.Second
 )
 
 const (
