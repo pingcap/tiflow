@@ -77,6 +77,7 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 
 func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -92,6 +93,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
+	defer cancel()
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
