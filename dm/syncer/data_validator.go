@@ -38,8 +38,8 @@ import (
 // stage of validator is independent of subtask, pause/resume subtask doesn't affect the stage of validator.
 //
 // validator can be in running or stopped stage
-// - in running when it's started with subtask or started later on the fly
-// - in stopped when validation stop is executed
+// - in running when it's started with subtask or started later on the fly.
+// - in stopped when validation stop is executed.
 type DataValidator struct {
 	sync.RWMutex
 	cfg    *config.SubTaskConfig
