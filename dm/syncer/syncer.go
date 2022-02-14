@@ -290,13 +290,6 @@ func (s *Syncer) newJobChans() {
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
 	s.ddlJobCh = make(chan *job, s.cfg.QueueSize)
-	s.checkpointFlushWorker = &checkpointFlushWorker{
-		input:              make(chan *checkpointFlushTask, 16),
-		cp:                 s.checkpoint,
-		execError:          &s.execError,
-		afterFlushFn:       s.afterFlushCheckpoint,
-		updateJobMetricsFn: s.updateJobMetrics,
-	}
 	s.jobsClosed.Store(false)
 }
 
@@ -308,7 +301,6 @@ func (s *Syncer) closeJobChans() {
 	}
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
-	s.checkpointFlushWorker.Close()
 	s.jobsClosed.Store(true)
 }
 
@@ -567,6 +559,13 @@ func (s *Syncer) reset() {
 	}
 	// create new job chans
 	s.newJobChans()
+	s.checkpointFlushWorker = &checkpointFlushWorker{
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 s.checkpoint,
+		execError:          &s.execError,
+		afterFlushFn:       s.afterFlushCheckpoint,
+		updateJobMetricsFn: s.updateJobMetrics,
+	}
 
 	s.execError.Store(nil)
 	s.setErrLocation(nil, nil, false)
@@ -1514,6 +1513,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	defer func() {
 		s.runCancel()
 		s.closeJobChans()
+		s.checkpointFlushWorker.Close()
 		s.runWg.Wait()
 	}()
 

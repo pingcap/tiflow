@@ -56,12 +56,8 @@ function test_restart_relay_status() {
 		"list-member -n worker3" \
 		"relay" 1
 
-	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	echo "kill dm-master"
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	check_master_port_offline 1
+	kill_dm_worker
+	kill_dm_master
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
