@@ -3202,7 +3202,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("path", s.cfg.Dir),
+				zap.String("path", s.cfg.LoaderConfig.Dir),
 				zap.String("file", file),
 				zap.Error(err))
 			setFirstErr(err2)
