@@ -16,17 +16,16 @@ package syncer
 import (
 	"context"
 	"database/sql"
-	"hash/fnv"
-	"sort"
-
-	"github.com/pingcap/errors"
-
 	"fmt"
+	"hash/fnv"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pingcap/errors"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -36,6 +35,7 @@ import (
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -57,18 +57,10 @@ const (
 
 type rowChangeType int
 
-// table info
-type TableDiff struct {
-	// Schema represents the database name.
-	Schema string `json:"schema"`
-
-	// Table represents the table name.
-	Table string `json:"table"`
-
-	// Info is the parser.TableInfo, include some meta infos for this table.
-	// It used for TiDB/MySQL/MySQL Shard sources.
-	Info *model.TableInfo `json:"info"`
-
+type validateTableInfo struct {
+	Schema     string
+	Name       string
+	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	ColumnMap  map[string]*model.ColumnInfo
 }
@@ -125,7 +117,7 @@ const (
 // binlog changes are clustered into table changes
 // the validator validates changes of table-grain at a time
 type tableChange struct {
-	table *TableDiff
+	table *validateTableInfo
 	rows  map[string]*rowChange
 }
 
@@ -175,7 +167,7 @@ type DataValidator struct {
 	pendingChangeCh    chan map[string]*tableChange
 	changeEventCount   []int
 	validationTimer    *time.Timer
-	diffTables         map[string]*TableDiff
+	tables             map[string]*validateTableInfo
 	workerCnt          int
 	pendingChangeChs   map[int]chan map[string]*tableChange // replace pendingChangeCh
 	failedChangesMap   map[int]map[string]*tableChange      // replace failedChanges
@@ -188,6 +180,23 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 		stage:  pb.Stage_Stopped,
 	}
 	c.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
+
+	c.workerCnt = defaultWorkerCnt
+	c.pendingChangeChs = make(map[int]chan map[string]*tableChange)
+	c.failedChangesMap = make(map[int]map[string]*tableChange)
+	for i := 0; i < c.workerCnt; i++ {
+		c.pendingChangeChs[i] = make(chan map[string]*tableChange)
+		c.failedChangesMap[i] = make(map[string]*tableChange)
+	}
+	c.batchRowCnt = batchRowCount
+	c.validationTimer = time.NewTimer(validationInterval)
+	c.rowsEventChan = make(chan *replication.BinlogEvent)
+	c.pendingChangeCh = make(chan map[string]*tableChange)
+	c.tables = make(map[string]*validateTableInfo)
+	c.changeEventCount = make([]int, 4)
+	c.accumulatedChanges = make(map[string]*tableChange)
+	c.retryInterval = retryInterval
+
 	return c
 }
 
@@ -198,26 +207,16 @@ func (v *DataValidator) initialize() error {
 
 	var err error
 	defer func() {
-		if err != nil && v.fromDB != nil {
+		if err == nil {
+			return
+		}
+		if v.fromDB != nil {
 			v.fromDB.Close()
 		}
+		if v.toDB != nil {
+			v.toDB.Close()
+		}
 	}()
-
-	v.workerCnt = defaultWorkerCnt
-	v.pendingChangeChs = make(map[int]chan map[string]*tableChange)
-	v.failedChangesMap = make(map[int]map[string]*tableChange)
-	for i := 0; i < v.workerCnt; i++ {
-		v.pendingChangeChs[i] = make(chan map[string]*tableChange)
-		v.failedChangesMap[i] = make(map[string]*tableChange)
-	}
-	v.batchRowCnt = batchRowCount
-	v.validationTimer = time.NewTimer(validationInterval)
-	v.rowsEventChan = make(chan *replication.BinlogEvent)
-	v.pendingChangeCh = make(chan map[string]*tableChange)
-	v.diffTables = make(map[string]*TableDiff)
-	v.changeEventCount = make([]int, 4)
-	v.accumulatedChanges = make(map[string]*tableChange)
-	v.retryInterval = retryInterval
 
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
@@ -227,11 +226,13 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 	v.fromDBConn = fromDBConns[0]
+
 	v.toDB, toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
 	}
 	v.toDBConn = toDBConns[0]
+
 	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
@@ -481,10 +482,10 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 	schemaName, tableName := string(ev.Table.Schema), string(ev.Table.Table)
 	fullTableName := fmt.Sprintf("%s.%s", schemaName, tableName)
 	var (
-		table *TableDiff
+		table *validateTableInfo
 		ok    bool
 	)
-	if table, ok = v.diffTables[fullTableName]; !ok {
+	if table, ok = v.tables[fullTableName]; !ok {
 		// table not found in cache
 		// try getting table info from the upstream
 		tctx := tcontext.NewContext(v.ctx, v.L)
@@ -512,14 +513,14 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 				primaryIdx = idx
 			}
 		}
-		v.diffTables[fullTableName] = &TableDiff{
+		v.tables[fullTableName] = &validateTableInfo{
 			Schema:     schemaName,
-			Table:      tableName,
+			Name:       tableName,
 			Info:       tableInfo,
 			PrimaryKey: primaryIdx,
 			ColumnMap:  columnMap,
 		}
-		table = v.diffTables[fullTableName]
+		table = v.tables[fullTableName]
 	}
 	if table.PrimaryKey == nil {
 		err := errors.Errorf("missing primary key for table `%s`.`%s`", schemaName, tableName)
@@ -660,7 +661,7 @@ func (v *DataValidator) validateTableChange(tableChanges map[string]*tableChange
 	return failedChanges
 }
 
-func (v *DataValidator) validateChanges(table *TableDiff, rows []*rowChange, deleteChange bool) [][]string {
+func (v *DataValidator) validateChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) [][]string {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.pk)
@@ -826,7 +827,7 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 
 func getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIterator, error) {
 	tctx := tcontext.NewContext(context.Background(), log.L())
-	fullTableName := dbutil.TableName(cond.Table.Schema, cond.Table.Table)
+	fullTableName := dbutil.TableName(cond.Table.Schema, cond.Table.Name)
 	orderKeys, _ := dbutil.SelectUniqueOrderKey(cond.Table.Info)
 	columnNames := make([]string, 0, len(cond.Table.Info.Columns))
 	for _, col := range cond.Table.ColumnMap {
@@ -845,7 +846,7 @@ func getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIterator, error) {
 	return newRowDataIter, nil
 }
 
-func getRowChangeIterator(table *TableDiff, rows []*rowChange) (RowDataIterator, error) {
+func getRowChangeIterator(table *validateTableInfo, rows []*rowChange) (RowDataIterator, error) {
 	sort.Slice(rows, func(i, j int) bool {
 		left, right := rows[i], rows[j]
 		for idx := range left.pk {

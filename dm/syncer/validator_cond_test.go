@@ -29,7 +29,7 @@ type testCondSuite struct{}
 
 var _ = Suite(&testCondSuite{})
 
-func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *TableDiff {
+func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *validateTableInfo {
 	var (
 		err       error
 		parser2   *parser.Parser
@@ -49,9 +49,9 @@ func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *Tab
 			primaryIdx = idx
 		}
 	}
-	tableDiff := &TableDiff{
+	tableDiff := &validateTableInfo{
 		Schema:     schemaName,
-		Table:      tableName,
+		Name:       tableName,
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
 		ColumnMap:  columnMap,

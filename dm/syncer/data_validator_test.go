@@ -692,7 +692,7 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 		c.Assert(int(validator.failedRowCnt.Load()), Equals, testCase.failRowCnt)
 		// valid table
 		fullTableName := testCase.schemaName + "." + testCase.tblName
-		table, ok := validator.diffTables[fullTableName]
+		table, ok := validator.tables[fullTableName]
 		c.Assert(ok, IsTrue)
 		c.Assert(len(table.Info.Columns), Equals, len(testCase.colNames))
 		if testCase.failRowCnt > 0 {

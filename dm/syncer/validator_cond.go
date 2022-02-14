@@ -18,7 +18,7 @@ import (
 )
 
 type Cond struct {
-	Table    *TableDiff
+	Table    *validateTableInfo
 	PkValues [][]string
 }
 
