@@ -25,7 +25,7 @@ function run() {
 
 	# worker will inject delete/update sql check
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/syncer/DownstreamTrackerWhereCheck=return()"
+		"github.com/pingcap/tiflow/pkg/sqlmodel/DownstreamTrackerWhereCheck=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml

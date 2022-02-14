@@ -15,14 +15,15 @@ package syncer
 
 import (
 	"math"
-	"strings"
+	"testing"
 
 	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/dm/pkg/schema"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -31,6 +32,14 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/mock"
+)
+
+var (
+	location = binlog.Location{
+		Position: binlog.MinPosition,
+	}
+	ec             = &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
+	ecWithSafeMode = &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location, safeMode: true}
 )
 
 func (s *testSyncerSuite) TestCastUnsigned(c *C) {
@@ -70,420 +79,174 @@ func createTableInfo(p *parser.Parser, se sessionctx.Context, tableID int64, sql
 	return tiddl.MockTableInfo(se, node.(*ast.CreateTableStmt), tableID)
 }
 
-func (s *testSyncerSuite) TestFindFitIndex(c *C) {
-	p := parser.New()
-	se := mock.NewContext()
+func TestGenDMLWithSameOp(t *testing.T) {
+	targetTable1 := &cdcmodel.TableName{Schema: "db1", Table: "tb1"}
+	targetTable2 := &cdcmodel.TableName{Schema: "db2", Table: "tb2"}
+	sourceTable11 := &cdcmodel.TableName{Schema: "dba", Table: "tba"}
+	sourceTable12 := &cdcmodel.TableName{Schema: "dba", Table: "tbb"}
+	sourceTable21 := &cdcmodel.TableName{Schema: "dbb", Table: "tba"}
+	sourceTable22 := &cdcmodel.TableName{Schema: "dbb", Table: "tbb"}
 
-	ti, err := createTableInfo(p, se, 1, `
-		create table t1(
-			a int,
-			b int,
-			c int,
-			d int not null,
-			primary key(a, b),
-			unique key(c),
-			unique key(d)
-		);
-	`)
-	c.Assert(err, IsNil)
+	tableInfo11 := mockTableInfo(t, "create table db.tb(id int primary key, col1 int unique not null, name varchar(24))")
+	tableInfo12 := mockTableInfo(t, "create table db.tb(id int primary key, col1 int unique not null, name varchar(24))")
+	tableInfo21 := mockTableInfo(t, "create table db.tb(id int primary key, col2 int unique not null, name varchar(24))")
+	tableInfo22 := mockTableInfo(t, "create table db.tb(id int primary key, col3 int unique not null, name varchar(24))")
 
-	columns := findFitIndex(ti)
-	c.Assert(columns, NotNil)
-	c.Assert(columns.Columns, HasLen, 2)
-	c.Assert(columns.Columns[0].Name.L, Equals, "a")
-	c.Assert(columns.Columns[1].Name.L, Equals, "b")
-
-	ti, err = createTableInfo(p, se, 2, `create table t2(c int unique);`)
-	c.Assert(err, IsNil)
-	columns = findFitIndex(ti)
-	c.Assert(columns, IsNil)
-
-	ti, err = createTableInfo(p, se, 3, `create table t3(d int not null unique);`)
-	c.Assert(err, IsNil)
-	columns = findFitIndex(ti)
-	c.Assert(columns, NotNil)
-	c.Assert(columns.Columns, HasLen, 1)
-	c.Assert(columns.Columns[0].Name.L, Equals, "d")
-
-	ti, err = createTableInfo(p, se, 4, `create table t4(e int not null, key(e));`)
-	c.Assert(err, IsNil)
-	columns = findFitIndex(ti)
-	c.Assert(columns, IsNil)
-
-	ti, err = createTableInfo(p, se, 5, `create table t5(f datetime primary key);`)
-	c.Assert(err, IsNil)
-	columns = findFitIndex(ti)
-	c.Assert(columns, NotNil)
-	c.Assert(columns.Columns, HasLen, 1)
-	c.Assert(columns.Columns[0].Name.L, Equals, "f")
-
-	ti, err = createTableInfo(p, se, 6, `create table t6(g int primary key);`)
-	c.Assert(err, IsNil)
-	columns = findFitIndex(ti)
-	c.Assert(columns, NotNil)
-	c.Assert(columns.Columns, HasLen, 1)
-	c.Assert(columns.Columns[0].Name.L, Equals, "g")
-}
-
-func (s *testSyncerSuite) TestGenMultipleKeys(c *C) {
-	p := parser.New()
-	se := mock.NewContext()
-
-	testCases := []struct {
-		schema string
-		values []interface{}
-		keys   []string
-	}{
-		{
-			// test no keys
-			schema: `create table t1(a int)`,
-			values: []interface{}{10},
-			keys:   []string{"table"},
-		},
-		{
-			// one primary key
-			schema: `create table t2(a int primary key, b double)`,
-			values: []interface{}{60, 70.5},
-			keys:   []string{"60.a.table"},
-		},
-		{
-			// one unique key
-			schema: `create table t3(a int unique, b double)`,
-			values: []interface{}{60, 70.5},
-			keys:   []string{"60.a.table"},
-		},
-		{
-			// one ordinary key
-			schema: `create table t4(a int, b double, key(b))`,
-			values: []interface{}{60, 70.5},
-			keys:   []string{"table"},
-		},
-		{
-			// multiple keys
-			schema: `create table t5(a int, b text, c int, key(a), key(b(3)))`,
-			values: []interface{}{13, "abcdef", 15},
-			keys:   []string{"table"},
-		},
-		{
-			// multiple keys with primary key
-			schema: `create table t6(a int primary key, b varchar(16) unique)`,
-			values: []interface{}{16, "xyz"},
-			keys:   []string{"16.a.table", "xyz.b.table"},
-		},
-		{
-			// non-integer primary key
-			schema: `create table t65(a int unique, b varchar(16) primary key)`,
-			values: []interface{}{16, "xyz"},
-			keys:   []string{"xyz.b.table", "16.a.table"},
-		},
-		{
-			// primary key of multiple columns
-			schema: `create table t7(a int, b int, primary key(a, b))`,
-			values: []interface{}{59, 69},
-			keys:   []string{"59.a.69.b.table"},
-		},
-		{
-			// ordinary key of multiple columns
-			schema: `create table t75(a int, b int, c int, key(a, b), key(c, b))`,
-			values: []interface{}{48, 58, 68},
-			keys:   []string{"table"},
-		},
-		{
-			// so many keys
-			schema: `
-				create table t8(
-					a int, b int, c int,
-					primary key(a, b),
-					unique key(b, c),
-					key(a, b, c),
-					unique key(c, a)
-				)
-			`,
-			values: []interface{}{27, 37, 47},
-			keys:   []string{"27.a.37.b.table", "37.b.47.c.table", "47.c.27.a.table"},
-		},
-		{
-			// `null` for unique key
-			schema: `
-				create table t8(
-					a int, b int default null,
-					primary key(a),
-					unique key(b)
-				)
-			`,
-			values: []interface{}{17, nil},
-			keys:   []string{"17.a.table"},
-		},
-	}
-	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-	for i, tc := range testCases {
-		schemaStr := tc.schema
-		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
-			c.Assert(obtained, checker, append(args, Commentf("test case schema: %s", schemaStr))...)
-		}
-
-		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
-		assert(err, IsNil)
-		dti := schema.GetDownStreamTI(ti, ti)
-		assert(dti, NotNil)
-		keys := genMultipleKeys(sessCtx, dti, ti, tc.values, "table")
-		assert(keys, DeepEquals, tc.keys)
-	}
-}
-
-func (s *testSyncerSuite) TestGenWhere(c *C) {
-	p := parser.New()
-	se := mock.NewContext()
-	schema1 := "create table test.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
-	ti1, err := createTableInfo(p, se, 0, schema1)
-	c.Assert(err, IsNil)
-	schema2 := "create table test.tb(id int, col1 int, col2 int, name varchar(24))"
-	ti2, err := createTableInfo(p, se, 0, schema2)
-	c.Assert(err, IsNil)
-	ti1Index := &model.IndexInfo{
-		Table:   ti1.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti1.Columns[0].Name,
-			Offset: ti1.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-
-	testCases := []struct {
-		dml    *DML
-		sql    string
-		values []interface{}
-	}{
-		{
-			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti1.Columns, ti1, ti1Index, nil),
-			"`id` = ?",
-			[]interface{}{1},
-		},
-		{
-			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti1.Columns, ti1, ti1Index, nil),
-			"`id` = ?",
-			[]interface{}{1},
-		},
-		{
-			newDML(del, false, "", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti2.Columns, ti2, nil, nil),
-			"`id` = ? AND `col1` = ? AND `col2` = ? AND `name` = ?",
-			[]interface{}{1, 2, 3, "haha"},
-		},
-		{
-			newDML(update, false, "", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, ti2.Columns, ti2, nil, nil),
-			"`id` = ? AND `col1` = ? AND `col2` = ? AND `name` = ?",
-			[]interface{}{1, 2, 3, "haha"},
-		},
-	}
-
-	for _, tc := range testCases {
-		var buf strings.Builder
-		whereValues := tc.dml.genWhere(&buf)
-		c.Assert(buf.String(), Equals, tc.sql)
-		c.Assert(whereValues, DeepEquals, tc.values)
-	}
-}
-
-func (s *testSyncerSuite) TestGenSQL(c *C) {
-	p := parser.New()
-	se := mock.NewContext()
-	schema := "create table test.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
-	ti, err := createTableInfo(p, se, 0, schema)
-	c.Assert(err, IsNil)
-	tiIndex := &model.IndexInfo{
-		Table:   ti.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti.Columns[0].Name,
-			Offset: ti.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-
-	testCases := []struct {
-		dml     *DML
-		queries []string
-		args    [][]interface{}
-	}{
-		{
-			newDML(insert, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1, 2, 3, "haha"}},
-		},
-		{
-			newDML(insert, true, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1, 2, 3, "haha"}},
-		},
-		{
-			newDML(del, false, "`targetSchema`.`targetTable`", &filter.Table{}, nil, []interface{}{1, 2, 3, "haha"}, nil, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{1}},
-		},
-		{
-			newDML(update, false, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"UPDATE `targetSchema`.`targetTable` SET `id` = ?, `col1` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{4, 5, 6, "hihi", 1}},
-		},
-		{
-			newDML(update, true, "`targetSchema`.`targetTable`", &filter.Table{}, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, []interface{}{1, 2, 3, "haha"}, []interface{}{1, 2, 3, "haha"}, ti.Columns, ti, tiIndex, nil),
-			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1}, {4, 5, 6, "hihi"}},
-		},
-	}
-	for _, tc := range testCases {
-		queries, args := tc.dml.genSQL()
-		c.Assert(queries, DeepEquals, tc.queries)
-		c.Assert(args, DeepEquals, tc.args)
-	}
-}
-
-func (s *testSyncerSuite) TestValueHolder(c *C) {
-	holder := valuesHolder(0)
-	c.Assert(holder, Equals, "()")
-	holder = valuesHolder(10)
-	c.Assert(holder, Equals, "(?,?,?,?,?,?,?,?,?,?)")
-}
-
-func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
-	targetTableID1 := "`db1`.`tb1`"
-	targetTableID2 := "`db2`.`tb2`"
-	sourceTable11 := &filter.Table{Schema: "dba", Name: "tba"}
-	sourceTable12 := &filter.Table{Schema: "dba", Name: "tbb"}
-	sourceTable21 := &filter.Table{Schema: "dbb", Name: "tba"}
-	sourceTable22 := &filter.Table{Schema: "dbb", Name: "tbb"}
-
-	p := parser.New()
-	se := mock.NewContext()
-	schema11 := "create table dba.tba(id int primary key, col1 int unique not null, name varchar(24))"
-	schema12 := "create table dba.tbb(id int primary key, col1 int unique not null, name varchar(24))"
-	schema21 := "create table dbb.tba(id int primary key, col2 int unique not null, name varchar(24))"
-	schema22 := "create table dbb.tbb(id int primary key, col3 int unique not null, name varchar(24))"
-	ti11, err := createTableInfo(p, se, 0, schema11)
-	c.Assert(err, IsNil)
-	ti11Index := &model.IndexInfo{
-		Table:   ti11.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti11.Columns[0].Name,
-			Offset: ti11.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi11 := &schema.DownstreamTableInfo{
-		AbsoluteUKIndexInfo: ti11Index,
-	}
-	ti12, err := createTableInfo(p, se, 0, schema12)
-	c.Assert(err, IsNil)
-	ti12Index := &model.IndexInfo{
-		Table:   ti12.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti12.Columns[0].Name,
-			Offset: ti12.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi12 := &schema.DownstreamTableInfo{
-		AbsoluteUKIndexInfo: ti12Index,
-	}
-	ti21, err := createTableInfo(p, se, 0, schema21)
-	c.Assert(err, IsNil)
-	ti21Index := &model.IndexInfo{
-		Table:   ti21.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti21.Columns[0].Name,
-			Offset: ti21.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi21 := &schema.DownstreamTableInfo{
-		AbsoluteUKIndexInfo: ti21Index,
-	}
-	ti22, err := createTableInfo(p, se, 0, schema22)
-	c.Assert(err, IsNil)
-	ti22Index := &model.IndexInfo{
-		Table:   ti22.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti22.Columns[0].Name,
-			Offset: ti22.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi22 := &schema.DownstreamTableInfo{
-		AbsoluteUKIndexInfo: ti22Index,
-	}
-
-	dmls := []*DML{
+	dmls := []*job{
 		// insert
-		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(insert, true, targetTableID1, sourceTable11, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(insert, true, targetTableID1, sourceTable12, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []interface{}{1, 1, "a"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []interface{}{2, 2, "b"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, nil, []interface{}{3, 3, "c"}, tableInfo12, nil, nil),
+			ecWithSafeMode,
+		),
+
 		// update no index but safemode
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, tableInfo12, nil, nil),
+			ecWithSafeMode,
+		),
+
 		// update uk
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, tableInfo12, nil, nil),
+			ecWithSafeMode,
+		),
+
 		// update pk
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{4, 4, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable11, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{5, 5, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(update, true, targetTableID1, sourceTable12, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{6, 6, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, tableInfo12, nil, nil),
+			ecWithSafeMode,
+		),
 		// delete
-		newDML(del, true, targetTableID1, sourceTable11, nil, []interface{}{4, 4, "aa"}, nil, []interface{}{4, 4, "aa"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(del, true, targetTableID1, sourceTable11, nil, []interface{}{5, 5, "bb"}, nil, []interface{}{5, 5, "bb"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(del, true, targetTableID1, sourceTable12, nil, []interface{}{6, 6, "cc"}, nil, []interface{}{6, 6, "cc"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{4, 4, "aa"}, nil, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{5, 5, "bb"}, nil, tableInfo11, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{6, 6, "cc"}, nil, tableInfo12, nil, nil),
+			ecWithSafeMode,
+		),
 
 		// target table 2
 		// insert
-		newDML(insert, true, targetTableID2, sourceTable21, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(insert, false, targetTableID2, sourceTable21, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(insert, false, targetTableID2, sourceTable22, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti22.Columns, ti22, ti22Index, downTi22),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []interface{}{1, 1, "a"}, tableInfo21, nil, nil),
+			ecWithSafeMode,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []interface{}{2, 2, "b"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, nil, []interface{}{3, 3, "c"}, tableInfo22, nil, nil),
+			ec,
+		),
+
 		// update no index
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, ti22.Columns, ti22, ti22Index, downTi22),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, tableInfo22, nil, nil),
+			ec,
+		),
+
 		// update uk
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, ti22.Columns, ti22, ti22Index, downTi22),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, tableInfo22, nil, nil),
+			ec,
+		),
+
 		// update pk
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, []interface{}{1, 1, "aa"}, []interface{}{4, 4, "aa"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable21, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, []interface{}{2, 2, "bb"}, []interface{}{5, 5, "bb"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(update, false, targetTableID2, sourceTable22, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, []interface{}{3, 3, "cc"}, []interface{}{6, 6, "cc"}, ti22.Columns, ti22, ti22Index, downTi22),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, tableInfo22, nil, nil),
+			ec,
+		),
+
 		// delete
-		newDML(del, false, targetTableID2, sourceTable21, nil, []interface{}{4, 4, "aa"}, nil, []interface{}{4, 4, "aa"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(del, false, targetTableID2, sourceTable21, nil, []interface{}{5, 5, "bb"}, nil, []interface{}{5, 5, "bb"}, ti21.Columns, ti21, ti21Index, downTi21),
-		newDML(del, false, targetTableID2, sourceTable22, nil, []interface{}{6, 6, "cc"}, nil, []interface{}{6, 6, "cc"}, ti22.Columns, ti22, ti22Index, downTi22),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{4, 4, "aa"}, nil, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{5, 5, "bb"}, nil, tableInfo21, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{6, 6, "cc"}, nil, tableInfo22, nil, nil),
+			ec,
+		),
 
 		// table1
 		// detele
-		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{44, 44, "aaa"}, nil, []interface{}{44, 44, "aaa"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(del, false, targetTableID1, sourceTable11, nil, []interface{}{55, 55, "bbb"}, nil, []interface{}{55, 55, "bbb"}, ti11.Columns, ti11, ti11Index, downTi11),
-		newDML(del, false, targetTableID1, sourceTable12, nil, []interface{}{66, 66, "ccc"}, nil, []interface{}{66, 66, "ccc"}, ti12.Columns, ti12, ti12Index, downTi12),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{44, 44, "aaa"}, nil, tableInfo11, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{55, 55, "bbb"}, nil, tableInfo11, nil, nil),
+			ec,
+		),
+		newDMLJob(
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{66, 66, "ccc"}, nil, tableInfo12, nil, nil),
+			ec,
+		),
 	}
 
 	expectQueries := []string{
@@ -567,70 +330,8 @@ func (s *testSyncerSuite) TestGenDMLWithSameOp(c *C) {
 	}
 
 	queries, args := genDMLsWithSameOp(dmls)
-	c.Assert(queries, DeepEquals, expectQueries)
-	c.Assert(args, DeepEquals, expectArgs)
-}
-
-func (s *testSyncerSuite) TestTruncateIndexValues(c *C) {
-	p := parser.New()
-	se := mock.NewContext()
-
-	testCases := []struct {
-		schema    string
-		values    []interface{}
-		preValues []interface{}
-	}{
-		{
-			// test not prefix key
-			schema:    `create table t1(a int, b varchar(20), unique key b(b))`,
-			values:    []interface{}{10, "1234"},
-			preValues: []interface{}{"1234"},
-		},
-		{
-			// test not string key
-			schema:    `create table t1(a int, b text, unique key a(a))`,
-			values:    []interface{}{10, "1234"},
-			preValues: []interface{}{int64(10)},
-		},
-		{
-			// test keys
-			schema:    `create table t1(a int, b text, unique key b(b(3)))`,
-			values:    []interface{}{10, "1234"},
-			preValues: []interface{}{"123"},
-		},
-		{
-			// test multi keys
-			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
-			values:    []interface{}{10, "1234"},
-			preValues: []interface{}{int64(10), "123"},
-		},
-		{
-			// value is nil
-			schema:    `create table t1(a int, b text, unique key c2(a, b(3)))`,
-			values:    []interface{}{10, nil},
-			preValues: []interface{}{int64(10), nil},
-		},
-	}
-	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-	for i, tc := range testCases {
-		schemaStr := tc.schema
-		assert := func(obtained interface{}, checker Checker, args ...interface{}) {
-			c.Assert(obtained, checker, append(args, Commentf("test case schema: %s", schemaStr))...)
-		}
-		ti, err := createTableInfo(p, se, int64(i+1), tc.schema)
-		assert(err, IsNil)
-		dti := schema.GetDownStreamTI(ti, ti)
-		assert(dti, NotNil)
-		assert(dti.AvailableUKIndexList, NotNil)
-		cols := make([]*model.ColumnInfo, 0, len(dti.AvailableUKIndexList[0].Columns))
-		values := make([]interface{}, 0, len(dti.AvailableUKIndexList[0].Columns))
-		for _, column := range dti.AvailableUKIndexList[0].Columns {
-			cols = append(cols, ti.Columns[column.Offset])
-			values = append(values, tc.values[column.Offset])
-		}
-		realPreValue := truncateIndexValues(sessCtx, ti, dti.AvailableUKIndexList[0], cols, values)
-		assert(realPreValue, DeepEquals, tc.preValues)
-	}
+	require.Equal(t, expectQueries, queries)
+	require.Equal(t, expectArgs, args)
 }
 
 func (s *testSyncerSuite) TestGBKExtractValueFromData(c *C) {
