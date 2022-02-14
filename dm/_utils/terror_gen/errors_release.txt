@@ -184,6 +184,8 @@ ErrOpenAPITaskConfigNotExist,[code=20051:class=config:scope=internal:level=low],
 ErrConfigCollationCompatibleNotSupport,[code=20052:class=config:scope=internal:level=medium], "Message: collation compatible %s not supported, Workaround: Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['sql', 'loader']"
 ErrConfigInvalidDuplicateResolution,[code=20054:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate '%s', Workaround: Please choose a valid value in ['replace', 'error', 'ignore']"
+ErrConfigValidationMode,[code=20055:class=config:scope=internal:level=high], "Message: invalid validation mode, Workaround: Please check `validation-mode` config in task configuration file."
+ErrContinuousValidatorCfgNotFound,[code=20056:class=config:scope=internal:level=medium], "Message: mysql-instance(%d)'s continuous validator config %s not exist, Workaround: Please check the `continuous-validator-config-name` config in task configuration file."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
@@ -212,7 +214,7 @@ ErrRelayBinlogNameNotValid,[code=30004:class=relay-unit:scope=internal:level=hig
 ErrRelayNoCurrentUUID,[code=30005:class=relay-unit:scope=internal:level=high], "Message: no current UUID set"
 ErrRelayFlushLocalMeta,[code=30006:class=relay-unit:scope=internal:level=high], "Message: flush local meta"
 ErrRelayUpdateIndexFile,[code=30007:class=relay-unit:scope=internal:level=high], "Message: update UUID index file %s"
-ErrRelayLogDirpathEmpty,[code=30008:class=relay-unit:scope=internal:level=high], "Message: dirpath is empty, Workaround: Please check the `relay-dir` config in source config file."
+ErrRelayLogDirpathEmpty,[code=30008:class=relay-unit:scope=internal:level=high], "Message: dirpath is empty, Workaround: Please check the `relay-dir` config in source config file or dm-worker config file."
 ErrRelayReaderNotStateNew,[code=30009:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s, already started"
 ErrRelayReaderStateCannotClose,[code=30010:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s, can not close"
 ErrRelayReaderNeedStart,[code=30011:class=relay-unit:scope=internal:level=high], "Message: stage %s, expect %s"
@@ -395,6 +397,8 @@ ErrMasterBoundChanging,[code=38052:class=dm-master:scope=internal:level=low], "M
 ErrMasterFailToImportFromV10x,[code=38053:class=dm-master:scope=internal:level=high], "Message: fail to import DM cluster from v1.0.x, Workaround: Please confirm that you have not violated any restrictions in the upgrade documentation."
 ErrMasterInconsistentOptimisticDDLsAndInfo,[code=38054:class=dm-master:scope=internal:level=high], "Message: inconsistent count of optimistic ddls and table infos, ddls: %d, table info: %d"
 ErrMasterOptimisticTableInfoBeforeNotExist,[code=38055:class=dm-master:scope=internal:level=high], "Message: table-info-before not exist in optimistic ddls: %v"
+ErrMasterOptimisticDownstreamMetaNotFound,[code=38056:class=dm-master:scope=internal:level=high], "Message: downstream database config and meta for task %s not found"
+ErrMasterInvalidClusterID,[code=38057:class=dm-master:scope=internal:level=high], "Message: invalid cluster id: %v"
 ErrWorkerParseFlagSet,[code=40001:class=dm-worker:scope=internal:level=medium], "Message: parse dm-worker config flag set"
 ErrWorkerInvalidFlag,[code=40002:class=dm-worker:scope=internal:level=medium], "Message: '%s' is an invalid flag"
 ErrWorkerDecodeConfigFromFile,[code=40003:class=dm-worker:scope=internal:level=medium], "Message: toml decode file, Workaround: Please check the configuration file has correct TOML format."

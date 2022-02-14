@@ -93,6 +93,12 @@ type ErrorWithMessage struct {
 	ErrorMsg string `json:"error_msg"`
 }
 
+// GetClusterInfoResponse defines model for GetClusterInfoResponse.
+type GetClusterInfoResponse struct {
+	// cluster id
+	ClusterId uint64 `json:"cluster_id"`
+}
+
 // GetClusterMasterListResponse defines model for GetClusterMasterListResponse.
 type GetClusterMasterListResponse struct {
 	Data  []ClusterMaster `json:"data"`
@@ -305,6 +311,9 @@ type StopRelayRequest struct {
 type SubTaskStatus struct {
 	// status of dump unit
 	DumpStatus *DumpStatus `json:"dump_status,omitempty"`
+
+	// error message when something wrong
+	ErrorMsg *string `json:"error_msg,omitempty"`
 
 	// status of load unit
 	LoadStatus *LoadStatus `json:"load_status,omitempty"`
