@@ -170,9 +170,9 @@ function test_watch_source_bound_exit() {
 }
 
 function run() {
-	# test_multi_task_running
+	test_multi_task_running
 	test_watch_source_bound_exit
-	# test_isolate_master_and_worker # TICASE-934, 935, 936, 987, 992, 998, 999
+	test_isolate_master_and_worker # TICASE-934, 935, 936, 987, 992, 998, 999
 }
 
 cleanup_data $ha_test
