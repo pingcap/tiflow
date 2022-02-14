@@ -451,7 +451,13 @@ func (s *Server) DMAPIDeleteTask(c *gin.Context, taskName string, params openapi
 		_ = c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
 		return
 	}
-	if err := s.stopTask(c.Request.Context(), taskName, sourceNameList, nil); err != nil {
+
+	ctx := c.Request.Context()
+	if err := s.stopTask(ctx, taskName, sourceNameList, nil); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if err := s.deleteTask(ctx, taskName); err != nil {
 		_ = c.Error(err)
 		return
 	}

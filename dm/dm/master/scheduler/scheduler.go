@@ -1545,8 +1545,8 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 
 // UpdateExpectSubTaskStage updates the current expect subtask stage.
 // now, only support updates:
-// - from `Running` to `Paused`.
-// - from `Paused` to `Running`.
+// - from `Running` to `Paused/Stopped`.
+// - from `Paused/Stopped` to `Running`.
 // NOTE: from `Running` to `Running` and `Paused` to `Paused` still update the data in etcd,
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
@@ -1561,7 +1561,7 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, taskName string,
 
 	// 1. check the new expectant stage.
 	switch newStage {
-	case pb.Stage_Running, pb.Stage_Paused:
+	case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
 	default:
 		return terror.ErrSchedulerSubTaskStageInvalidUpdate.Generate(newStage)
 	}

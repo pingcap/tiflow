@@ -13,8 +13,8 @@
 //
 // contains all controllers for openapi: source controller，task controller...
 // Model(data in etcd): source of truth
-// View(openapi): handle(validate,filter,prepare parameters) request from user and call controller to update model.
-// Controller(all funcs in this file): call model func to update data.
+// View(openapi_view): handle(validate,filter,prepare parameters) request from user and call controller to update model.
+// Controller(openapi_controller): call model func to update data.
 
 package master
 
