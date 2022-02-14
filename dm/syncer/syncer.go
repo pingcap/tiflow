@@ -3217,7 +3217,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			err = s.schemaTracker.Exec(ctx, db, string(stmt))
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
-					zap.Any("path", s.cfg.Dir),
+					zap.Any("path", s.cfg.LoaderConfig.Dir),
 					zap.Any("file", file),
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
