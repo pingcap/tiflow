@@ -3198,7 +3198,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := exstorage.ReadFile(ctx, s.cfg.Dir, file, nil)
+		content, err2 := exstorage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
