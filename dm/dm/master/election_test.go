@@ -37,8 +37,12 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	var s1, s2 *Server
 	defer func() {
 		cancel()
-		s1.Close()
-		s2.Close()
+		if s1 != nil {
+			s1.Close()
+		}
+		if s2 != nil {
+			s2.Close()
+		}
 	}()
 
 	// create a new cluster
