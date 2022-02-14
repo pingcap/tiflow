@@ -300,12 +300,21 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	}
 }
 
+func (v *DataValidator) processError(err error) {
+	v.fillResult(err, true)
+
+	if errors.Cause(err) != context.Canceled {
+		v.Stop()
+	}
+}
+
+// doValidate: runs in a separate goroutine
 func (v *DataValidator) doValidate() {
 	tctx := tcontext.NewContext(v.ctx, v.L)
 	if v.streamerController.IsClosed() {
 		err := v.streamerController.Start(tctx, lastLocation)
 		if err != nil {
-			v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
+			v.processError(terror.Annotate(err, "fail to start streamer controller"))
 			return
 		}
 	}
@@ -314,12 +323,12 @@ func (v *DataValidator) doValidate() {
 	v.wg.Add(2)
 	go v.rowsEventProcessRoutine()
 	go v.validateTaskDispatchRoutine()
+
 	var latestPos mysql.Position
 	for {
 		e, err := v.streamerController.GetEvent(tctx)
 		if err != nil {
-			// todo: validation paused?
-			v.fillResult(terror.Annotate(err, "fail to get binlog from stream controller"), true)
+			v.processError(terror.Annotate(err, "fail to get binlog from stream controller"))
 			return
 		}
 		// todo: configuring the time or use checkpoint
@@ -353,13 +362,11 @@ func (v *DataValidator) Stop() {
 		return
 	}
 
+	v.cancel()
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
 
-	if v.cancel != nil {
-		v.cancel()
-	}
 	v.wg.Wait()
 	v.stage = pb.Stage_Stopped
 }

@@ -46,10 +46,9 @@ func (c *Cond) GetWhere() string {
 		b.WriteString(pk.Columns[i].Name.O)
 	}
 	if !isOneKey {
-		b.WriteString(") in (")
-	} else {
-		b.WriteString(" in (")
+		b.WriteString(")")
 	}
+	b.WriteString(" in (")
 	for i := range c.PkValues {
 		if i != 0 {
 			b.WriteString(",")
