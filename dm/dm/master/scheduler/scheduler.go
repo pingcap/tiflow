@@ -175,6 +175,17 @@ type Scheduler struct {
 	// - stop-relay
 	relayWorkers map[string]map[string]struct{}
 
+	// expectant validator stages, task name -> source ID -> stage.
+	// add:
+	// - on subtask start with validator mode not none
+	// - start validator manually
+	// - recover from etcd
+	// update
+	// - update stage by user request
+	// delete:
+	// - when subtask is removed by user request
+	expectValidatorStages sync.Map
+
 	// workers in load stage
 	// task -> source -> worker
 	loadTasks map[string]map[string]string
@@ -918,6 +929,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	// 2. construct `Running` stages when adding.
 	newCfgs := make([]config.SubTaskConfig, 0, len(cfgs)-len(existSources))
 	newStages := make([]ha.Stage, 0, cap(newCfgs))
+	validatorStages := make([]ha.Stage, 0, cap(newCfgs))
 	unbounds := make([]string, 0)
 	for _, cfg := range cfgs {
 		if _, ok := existSourcesM[cfg.SourceID]; ok {
@@ -925,6 +937,9 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 		}
 		newCfgs = append(newCfgs, cfg)
 		newStages = append(newStages, ha.NewSubTaskStage(expectStage, cfg.SourceID, cfg.Name))
+		if cfg.ValidatorCfg.Mode != config.ValidationNone {
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		}
 		if _, ok := s.bounds[cfg.SourceID]; !ok {
 			unbounds = append(unbounds, cfg.SourceID)
 		}
@@ -936,7 +951,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	}
 
 	// 4. put the configs and stages into etcd.
-	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages)
+	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages, validatorStages)
 	if err != nil {
 		return err
 	}
@@ -949,6 +964,11 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	}
 	for _, stage := range newStages {
 		v, _ := s.expectSubTaskStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
+		m := v.(map[string]ha.Stage)
+		m[stage.Source] = stage
+	}
+	for _, stage := range validatorStages {
+		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
 		m := v.(map[string]ha.Stage)
 		m[stage.Source] = stage
 	}
@@ -979,11 +999,17 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(task)
 	}
 
+	var validatorStageM map[string]ha.Stage
+	if validatorStageV, ok := s.expectValidatorStages.Load(task); ok {
+		validatorStageM = validatorStageV.(map[string]ha.Stage)
+	}
+
 	var (
 		stagesM          = stagesMapV.(map[string]ha.Stage)
 		cfgsM            = cfgsMapV.(map[string]config.SubTaskConfig)
 		notExistSourcesM = make(map[string]struct{})
 		stages           = make([]ha.Stage, 0, len(sources))
+		validatorStages  = make([]ha.Stage, 0, len(sources))
 		cfgs             = make([]config.SubTaskConfig, 0, len(sources))
 	)
 	for _, source := range sources {
@@ -991,6 +1017,9 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 			notExistSourcesM[source] = struct{}{}
 		} else {
 			stages = append(stages, stage)
+		}
+		if stage, ok := validatorStageM[source]; ok {
+			validatorStages = append(validatorStages, stage)
 		}
 		if cfg, ok := cfgsM[source]; ok {
 			cfgs = append(cfgs, cfg)
@@ -1003,7 +1032,7 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	}
 
 	// 2. delete the configs and the stages.
-	_, err = ha.DeleteSubTaskCfgStage(s.etcdCli, cfgs, stages)
+	_, err = ha.DeleteSubTaskCfgStage(s.etcdCli, cfgs, stages, validatorStages)
 	if err != nil {
 		return err
 	}
@@ -1020,6 +1049,12 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	}
 	if len(stagesM) == 0 {
 		s.expectSubTaskStages.Delete(task)
+	}
+	for _, stage := range validatorStages {
+		delete(validatorStageM, stage.Source)
+	}
+	if len(validatorStageM) == 0 {
+		s.expectValidatorStages.Delete(task)
 	}
 
 	return nil
@@ -1682,6 +1717,10 @@ func (s *Scheduler) recoverSubTasks() error {
 	if err != nil {
 		return err
 	}
+	validatorStageMM, _, err := ha.GetAllValidatorStage(s.etcdCli)
+	if err != nil {
+		return err
+	}
 
 	// recover in-memory data.
 	for source, cfgM := range cfgMM {
@@ -1694,6 +1733,13 @@ func (s *Scheduler) recoverSubTasks() error {
 	for source, stageM := range stageMM {
 		for task, stage := range stageM {
 			v, _ := s.expectSubTaskStages.LoadOrStore(task, map[string]ha.Stage{})
+			m := v.(map[string]ha.Stage)
+			m[source] = stage
+		}
+	}
+	for source, stageM := range validatorStageMM {
+		for task, stage := range stageM {
+			v, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})
 			m := v.(map[string]ha.Stage)
 			m[source] = stage
 		}

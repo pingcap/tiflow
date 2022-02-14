@@ -763,6 +763,30 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
 	c.Assert(CompareLocation(loc, loc2, true), Equals, 1)
+
+	loc2.gtidSet = nil
+	err = loc2.SetGTID(mysqlSet)
+	c.Assert(err, IsNil)
+	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
+}
+
+func (t *testPositionSuite) TestSetGTIDMariaDB(c *C) {
+	gSetStr := "1-1-1,2-2-2"
+	gSet, err := gtid.ParserGTID("mariadb", gSetStr)
+	c.Assert(err, IsNil)
+	gSetOrigin := gSet.Origin()
+
+	loc := Location{
+		Position: gmysql.Position{
+			Name: "mysql-bin.00002",
+			Pos:  2333,
+		},
+		gtidSet: nil,
+		Suffix:  0,
+	}
+	err = loc.SetGTID(gSetOrigin)
+	c.Assert(err, IsNil)
+	c.Assert(loc.gtidSet.String(), Equals, gSetStr)
 }
 
 func (t *testPositionSuite) TestExtractSuffix(c *C) {

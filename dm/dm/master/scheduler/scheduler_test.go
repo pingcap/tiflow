@@ -131,6 +131,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(subtaskCfg21.Adjust(true), IsNil)
 	subtaskCfg22 := subtaskCfg21
 	subtaskCfg22.SourceID = sourceID2
+	subtaskCfg22.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
 	c.Assert(subtaskCfg22.Adjust(true), IsNil)
 
 	// not started scheduler can't do anything.
@@ -425,6 +426,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskCfgExist(c, s, subtaskCfg22)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4.2 fail to stop any task.
@@ -471,6 +473,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
 	// CASE 4.7: remove source2.
@@ -765,6 +768,29 @@ func (t *testScheduler) subTaskStageMatch(c *C, s *Scheduler, task, source strin
 		stageDeepEqualExcludeRev(c, eStageM[task], stage)
 	default:
 		c.Assert(eStageM, HasLen, 0)
+	}
+}
+
+func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, task)
+	var m map[string]ha.Stage
+	if v, ok := s.expectValidatorStages.Load(task); ok {
+		m = v.(map[string]ha.Stage)
+	}
+	if expectStage == pb.Stage_InvalidStage {
+		_, ok := m[source]
+		c.Assert(ok, IsFalse)
+	} else {
+		stageDeepEqualExcludeRev(c, m[source], stage)
+	}
+	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task, 0)
+	c.Assert(err, IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[task], stage)
+	default:
+		c.Assert(stageM, HasLen, 0)
 	}
 }
 

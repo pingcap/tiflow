@@ -339,7 +339,7 @@ func (c *StreamerController) ReopenWithRetry(tctx *tcontext.Context, location bi
 }
 
 // Close closes streamer.
-func (c *StreamerController) Close(tctx *tcontext.Context) {
+func (c *StreamerController) Close() {
 	c.Lock()
 	c.close()
 	c.Unlock()
