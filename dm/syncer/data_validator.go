@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -140,10 +141,12 @@ type DataValidator struct {
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
 
-	stage  pb.Stage
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	stage        pb.Stage
+	wg           sync.WaitGroup
+	errProcessWg sync.WaitGroup
+	errChan      chan error
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	L                  log.Logger
 	fromDB             *conn.BaseDB
@@ -173,9 +176,10 @@ type DataValidator struct {
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
 	c := &DataValidator{
-		cfg:    cfg,
-		syncer: syncerObj,
-		stage:  pb.Stage_Stopped,
+		cfg:     cfg,
+		syncer:  syncerObj,
+		stage:   pb.Stage_Stopped,
+		errChan: make(chan error, 1),
 	}
 	c.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -271,6 +275,9 @@ func (v *DataValidator) Start(expect pb.Stage) {
 		v.doValidate()
 	}()
 
+	v.errProcessWg.Add(1)
+	go v.errorProcessRoutine()
+
 	v.stage = pb.Stage_Running
 }
 
@@ -300,21 +307,36 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	}
 }
 
-func (v *DataValidator) processError(err error) {
-	v.fillResult(err, true)
+func (v *DataValidator) errorProcessRoutine() {
+	v.errProcessWg.Done()
+	for {
+		select {
+		case err := <-v.errChan:
+			v.fillResult(err, true)
 
-	if errors.Cause(err) != context.Canceled {
-		v.Stop()
+			if errors.Cause(err) != context.Canceled {
+				v.stopInner()
+			}
+		case <-v.ctx.Done():
+			return
+		}
 	}
+}
+
+func (v *DataValidator) waitSyncerSynced(loc *binlog.Location, event *replication.BinlogEvent) error {
+	// TODO
+	return nil
 }
 
 // doValidate: runs in a separate goroutine
 func (v *DataValidator) doValidate() {
+	// todo: wait syncer started, get syncer checkpoint
+	var location binlog.Location
 	tctx := tcontext.NewContext(v.ctx, v.L)
 	if v.streamerController.IsClosed() {
-		err := v.streamerController.Start(tctx, lastLocation)
+		err := v.streamerController.Start(tctx, location)
 		if err != nil {
-			v.processError(terror.Annotate(err, "fail to start streamer controller"))
+			v.errChan <- terror.Annotate(err, "fail to start streamer controller")
 			return
 		}
 	}
@@ -324,37 +346,46 @@ func (v *DataValidator) doValidate() {
 	go v.rowsEventProcessRoutine()
 	go v.validateTaskDispatchRoutine()
 
-	var latestPos mysql.Position
+	var currLoc binlog.Location
 	for {
 		e, err := v.streamerController.GetEvent(tctx)
 		if err != nil {
-			v.processError(terror.Annotate(err, "fail to get binlog from stream controller"))
+			v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
 			return
 		}
-		// todo: configuring the time or use checkpoint
-		eventTime := time.Unix(int64(e.Header.Timestamp), 0)
-		lag := time.Since(eventTime)
-		if lag < defaultDelay {
-			time.Sleep(defaultDelay - lag)
+		if utils.IsFakeRotateEvent(e.Header) {
+			continue
+		}
+
+		// wait until syncer synced that event
+		if err := v.waitSyncerSynced(&currLoc, e); err != nil {
+			v.errChan <- terror.Annotate(err, "failed to wait syncer")
+			return
 		}
 
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
-			latestPos.Name = string(ev.NextLogName)
+			currLoc.Position = mysql.Position{Name: string(ev.NextLogName), Pos: binlog.FileHeaderLen}
 		case *replication.QueryEvent:
 			// TODO not processed now
+			currLoc.Position.Pos = e.Header.LogPos
 		case *replication.RowsEvent:
+			currLoc.Position.Pos = e.Header.LogPos
 			select {
 			case v.rowsEventChan <- e:
 			case <-v.ctx.Done():
 				return
 			}
 		}
-		latestPos.Pos = e.Header.LogPos
 	}
 }
 
 func (v *DataValidator) Stop() {
+	v.stopInner()
+	v.errProcessWg.Wait()
+}
+
+func (v *DataValidator) stopInner() {
 	v.Lock()
 	defer v.Unlock()
 	if v.stage != pb.Stage_Running {
@@ -384,15 +415,16 @@ func (v *DataValidator) Stage() pb.Stage {
 }
 
 func (v *DataValidator) rowsEventProcessRoutine() {
+	defer v.wg.Done()
 	for {
 		select {
 		case <-v.ctx.Done():
 			v.L.Debug("validator row event process unit done")
-			v.wg.Done()
 			return
 		case e := <-v.rowsEventChan:
 			if err := v.processEventRows(e.Header, e.Event.(*replication.RowsEvent)); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
+				return
 			}
 		case <-v.validationTimer.C:
 			rowCount := v.getRowCount(v.accumulatedChanges)
@@ -405,7 +437,8 @@ func (v *DataValidator) rowsEventProcessRoutine() {
 	}
 }
 
-func (v *DataValidator) workerValidateTableChange(workerID int) {
+func (v *DataValidator) validateTableChangeWorkerRoutine(workerID int) {
+	defer v.wg.Done()
 	for {
 		select {
 		case change := <-v.pendingChangeChs[workerID]:
@@ -419,7 +452,6 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 			v.failedRowCnt.Add(int64(deltaFailed))            // atomic value
 		case <-v.ctx.Done():
 			v.L.Debug("validator worker done", zap.Int("workerID", workerID))
-			v.wg.Done()
 			return
 		case <-time.After(v.retryInterval):
 			retryChange := v.failedChangesMap[workerID]
@@ -431,10 +463,11 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 }
 
 func (v *DataValidator) validateTaskDispatchRoutine() {
+	defer v.wg.Done()
 	// start workers here
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
-		go v.workerValidateTableChange(i)
+		go v.validateTableChangeWorkerRoutine(i)
 	}
 	for {
 		select {
@@ -442,7 +475,6 @@ func (v *DataValidator) validateTaskDispatchRoutine() {
 			v.dispatchRowChange(change) // dispatch change to worker
 		case <-v.ctx.Done():
 			v.L.Debug("validator task dispatch done")
-			v.wg.Done()
 			return
 		}
 	}
