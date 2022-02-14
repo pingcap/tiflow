@@ -47,7 +47,7 @@ type testLocationSuite struct {
 	currGSet gtid.Set
 }
 
-func (s *testLocationSuite) SetUpSuite(c *C) {
+func (s *testLocationSuite) SetUpTest(c *C) {
 	s.serverID = 101
 	s.binlogFile = "mysql-bin.000001"
 	s.nextBinlogFile = "mysql-bin.000002"
@@ -55,7 +55,7 @@ func (s *testLocationSuite) SetUpSuite(c *C) {
 	s.flavor = mysql.MySQLFlavor
 	s.prevGSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
 	s.lastGTIDStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:14"
-	s.currGSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
+	s.currGSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-15"
 
 	var err error
 	s.prevGSet, err = gtid.ParserGTID(s.flavor, s.prevGSetStr)
@@ -179,10 +179,20 @@ func (s *testLocationSuite) checkOneTxnEvents(c *C, events []*replication.Binlog
 	c.Assert(r.curEndLocation, DeepEquals, expected[0])
 	c.Assert(r.txnEndLocation, DeepEquals, expected[0])
 
+	seenGTID := false
 	for i, e := range events {
 		r.update(e)
 		c.Assert(r.curStartLocation, DeepEquals, expected[i])
-		c.Assert(r.curEndLocation, DeepEquals, expected[i+1])
+
+		if e.Header.EventType == replication.GTID_EVENT || e.Header.EventType == replication.MARIADB_GTID_EVENT {
+			seenGTID = true
+		}
+		if seenGTID {
+			c.Assert(r.curEndLocation.Position, DeepEquals, expected[i+1].Position)
+			c.Assert(r.curEndLocation.GetGTID(), DeepEquals, expected[len(expected)-1].GetGTID())
+		} else {
+			c.Assert(r.curEndLocation, DeepEquals, expected[i+1])
+		}
 
 		if i == len(events)-1 {
 			switch e.Header.EventType {
@@ -197,7 +207,8 @@ func (s *testLocationSuite) checkOneTxnEvents(c *C, events []*replication.Binlog
 	}
 }
 
-func (s *testLocationSuite) generateExpectLocations(
+// generateExpectedLocations generates binlog position part of location from given event.
+func (s *testLocationSuite) generateExpectedLocations(
 	initLoc binlog.Location,
 	events []*replication.BinlogEvent,
 ) []binlog.Location {
@@ -224,7 +235,7 @@ func (s *testLocationSuite) TestDMLUpdateLocationsGTID(c *C) {
 	// we have 8 events
 	c.Assert(events, HasLen, 8)
 
-	expected := s.generateExpectLocations(s.loc, events)
+	expected := s.generateExpectedLocations(s.loc, events)
 
 	c.Assert(expected[8].SetGTID(s.currGSet.Origin()), IsNil)
 
@@ -246,7 +257,7 @@ func (s *testLocationSuite) TestDMLUpdateLocationsPos(c *C) {
 	events[7].Event.(*replication.XIDEvent).GSet = nil
 	events = append(events[:2], events[4:]...)
 
-	expected := s.generateExpectLocations(loc, events)
+	expected := s.generateExpectedLocations(loc, events)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
@@ -257,7 +268,7 @@ func (s *testLocationSuite) TestDDLUpdateLocationsGTID(c *C) {
 	// we have 5 events
 	c.Assert(events, HasLen, 5)
 
-	expected := s.generateExpectLocations(s.loc, events)
+	expected := s.generateExpectedLocations(s.loc, events)
 
 	c.Assert(expected[5].SetGTID(s.currGSet.Origin()), IsNil)
 
@@ -281,7 +292,7 @@ func (s *testLocationSuite) TestDDLUpdateLocationsPos(c *C) {
 	events = append(events[:2], events[4:]...)
 
 	// now we have 3 events, test about their 4 locations
-	expected := s.generateExpectLocations(loc, events)
+	expected := s.generateExpectedLocations(loc, events)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
@@ -305,7 +316,7 @@ func (s *testLocationSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 	// we have 7 events
 	c.Assert(events, HasLen, 7)
 
-	expected := s.generateExpectLocations(s.loc, events)
+	expected := s.generateExpectedLocations(s.loc, events)
 
 	c.Assert(expected[7].SetGTID(s.currGSet.Origin()), IsNil)
 
@@ -334,7 +345,7 @@ func (s *testLocationSuite) TestRotateEvent(c *C) {
 
 	nextLoc := s.loc
 	nextLoc.Position.Name = s.nextBinlogFile
-	expected := s.generateExpectLocations(nextLoc, events)
+	expected := s.generateExpectedLocations(nextLoc, events)
 
 	// reset events of first binlog file
 	expected[0].Position.Name = s.binlogFile

@@ -1797,10 +1797,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		startTime := time.Now()
 		e, err = s.getEvent(s.runCtx, currentLocation)
-		s.tctx.L().Debug("location refactor",
-			zap.Stringer("current", currentLocation),
-			zap.Stringer("start", startLocation),
-			zap.Stringer("last", lastLocation))
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -3690,8 +3686,6 @@ func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location)
 	e, err := s.streamerController.GetEvent(tctx)
 	if err == nil {
 		s.locations.update(e)
-		// TODO: observe below log in integration test
-		s.tctx.L().Debug("location refactor", zap.Stringer("locations", s.locations))
 	}
 	return e, err
 }
