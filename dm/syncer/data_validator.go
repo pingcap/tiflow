@@ -320,7 +320,7 @@ func (v *DataValidator) doValidate() {
 		e, err := v.streamerController.GetEvent(tctx)
 		if err != nil {
 			// todo: validation paused?
-			v.fillResult(errors.New("getting binlog event failed"), true)
+			v.fillResult(terror.Annotate(err, "fail to get binlog from stream controller"), true)
 			return
 		}
 		// todo: configuring the time or use checkpoint
@@ -381,7 +381,7 @@ func (v *DataValidator) rowsEventProcessRoutine() {
 	for {
 		select {
 		case <-v.ctx.Done():
-			fmt.Printf("rowsEventProcessRoutine Done\n")
+			v.L.Debug("validator row event process unit done")
 			v.wg.Done()
 			return
 		case e := <-v.rowsEventChan:
@@ -412,7 +412,7 @@ func (v *DataValidator) workerValidateTableChange(workerID int) {
 			v.pendingRowCnt.Sub(int64(v.getRowCount(change))) // atomic value
 			v.failedRowCnt.Add(int64(deltaFailed))            // atomic value
 		case <-v.ctx.Done():
-			fmt.Printf("workerValidateTableChange %d Done\n", workerID)
+			v.L.Debug("validator worker done", zap.Int("workerID", workerID))
 			v.wg.Done()
 			return
 		case <-time.After(v.retryInterval):
@@ -435,7 +435,7 @@ func (v *DataValidator) validateTaskDispatchRoutine() {
 		case change := <-v.pendingChangeCh:
 			v.dispatchRowChange(change) // dispatch change to worker
 		case <-v.ctx.Done():
-			fmt.Printf("validateTaskDispatchRoutine Done\n")
+			v.L.Debug("validator task dispatch done")
 			v.wg.Done()
 			return
 		}
@@ -521,16 +521,14 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		}
 		table = v.diffTables[fullTableName]
 	}
-	if table == nil {
-		return nil
-	}
 	if table.PrimaryKey == nil {
-		errMsg := fmt.Sprintf("no primary key for %s.%s", table.Schema, table.Table)
-		return errors.New(errMsg)
+		err := errors.Errorf("missing primary key for table `%s`.`%s`", schemaName, tableName)
+		return err
 	}
 	for _, cols := range ev.SkippedColumns {
 		if len(cols) > 0 {
-			return errors.New("")
+			err := errors.Errorf("unexpected skipped columns for table `%s`.`%s`", schemaName, tableName)
+			return err
 		}
 	}
 	changeType := getRowChangeType(header.EventType)
@@ -540,10 +538,6 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 	}
 	v.changeEventCount[changeType]++
 
-	init, step := 0, 1
-	if changeType == rowUpdated {
-		init, step = 1, 2
-	}
 	pk := table.PrimaryKey
 	pkIndices := make([]int, len(pk.Columns))
 	for i, col := range pk.Columns {
@@ -552,7 +546,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 
 	rowCount := v.getRowCount(v.accumulatedChanges)
 	change := v.accumulatedChanges[fullTableName]
-	for i := init; i < len(ev.Rows); i += step {
+	for i := 0; i < len(ev.Rows); i++ {
 		row := ev.Rows[i]
 		pkValue := make([]string, len(pk.Columns))
 		for _, idx := range pkIndices {
@@ -569,16 +563,29 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		}
 		key := strings.Join(pkValue, "-")
 		val, ok := change.rows[key]
-		if !ok {
-			// this row hasn't been changed before
+		if !ok && (changeType != rowUpdated || i%2 != 0) {
+			// insert a new row change iff:
+			// 1. not an update binlog record (e.g. insert/delete) OR
+			// 2. the new value in the update binlog
 			val = &rowChange{pk: pkValue}
 			change.rows[key] = val
 			rowCount++
 			v.pendingRowCnt.Inc()
+		} else if ok && changeType == rowUpdated && i%2 == 0 {
+			// if this row change exists and updated now:
+			// mark the `old_row_val` as deleted
+			// delete it and replace this record with the `new_row_val` later in the next iteration
+			val.theType = rowDeleted
+			continue
 		}
-		val.data = row
-		val.theType = changeType
-		val.lastMeetTs = int64(header.Timestamp)
+		if val != nil {
+			val.data = row
+			val.theType = changeType
+			val.lastMeetTs = int64(header.Timestamp)
+		} else {
+			// row change NOT exists and this row change record is an update binlog with `old_row_val`
+			continue
+		}
 
 		if rowCount >= v.batchRowCnt {
 			v.pendingChangeCh <- v.accumulatedChanges
@@ -667,16 +674,13 @@ func (v *DataValidator) validateChanges(table *TableDiff, rows []*rowChange, del
 		failedRows, err = v.validateInsertAndUpdateRows(rows, cond)
 	}
 	if err != nil {
-		v.fillResult(err, false)
+		v.L.Warn("fail to validate row changes of table", zap.Error(err))
 		return [][]string{}
 	}
 	return failedRows
 }
 
 // remove previous failed rows related to current batch of rows
-// e.g. Assuming that one row was modified twice and successfully migrated to downstream.
-// the validator might get false negative result when validating the first update binlog record
-// but it must finally get true positive after validating the second update record.
 // This function updates the failed rows every time after validating
 func (v *DataValidator) updateFailedChangesByWorker(all, failed map[string]*tableChange, workerID int) int {
 	failedChanges := v.failedChangesMap[workerID]
@@ -689,8 +693,10 @@ func (v *DataValidator) updateFailedChangesByWorker(all, failed map[string]*tabl
 		}
 		for _, r := range val.rows {
 			key := strings.Join(r.pk, "-")
-			delete(prevFailed.rows, key)
-			deltaFailed--
+			if _, ok := prevFailed.rows[key]; ok {
+				delete(prevFailed.rows, key)
+				deltaFailed--
+			}
 		}
 	}
 	for k, val := range failed {
@@ -740,14 +746,12 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 	var err error
 	upstreamRowsIterator, err = getRowChangeIterator(cond.Table, rows)
 	if err != nil {
-		return nil, errors.New("get row change iter fails")
+		return nil, err
 	}
 	defer upstreamRowsIterator.Close()
-	fmt.Printf("cond: %v\n", cond)
 	downstreamRowsIterator, err = getRowsFrom(cond, v.toDBConn)
 	if err != nil {
-		fmt.Printf("get row fails: %s\n", err.Error())
-		return nil, errors.New("get rows fails")
+		return nil, err
 	}
 	defer downstreamRowsIterator.Close()
 
@@ -793,7 +797,7 @@ func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Con
 
 		eq, cmp, err := v.compareData(lastUpstreamData, lastDownstreamData, orderKeyCols, tableInfo.Columns)
 		if err != nil {
-			return nil, errors.New("")
+			return nil, err
 		}
 		if eq {
 			lastDownstreamData = nil
@@ -904,10 +908,10 @@ func (v *DataValidator) compareData(map1, map2 map[string]*dbutil.ColumnData, or
 
 	for _, column := range columns {
 		if data1, ok = map1[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("upstream don't have key %s", key)
+			return false, 0, errors.Errorf("upstream doesn't have key %s", key)
 		}
 		if data2, ok = map2[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("downstream don't have key %s", key)
+			return false, 0, errors.Errorf("downstream doesn't have key %s", key)
 		}
 		str1 = string(data1.Data)
 		str2 = string(data2.Data)
@@ -942,11 +946,11 @@ func (v *DataValidator) compareData(map1, map2 map[string]*dbutil.ColumnData, or
 	// Not Equal. Compare orderkeycolumns.
 	for _, col := range orderKeyCols {
 		if data1, ok = map1[col.Name.O]; !ok {
-			err = errors.Errorf("don't have key %s", col.Name.O)
+			err = errors.Errorf("upstream doesn't have key %s", col.Name.O)
 			return
 		}
 		if data2, ok = map2[col.Name.O]; !ok {
-			err = errors.Errorf("don't have key %s", col.Name.O)
+			err = errors.Errorf("downstream doesn't have key %s", col.Name.O)
 			return
 		}
 

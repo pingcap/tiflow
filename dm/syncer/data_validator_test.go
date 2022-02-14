@@ -22,6 +22,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -67,7 +69,7 @@ func (d *testDataValidatorSuite) SetUpSuite(c *C) {
 		To:               config.GetDBConfigForTest(),
 		ServerID:         101,
 		MetaSchema:       "test",
-		Name:             "syncer_ut",
+		Name:             "validator_ut",
 		ShadowTableRules: []string{config.DefaultShadowTableRules},
 		TrashTableRules:  []string{config.DefaultTrashTableRules},
 		Mode:             config.ModeIncrement,
@@ -79,6 +81,7 @@ func (d *testDataValidatorSuite) SetUpSuite(c *C) {
 	d.cfg.To.Adjust()
 
 	d.cfg.UseRelay = false
+	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
 
 func (d *testDataValidatorSuite) genDBConn(c *C, db *sql.DB) *dbconn.DBConn {
@@ -517,20 +520,6 @@ func (d *testDataValidatorSuite) generateEvents(binlogEvents mockBinlogEvents, c
 	return events
 }
 
-// func (d *testDataValidatorSuite) TestMock(c *C) {
-// 	db, mock, err := sqlmock.New()
-// 	c.Assert(err, IsNil)
-// 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
-// 	rows, err := db.Query("SELECT * FROM test;")
-// 	c.Assert(err, IsNil)
-// 	iter := &RowDataIteratorImpl{
-// 		Rows: rows,
-// 	}
-// 	res, err := iter.Next()
-// 	c.Assert(res, IsNil)
-// 	c.Assert(err, IsNil)
-// }
-
 func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 	type testCase struct {
 		schemaName string
@@ -538,7 +527,6 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 		creatSQL   string
 		binlogEvs  []mockBinlogEvent
 		selectSQLs []string // mock in toDB
-		selectArgs [][]string
 		retRows    [][][]string
 		colNames   []string
 		failRowCnt int
@@ -547,7 +535,6 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 	batchSize := 2
 	testCases := []testCase{
 		{
-			// test case 1:
 			schemaName: "test1",
 			tblName:    "tbl1",
 			creatSQL: `create table if not exists test1.tbl1(
@@ -566,16 +553,11 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 				{typ: Update, args: []interface{}{uint64(8), "test1", "tbl1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(5), int32(6), "some data4"}, {int32(5), int32(7), "some data4"}}}},
 			},
 			selectSQLs: []string{
-				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\),\\(\\?,\\?\\)\\).*", // batch1: insert row1, row2
-				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\)\\).*",               // batch2: update row1
-				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\)\\).*",               // batch2: delete row2
-				"SELECT .* FROM .*test1.* WHERE .*a,b.* in \\(\\(\\?,\\?\\),\\(\\?,\\?\\)\\).*", // batch3: insert and update row3. pk changed and probably caused false negative
-			},
-			selectArgs: [][]string{
-				{"1", "2", "3", "4"},
-				{"1", "3"},
-				{"3", "4"},
-				{"5", "6", "5", "7"},
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in .*", // batch1: insert row1, row2
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in .*", // batch2: update row1
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in .*", // batch2: delete row2
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in .*", // batch3: insert and update row3, only query (5, 7)
+				"SELECT .* FROM .*test1.* WHERE .*a,b.* in .*", // batch3: update query (5, 6)
 			},
 			retRows: [][][]string{
 				{
@@ -591,10 +573,57 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 				{
 					{"5", "7", "some data4"},
 				},
+				{
+					{},
+				},
 			},
 			colNames:   []string{"a", "b", "c"},
-			failRowCnt: 1, // one false negative
-			failRowPKs: []string{"5-6"},
+			failRowCnt: 0,
+			failRowPKs: []string{},
+		},
+		{
+			// stale read in downstream and got erronous result
+			// but row2's primary key is reused and inserted again
+			// the error is restored
+			schemaName: "test2",
+			tblName:    "tbl2",
+			creatSQL: `create table if not exists test2.tbl2(
+				a varchar(10),
+				b int,
+				c float,
+				primary key(a));`,
+			binlogEvs: []mockBinlogEvent{
+				{typ: Write, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val1", int32(1), float32(1.2)}}}},
+				{typ: Write, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val2", int32(2), float32(2.2)}}}},
+
+				{typ: Delete, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val1", int32(1), float32(1.2)}}}},
+				{typ: Delete, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val2", int32(2), float32(2.2)}}}},
+
+				{typ: Write, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val3", int32(3), float32(3.2)}}}},
+				{typ: Write, args: []interface{}{uint64(8), "test2", "tbl2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_FLOAT}, [][]interface{}{{"val2", int32(2), float32(4.2)}}}},
+			},
+			selectSQLs: []string{
+				"SELECT .* FROM .*test2.* WHERE .*a.* in.*", // batch1: query row1 and row2
+				"SELECT .* FROM .*test2.* WHERE .*a.* in.*", // batch2: query row1 and row2
+				"SELECT .* FROM .*test2.* WHERE .*a.* in.*", // batch3: query row2 and row3
+			},
+			retRows: [][][]string{
+				{
+					{"val1", "1", "1.2"},
+					{"val2", "2", "2.2"},
+				},
+				{
+					{"val1", "1", "1.2"},
+					{"val2", "2", "2.2"},
+				},
+				{
+					{"val2", "2", "4.2"},
+					{"val3", "3", "3.2"},
+				},
+			},
+			colNames:   []string{"a", "b", "c"},
+			failRowCnt: 1,
+			failRowPKs: []string{"val1"},
 		},
 	}
 	for _, testCase := range testCases {
@@ -613,7 +642,7 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 		validator.Start(pb.Stage_Paused)      // init but will return soon
 		validator.result = pb.ProcessResult{} // clear error
 		validator.workerCnt = 1
-		validator.retryInterval = 100 // never retry
+		validator.retryInterval = 100 * time.Second // never retry
 		events1 := testCase.binlogEvs
 		mockStreamerProducer := &MockStreamProducer{d.generateEvents(events1, c)}
 		mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
@@ -652,18 +681,13 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 				}
 				rows.AddRow(rowVals...)
 			}
-			args := []driver.Value{}
-			for _, arg := range testCase.selectArgs[i] {
-				args = append(args, arg)
-			}
-			toMock.ExpectQuery(testCase.selectSQLs[i]).WithArgs(args...).WillReturnRows(rows)
+			toMock.ExpectQuery(testCase.selectSQLs[i]).WillReturnRows(rows)
 		}
 		validator.doValidate()
 		// wait for all routine finished
+		time.Sleep(1 * time.Second)
 		validator.cancel()
-		// validator.wg.Wait()
-		time.Sleep(5 * time.Second)
-		fmt.Printf("results: %v\n", validator.result.Errors)
+		validator.wg.Wait()
 		// failed row
 		c.Assert(int(validator.failedRowCnt.Load()), Equals, testCase.failRowCnt)
 		// valid table
@@ -684,6 +708,6 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 			})
 			c.Assert(allRowsPKs, DeepEquals, testCase.failRowPKs)
 		}
-		c.Assert(len(validator.result.Errors), Equals, 1)
+		c.Assert(len(validator.result.Errors), Equals, 0)
 	}
 }
