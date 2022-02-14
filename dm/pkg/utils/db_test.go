@@ -492,3 +492,8 @@ func (t *testDBSuite) TestGetMaxConnections(c *C) {
 	c.Assert(maxConnections, Equals, 151)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
+
+func (t *testDBSuite) TestIsMariaDB(c *C) {
+	c.Assert(IsMariaDB("5.5.50-MariaDB-1~wheezy"), IsTrue)
+	c.Assert(IsMariaDB("5.7.19-17-log"), IsFalse)
+}

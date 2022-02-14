@@ -245,6 +245,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			if c.onlineDDL != nil {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 			}
+			c.checkList = append(c.checkList, checker.NewBinlogDbChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas))
 		}
 	}
 

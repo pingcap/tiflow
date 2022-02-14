@@ -28,7 +28,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
@@ -56,7 +55,7 @@ func GetFlavor(ctx context.Context, db *sql.DB) (string, error) {
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	if check.IsMariaDB(value) {
+	if IsMariaDB(value) {
 		return gmysql.MariaDBFlavor, nil
 	}
 	return gmysql.MySQLFlavor, nil
@@ -661,4 +660,9 @@ func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) 
 	}
 	maxConnections, err := strconv.ParseUint(maxConnectionsStr, 10, 32)
 	return int(maxConnections), err
+}
+
+// IsMariaDB tells whether the version is mariadb.
+func IsMariaDB(version string) bool {
+	return strings.Contains(strings.ToUpper(version), "MARIADB")
 }

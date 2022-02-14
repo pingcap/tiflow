@@ -17,9 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/utils"
+	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
+
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // MySQLVersionChecker checks mysql/mariadb/rds,... version.
@@ -70,7 +73,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
-	if IsMariaDB(value) {
+	if utils.IsMariaDB(value) {
 		return NewWarn("Migrating from MariaDB is experimentally supported")
 	}
 	if IsTiDBFromVersion(value) {
@@ -124,7 +127,7 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 
 	serverID, err := dbutil.ShowServerID(ctx, pc.db)
 	if err != nil {
-		if utils.OriginError(err) != sql.ErrNoRows {
+		if toolsutils.OriginError(err) != sql.ErrNoRows {
 			markCheckError(result, err)
 			return result
 		}
@@ -149,35 +152,64 @@ func (pc *MySQLServerIDChecker) Name() string {
 
 // BinlogDbChecker checks mysql/mariadb server ID.
 type BinlogDbChecker struct {
-	db     *sql.DB
-	dbinfo *dbutil.DBConfig
+	db      *sql.DB
+	dbinfo  *dbutil.DBConfig
+	schemas map[string]struct{}
 }
 
 // NewMySQLServerIDChecker returns a RealChecker.
-func NewBinlogDbChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
-	return &BinlogDbChecker{db: db, dbinfo: dbinfo}
+func NewBinlogDbChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}) RealChecker {
+	return &BinlogDbChecker{db: db, dbinfo: dbinfo, schemas: schemas}
 }
 
 // Check implements the RealChecker interface.
 func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether mysql server_id has been greater than 0",
+		Desc:  "check whether dbs need replication is in binlog_do_db/binlog_ignore_db",
 		State: StateFailure,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
 	}
 
-	serverID, err := dbutil.ShowServerID(ctx, c.db)
+	flavor, err := utils.GetFlavor(ctx, c.db)
 	if err != nil {
-		result.Errors = append(result.Errors, NewError("server_id not set"))
-		result.Instruction = "please set server_id in your database"
+		markCheckError(result, err)
+		return result
+	}
+	binlogDoDb, binlogIgnoreDb, err := utils.GetBinlogDb(ctx, c.db, flavor)
+	if err != nil {
+		markCheckError(result, err)
 		return result
 	}
 
-	if serverID == 0 {
-		result.Errors = append(result.Errors, NewError("server_id is 0"))
-		result.Instruction = "please set server_id greater than 0"
-		return result
+	binlogDoDb = strings.ReplaceAll(binlogDoDb, " ", "")
+	binlogIgnoreDb = strings.ReplaceAll(binlogIgnoreDb, " ", "")
+
+	binlogDoDbs := strings.Split(binlogDoDb, ",")
+	binlogIgnoreDbs := strings.Split(binlogIgnoreDb, ",")
+	// MySQL will check –binlog-do-db first, if there are any options,
+	// it will apply this one and ignore –binlog-ignore-db. If the
+	// –binlog-do-db is NOT set, then mysql will check –binlog-ignore-db.
+	// If both of them are empty, it will log changes for all DBs.
+	if len(binlogDoDb) != 0 {
+		for _, doDb := range binlogDoDbs {
+			delete(c.schemas, doDb)
+		}
+		if len(c.schemas) > 0 {
+			dbs := []string{}
+			for db := range c.schemas {
+				dbs = append(dbs, db)
+			}
+			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db", strings.Join(dbs, ","))
+			return result
+		}
+	} else {
+		for _, ignoreDb := range binlogIgnoreDbs {
+			if _, ok := c.schemas[ignoreDb]; ok {
+				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db", ignoreDb)
+				return result
+			}
+		}
 	}
 	result.State = StateSuccess
 	return result

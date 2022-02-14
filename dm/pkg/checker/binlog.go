@@ -148,8 +148,8 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	// for mysql.version < 5.6.2 || mariadb.version < 10.1.6,  we don't need to check binlog_row_image.
-	if (!IsMariaDB(value) && !version.Ge(mysqlBinlogRowImageRequired)) || (IsMariaDB(value) && !version.Ge(mariadbBinlogRowImageRequired)) {
+	// for mysql.version < 5.6.2,  we don't need to check binlog_row_image.
+	if !version.Ge(mysqlBinlogRowImageRequired) {
 		result.State = StateSuccess
 		return result
 	}
