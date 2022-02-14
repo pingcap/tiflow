@@ -36,26 +36,16 @@ type MockMasterImpl struct {
 
 func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
-		masterID:              masterID,
-		id:                    id,
-		dispatchedWorkers:     make(chan WorkerHandle),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		messageSender:         p2p.NewMockMessageSender(),
-		metaKVClient:          metadata.NewMetaMock(),
-		executorClientManager: client.NewClientManager(),
-		serverMasterClient:    &client.MockServerMasterClient{},
+		masterID:          masterID,
+		id:                id,
+		dispatchedWorkers: make(chan WorkerHandle),
 	}
-	ret.DefaultBaseMaster = NewBaseMaster(
-		// ctx is nil for now
-		// TODO refine this
-		nil,
-		ret,
-		id,
-		ret.messageHandlerManager,
-		ret.messageSender,
-		ret.metaKVClient,
-		ret.executorClientManager,
-		ret.serverMasterClient).(*DefaultBaseMaster)
+	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
+	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
+	ret.messageSender = ret.DefaultBaseMaster.messageRouter
+	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*metadata.MetaMock)
+	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
+	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
 	return ret
 }

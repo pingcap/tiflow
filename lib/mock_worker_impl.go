@@ -4,10 +4,11 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
+
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type mockWorkerImpl struct {
@@ -27,19 +28,12 @@ type mockWorkerImpl struct {
 //nolint:unparam
 func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 	ret := &mockWorkerImpl{
-		id:                    workerID,
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		messageSender:         p2p.NewMockMessageSender(),
-		metaKVClient:          metadata.NewMetaMock(),
+		id: workerID,
 	}
-	base := NewBaseWorker(
-		ret,
-		ret.messageHandlerManager,
-		ret.messageSender,
-		ret.metaKVClient,
-		workerID,
-		masterID)
-	ret.DefaultBaseWorker = base.(*DefaultBaseWorker)
+	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret)
+	ret.messageHandlerManager = ret.DefaultBaseWorker.messageHandlerManager.(*p2p.MockMessageHandlerManager)
+	ret.messageSender = ret.DefaultBaseWorker.messageSender.(*p2p.MockMessageSender)
+	ret.metaKVClient = ret.DefaultBaseWorker.metaKVClient.(*metadata.MetaMock)
 	return ret
 }
 

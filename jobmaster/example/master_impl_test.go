@@ -2,6 +2,7 @@ package example
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,8 @@ const (
 	workerID = "worker"
 )
 
+var initLogger sync.Once
+
 func newExampleMaster() *exampleMaster {
 	self := &exampleMaster{}
 	self.DefaultBaseMaster = lib.MockBaseMaster(masterID, self)
@@ -28,8 +31,10 @@ func newExampleMaster() *exampleMaster {
 func TestExampleMaster(t *testing.T) {
 	t.Parallel()
 
-	_ = log.InitLogger(&log.Config{
-		Level: "debug",
+	initLogger.Do(func() {
+		_ = log.InitLogger(&log.Config{
+			Level: "debug",
+		})
 	})
 
 	master := newExampleMaster()
