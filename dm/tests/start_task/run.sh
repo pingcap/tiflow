@@ -75,8 +75,7 @@ function start_task_by_time() {
 	run_sql_source1 'CREATE TABLE start_task.t1 (c INT PRIMARY KEY);'
 
 	sleep 2
-	start_time=$(date --rfc-3339=seconds)       # 2022-01-26 17:32:22+08:00
-	start_time=$(echo $start_time | cut -c -19) # 2022-01-26 17:32:22
+	start_time=$(date '+%Y-%m-%d %T') # 2022-01-26 17:32:22
 	sleep 2
 
 	run_sql_source1 'CREATE TABLE start_task.t2 (c INT PRIMARY KEY);'
@@ -109,6 +108,13 @@ function start_task_by_time() {
 		"query-status -s $SOURCE_ID1" \
 		"\"relayStatus\": null" 1
 
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"transfer-source $SOURCE_ID1 worker2" \
+		"\"result\": true" 1
+
 	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml --start-time '$start_time'" \
@@ -118,7 +124,7 @@ function start_task_by_time() {
 	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 1"
 
 	# no duplicate entry error
-	check_log_contain_with_retry "enable safe-mode for safe mode exit point, will exit at" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "enable safe-mode for safe mode exit point, will exit at" $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2

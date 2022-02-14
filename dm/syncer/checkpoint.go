@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -240,8 +241,8 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
-	// ResetGlobalPoint saves the global binlog stream's checkpoint forcibly.
-	ResetGlobalPoint(location binlog.Location)
+	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
+	SaveGlobalPointForcibly(location binlog.Location)
 
 	// Snapshot make a snapshot of current checkpoint
 	Snapshot(isSyncFlush bool) *SnapshotInfo
@@ -562,9 +563,11 @@ func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
 	cp.Lock()
 	defer cp.Unlock()
 
+	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
+	defer cancel()
 	cp.logCtx.L().Info("delete all table checkpoint")
 	_, err := cp.dbConn.ExecuteSQL(
-		tctx,
+		tctx2,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
 		[]interface{}{cp.id, false},
 	)
@@ -638,12 +641,12 @@ func (cp *RemoteCheckPoint) SaveGlobalPoint(location binlog.Location) {
 	}
 }
 
-// ResetGlobalPoint implements CheckPoint.ResetGlobalPoint.
-func (cp *RemoteCheckPoint) ResetGlobalPoint(location binlog.Location) {
+// SaveGlobalPointForcibly implements CheckPoint.SaveGlobalPointForcibly.
+func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
 	cp.Lock()
 	defer cp.Unlock()
 
-	cp.logCtx.L().Debug("reset global checkpoint", zap.Stringer("location", location))
+	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
 	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 }
 

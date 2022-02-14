@@ -3864,7 +3864,7 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 	if err != nil {
 		return err
 	}
-	s.checkpoint.ResetGlobalPoint(*loc)
+	s.checkpoint.SaveGlobalPointForcibly(*loc)
 	s.tctx.L().Info("Will replicate from the specified time, the location recorded in checkpoint and config file will be ignored",
 		zap.String("time", timeStr),
 		zap.Any("locationOfTheTime", loc))
