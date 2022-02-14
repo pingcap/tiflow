@@ -29,6 +29,9 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
@@ -41,8 +44,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 const (
@@ -629,11 +631,27 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
+		preValues := make([]interface{}, 0, len(row.PreColumns))
+		for _, col := range row.PreColumns {
+			preValues = append(preValues, col.Value)
+		}
+		postValues := make([]interface{}, 0, len(row.Columns))
+		for _, col := range row.Columns {
+			postValues = append(postValues, col.Value)
+		}
+
+		rowChange := sqlmodel.NewRowChange(row.Table, nil, preValues, postValues, row.TableInfo, nil, nil)
+
 		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
+			if s.forceReplicate {
+				query, args = rowChange.GenSQL(sqlmodel.DMLUpdate)
+			} else {
+				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
+			}
+
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -650,7 +668,11 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
+			if s.forceReplicate {
+				query, args = rowChange.GenSQL(sqlmodel.DMLDelete)
+			} else {
+				query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
+			}
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -677,7 +699,11 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 					rowCount++
 				}
 			} else {
-				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+				if translateToInsert {
+					query, args = rowChange.GenSQL(sqlmodel.DMLInsert)
+				} else {
+					query, args = rowChange.GenSQL(sqlmodel.DMLReplace)
+				}
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

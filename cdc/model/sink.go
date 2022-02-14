@@ -21,9 +21,10 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 //go:generate msgp
@@ -265,6 +266,8 @@ type RowChangedEvent struct {
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
+
+	TableInfo *model.TableInfo `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
