@@ -401,9 +401,18 @@ func (l *Location) ResetSuffix() {
 // SetGTID set new gtid for location
 // Use this func instead of GITSet.Set to avoid change other location.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	flavor := gmysql.MySQLFlavor
-	if _, ok := l.gtidSet.(*gtid.MariadbGTIDSet); ok {
+	var flavor string
+
+	switch gset.(type) {
+	case *gmysql.MysqlGTIDSet:
+		flavor = gmysql.MySQLFlavor
+	case *gmysql.MariadbGTIDSet:
 		flavor = gmysql.MariaDBFlavor
+	case nil:
+		l.gtidSet = nil
+		return nil
+	default:
+		return fmt.Errorf("unknown GTIDSet type: %T", gset)
 	}
 
 	newGTID := gtid.MinGTIDSet(flavor)

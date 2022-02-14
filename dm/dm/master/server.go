@@ -15,7 +15,9 @@ package master
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -122,6 +124,8 @@ type Server struct {
 	closed atomic.Bool
 
 	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
+
+	clusterID atomic.Uint64
 }
 
 // NewServer creates a new Server.
@@ -404,6 +408,45 @@ func subtaskCfgPointersToInstances(stCfgPointers ...*config.SubTaskConfig) []con
 		stCfgs = append(stCfgs, *stCfg)
 	}
 	return stCfgs
+}
+
+func (s *Server) initClusterID(ctx context.Context) error {
+	log.L().Info("init cluster id begin")
+	ctx1, cancel := context.WithTimeout(ctx, etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	resp, err := s.etcdClient.Get(ctx1, dmcommon.ClusterIDKey)
+	if err != nil {
+		return err
+	}
+
+	// New cluster, generate a cluster id and backfill it to etcd
+	if len(resp.Kvs) == 0 {
+		ts := uint64(time.Now().Unix())
+		clusterID := (ts << 32) + uint64(rand.Uint32())
+		clusterIDBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(clusterIDBytes, clusterID)
+		_, err = s.etcdClient.Put(ctx1, dmcommon.ClusterIDKey, string(clusterIDBytes))
+		if err != nil {
+			return err
+		}
+		s.clusterID.Store(clusterID)
+		log.L().Info("generate and init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+		return nil
+	}
+
+	if len(resp.Kvs[0].Value) != 8 {
+		return terror.ErrMasterInvalidClusterID.Generate(resp.Kvs[0].Value)
+	}
+
+	s.clusterID.Store(binary.BigEndian.Uint64(resp.Kvs[0].Value))
+	log.L().Info("init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+	return nil
+}
+
+// ClusterID return correct cluster id when as leader.
+func (s *Server) ClusterID() uint64 {
+	return s.clusterID.Load()
 }
 
 // StartTask implements MasterServer.StartTask.

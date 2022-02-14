@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -841,11 +842,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -882,7 +883,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			[]string{"CREATE TABLE IF NOT EXISTS `test_1`.`t_2` (`id` INT PRIMARY KEY,`name` VARCHAR(24))"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838401), "a"}},
 		}, {
@@ -894,16 +895,16 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			[]string{"ALTER TABLE `test_1`.`t_1` ADD INDEX `index1`(`name`)"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402), "b"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(580981944116838401)}},
 		}, {
 			// safe mode is true, will split update to delete + replace
-			update,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402)}, {int64(580981944116838401), "b"}},
 		}, {
@@ -984,11 +985,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -1000,11 +1001,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	expectJobs2 := []*expectJob{
 		{
-			insert,
+			dml,
 			[]string{"INSERT INTO `test_1`.`t_2` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(3), "c"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_2` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(3)}},
 		}, {
@@ -1122,11 +1123,11 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -1161,28 +1162,28 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			[]string{"CREATE TABLE IF NOT EXISTS `test_1`.`t_1` (`id` INT PRIMARY KEY,`name` VARCHAR(24))"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(1), "a"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1)}},
 		}, {
-			update,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(2)}, {int64(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
-			insert,
+			dml,
 			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(1), "a"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1)}},
 		}, {
-			update,
+			dml,
 			[]string{"UPDATE `test_1`.`t_1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1), "b", int64(2)}},
 		}, {
@@ -1444,16 +1445,46 @@ type expectJob struct {
 	args     [][]interface{}
 }
 
+var defaultDMLType = map[sqlmodel.RowChangeType]sqlmodel.DMLType{
+	sqlmodel.RowChangeInsert: sqlmodel.DMLInsert,
+	sqlmodel.RowChangeUpdate: sqlmodel.DMLUpdate,
+	sqlmodel.RowChangeDelete: sqlmodel.DMLDelete,
+}
+
 func checkJobs(c *C, jobs []*job, expectJobs []*expectJob) {
 	c.Assert(len(jobs), Equals, len(expectJobs), Commentf("jobs = %q", jobs))
 	for i, job := range jobs {
 		c.Assert(job.tp, Equals, expectJobs[i].tp)
+
 		if job.tp == ddl {
 			c.Assert(job.ddls, DeepEquals, expectJobs[i].sqlInJob)
-		} else if job.tp == insert || job.tp == update || job.tp == del {
-			sqls, args := job.dml.genSQL()
-			c.Assert(sqls, DeepEquals, expectJobs[i].sqlInJob)
-			c.Assert(args, DeepEquals, expectJobs[i].args)
+			continue
+		}
+
+		if job.tp == dml {
+			if !job.safeMode {
+				sql, args := job.dml.GenSQL(defaultDMLType[job.dml.Type()])
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+				continue
+			}
+
+			// safemode
+			switch job.dml.Type() {
+			case sqlmodel.RowChangeInsert:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeUpdate:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				sql2, args2 := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql, sql2}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args, args2}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeDelete:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			}
 		}
 	}
 }
@@ -1463,11 +1494,21 @@ var testJobs struct {
 	jobs []*job
 }
 
+func newDummyJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
+	return &job{
+		tp:          tp,
+		targetTable: targetTable,
+		ddls:        ddls,
+		dml:         &sqlmodel.RowChange{},
+	}
+}
+
 func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	for _, job := range jobs {
 		switch job.tp {
-		case ddl, insert, update, del, flush:
-			s.addCount(true, "test", job.tp, 1, &filter.Table{})
+		case ddl, dml, flush:
+			dummyJob := newDummyJob(job.tp, &filter.Table{}, job.sqlInJob...)
+			s.updateJobMetrics(true, "test", dummyJob)
 		}
 	}
 }
@@ -1476,8 +1517,8 @@ func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 	log.L().Info("add job to memory", zap.Stringer("job", job))
 
 	switch job.tp {
-	case ddl, insert, update, del, flush:
-		s.addCount(false, "test", job.tp, 1, &filter.Table{})
+	case ddl, dml, flush:
+		s.updateJobMetrics(false, "test", job)
 		testJobs.Lock()
 		testJobs.jobs = append(testJobs.jobs, job)
 		testJobs.Unlock()
@@ -1500,7 +1541,7 @@ func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 			}
 		}
 		s.resetShardingGroup(job.targetTable)
-	case insert, update, del:
+	case dml:
 		for sourceSchema, tbs := range job.sourceTbls {
 			if len(sourceSchema) == 0 {
 				continue
@@ -1527,11 +1568,11 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 	s.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
 	// mock syncer.flushCpWorker init
 	s.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        nil,
-		cp:           s.checkpoint,
-		execError:    &s.execError,
-		afterFlushFn: s.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              nil,
+		cp:                 s.checkpoint,
+		execError:          &s.execError,
+		afterFlushFn:       s.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
 	// disable flush checkpoint periodically
