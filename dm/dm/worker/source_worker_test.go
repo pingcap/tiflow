@@ -109,7 +109,7 @@ func (t *testServer) testWorker(c *C) {
 	})
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 
-	err = w.OperateSubTask("testSubTask", pb.TaskOp_Stop)
+	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 }
 

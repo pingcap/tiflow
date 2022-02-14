@@ -613,7 +613,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 		expect = pb.Stage_Paused
 	case pb.TaskOp_Resume:
 		expect = pb.Stage_Running
-	case pb.TaskOp_Stop:
+	case pb.TaskOp_Delete:
 		expect = pb.Stage_Stopped
 	default:
 		resp.Msg = terror.ErrMasterInvalidOperateOp.Generate(req.Op.String(), "task").Error()
@@ -1711,7 +1711,7 @@ func (s *Server) waitOperationOk(
 			expect = pb.Stage_Running
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
-		case pb.TaskOp_Stop:
+		case pb.TaskOp_Delete:
 			expect = pb.Stage_Stopped
 		}
 	case *pb.OperateWorkerRelayRequest:

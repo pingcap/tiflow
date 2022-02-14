@@ -607,25 +607,26 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		return terror.ErrWorkerSubTaskNotFound.Generate(name)
 	}
 
+	w.l.Info("OperateSubTask start", zap.Stringer("op", op), zap.String("task", name))
 	var err error
 	switch op {
-	case pb.TaskOp_Stop:
-		w.l.Info("stop sub task", zap.String("task", name))
+	case pb.TaskOp_Delete:
+		w.l.Info("delete subtask", zap.String("task", name))
 		st.Close()
 		w.subTaskHolder.removeSubTask(name)
-	case pb.TaskOp_Pause:
-		w.l.Info("pause sub task", zap.String("task", name))
+	case pb.TaskOp_Pause, pb.TaskOp_Stop:
+		w.l.Info("pause subtask", zap.String("task", name))
 		err = st.Pause()
 	case pb.TaskOp_Resume:
-		w.l.Info("resume sub task", zap.String("task", name))
+		w.l.Info("resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
-		w.l.Info("auto_resume sub task", zap.String("task", name))
+		w.l.Info("auto_resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	default:
 		err = terror.ErrWorkerUpdateTaskStage.Generatef("invalid operate %s on subtask %v", op, name)
 	}
-
+	w.l.Info("OperateSubTask finished", zap.Stringer("op", op), zap.String("task", name))
 	return err
 }
 
@@ -685,9 +686,9 @@ func (w *SourceWorker) resetSubtaskStage() (int64, error) {
 	}
 	// remove subtasks without subtask config or subtask stage
 	for name := range sts {
-		err = w.OperateSubTask(name, pb.TaskOp_Stop)
+		err = w.OperateSubTask(name, pb.TaskOp_Delete)
 		if err != nil {
-			opErrCounter.WithLabelValues(w.name, pb.TaskOp_Stop.String()).Inc()
+			opErrCounter.WithLabelValues(w.name, pb.TaskOp_Delete.String()).Inc()
 			log.L().Error("fail to stop subtask", zap.String("task", name), zap.Error(err))
 		}
 	}
@@ -782,21 +783,30 @@ func (w *SourceWorker) handleSubTaskStage(ctx context.Context, stageCh chan ha.S
 // operateSubTaskStage returns TaskOp.String() additionally to record metrics.
 func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.SubTaskConfig) (string, error) {
 	var op pb.TaskOp
-	switch {
-	case stage.Expect == pb.Stage_Running, stage.Expect == pb.Stage_Paused:
-		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
-			// create the subtask for expected running and paused stage.
-			log.L().Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
-			err := w.StartSubTask(&subTaskCfg, stage.Expect, true)
-			return opErrTypeBeforeOp, err
+	log.L().Info("operateSubTaskStage start to create subtask",
+		zap.String("sourceID", subTaskCfg.SourceID),
+		zap.String("task", subTaskCfg.Name),
+		zap.Stringer("stage", stage))
+
+	// new sub task
+	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
+		switch stage.Expect {
+		case pb.Stage_Stopped, pb.Stage_Running:
+			return opErrTypeBeforeOp, w.StartSubTask(&subTaskCfg, stage.Expect, true)
+		default:
+			// not valid stage
+			return op.String(), w.OperateSubTask(stage.Task, op)
 		}
-		if stage.Expect == pb.Stage_Running {
-			op = pb.TaskOp_Resume
-		} else if stage.Expect == pb.Stage_Paused {
-			op = pb.TaskOp_Pause
-		}
-	case stage.IsDeleted:
-		op = pb.TaskOp_Stop
+	}
+	// todo(ehco) remove  pause and resume after using openapi to impl dmctl
+	switch stage.Expect {
+	case pb.Stage_Stopped, pb.Stage_Paused:
+		op = pb.TaskOp_Pause
+	case pb.Stage_Running:
+		op = pb.TaskOp_Resume
+	}
+	if stage.IsDeleted {
+		op = pb.TaskOp_Delete
 	}
 	return op.String(), w.OperateSubTask(stage.Task, op)
 }

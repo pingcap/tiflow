@@ -66,7 +66,14 @@ func (s *Server) updateSource(ctx context.Context, cfg *config.SourceConfig) err
 }
 
 // nolint:unparam
-func (s *Server) deleteSource(ctx context.Context, sourceName string) error {
+func (s *Server) deleteSource(ctx context.Context, sourceName string, force bool) error {
+	if force {
+		for _, taskName := range s.scheduler.GetTaskNameListBySourceName(sourceName) {
+			if err := s.scheduler.RemoveSubTasks(taskName, sourceName); err != nil {
+				return err
+			}
+		}
+	}
 	return s.scheduler.RemoveSourceCfg(sourceName)
 }
 
@@ -97,7 +104,15 @@ func (s *Server) listSource(ctx context.Context, req interface{}) []openapi.Sour
 }
 
 func (s *Server) enableSource(ctx context.Context, sourceName, workerName string) error {
-	return s.transferSource(ctx, sourceName, workerName)
+	if err := s.transferSource(ctx, sourceName, workerName); err != nil {
+		return err
+	}
+	worker := s.scheduler.GetWorkerBySource(sourceName)
+	if worker == nil {
+		return terror.ErrWorkerNoStart
+	}
+	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName)
+	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Running, true)
 }
 
 func (s *Server) disableSource(ctx context.Context, sourceName string) error {
@@ -223,6 +238,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, sourceNameL
 	}
 	return subTaskStatusList, nil
 }
+
 func (s *Server) listTask(ctx context.Context, req interface{}) []openapi.Task {
 	// TODO(ehco) implement filter later
 	subTaskConfigMap := s.scheduler.GetSubTaskCfgs()
@@ -261,6 +277,6 @@ func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList 
 }
 
 // nolint:unused
-func (s *Server) stopTask(ctx context.Context, taskName string, sourceNameList []string, req interface{}) error {
+func (s *Server) stopTask(ctx context.Context, taskName string, sourceNameList []string) error {
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, sourceNameList...)
 }

@@ -216,15 +216,12 @@ func (s *Server) DMAPIGetSourceList(c *gin.Context, params openapi.DMAPIGetSourc
 // DMAPIDeleteSource url is:(DELETE /api/v1/sources).
 func (s *Server) DMAPIDeleteSource(c *gin.Context, sourceName string, params openapi.DMAPIDeleteSourceParams) {
 	ctx := c.Request.Context()
-
+	var force bool
 	// force means delete source and stop all task of this source
 	if params.Force != nil && *params.Force {
-		if err := s.disableSource(ctx, sourceName); err != nil {
-			_ = c.Error(terror.ErrOpenAPICommonError.Delegate(err))
-			return
-		}
+		force = *params.Force
 	}
-	if err := s.deleteSource(ctx, sourceName); err != nil {
+	if err := s.deleteSource(ctx, sourceName, force); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -441,19 +438,18 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 // DMAPIDeleteTask url is:(DELETE /api/v1/tasks).
 func (s *Server) DMAPIDeleteTask(c *gin.Context, taskName string, params openapi.DMAPIDeleteTaskParams) {
 	var sourceNameList []string
-	// specify only start task on partial sources
 	if params.SourceNameList != nil {
 		sourceNameList = *params.SourceNameList
 	} else {
 		sourceNameList = s.getTaskSourceNameList(taskName)
 	}
-	if len(taskName) == 0 {
+	if len(sourceNameList) == 0 {
 		_ = c.Error(terror.ErrSchedulerTaskNotExist.Generate(taskName))
 		return
 	}
 
 	ctx := c.Request.Context()
-	if err := s.stopTask(ctx, taskName, sourceNameList, nil); err != nil {
+	if err := s.stopTask(ctx, taskName, sourceNameList); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -509,30 +505,32 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 
 // DMAPIPauseTask pause task url is: (POST /api/v1/tasks/{task-name}/pause).
 func (s *Server) DMAPIPauseTask(c *gin.Context, taskName string) {
-	var sourceName openapi.SchemaNameList
-	if err := c.Bind(&sourceName); err != nil {
+	var sourceNameList openapi.SchemaNameList
+	if err := c.Bind(&sourceNameList); err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if len(sourceName) == 0 {
-		sourceName = s.getTaskSourceNameList(taskName)
+	if len(sourceNameList) == 0 {
+		sourceNameList = s.getTaskSourceNameList(taskName)
 	}
-	if err := s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName, sourceName...); err != nil {
+	ctx := c.Request.Context()
+	if err := s.stopTask(ctx, taskName, sourceNameList); err != nil {
 		_ = c.Error(err)
 	}
 }
 
 // DMAPIResumeTask resume task url is: (POST /api/v1/tasks/{task-name}/resume).
 func (s *Server) DMAPIResumeTask(c *gin.Context, taskName string) {
-	var sourceName openapi.SchemaNameList
-	if err := c.Bind(&sourceName); err != nil {
+	var sourceNameList openapi.SchemaNameList
+	if err := c.Bind(&sourceNameList); err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if len(sourceName) == 0 {
-		sourceName = s.getTaskSourceNameList(taskName)
+	if len(sourceNameList) == 0 {
+		sourceNameList = s.getTaskSourceNameList(taskName)
 	}
-	if err := s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, sourceName...); err != nil {
+	ctx := c.Request.Context()
+	if err := s.startTask(ctx, taskName, sourceNameList, false, nil); err != nil {
 		_ = c.Error(err)
 	}
 }
