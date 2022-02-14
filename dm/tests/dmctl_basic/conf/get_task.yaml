@@ -41,6 +41,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 - source-id: mysql-replica-02
   meta: null
   filter-rules:
@@ -62,6 +63,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 online-ddl: false
 shadow-table-rules: []
 trash-table-rules: []
@@ -159,6 +161,9 @@ syncers:
     disable-detect: false
     safe-mode: false
     enable-ansi-quotes: false
+validators:
+  validator-01:
+    mode: none
 clean-dump-file: true
 ansi-quotes: false
 remove-meta: false
