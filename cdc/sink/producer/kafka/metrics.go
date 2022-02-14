@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// batch-size
+	// Histogram update by the `batch-size`
 	batchSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -33,7 +33,6 @@ var (
 			Help:      "the number of bytes sent per partition per request for all topics",
 		}, []string{"capture", "changefeed"})
 
-	// record-send-rate
 	// meter mark by total records count
 	recordSendRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -53,7 +52,7 @@ var (
 			Help:      "the number of records sent per request for all topics",
 		}, []string{"capture", "changefeed"})
 
-	// compression-ratio
+	// histogram update by `compression-ratio`.
 	compressionRatioGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -154,13 +153,13 @@ func InitMetrics(registry *prometheus.Registry) {
 
 // sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview
 const (
-	// producer metrics
+	// metrics at producer level.
 	batchSizeMetricName        = "batch-size"
 	recordSendRateMetricName   = "record-send-rate"
 	recordPerRequestMetricName = "records-per-request"
 	compressionRatioMetricName = "compression-ratio"
 
-	// broker metrics
+	// metrics at broker level.
 	incomingByteRateMetricNamePrefix   = "incoming-byte-rate-for-broker-"
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
@@ -209,7 +208,7 @@ func (sm *saramaMetricsMonitor) collectProducerMetrics() {
 	}
 }
 
-func buildBrokerMetricName(prefix, brokerID string) string {
+func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
@@ -222,42 +221,42 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 	for _, b := range brokers {
 		brokerID := strconv.Itoa(int(b.ID()))
 
-		incomingByteRateMetric := sm.registry.Get(buildBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
+		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
 			incomingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
-		outgoingByteRateMetric := sm.registry.Get(buildBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
+		outgoingByteRateMetric := sm.registry.Get(getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
 			outgoingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
-		requestRateMetric := sm.registry.Get(buildBrokerMetricName(requestRateMetricNamePrefix, brokerID))
+		requestRateMetric := sm.registry.Get(getBrokerMetricName(requestRateMetricNamePrefix, brokerID))
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
 			requestRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
-		requestSizeMetric := sm.registry.Get(buildBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
+		requestSizeMetric := sm.registry.Get(getBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
 		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
 			requestSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 
-		requestLatencyMetric := sm.registry.Get(buildBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
+		requestLatencyMetric := sm.registry.Get(getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
 			requestLatencyInMsGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 
-		requestsInFlightMetric := sm.registry.Get(buildBrokerMetricName(requestsInFlightMetricNamePrefix, brokerID))
+		requestsInFlightMetric := sm.registry.Get(getBrokerMetricName(requestsInFlightMetricNamePrefix, brokerID))
 		if counter, ok := requestsInFlightMetric.(metrics.Counter); ok {
 			requestsInFlightGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(float64(counter.Snapshot().Count()))
 		}
 
-		responseRateMetric := sm.registry.Get(buildBrokerMetricName(responseRateMetricNamePrefix, brokerID))
+		responseRateMetric := sm.registry.Get(getBrokerMetricName(responseRateMetricNamePrefix, brokerID))
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
 			responseRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
-		responseSizeMetric := sm.registry.Get(buildBrokerMetricName(responseSizeMetricNamePrefix, brokerID))
+		responseSizeMetric := sm.registry.Get(getBrokerMetricName(responseSizeMetricNamePrefix, brokerID))
 		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
 			responseSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
