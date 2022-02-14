@@ -61,15 +61,7 @@ var (
 			Help:      "the compression ratio times 100 of record batches for all topics",
 		}, []string{"capture", "changefeed"})
 
-	// meter mark for each received response's size in bytes
-	incomingByteRateGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "kafka_producer_incoming_byte_rate",
-			Help:      "Bytes/second read off all brokers",
-		}, []string{"capture", "changefeed", "broker"})
-
+	// metrics for outgoing events
 	// meter mark for each request's size in bytes
 	outgoingByteRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -113,6 +105,16 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_in_flight_requests",
 			Help:      "the current number of in-flight requests awaiting a response for all brokers",
+		}, []string{"capture", "changefeed", "broker"})
+
+	// metrics for incoming events
+	// meter mark for each received response's size in bytes
+	incomingByteRateGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_incoming_byte_rate",
+			Help:      "Bytes/second read off all brokers",
 		}, []string{"capture", "changefeed", "broker"})
 
 	// meter mark by 1 once a response received.
