@@ -186,24 +186,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
 
-		if c.mode != config.ModeFull {
-			// full mode needn't check follows
-			if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-			}
-			if _, ok := c.checkingItems[config.BinlogEnableChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-			}
-			if _, ok := c.checkingItems[config.BinlogFormatChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-			}
-			if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-			}
-			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-			}
-		}
 		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
 		if err != nil {
 			return err
@@ -243,8 +225,26 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 
-		if c.onlineDDL != nil {
-			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
+		if c.mode != config.ModeFull {
+			// full mode needn't check follows
+			if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogEnableChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogFormatChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if c.onlineDDL != nil {
+				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
+			}
 		}
 	}
 

@@ -146,3 +146,44 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLServerIDChecker) Name() string {
 	return "mysql_server_id"
 }
+
+// BinlogDbChecker checks mysql/mariadb server ID.
+type BinlogDbChecker struct {
+	db     *sql.DB
+	dbinfo *dbutil.DBConfig
+}
+
+// NewMySQLServerIDChecker returns a RealChecker.
+func NewBinlogDbChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
+	return &BinlogDbChecker{db: db, dbinfo: dbinfo}
+}
+
+// Check implements the RealChecker interface.
+func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether mysql server_id has been greater than 0",
+		State: StateFailure,
+		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
+	}
+
+	serverID, err := dbutil.ShowServerID(ctx, c.db)
+	if err != nil {
+		result.Errors = append(result.Errors, NewError("server_id not set"))
+		result.Instruction = "please set server_id in your database"
+		return result
+	}
+
+	if serverID == 0 {
+		result.Errors = append(result.Errors, NewError("server_id is 0"))
+		result.Instruction = "please set server_id greater than 0"
+		return result
+	}
+	result.State = StateSuccess
+	return result
+}
+
+// Name implements the RealChecker interface.
+func (pc *BinlogDbChecker) Name() string {
+	return "binlog_do_db/binlog_ignore_db check"
+}

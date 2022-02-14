@@ -73,7 +73,7 @@ func (t *testDBSuite) TestGetRandomServerID(c *C) {
 	c.Assert(serverID, Not(Equals), 101)
 }
 
-func (t *testDBSuite) TestGetMasterStatus(c *C) {
+func (t *testDBSuite) TestGetPosAndGs(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 
@@ -82,11 +82,11 @@ func (t *testDBSuite) TestGetMasterStatus(c *C) {
 
 	// 5 columns for MySQL
 	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
-		"mysql-bin.000009", 11232, nil, nil, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
+		"mysql-bin.000009", 11232, "do_db", "ignore_db", "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
 	)
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
-	pos, gs, err := GetMasterStatus(ctx, db, "mysql")
+	pos, gs, err := GetPosAndGs(ctx, db, "mysql")
 	c.Assert(err, IsNil)
 	c.Assert(pos, Equals, gmysql.Position{
 		Name: "mysql-bin.000009",
@@ -95,30 +95,15 @@ func (t *testDBSuite) TestGetMasterStatus(c *C) {
 	c.Assert(gs.String(), Equals, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699")
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
-	// 4 columns for MySQL
-	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
-		"mysql-bin.000009", 11232, nil, nil,
-	)
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-
-	pos, gs, err = GetMasterStatus(ctx, db, "mysql")
-	c.Assert(err, IsNil)
-	c.Assert(pos, Equals, gmysql.Position{
-		Name: "mysql-bin.000009",
-		Pos:  11232,
-	})
-	c.Assert(gs.String(), Equals, "")
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-
 	// 4 columns for MariaDB
 	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
-		"mysql-bin.000009", 11232, nil, nil,
+		"mysql-bin.000009", 11232, "do_db", "ignore_db",
 	)
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
 
-	pos, gs, err = GetMasterStatus(ctx, db, "mariadb")
+	pos, gs, err = GetPosAndGs(ctx, db, "mariadb")
 	c.Assert(err, IsNil)
 	c.Assert(pos, Equals, gmysql.Position{
 		Name: "mysql-bin.000009",
@@ -131,9 +116,43 @@ func (t *testDBSuite) TestGetMasterStatus(c *C) {
 	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"})
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
-	_, gs, err = GetMasterStatus(ctx, db, "mysql")
+	_, gs, err = GetPosAndGs(ctx, db, "mysql")
 	c.Assert(gs, IsNil)
 	c.Assert(err, NotNil)
+}
+
+func (t *testDBSuite) TestGetBinlogDb(c *C) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
+	defer cancel()
+
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	// 5 columns for MySQL
+	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db", "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
+	)
+	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+
+	binlogDoDb, binlogIgnoreDb, err := GetBinlogDb(ctx, db, "mysql")
+	c.Assert(err, IsNil)
+	c.Assert(binlogDoDb, Equals, "do_db")
+	c.Assert(binlogIgnoreDb, Equals, "ignore_db")
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+
+	// 4 columns for MariaDB
+	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db",
+	)
+	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
+
+	binlogDoDb, binlogIgnoreDb, err = GetBinlogDb(ctx, db, "mariadb")
+	c.Assert(err, IsNil)
+	c.Assert(binlogDoDb, Equals, "do_db")
+	c.Assert(binlogIgnoreDb, Equals, "ignore_db")
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
 func (t *testDBSuite) TestGetMariaDBGtidDomainID(c *C) {
