@@ -83,7 +83,9 @@ type Checker struct {
 	errCnt  int64
 	warnCnt int64
 
-	onlineDDL onlineddl.OnlinePlugin
+	onlineDDL  onlineddl.OnlinePlugin
+	mode       string
+	isSharding bool
 }
 
 // NewChecker returns a checker.
@@ -91,9 +93,10 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
-
-		errCnt:  errCnt,
-		warnCnt: warnCnt,
+		mode:          cfgs[0].Mode,
+		isSharding:    cfgs[0].IsSharding,
+		errCnt:        errCnt,
+		warnCnt:       warnCnt,
 	}
 
 	for _, cfg := range cfgs {
@@ -182,22 +185,25 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.VersionChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-		if _, ok := c.checkingItems[config.BinlogEnableChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-		if _, ok := c.checkingItems[config.BinlogFormatChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-		if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
-		if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-			c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
-		}
 
+		if c.mode != config.ModeFull {
+			// full mode needn't check follows
+			if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogEnableChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogEnableChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogFormatChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogFormatChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.BinlogRowImageChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+			}
+		}
 		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
 		if err != nil {
 			return err
@@ -225,14 +231,18 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		checkTablesMap[instance.cfg.SourceID] = checkTables
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
-		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
-			exportCfg := export.DefaultConfig()
-			err := dumpling.ParseExtraArgs(&c.tctx.Logger, exportCfg, strings.Fields(instance.cfg.ExtraArgs))
-			if err != nil {
-				return err
+		if c.mode != config.ModeIncrement {
+			// increment mode needn't check dump privilege
+			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
+				exportCfg := export.DefaultConfig()
+				err := dumpling.ParseExtraArgs(&c.tctx.Logger, exportCfg, strings.Fields(instance.cfg.ExtraArgs))
+				if err != nil {
+					return err
+				}
+				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
 			}
-			c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
 		}
+
 		if c.onlineDDL != nil {
 			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
@@ -243,7 +253,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
 	}
 
-	if checkingShard {
+	if checkingShard && c.isSharding && c.mode != config.ModeIncrement {
 		for name, shardingSet := range sharding {
 			if shardingCounter[name] <= 1 {
 				continue

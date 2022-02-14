@@ -287,6 +287,7 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
 func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			IsSharding: true,
 			RouteRules: []*router.TableRule{
 				{
 					SchemaPattern: schema,
@@ -336,6 +337,7 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			IsSharding: true,
 			RouteRules: []*router.TableRule{
 				{
 					SchemaPattern: schema,

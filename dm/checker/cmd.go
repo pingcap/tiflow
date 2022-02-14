@@ -45,15 +45,6 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	// all `IgnoreCheckingItems` and `Mode` of sub-task are same, so we take first one
 	// for ModeFull we don't need replication privilege; for ModeIncrement we don't need dump privilege
 	ignoreCheckingItems := cfgs[0].IgnoreCheckingItems
-	// we directly append ignore checking items here which may cause duplicate in ignoreCheckingItems
-	// but in config.FilterCheckingItems we only use this to delete map's keys so it is tolerable to append directly here
-	switch cfgs[0].Mode {
-	case config.ModeFull:
-		ignoreCheckingItems = append(ignoreCheckingItems, config.ReplicationPrivilegeChecking,
-			config.BinlogEnableChecking, config.BinlogFormatChecking, config.BinlogRowImageChecking, config.ServerIDChecking)
-	case config.ModeIncrement:
-		ignoreCheckingItems = append(ignoreCheckingItems, config.DumpPrivilegeChecking)
-	}
 	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
 	if len(checkingItems) == 0 {
 		return "", nil
