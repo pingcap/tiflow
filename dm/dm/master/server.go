@@ -135,7 +135,7 @@ func NewServer(cfg *Config) *Server {
 		scheduler: scheduler.NewScheduler(&logger, cfg.Security),
 		ap:        NewAgentPool(&RateLimitConfig{rate: cfg.RPCRateLimit, burst: cfg.RPCRateBurst}),
 	}
-	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskResources)
+	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskSourceNameList)
 	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 	server.closed.Store(true)
 	setUseTLS(&cfg.Security)
@@ -601,7 +601,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 
 	sources := req.Sources
 	if len(req.Sources) == 0 {
-		sources = s.getTaskResources(req.Name)
+		sources = s.getTaskSourceNameList(req.Name)
 	}
 	if len(sources) == 0 {
 		resp.Msg = fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.Name)
@@ -777,7 +777,7 @@ func extractSources(s *Server, req hasWokers) (sources []string, specifiedSource
 		specifiedSource = true
 	case len(req.GetName()) > 0:
 		// query specified task's sources
-		sources = s.getTaskResources(req.GetName())
+		sources = s.getTaskSourceNameList(req.GetName())
 		if len(sources) == 0 {
 			return nil, false, errors.Errorf("task %s has no source or not exist", req.GetName())
 		}
@@ -1063,11 +1063,11 @@ func (s *Server) OperateWorkerRelayTask(ctx context.Context, req *pb.OperateWork
 	return resp, nil
 }
 
-// getTaskResources gets workers relevant to specified task.
-func (s *Server) getTaskResources(task string) []string {
+// getTaskSourceNameList gets workers relevant to specified task.
+func (s *Server) getTaskSourceNameList(taskName string) []string {
 	s.Lock()
 	defer s.Unlock()
-	cfgM := s.scheduler.GetSubTaskCfgsByTask(task)
+	cfgM := s.scheduler.GetSubTaskCfgsByTask(taskName)
 	// do a copy
 	ret := make([]string, 0, len(cfgM))
 	for source := range cfgM {
@@ -2402,7 +2402,7 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleErrorRequest) (*
 
 	sources := req.Sources
 	if len(sources) == 0 {
-		sources = s.getTaskResources(req.Task)
+		sources = s.getTaskSourceNameList(req.Task)
 		log.L().Info(fmt.Sprintf("sources: %s", sources))
 		if len(sources) == 0 {
 			return &pb.HandleErrorResponse{

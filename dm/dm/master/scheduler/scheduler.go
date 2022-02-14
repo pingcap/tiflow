@@ -1106,20 +1106,6 @@ func (s *Scheduler) GetTaskNameListBySourceName(sourceName string) []string {
 	return taskNameList
 }
 
-// GetSourceNameListByTaskName gets source name list by task name.
-func (s *Scheduler) GetSourceNameListByTaskName(taskName string) []string {
-	v, ok := s.subTaskCfgs.Load(taskName)
-	if !ok {
-		return nil
-	}
-	subtaskCfgMap := v.(map[string]config.SubTaskConfig)
-	sourceNameList := make([]string, 0, len(subtaskCfgMap))
-	for sourceName := range subtaskCfgMap {
-		sourceNameList = append(sourceNameList, sourceName)
-	}
-	return sourceNameList
-}
-
 // AddWorker adds the information of the DM-worker when registering a new instance.
 // This only adds the information of the DM-worker,
 // in order to know whether it's online (ready to handle works),
