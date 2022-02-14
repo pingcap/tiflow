@@ -81,4 +81,13 @@ var (
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
+
+	// meta related errors
+	ErrMetaNewClientFail   = errors.Normalize("create meta client fail", errors.RFCCodeText("DFLOW:ErrMetaNewClientFail"))
+	ErrMetaOpFail          = errors.Normalize("meta operation fail:%s", errors.RFCCodeText("DFLOW:ErrMetaOpFail"))
+	ErrMetaOptionInvalid   = errors.Normalize("meta option invalid", errors.RFCCodeText("DFLOW:ErrMetaOptionInvalid"))
+	ErrMetaOptionConflict  = errors.Normalize("WithRange/WithPrefix/WithFromKey, more than one option are used", errors.RFCCodeText("DFLOW:ErrMetaOptionConflict"))
+	ErrMetaEmptyKey        = errors.Normalize("meta empty key", errors.RFCCodeText("DFLOW:ErrMetaEmptyKey"))
+	ErrMetaRevisionUnmatch = errors.Normalize("meta revision unmatch", errors.RFCCodeText("DFLOW:ErrMetaRevisionUnmatch"))
+	ErrMetaNestedTxn       = errors.Normalize("meta unsupported nested txn", errors.RFCCodeText("DFLOW:ErrMetaNestedTxn"))
 )
