@@ -178,40 +178,40 @@ func (s *testRouteSuite) TestRegExprRoute(c *C) {
 			TargetSchema:  "dtest1",
 		},
 		{
-			SchemaPattern: "~test2?[ab|cd]",
-			TablePattern:  "~g*[cat|dog]+[0-9]*",
+			SchemaPattern: "~test2?[animal|human]",
+			TablePattern:  "~tbl.*[cat|dog]+",
 			TargetSchema:  "dtest2",
 			TargetTable:   "dtable2",
 		},
 		{
-			SchemaPattern: "~test3(gd|ct)?8917*",
+			SchemaPattern: "~test3_(schema)?.*",
 			TablePattern:  "test3_*",
 			TargetSchema:  "dtest3",
 			TargetTable:   "dtable3",
 		},
 		{
 			SchemaPattern: "test4s_*",
-			TablePattern:  "~testtable4?(ddd|lbc)+",
+			TablePattern:  "~testtable_[donot_delete]?",
 			TargetSchema:  "dtest4",
 			TargetTable:   "dtable4",
 		},
 	}
 	inputTable := []Table{
 		{
-			Schema: "tests99",
+			Schema: "tests100",
 			Name:   "table1", // match rule 1
 		},
 		{
-			Schema: "testcd",
-			Name:   "ggggdog9897", // match rule 2
+			Schema: "test2animal",
+			Name:   "tbl_animal_dogcat", // match rule 2
 		},
 		{
-			Schema: "test3gd8917777",
-			Name:   "test3_99aa99", // match rule 3
+			Schema: "test3_schema_meta",
+			Name:   "test3_tail", // match rule 3
 		},
 		{
 			Schema: "test4s_2022",
-			Name:   "testtablelbclbc", // match rule 4
+			Name:   "testtable_donot_delete", // match rule 4
 		},
 		{
 			Schema: "mytst5566",
@@ -314,20 +314,20 @@ func (s *testRouteSuite) TestAllRule(c *C) {
 			TargetSchema:  "dtest1",
 		},
 		{
-			SchemaPattern: "~test2?[ab|cd]",
-			TablePattern:  "~g*[cat|dog]+[0-9]*",
+			SchemaPattern: "~test2?[animal|human]",
+			TablePattern:  "~tbl.*[cat|dog]+",
 			TargetSchema:  "dtest2",
 			TargetTable:   "dtable2",
 		},
 		{
-			SchemaPattern: "~test3(gd|ct)?8917*",
+			SchemaPattern: "~test3_(schema)?.*",
 			TablePattern:  "test3_*",
 			TargetSchema:  "dtest3",
 			TargetTable:   "dtable3",
 		},
 		{
 			SchemaPattern: "test4s_*",
-			TablePattern:  "~testtable4?(ddd|lbc)+",
+			TablePattern:  "~testtable_[donot_delete]?",
 			TargetSchema:  "dtest4",
 			TargetTable:   "dtable4",
 		},
@@ -352,27 +352,27 @@ func (s *testRouteSuite) TestDupMatch(c *C) {
 			TargetSchema:  "dtest1",
 		},
 		{
-			SchemaPattern: "~test2?[ab|cd]",
-			TablePattern:  "~g*[cat|dog]+[0-9]*",
+			SchemaPattern: "~test2?[a|b]",
+			TablePattern:  "~tbl2",
 			TargetSchema:  "dtest2",
 			TargetTable:   "dtable2",
 		},
 		{
-			SchemaPattern: "gp*",
-			TargetSchema:  "hiid",
+			SchemaPattern: "mytest*",
+			TargetSchema:  "mytest",
 		},
 		{
-			SchemaPattern: "~[0-9]?g+p*uid",
-			TargetSchema:  "hig",
+			SchemaPattern: "~mytest(_meta)?_schema",
+			TargetSchema:  "test",
 		},
 	}
 	inputTables := []Table{
 		{
-			Schema: "test2cd",
-			Name:   "dog99",
+			Schema: "test2a", // match rule1 and rule2
+			Name:   "tbl2",
 		},
 		{
-			Schema: "gpuid",
+			Schema: "mytest_meta_schema", // match rule3 and rule4
 			Name:   "",
 		},
 	}

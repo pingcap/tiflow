@@ -326,17 +326,17 @@ function test_regexpr_router() {
 	echo "[$(date)] <<<<<< start test_regexpr_router >>>>>>"
 	cleanup_process
 	cleanup_data all_mode
-	cleanup_data test3gd8917777
+	cleanup_data test2animal
 	cleanup_data test4s_2022
-	cleanup_data_upstream test3gd8917777
+	cleanup_data_upstream test2animal
 	cleanup_data_upstream test4s_2022
 	run_sql_file $cur/data/db1.regexpr.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.regexpr.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	run_sql_tidb 'drop database if exists dtest3;'
-	run_sql_tidb 'create database dtest3;'
+	run_sql_tidb 'drop database if exists dtest2;'
+	run_sql_tidb 'create database dtest2;'
 	run_sql_tidb 'drop database if exists dtest4;'
 	run_sql_tidb 'create database dtest4;'
-	run_sql_tidb 'create table if not exists dtest3.dtable3(a int, b int);'
+	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int);'
 	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int);'
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -370,9 +370,9 @@ function test_regexpr_router() {
 	check_sync_diff $WORK_DIR $cur/conf/regexpr_diff_config.toml
 
 	cleanup_process
-	cleanup_data test3gd8917777
+	cleanup_data test2animal
 	cleanup_data test4s_2022
-	cleanup_data_upstream test3gd8917777
+	cleanup_data_upstream test2animal
 	cleanup_data_upstream test4s_2022
 	echo "[$(date)] <<<<<< finish test_regexpr_router >>>>>>"
 }
@@ -589,6 +589,7 @@ function run() {
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
 }
 
+cleanup_data all_mode
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*

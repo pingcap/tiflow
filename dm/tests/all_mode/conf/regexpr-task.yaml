@@ -22,22 +22,26 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     route-rules: ["rule1"]
     block-allow-list: "balist1"
+    loader:
+      import-mode: "loader"
   - source-id: "mysql-replica-02"
     route-rules: ["rule2"]
     block-allow-list: "balist1"
+    loader:
+      import-mode: "loader"
 
 routes:
   rule1:
-    schema-pattern: "~test3(gd|ct)?8917*"
-    table-pattern: "test3_*"
-    target-schema: "dtest3"
-    target-table: "dtable3"
+    schema-pattern: "~test2?[animal|human]"
+    table-pattern: "~tbl.*[cat|dog]+"
+    target-schema: "dtest2"
+    target-table: "dtable2"
   rule2:
     schema-pattern: "test4s_*"
-    table-pattern: "~testtable4?(ddd|lbc)+"
+    table-pattern: "~testtable_[donot_delete]?"
     target-schema: "dtest4"
     target-table: "dtable4"
 
 block-allow-list:
   balist1:
-    do-dbs: ["~test3(gd|ct)?8917*", "test4s_*"]
+    do-dbs: ["~test2?[animal|human]", "test4s_*"]

@@ -13,17 +13,17 @@ check-struct-only = false
 
     target-instance = "tidb0"
 
-    target-check-tables = ["dtest3.dtable3", "dtest4.dtable4"]
+    target-check-tables = ["dtest2.dtable2", "dtest4.dtable4"]
 
 
 [routes.rule1]
-    schema-pattern = "test3gd8917777"
-    table-pattern = "test3_*"
-    target-schema = "dtest3"
-    target-table = "dtable3"
+    schema-pattern = "test2animal"
+    table-pattern = "tbl_animal_dogcat"
+    target-schema = "dtest2"
+    target-table = "dtable2"
 [routes.rule2]
     schema-pattern = "test4s_*"
-    table-pattern = "testtablelbclbc"
+    table-pattern = "testtable_donot_delete"
     target-schema = "dtest4"
     target-table = "dtable4"
 

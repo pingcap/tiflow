@@ -40,22 +40,22 @@ const (
 	SchmFilter
 )
 
-type FilterWrapper struct {
-	Filter *filter.Filter
-	Type   FilterType
-	Target Table
+type filterWrapper struct {
+	filter *filter.Filter
+	typ    FilterType
+	target Table
 
 	rawRule *TableRule
 }
 
 type RouteTable struct {
-	filters       []*FilterWrapper
+	filters       []*filterWrapper
 	caseSensitive bool
 }
 
 func NewRouter(caseSensitive bool, rules []*TableRule) (*RouteTable, error) {
 	r := &RouteTable{
-		filters:       make([]*FilterWrapper, 0),
+		filters:       make([]*filterWrapper, 0),
 		caseSensitive: caseSensitive,
 	}
 	for _, rule := range rules {
@@ -74,25 +74,25 @@ func (r *RouteTable) AddRule(rule *TableRule) error {
 	if !r.caseSensitive {
 		rule.ToLower()
 	}
-	newFilter := &FilterWrapper{
+	newFilter := &filterWrapper{
 		rawRule: rule,
 	}
-	newFilter.Target = Table{
+	newFilter.target = Table{
 		Schema: rule.TargetSchema,
 		Name:   rule.TargetTable,
 	}
 	if len(rule.TablePattern) == 0 {
 		// raw schema rule
-		newFilter.Type = SchmFilter
+		newFilter.typ = SchmFilter
 		rawFilter, err := filter.New(r.caseSensitive, &FilterRule{
 			DoDBs: []string{rule.SchemaPattern},
 		})
 		if err != nil {
 			return errors.Annotatef(err, "add rule %+v into table router", rule)
 		}
-		newFilter.Filter = rawFilter
+		newFilter.filter = rawFilter
 	} else {
-		newFilter.Type = TblFilter
+		newFilter.typ = TblFilter
 		rawFilter, err := filter.New(r.caseSensitive, &FilterRule{
 			DoTables: []*Table{
 				{
@@ -105,7 +105,7 @@ func (r *RouteTable) AddRule(rule *TableRule) error {
 		if err != nil {
 			return errors.Annotatef(err, "add rule %+v into table router", rule)
 		}
-		newFilter.Filter = rawFilter
+		newFilter.filter = rawFilter
 	}
 	r.filters = append(r.filters, newFilter)
 	return nil
@@ -116,11 +116,11 @@ func (r *RouteTable) Route(schema, table string) (string, string, error) {
 		Schema: schema,
 		Name:   table,
 	}
-	tblRules := make([]*FilterWrapper, 0)
-	schmRules := make([]*FilterWrapper, 0)
+	tblRules := make([]*filterWrapper, 0)
+	schmRules := make([]*filterWrapper, 0)
 	for _, filterWrapper := range r.filters {
-		if filterWrapper.Filter.Match(curTable) {
-			if filterWrapper.Type == TblFilter {
+		if filterWrapper.filter.Match(curTable) {
+			if filterWrapper.typ == TblFilter {
 				tblRules = append(tblRules, filterWrapper)
 			} else {
 				schmRules = append(schmRules, filterWrapper)
@@ -131,20 +131,20 @@ func (r *RouteTable) Route(schema, table string) (string, string, error) {
 		targetSchema string
 		targetTable  string
 	)
-	if len(table) == 0 || len(tblRules) == 0 {
+	if table == "" || len(tblRules) == 0 {
 		// 1. no need to match table or
 		// 2. match no table
 		if len(schmRules) > 1 {
 			return "", "", terror.ErrWorkerRouteTableDupMatch.Generate(schema, table)
 		}
 		if len(schmRules) == 1 {
-			targetSchema, targetTable = schmRules[0].Target.Schema, schmRules[0].Target.Name
+			targetSchema, targetTable = schmRules[0].target.Schema, schmRules[0].target.Name
 		}
 	} else {
 		if len(tblRules) > 1 {
 			return "", "", terror.ErrWorkerRouteTableDupMatch.Generate(schema, table)
 		}
-		targetSchema, targetTable = tblRules[0].Target.Schema, tblRules[0].Target.Name
+		targetSchema, targetTable = tblRules[0].target.Schema, tblRules[0].target.Name
 	}
 	if len(targetSchema) == 0 {
 		targetSchema = schema
@@ -161,7 +161,7 @@ func (r *RouteTable) AllRules() ([]TableRule, []TableRule) {
 		tableRouteRules []TableRule
 	)
 	for _, filter := range r.filters {
-		if len(filter.rawRule.TablePattern) == 0 {
+		if filter.typ == SchmFilter {
 			schmRouteRules = append(schmRouteRules, *filter.rawRule)
 		} else {
 			tableRouteRules = append(tableRouteRules, *filter.rawRule)
@@ -173,13 +173,13 @@ func (r *RouteTable) AllRules() ([]TableRule, []TableRule) {
 func (r *RouteTable) FetchExtendColumn(schema, table, source string) ([]string, []string) {
 	var cols []string
 	var vals []string
-	rules := []*FilterWrapper{}
+	rules := []*filterWrapper{}
 	curTable := &Table{
 		Schema: schema,
 		Name:   table,
 	}
 	for _, filter := range r.filters {
-		if filter.Filter.Match(curTable) {
+		if filter.filter.Match(curTable) {
 			rules = append(rules, filter)
 		}
 	}
@@ -189,7 +189,7 @@ func (r *RouteTable) FetchExtendColumn(schema, table, source string) ([]string, 
 	)
 	for i := range rules {
 		rule := rules[i].rawRule
-		if len(rule.TablePattern) == 0 {
+		if rule.TablePattern == "" {
 			schemaRules = append(schemaRules, rule)
 		} else {
 			tableRules = append(tableRules, rule)
