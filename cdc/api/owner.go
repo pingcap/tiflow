@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/oracle"
@@ -82,11 +81,16 @@ type ownerAPI struct {
 // RegisterOwnerAPIRoutes registers routes for owner APIs.
 func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
-	router.POST("/capture/owner/resign", gin.WrapF(ownerAPI.handleResignOwner))
-	router.POST("/capture/owner/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))
-	router.POST("/capture/owner/rebalance_trigger", gin.WrapF(ownerAPI.handleRebalanceTrigger))
-	router.POST("/capture/owner/move_table", gin.WrapF(ownerAPI.handleMoveTable))
-	router.POST("/capture/owner/changefeed/query", gin.WrapF(ownerAPI.handleChangefeedQuery))
+	owner := router.Group("/capture/owner")
+
+	owner.Use(errorHandleMiddleware())
+	owner.Use(logMiddleware())
+
+	owner.POST("/resign", gin.WrapF(ownerAPI.handleResignOwner))
+	owner.POST("/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))
+	owner.POST("/rebalance_trigger", gin.WrapF(ownerAPI.handleRebalanceTrigger))
+	owner.POST("/move_table", gin.WrapF(ownerAPI.handleMoveTable))
+	owner.POST("/changefeed/query", gin.WrapF(ownerAPI.handleChangefeedQuery))
 }
 
 func handleOwnerResp(w http.ResponseWriter, err error) {
@@ -107,10 +111,10 @@ func (h *ownerAPI) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
-	err := h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.AsyncStop()
-		return nil
-	})
+	o, err := h.capture.GetOwner()
+	if o != nil {
+		o.AsyncStop()
+	}
 	handleOwnerResp(w, err)
 }
 
@@ -148,11 +152,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		Opts: opts,
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.EnqueueJob(job)
-		return nil
-	})
-
+	err = handleOwnerJob(req.Context(), h.capture, job)
 	handleOwnerResp(w, err)
 }
 
@@ -175,11 +175,7 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.TriggerRebalance(changefeedID)
-		return nil
-	})
-
+	err = handleOwnerRebalance(req.Context(), h.capture, changefeedID)
 	handleOwnerResp(w, err)
 }
 
@@ -216,11 +212,8 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = h.capture.OperateOwnerUnderLock(func(owner *owner.Owner) error {
-		owner.ManualSchedule(changefeedID, to, tableID)
-		return nil
-	})
-
+	err = handleOwnerScheduleTable(
+		req.Context(), h.capture, changefeedID, to, tableID)
 	handleOwnerResp(w, err)
 }
 
@@ -269,7 +262,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 	writeData(w, resp)
 }
 
-func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
+func HandleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	var level string
 	data, err := io.ReadAll(r.Body)
 	r.Body.Close()

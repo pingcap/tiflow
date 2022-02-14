@@ -93,14 +93,12 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.MydumperConfig = *inst.Mydumper
 		cfg.LoaderConfig = *inst.Loader
 		cfg.SyncerConfig = *inst.Syncer
+		cfg.ValidatorCfg = inst.ContinuousValidator
 
 		cfg.CleanDumpFile = c.CleanDumpFile
 
 		if err := cfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source %s", inst.SourceID)
-		}
-		if c.TiDB != nil {
-			cfg.TiDB = *c.TiDB
 		}
 		cfgs[i] = cfg
 	}
@@ -208,6 +206,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 				subTaskCfg.SyncerConfig.Batch = *incrCfg.ReplBatch
 			}
 		}
+		subTaskCfg.ValidatorCfg = defaultValidatorConfig()
 		// set route,blockAllowList,filter config
 		doCnt := len(tableMigrateRuleMap[sourceCfg.SourceName])
 		doDBs := make([]string, doCnt)
@@ -305,6 +304,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.Syncers = make(map[string]*SyncerConfig)
 	c.ExprFilter = make(map[string]*ExpressionFilter)
 	c.Experimental = stCfg0.Experimental
+	c.Validators = make(map[string]*ValidatorConfig)
 
 	baListMap := make(map[string]string, len(stCfgs))
 	routeMap := make(map[string]string, len(stCfgs))
@@ -314,8 +314,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	syncMap := make(map[string]string, len(stCfgs))
 	cmMap := make(map[string]string, len(stCfgs))
 	exprFilterMap := make(map[string]string, len(stCfgs))
-	var baListIdx, routeIdx, filterIdx, dumpIdx, loadIdx, syncIdx, cmIdx, efIdx int
-	var baListName, routeName, filterName, dumpName, loadName, syncName, cmName, efName string
+	validatorMap := make(map[string]string, len(stCfgs))
+	var baListIdx, routeIdx, filterIdx, dumpIdx, loadIdx, syncIdx, validateIdx, cmIdx, efIdx int
+	var baListName, routeName, filterName, dumpName, loadName, syncName, validateName, cmName, efName string
 
 	// NOTE:
 	// - we choose to ref global configs for instances now.
@@ -357,6 +358,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 			c.ExprFilter[efName] = f
 		}
 
+		validateName, validateIdx = getGenerateName(stCfg.ValidatorCfg, validateIdx, "validator", validatorMap)
+		c.Validators[validateName] = &stCfg.ValidatorCfg
+
 		cmNames := make([]string, 0, len(stCfg.ColumnMappingRules))
 		for _, rule := range stCfg.ColumnMappingRules {
 			cmName, cmIdx = getGenerateName(rule, cmIdx, "cm", cmMap)
@@ -365,16 +369,17 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 		}
 
 		c.MySQLInstances = append(c.MySQLInstances, &MySQLInstance{
-			SourceID:           stCfg.SourceID,
-			Meta:               stCfg.Meta,
-			FilterRules:        filterNames,
-			ColumnMappingRules: cmNames,
-			RouteRules:         routeNames,
-			BAListName:         baListName,
-			MydumperConfigName: dumpName,
-			LoaderConfigName:   loadName,
-			SyncerConfigName:   syncName,
-			ExpressionFilters:  exprFilterNames,
+			SourceID:                      stCfg.SourceID,
+			Meta:                          stCfg.Meta,
+			FilterRules:                   filterNames,
+			ColumnMappingRules:            cmNames,
+			RouteRules:                    routeNames,
+			BAListName:                    baListName,
+			MydumperConfigName:            dumpName,
+			LoaderConfigName:              loadName,
+			SyncerConfigName:              syncName,
+			ExpressionFilters:             exprFilterNames,
+			ContinuousValidatorConfigName: validateName,
 		})
 	}
 	if c.CollationCompatible == "" {

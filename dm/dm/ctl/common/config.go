@@ -21,7 +21,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/BurntSushi/toml"
@@ -214,4 +218,14 @@ func validateAddr(addr string) error {
 		}
 	}
 	return nil
+}
+
+// SplitArgsRespectQuote splits args by space, but won't split space inside single or double quotes.
+func SplitArgsRespectQuote(line string) []string {
+	ret, err := shlex.Split(line)
+	if err != nil {
+		log.L().Error("split args error", zap.Error(err))
+		return []string{line}
+	}
+	return ret
 }

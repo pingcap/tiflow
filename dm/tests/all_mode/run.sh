@@ -176,7 +176,9 @@ function test_stop_task_before_checkpoint() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# generate uncomplete checkpoint
-	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s/import-mode: sql/import-mode: loader/" $WORK_DIR/dm-task.yaml
+	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	check_log_contain_with_retry 'wait loader stop after init checkpoint' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry 'wait loader stop after init checkpoint' $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -195,14 +197,14 @@ function test_stop_task_before_checkpoint() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	# stop-task before load checkpoint
-	dmctl_start_task "$cur/conf/dm-task.yaml"
+	dmctl_start_task $WORK_DIR/dm-task.yaml
 	check_log_contain_with_retry 'wait loader stop before load checkpoint' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry 'wait loader stop before load checkpoint' $WORK_DIR/worker2/log/dm-worker.log
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
 
-	dmctl_start_task "$cur/conf/dm-task.yaml"
+	dmctl_start_task $WORK_DIR/dm-task.yaml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
