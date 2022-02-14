@@ -398,10 +398,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	// adjust dir
 	if c.Mode == ModeAll || c.Mode == ModeFull {
 		// check
-		isS3, err := exstorage.IsS3Path(c.LoaderConfig.Dir)
-		if err != nil {
-			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
-		}
+		isS3 := exstorage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode != LoadModeSQL {
 			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
 		}

@@ -51,18 +51,18 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 }
 
 // isS3Path judges if rawURL is s3 path.
-func IsS3Path(rawURL string) (bool, error) {
+func IsS3Path(rawURL string) bool {
 	if rawURL == "" {
-		return false, nil
+		return false
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return false, err
+		return false
 	}
 	if u.Scheme == "s3" {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // CreateExternalStore creates ExternalStore.

@@ -115,37 +115,7 @@ func getDBAndTableFromFilename(filename string) (string, string, error) {
 	return fields[0], fields[1], nil
 }
 
-func getMydumpMetadata(cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
-	metafile := filepath.Join(cfg.LoaderConfig.Dir, "metadata")
-	loc, _, err := dumpling.ParseMetaData(metafile, cfg.Flavor)
-	if err != nil {
-		if os.IsNotExist(err) {
-			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
-			if err2 != nil {
-				log.L().Warn("get load task", log.ShortError(err2))
-			}
-			if worker != "" && worker != workerName {
-				return "", "", terror.ErrLoadTaskWorkerNotMatch.Generate(worker, workerName)
-			}
-		}
-		if terror.ErrMetadataNoBinlogLoc.Equal(err) {
-			log.L().Warn("dumped metadata doesn't have binlog location, it's OK if DM doesn't enter incremental mode")
-			return "", "", nil
-		}
-
-		toPrint, err2 := os.ReadFile(metafile)
-		if err2 != nil {
-			toPrint = []byte(err2.Error())
-		}
-		log.L().Error("fail to parse dump metadata", log.ShortError(err))
-		return "", "", terror.ErrParseMydumperMeta.Generate(err, toPrint)
-	}
-
-	return loc.Position.String(), loc.GTIDSetStr(), nil
-}
-
-// getMydumpMetadataByExternalStorage gets Metadata by ExternalStorage.
-func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
+func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
 	failpoint.Inject("TestRemoveMetaFile", func() {
 		err := exstorage.RemoveAll(ctx, cfg.LoaderConfig.Dir, nil)
@@ -153,7 +123,7 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
 	})
-	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.LoaderConfig.Dir, metafile, cfg.Flavor)
+	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.Flavor)
 	if err != nil {
 		if exstorage.IsNotExistError(err) {
 			failpoint.Inject("TestRemoveMetaFile", func() {
@@ -192,10 +162,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", cfg.Dir), zap.Error(err))
 		}
 	} else {
-		isS3, err := exstorage.IsS3Path(cfg.Dir)
-		if err != nil {
-			log.L().Warn("dump dir is invalid", zap.String("dump dir", cfg.Dir), zap.Error(err))
-		} else if isS3 {
+		if exstorage.IsS3Path(cfg.Dir) {
 			// s3 no need immediately remove
 			return
 		}

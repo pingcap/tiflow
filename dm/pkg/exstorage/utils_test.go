@@ -49,36 +49,13 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		"s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
 	}
 
-	testIsS3Results := []struct {
-		hasErr bool
-		res    bool
-		errMsg string
-	}{
-		{false, false, ""},
-		{true, false, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
-		{false, false, ""},
-		{false, false, ""},
-		{false, false, ""},
-		{false, false, ""},
-		{false, false, ""},
-		{false, false, ""},
-		{false, true, ""},
-		{false, true, ""},
-		{false, true, ""},
-		{false, true, ""},
-		{false, true, ""},
-		{false, true, ""},
+	testIsS3Results := []bool{
+		false, false, false, false, false, false, false, false, true, true, true, true, true, true,
 	}
 
 	for i, testPath := range testPaths {
-		isS3, err := IsS3Path(testPath)
-		if testIsS3Results[i].hasErr {
-			require.Error(t, err)
-			require.Regexp(t, testIsS3Results[i].errMsg, err.Error())
-		} else {
-			require.NoError(t, err)
-			require.Equal(t, testIsS3Results[i].res, isS3)
-		}
+		isS3 := IsS3Path(testPath)
+		require.Equal(t, testIsS3Results[i], isS3)
 	}
 
 	testAjustResults := []struct {

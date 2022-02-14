@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -41,19 +40,7 @@ var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
-func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	fd, err := os.Open(filename)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer fd.Close()
-	return parseMetaDataByReader(filename, flavor, fd)
-}
-
-// ParseMetaDataByExternalStore parses mydumper's output meta file by `ExternalStorage` which supports s3 and returns binlog location.
-// since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
-// we return this location as well.
-func ParseMetaDataByExternalStore(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
+func ParseMetaData(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
 	fd, err := exstorage.OpenFile(ctx, dir, filename, nil)
 	if err != nil {
 		return nil, nil, err
