@@ -375,3 +375,23 @@ func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 		zap.Stringer("DMLType", tp))
 	return "", nil
 }
+
+// GetPreValues is only used in tests.
+func (r *RowChange) GetPreValues() []interface{} {
+	return r.preValues
+}
+
+// GetPostValues is only used in tests.
+func (r *RowChange) GetPostValues() []interface{} {
+	return r.postValues
+}
+
+// GetSourceTable returns TableName of the source table.
+func (r *RowChange) GetSourceTable() *cdcmodel.TableName {
+	return r.sourceTable
+}
+
+// GetTargetTable returns TableName of the target table.
+func (r *RowChange) GetTargetTable() *cdcmodel.TableName {
+	return r.targetTable
+}
