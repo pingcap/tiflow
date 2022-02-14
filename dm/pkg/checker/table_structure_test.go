@@ -21,7 +21,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
 func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
@@ -29,22 +29,8 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
 
-	printJSON := func(r *Result) {
-		rawResult, _ := json.MarshalIndent(r, "", "\t")
-		fmt.Println("\n" + string(rawResult))
-	}
-
 	// 1. test a success check
-	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-
+	mock = initShardingMock(mock)
 	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
   "c" int(11) NOT NULL,
@@ -54,25 +40,28 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 
 	checker := NewShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
 		nil,
-		false)
+		false,
+		1)
 	result := checker.Check(ctx)
-
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 2. check different column number
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		nil,
+		false,
+		1)
+	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
   "c" int(11) NOT NULL,
@@ -85,18 +74,18 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 3. check different column def
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
-	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+		}},
+		nil,
+		false,
+		1)
+	mock = initShardingMock(mock)
 	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
   "c" varchar(20) NOT NULL,
@@ -108,7 +97,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 }
 
 func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
@@ -116,65 +104,76 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(err, tc.IsNil)
 	ctx := context.Background()
 
-	printJSON := func(r *Result) {
-		rawResult, _ := json.MarshalIndent(r, "", "\t")
-		fmt.Println("\n" + string(rawResult))
-	}
-
 	// 1. test a success check
-
-	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
-  "c" int(11) NOT NULL,
-  PRIMARY KEY ("c")
-) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
-	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
 	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("sql_mode", "ANSI_QUOTES")
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  PRIMARY KEY ("c")
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 
-	checker := NewTablesChecker(db,
-		&dbutil.DBConfig{},
-		map[string][]string{"test-db": {"test-table-1"}})
+	checker := NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
 	result := checker.Check(ctx)
-
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 2. check many errors
-
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
   CONSTRAINT "fk" FOREIGN KEY ("c") REFERENCES "t" ("c")
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
 	result = checker.Check(ctx)
-
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 2) // no PK/UK + has FK
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
-	printJSON(result)
 
 	// 3. unsupported charset
-
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
   "c" int(11) NOT NULL,
   PRIMARY KEY ("c")
 ) ENGINE=InnoDB DEFAULT CHARSET=ucs2`)
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
-	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("sql_mode", "ANSI_QUOTES")
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
 
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+		}},
+		1)
 	result = checker.Check(ctx)
-
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
@@ -209,9 +208,38 @@ PRIMARY KEY ("c")
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
 	checker := NewOptimisticShardingTablesChecker("test-name",
 		map[string]*sql.DB{"test-source": db},
-		map[string]map[string][]string{"test-source": {"test-db": []string{"test-table-1", "test-table-2"}}})
+		map[string][]*filter.Table{"test-source": {
+			&filter.Table{Schema: "test-db", Name: "test-table-1"},
+			&filter.Table{Schema: "test-db", Name: "test-table-2"},
+		}})
 	result := checker.Check(ctx)
 	printJSON(result)
 	c.Assert(result.State, tc.Equals, StateSuccess)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+}
+
+func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+"c" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+
+	maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+"c" int(11) NOT NULL,
+PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	return mock
 }

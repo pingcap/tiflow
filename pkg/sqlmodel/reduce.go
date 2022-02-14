@@ -120,11 +120,11 @@ func (r *RowChange) Reduce(preRowChange *RowChange) {
 	r.calculateType()
 }
 
-// Split will split current RowChangeUpdate into two RowChangeDelete and
+// SplitUpdate will split current RowChangeUpdate into two RowChangeDelete and
 // RowChangeInsert one. The behaviour is undefined for other types of RowChange.
-func (r *RowChange) Split() (*RowChange, *RowChange) {
+func (r *RowChange) SplitUpdate() (*RowChange, *RowChange) {
 	if r.tp != RowChangeUpdate {
-		log.L().DPanic("Split should only be called on RowChangeUpdate",
+		log.L().DPanic("SplitUpdate should only be called on RowChangeUpdate",
 			zap.Stringer("rowChange", r))
 		return nil, nil
 	}

@@ -121,9 +121,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
-	// target name => source => schema => [tables]
-	sharding := make(map[string]map[string]map[string][]string)
+	// targetTableID => source => [tables]
+	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
+	// sourceID => []table
+	checkTablesMap := make(map[string][]*filter.Table)
 	dbs := make(map[string]*sql.DB)
 	columnMapping := make(map[string]*column.Mapping)
 	_, checkingShardID := c.checkingItems[config.ShardAutoIncrementIDChecking]
@@ -208,29 +210,22 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		// checkTables map schema => {table1, table2, ...}
-		checkTables := make(map[string][]string)
+		var checkTables []*filter.Table
 		checkSchemas := make(map[string]struct{}, len(mapping))
-		for name, tables := range mapping {
+		for targetTableID, tables := range mapping {
+			checkTables = append(checkTables, tables...)
+			if _, ok := sharding[targetTableID]; !ok {
+				sharding[targetTableID] = make(map[string][]*filter.Table)
+			}
+			sharding[targetTableID][instance.cfg.SourceID] = append(sharding[targetTableID][instance.cfg.SourceID], tables...)
+			shardingCounter[targetTableID] += len(tables)
 			for _, table := range tables {
-				checkTables[table.Schema] = append(checkTables[table.Schema], table.Name)
 				if _, ok := checkSchemas[table.Schema]; !ok {
 					checkSchemas[table.Schema] = struct{}{}
 				}
-				if _, ok := sharding[name]; !ok {
-					sharding[name] = make(map[string]map[string][]string)
-				}
-				if _, ok := sharding[name][instance.cfg.SourceID]; !ok {
-					sharding[name][instance.cfg.SourceID] = make(map[string][]string)
-				}
-				if _, ok := sharding[name][instance.cfg.SourceID][table.Schema]; !ok {
-					sharding[name][instance.cfg.SourceID][table.Schema] = make([]string, 0, 1)
-				}
-
-				sharding[name][instance.cfg.SourceID][table.Schema] = append(sharding[name][instance.cfg.SourceID][table.Schema], table.Name)
-				shardingCounter[name]++
 			}
 		}
+		checkTablesMap[instance.cfg.SourceID] = checkTables
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
 		if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
 			exportCfg := export.DefaultConfig()
@@ -243,9 +238,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if c.onlineDDL != nil {
 			c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 		}
-		if checkSchema {
-			c.checkList = append(c.checkList, checker.NewTablesChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables))
-		}
+	}
+
+	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
+	if checkSchema {
+		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
 	}
 
 	instance := c.instances[0]
@@ -262,7 +259,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
-					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID))
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
 				} else {
 					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet))
 				}
