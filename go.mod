@@ -81,6 +81,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
