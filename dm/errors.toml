@@ -1115,6 +1115,18 @@ workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20055]
+message = "invalid validation mode"
+description = ""
+workaround = "Please check `validation-mode` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20056]
+message = "mysql-instance(%d)'s continuous validator config %s not exist"
+description = ""
+workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+tags = ["internal", "medium"]
+
+[error.DM-config-20057]
 message = "start-time %s is too late, no binlog location matches it"
 description = ""
 workaround = "Please check the `--start-time` is expected or try again later."
