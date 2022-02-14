@@ -22,15 +22,14 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 type opType byte
 
 const (
 	null opType = iota
-	insert
-	update
-	del
+	dml
 	ddl
 	xid
 	flush
@@ -44,12 +43,8 @@ const (
 
 func (t opType) String() string {
 	switch t {
-	case insert:
-		return "insert"
-	case update:
-		return "update"
-	case del:
-		return "delete"
+	case dml:
+		return "dml"
 	case ddl:
 		return "ddl"
 	case xid:
@@ -83,7 +78,9 @@ type job struct {
 	// sql example: drop table `s1`.`t1`, `s2`.`t2`.
 	sourceTbls      map[string][]*filter.Table
 	targetTable     *filter.Table
-	dml             *DML
+	dml             *sqlmodel.RowChange
+	dmlQueueKey     string
+	safeMode        bool
 	retry           bool
 	location        binlog.Location // location of last received (ROTATE / QUERY / XID) event, for global/table checkpoint
 	startLocation   binlog.Location // start location of the sql in binlog, for handle_error
@@ -109,16 +106,24 @@ func (j *job) String() string {
 	if j.dml != nil {
 		dmlStr = j.dml.String()
 	}
-	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: %s, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.ddls, j.location, j.startLocation, j.currentLocation)
+	return fmt.Sprintf("tp: %s, flushSeq: %d, dml: [%s], safemode: %v, ddls: %s, last_location: %s, start_location: %s, current_location: %s", j.tp, j.flushSeq, dmlStr, j.safeMode, j.ddls, j.location, j.startLocation, j.currentLocation)
 }
 
-func newDMLJob(tp opType, sourceTable, targetTable *filter.Table, dml *DML, ec *eventContext) *job {
+func newDMLJob(rowChange *sqlmodel.RowChange, ec *eventContext) *job {
+	sourceTable := rowChange.GetSourceTable()
+	targetTable := rowChange.GetTargetTable()
+	// TODO: remove sourceTbls and targetTable for dml Job
 	return &job{
-		tp:          tp,
-		sourceTbls:  map[string][]*filter.Table{sourceTable.Schema: {sourceTable}},
-		targetTable: targetTable,
-		dml:         dml,
+		tp: dml,
+		sourceTbls: map[string][]*filter.Table{
+			sourceTable.Schema: {
+				&filter.Table{Schema: sourceTable.Schema, Name: sourceTable.Table},
+			},
+		},
+		targetTable: &filter.Table{Schema: targetTable.Schema, Name: targetTable.Table},
+		dml:         rowChange,
 		retry:       true,
+		safeMode:    ec.safeMode,
 
 		location:        *ec.lastLocation,
 		startLocation:   *ec.startLocation,
@@ -225,6 +230,14 @@ func newConflictJob(workerCount int) *job {
 		targetTable: &filter.Table{},
 		jobAddTime:  time.Now(),
 		flushWg:     wg,
+	}
+}
+
+// newCompactJob is only used for metrics.
+func newCompactJob(targetTable *filter.Table) *job {
+	return &job{
+		tp:          compact,
+		targetTable: targetTable,
 	}
 }
 

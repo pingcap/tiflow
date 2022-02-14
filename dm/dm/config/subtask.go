@@ -241,6 +241,7 @@ type SubTaskConfig struct {
 	MydumperConfig // Mydumper configuration
 	LoaderConfig   // Loader configuration
 	SyncerConfig   // Syncer configuration
+	ValidatorCfg   ValidatorConfig
 
 	// compatible with standalone dm unit
 	LogLevel  string `toml:"log-level" json:"log-level"`
@@ -456,6 +457,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigBinlogEventFilter.Delegate(err)
 	}
 	if err := c.LoaderConfig.adjust(); err != nil {
+		return err
+	}
+	if err := c.ValidatorCfg.adjust(); err != nil {
 		return err
 	}
 
