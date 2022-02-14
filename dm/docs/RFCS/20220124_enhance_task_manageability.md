@@ -29,7 +29,7 @@ New syntax of dmctl is `dmctl [resource type] [command] [flags]`
 
 where `resource type`, `command` and `flags` are:
 
-- `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types. currently there are only these types of resource types: `task`, `source`, `relay`, `ddl-lock` and `member`
+- `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types. currently there are only these types of resource types: `task`, `source`, `relay`, `ddl-lock` and `member`.
 
 - `command`: Specifies the operation that you want to perform on one or more resources, for example `create`, `get`, `update`, `delete`, `etc`.
 
