@@ -182,7 +182,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return nil
 	}
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 	c.Assert(strings.Contains(st.Result().Errors[0].String(), "has no dm units for mode"), IsTrue)
 
@@ -192,7 +192,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -303,7 +303,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -403,7 +403,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
 
-	st.Run(pb.Stage_Finished, nil)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
@@ -411,9 +411,11 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 
 func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	cfg := &config.SubTaskConfig{
-		Name: "testSubtaskScene",
-		Mode: config.ModeFull,
+		SourceID: "source",
+		Name:     "testSubtaskScene",
+		Mode:     config.ModeFull,
 	}
+	c.Assert(cfg.Adjust(false), IsNil)
 
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	c.Assert(st.Stage(), DeepEquals, pb.Stage_Paused)
@@ -452,7 +454,7 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Finished, nil)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.CurrUnit(), Equals, nil)
 	c.Assert(st.Result(), IsNil)

@@ -59,7 +59,7 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 		// TODO: make a st.reset
 		st.ctx, st.cancel = context.WithCancel(context.Background())
 		st.cfg.UseRelay = relay != nil
-		st.Run(stage, relay)
+		st.Run(stage, st.getValidatorStage(), relay)
 	}
 }
 
