@@ -255,32 +255,33 @@ func (s *testCheckerSuite) TestTableSchemaChecking(c *tc.C) {
 	}
 
 	createTable1 := `CREATE TABLE %s (
-  					id int(11) DEFAULT NULL,
-  					b int(11) DEFAULT NULL
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) DEFAULT NULL,
+				  b int(11) DEFAULT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 	createTable2 := `CREATE TABLE %s (
-  					id int(11) DEFAULT NULL,
-  					b int(11) DEFAULT NULL,
-  					UNIQUE KEY id (id)
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) DEFAULT NULL,
+				  b int(11) DEFAULT NULL,
+				  UNIQUE KEY id (id)
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
 	mock := initMockDB(c)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*primary/unique key does not exist(.|\n)*")
+	c.Assert(len(msg), tc.Equals, 0)
 
 	mock = initMockDB(c)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb1)))
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 }
 
 func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
@@ -299,29 +300,37 @@ func (s *testCheckerSuite) TestShardTableSchemaChecking(c *tc.C) {
 	}
 
 	createTable1 := `CREATE TABLE %s (
-				  	id int(11) DEFAULT NULL,
-  					b int(11) DEFAULT NULL
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) DEFAULT NULL,
+				  b int(11) DEFAULT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 	createTable2 := `CREATE TABLE %s (
-  					id int(11) DEFAULT NULL,
-  					c int(11) DEFAULT NULL
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) DEFAULT NULL,
+				  c int(11) DEFAULT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
 	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*different column definition(.|\n)*")
+	c.Assert(len(msg), tc.Equals, 0)
 
 	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 }
 
 func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
@@ -340,36 +349,42 @@ func (s *testCheckerSuite) TestShardAutoIncrementIDChecking(c *tc.C) {
 	}
 
 	createTable1 := `CREATE TABLE %s (
-				  	id int(11) NOT NULL AUTO_INCREMENT,
-  					b int(11) DEFAULT NULL,
-					PRIMARY KEY (id),
-					UNIQUE KEY u_b(b)
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) NOT NULL AUTO_INCREMENT,
+				  b int(11) DEFAULT NULL,
+				PRIMARY KEY (id),
+				UNIQUE KEY u_b(b)
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
 	createTable2 := `CREATE TABLE %s (
-  					id int(11) NOT NULL,
-  					b int(11) DEFAULT NULL,
-					INDEX (id),
-					UNIQUE KEY u_b(b)
-					) ENGINE=InnoDB DEFAULT CHARSET=latin1`
+				  id int(11) NOT NULL,
+				  b int(11) DEFAULT NULL,
+				INDEX (id),
+				UNIQUE KEY u_b(b)
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`
 
 	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(len(msg), tc.Equals, 0)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*instance  table .* of sharding .* have auto-increment key(.|\n)*")
+	c.Assert(msg, tc.Matches, "(.|\n)*sourceID  table .* of sharding .* have auto-increment key(.|\n)*")
+	c.Assert(err, tc.IsNil)
 
-	mock = conn.InitMockDB(c)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2"))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb1)))
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable2, tb2)))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
 }
 
 func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {

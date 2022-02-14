@@ -20,31 +20,29 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/mock"
 
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 // mockExecute mock a kv store.
-func mockExecute(kv map[interface{}][]interface{}, dmls []*DML) map[interface{}][]interface{} {
+func mockExecute(kv map[interface{}][]interface{}, dmls []*sqlmodel.RowChange) map[interface{}][]interface{} {
 	for _, dml := range dmls {
-		switch dml.op {
-		case insert:
-			kv[dml.values[0]] = dml.values
-		case update:
-			delete(kv, dml.oldValues[0])
-			kv[dml.values[0]] = dml.values
-		case del:
-			delete(kv, dml.values[0])
+		switch dml.Type() {
+		case sqlmodel.RowChangeInsert:
+			kv[dml.GetPostValues()[0]] = dml.GetPostValues()
+		case sqlmodel.RowChangeUpdate:
+			delete(kv, dml.GetPreValues()[0])
+			kv[dml.GetPostValues()[0]] = dml.GetPostValues()
+		case sqlmodel.RowChangeDelete:
+			delete(kv, dml.GetPreValues()[0])
 		}
 	}
 
@@ -62,40 +60,25 @@ func randString(n int) string {
 
 func (s *testSyncerSuite) TestCompactJob(c *C) {
 	compactor := &compactor{
-		bufferSize:   10000,
-		logger:       log.L(),
-		keyMap:       make(map[string]map[string]int),
-		buffer:       make([]*job, 0, 10000),
-		addCountFunc: func(b bool, s string, ot opType, i int64, t *filter.Table) {},
+		bufferSize:         10000,
+		logger:             log.L(),
+		keyMap:             make(map[string]map[string]int),
+		buffer:             make([]*job, 0, 10000),
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	location := binlog.NewLocation("")
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 	p := parser.New()
 	se := mock.NewContext()
-	targetTableID := "`test`.`tb`"
-	sourceTable := &filter.Table{Schema: "test", Name: "tb1"}
-	targetTable := &filter.Table{Schema: "test", Name: "tb"}
+	sourceTable := &cdcmodel.TableName{Schema: "test", Table: "tb1"}
+	targetTable := &cdcmodel.TableName{Schema: "test", Table: "tb"}
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
 	c.Assert(err, IsNil)
-	tiIndex := &model.IndexInfo{
-		Table:   ti.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti.Columns[0].Name,
-			Offset: ti.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi := schema.GetDownStreamTI(ti, ti)
-	c.Assert(downTi, NotNil)
 
-	var dml *DML
-	var dmls []*DML
+	var dml *sqlmodel.RowChange
+	var dmls []*sqlmodel.RowChange
 	dmlNum := 1000000
 	maxID := 1000
 	batch := 1000
@@ -111,7 +94,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		oldValues, ok := kv[newID]
 		if !ok {
 			// insert
-			dml = newDML(insert, false, targetTableID, sourceTable, nil, values, nil, values, ti.Columns, ti, tiIndex, downTi)
+			dml = sqlmodel.NewRowChange(sourceTable, targetTable, nil, values, ti, nil, nil)
 		} else {
 			if rand.Int()%2 > 0 {
 				// update
@@ -125,14 +108,14 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 						}
 					}
 				}
-				dml = newDML(update, false, targetTableID, sourceTable, oldValues, values, oldValues, values, ti.Columns, ti, tiIndex, downTi)
+				dml = sqlmodel.NewRowChange(sourceTable, targetTable, oldValues, values, ti, nil, nil)
 			} else {
 				// delete
-				dml = newDML(del, false, targetTableID, sourceTable, nil, oldValues, nil, oldValues, ti.Columns, ti, tiIndex, downTi)
+				dml = sqlmodel.NewRowChange(sourceTable, targetTable, oldValues, nil, ti, nil, nil)
 			}
 		}
 
-		kv = mockExecute(kv, []*DML{dml})
+		kv = mockExecute(kv, []*sqlmodel.RowChange{dml})
 		dmls = append(dmls, dml)
 	}
 
@@ -148,15 +131,14 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		kv = mockExecute(kv, dmls[i:end])
 
 		for _, dml := range dmls[i:end] {
-			j := newDMLJob(dml.op, sourceTable, targetTable, dml, ec)
-			if j.dml.op == update && j.dml.updateIdentify() {
-				delDML, insertDML := updateToDelAndInsert(j.dml)
+			j := newDMLJob(dml, ec)
+			// if update job update its identify keys, turn it into delete + insert
+			if j.dml.IsIdentityUpdated() {
+				delDML, insertDML := j.dml.SplitUpdate()
 				delJob := j.clone()
-				delJob.tp = del
 				delJob.dml = delDML
 
 				insertJob := j.clone()
-				insertJob.tp = insert
 				insertJob.dml = insertDML
 
 				compactor.compactJob(delJob)
@@ -173,12 +155,12 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		}
 		for _, j := range compactor.buffer {
 			if j != nil {
-				compactKV = mockExecute(compactKV, []*DML{j.dml})
+				compactKV = mockExecute(compactKV, []*sqlmodel.RowChange{j.dml})
 				compactNumber++
 				c.Logf("after compact, dml: %s", j.dml.String())
 			}
 		}
-		c.Logf("before compcat: %d, after compact: %d", noCompactNumber, compactNumber)
+		c.Logf("before compact: %d, after compact: %d", noCompactNumber, compactNumber)
 		c.Assert(compactKV, DeepEquals, kv)
 		compactor.keyMap = make(map[string]map[string]int)
 		compactor.buffer = compactor.buffer[0:0]
@@ -186,65 +168,101 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 }
 
 func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
-	location := binlog.NewLocation("")
-	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 	p := parser.New()
 	se := mock.NewContext()
-	targetTableID := "`test`.`tb`"
-	sourceTable := &filter.Table{Schema: "test", Name: "tb1"}
-	targetTable := &filter.Table{Schema: "test", Name: "tb"}
+	sourceTable := &cdcmodel.TableName{Schema: "test", Table: "tb"}
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
 	c.Assert(err, IsNil)
-	tiIndex := &model.IndexInfo{
-		Table:   ti.Name,
-		Unique:  true,
-		Primary: true,
-		State:   model.StatePublic,
-		Tp:      model.IndexTypeBtree,
-		Columns: []*model.IndexColumn{{
-			Name:   ti.Columns[0].Name,
-			Offset: ti.Columns[0].Offset,
-			Length: types.UnspecifiedLength,
-		}},
-	}
-	downTi := schema.GetDownStreamTI(ti, ti)
-	c.Assert(downTi, NotNil)
 
 	testCases := []struct {
-		input  []*DML
-		output []*DML
+		input  []*job
+		output []*job
 	}{
 		// nolint:dupl
 		{
-			input: []*DML{
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(update, true, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
+			input: []*job{
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ec,
+				),
 			},
-			output: []*DML{
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(del, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
+			output: []*job{
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{3, 3, "c"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
 			},
 		},
 		// nolint:dupl
 		{
-			input: []*DML{
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(update, false, targetTableID, sourceTable, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(del, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{2, 2, "b"}, nil, []interface{}{2, 2, "b"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(update, false, targetTableID, sourceTable, []interface{}{2, 2, "b"}, []interface{}{2, 2, "c"}, []interface{}{2, 2, "b"}, []interface{}{2, 2, "c"}, ti.Columns, ti, tiIndex, downTi),
+			input: []*job{
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, []interface{}{2, 2, "c"}, ti, nil, nil),
+					ec,
+				),
 			},
-			output: []*DML{
-				newDML(insert, false, targetTableID, sourceTable, nil, []interface{}{3, 3, "c"}, nil, []interface{}{3, 3, "c"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{1, 1, "a"}, nil, []interface{}{1, 1, "a"}, ti.Columns, ti, tiIndex, downTi),
-				newDML(insert, true, targetTableID, sourceTable, nil, []interface{}{2, 2, "c"}, nil, []interface{}{2, 2, "c"}, ti.Columns, ti, tiIndex, downTi),
+			output: []*job{
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{3, 3, "c"}, ti, nil, nil),
+					ec,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
+				newDMLJob(
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "c"}, ti, nil, nil),
+					ecWithSafeMode,
+				),
 			},
 		},
 	}
@@ -269,8 +287,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 	outCh := compactorWrap(inCh, syncer)
 
 	for _, tc := range testCases {
-		for _, dml := range tc.input {
-			j := newDMLJob(dml.op, sourceTable, targetTable, dml, ec)
+		for _, j := range tc.input {
 			inCh <- j
 		}
 		inCh <- newFlushJob(syncer.cfg.WorkerCount, 1)
@@ -281,7 +298,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 		for i := 0; i <= len(tc.output); i++ {
 			j := <-outCh
 			if i < len(tc.output) {
-				c.Assert(j.dml, DeepEquals, tc.output[i])
+				c.Assert(j.String(), Equals, tc.output[i].String())
 			} else {
 				c.Assert(j.tp, Equals, flush)
 			}
