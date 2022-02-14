@@ -15,7 +15,7 @@ The main purpose of this change is to address the root cause of problems like [#
 
 ![dm new task lifecycle](../media/dm-new-task-lifecycle.png)
 
-This is mainly achieved by adding a new command `dmctl task create` , which creates a stopped task instead of creating and starting a new task with single command `dmctl start-task`.
+This is mainly achieved by adding a new command `dmctl task create`, which creates a stopped task instead of creating and starting a new task with single command `dmctl start-task`.
 
 ## Goals
 
@@ -29,11 +29,11 @@ New syntax of dmctl is `dmctl [resource type] [command] [flags]`
 
 where `resource type`, `command` and `flags` are:
 
-- `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types.
+- `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types. currently there are only these types of resource types: `task`, `source`, `relay`, `ddl-lock` and `member`
 
-- `command`: Specifies the operation that you want to perform on one or more resources, for example `create`, `get` , `update` , `delete` , `etc` .
+- `command`: Specifies the operation that you want to perform on one or more resources, for example `create`, `get`, `update`, `delete`, `etc`.
 
-- `flags`: Specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server. note that we **not allow** any non-keyword arguments, all arguments must be specified as this: `--flag value`.
+- `flags`: Specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server. Note that we **not allow** any non-keyword arguments, All arguments must be specified as this: `--flag value`.
 
 ### dmctl commands for Task
 
