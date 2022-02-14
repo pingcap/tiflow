@@ -1,46 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "6.1.6"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "heatmap",
-      "name": "Heatmap",
-      "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -60,7 +18,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "enable": true,
         "expr": "max(ticdc_processor_checkpoint_ts_lag) by (changefeed, capture) > BOOL $spike_threshold",
         "hide": true,
@@ -75,7 +33,7 @@
         "useValueForTime": false
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "enable": false,
         "expr": "delta(up{tidb_cluster=\"$tidb_cluster\", job=~\"tikv|ticdc\"}[30s]) < BOOL 0",
         "hide": false,
@@ -91,7 +49,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "enable": false,
         "expr": "sum(ALERTS{tidb_cluster=\"$tidb_cluster\", alertstate=\"firing\", alertname=~\"ticdc.*\"}) by (alertname) > BOOL 0",
         "hide": false,
@@ -105,7 +63,7 @@
         "type": "tags"
       },
       {
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "enable": false,
         "expr": "delta(tikv_cdc_region_resolve_status{status=\"resolved\"}[30s]) < BOOL -800",
         "hide": false,
@@ -125,7 +83,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": 25,
-  "iteration": 1644816724768,
+  "iteration": 1644826138916,
   "links": [],
   "panels": [
     {
@@ -143,7 +101,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Uptime of TiCDC and TiKV",
           "fill": 1,
           "fillGradient": 0,
@@ -251,7 +209,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Goroutine count of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -353,7 +311,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The count of open FD count of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -449,7 +407,7 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "TiCDC cluster ownership status",
           "fontSize": "100%",
           "gridPos": {
@@ -529,7 +487,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "CPU usage of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -638,7 +596,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Memory usage of TiCDC",
           "fill": 1,
           "fillGradient": 0,
@@ -740,7 +698,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The history of TiCDC cluster ownership, owner node has a value that is great than 0",
           "fill": 1,
           "gridPos": {
@@ -829,7 +787,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The history of PD cluster leadership, leader node has a value that is great than 0",
           "fill": 1,
           "gridPos": {
@@ -935,7 +893,7 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of captured table of TiCDC nodes ",
           "fontSize": "100%",
           "gridPos": {
@@ -998,7 +956,7 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Internal resolved ts of TiCDC nodes",
           "fontSize": "100%",
           "gridPos": {
@@ -1078,7 +1036,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The ID of the min resolved table of each TiCDC",
           "editable": true,
@@ -1177,7 +1135,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The ID of the min checkpoint table ID of each TiCDC",
           "editable": true,
@@ -1278,7 +1236,7 @@
               "value": "current"
             }
           ],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of replicated tables maintained in owner",
           "fontSize": "100%",
           "gridPos": {
@@ -1350,7 +1308,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The checkpoint ts of changefeeds.",
           "fill": 0,
           "gridPos": {
@@ -1464,7 +1422,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Request count of etcd operation per second",
           "fill": 1,
           "fillGradient": 0,
@@ -1561,7 +1519,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of errors that interrupt changefeed per minute ",
           "fill": 1,
           "gridPos": {
@@ -1649,7 +1607,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The lag between changefeed checkpoint ts and the latest ts of upstream TiDB.",
           "fill": 1,
           "fillGradient": 0,
@@ -1768,7 +1726,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The derivative of a changefeed checkpoint, ideally it should not be 0 (means the changefeed is stopped).",
           "fill": 1,
           "fillGradient": 0,
@@ -1865,7 +1823,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fill": 1,
           "gridPos": {
@@ -1953,7 +1911,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Estimate the remaining time for a changefeed catch-up upstream TiDB.",
           "fieldConfig": {
             "defaults": {
@@ -2067,7 +2025,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Sink write duration of changefeeds",
           "gridPos": {
             "h": 7,
@@ -2136,7 +2094,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of sink write duration of changefeeds",
           "fill": 1,
           "fillGradient": 0,
@@ -2244,7 +2202,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of changed rows that are written to  downstream per second",
           "fill": 1,
           "fillGradient": 0,
@@ -2347,7 +2305,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of sink batch size",
           "fill": 1,
           "fillGradient": 0,
@@ -2466,7 +2424,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Asynchronous flush sink duration of changefeeds",
           "gridPos": {
             "h": 7,
@@ -2533,7 +2491,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of asynchronous flush sink duration of changefeeds",
           "fill": 1,
           "fillGradient": 0,
@@ -2651,7 +2609,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The duration of detecting and waiting conflict of MySQL sink",
           "gridPos": {
             "h": 7,
@@ -2719,7 +2677,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Distribution of MySQL worker loads",
           "fill": 1,
           "fillGradient": 0,
@@ -2870,7 +2828,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The duration of executing DDL in MySQL sink",
           "gridPos": {
             "h": 7,
@@ -2938,7 +2896,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of detecting and waiting conflict duration of MySQL sink",
           "fill": 1,
           "fillGradient": 0,
@@ -3048,7 +3006,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 7,
@@ -3133,7 +3091,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of executing DDL duration of MySQL sink",
           "fill": 1,
           "fillGradient": 0,
@@ -3240,7 +3198,7 @@
         },
         {
           "columns": [],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3396,7 +3354,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -3495,7 +3453,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that puller outputs to sorter \n per second",
           "fill": 1,
           "fillGradient": 0,
@@ -3503,7 +3461,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 4
+            "y": 84
           },
           "hiddenSeries": false,
           "id": 218,
@@ -3589,7 +3547,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that puller outputs",
           "fill": 1,
           "fillGradient": 0,
@@ -3597,7 +3555,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 4
+            "y": 84
           },
           "hiddenSeries": false,
           "id": 229,
@@ -3683,7 +3641,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that sorter outputs to puller \n per second",
           "fill": 1,
           "fillGradient": 0,
@@ -3691,7 +3649,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 8
+            "y": 88
           },
           "hiddenSeries": false,
           "id": 228,
@@ -3777,7 +3735,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that sorter outputs",
           "fill": 1,
           "fillGradient": 0,
@@ -3785,7 +3743,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 8
+            "y": 88
           },
           "hiddenSeries": false,
           "id": 220,
@@ -3871,7 +3829,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that mounter outputs to sink per second",
           "fill": 1,
           "fillGradient": 0,
@@ -3879,7 +3837,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 92
           },
           "hiddenSeries": false,
           "id": 219,
@@ -3965,7 +3923,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that mounter outputs",
           "fill": 1,
           "fillGradient": 0,
@@ -3973,7 +3931,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 92
           },
           "hiddenSeries": false,
           "id": 224,
@@ -4059,7 +4017,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that table sorter outputs to buffer sink per second",
           "fill": 1,
           "fillGradient": 0,
@@ -4067,7 +4025,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 16
+            "y": 96
           },
           "hiddenSeries": false,
           "id": 223,
@@ -4153,7 +4111,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that table sinks emit",
           "fill": 1,
           "fillGradient": 0,
@@ -4161,7 +4119,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 16
+            "y": 96
           },
           "hiddenSeries": false,
           "id": 221,
@@ -4247,7 +4205,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that buffer sink outputs to backend sink per second",
           "fill": 1,
           "fillGradient": 0,
@@ -4255,7 +4213,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 100
           },
           "hiddenSeries": false,
           "id": 222,
@@ -4341,7 +4299,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total number of events that buffer sink emits",
           "fill": 1,
           "fillGradient": 0,
@@ -4349,7 +4307,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 100
           },
           "hiddenSeries": false,
           "id": 226,
@@ -4435,7 +4393,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of rows(events) that are processed by sink per second",
           "fill": 1,
           "fillGradient": 0,
@@ -4443,7 +4401,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 24
+            "y": 104
           },
           "hiddenSeries": false,
           "id": 227,
@@ -4531,7 +4489,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of rows(events) that are processed by sink",
           "fill": 1,
           "fillGradient": 0,
@@ -4539,7 +4497,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 24
+            "y": 104
           },
           "hiddenSeries": false,
           "id": 225,
@@ -4627,7 +4585,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of rows that sink flushes to downstream per second",
           "fill": 1,
           "fillGradient": 0,
@@ -4635,7 +4593,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 108
           },
           "hiddenSeries": false,
           "id": 108,
@@ -4722,7 +4680,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of rows(events) that are flushed by sink",
           "fill": 1,
           "fillGradient": 0,
@@ -4730,7 +4688,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 108
           },
           "hiddenSeries": false,
           "id": 240,
@@ -4832,7 +4790,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 6,
@@ -4916,7 +4874,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5011,7 +4969,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The count of files of each levels",
           "fill": 1,
           "fillGradient": 0,
@@ -5109,7 +5067,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter write",
           "fieldConfig": {
             "defaults": {},
@@ -5184,7 +5142,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5309,7 +5267,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "CPU usage of LevelDB sorter",
           "fill": 1,
           "fillGradient": 0,
@@ -5425,7 +5383,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter write",
           "fieldConfig": {
             "defaults": {},
@@ -5500,7 +5458,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5600,7 +5558,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The count and duration of write delay",
           "fieldConfig": {
             "defaults": {
@@ -5727,7 +5685,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5811,7 +5769,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5895,7 +5853,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter iterator read",
           "fieldConfig": {
             "defaults": {},
@@ -5970,7 +5928,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6070,7 +6028,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6170,7 +6128,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -6279,7 +6237,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time of sorter compact",
           "fieldConfig": {
             "defaults": {},
@@ -6368,7 +6326,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of established Eventfeed RPC between TiCDC and TiKV",
           "fill": 1,
           "fillGradient": 0,
@@ -6491,7 +6449,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": null,
           "description": "Percentiles of Eventfeed message size",
           "fill": 1,
@@ -6593,7 +6551,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of errors that interrupt Eventfeed RPC",
           "fill": 1,
           "fillGradient": 0,
@@ -6708,7 +6666,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of KV client received events from TiKV per seconds",
           "fill": 1,
           "fillGradient": 0,
@@ -6804,7 +6762,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that puller outputs to sorter \n per second",
           "fill": 1,
           "fillGradient": 0,
@@ -6898,7 +6856,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of events that are buffered in Processor's output channel and Mounter input channel",
           "fill": 1,
           "fillGradient": 0,
@@ -7009,7 +6967,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Duration of sorting unsorted events",
           "gridPos": {
             "h": 7,
@@ -7076,7 +7034,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of sorting events duration",
           "fill": 1,
           "fillGradient": 0,
@@ -7188,7 +7146,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Duration of merging sorted events",
           "gridPos": {
             "h": 7,
@@ -7255,7 +7213,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of merging sorted events duration",
           "fill": 1,
           "fillGradient": 0,
@@ -7367,7 +7325,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Duration of unmarshal events from kv to SQL row",
           "gridPos": {
             "h": 7,
@@ -7434,7 +7392,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Percentiles of unmarshal events from kv to SQL row duration",
           "fill": 0,
           "fillGradient": 0,
@@ -7540,7 +7498,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of KV client dispatched event per second",
           "fill": 1,
           "fillGradient": 0,
@@ -7657,7 +7615,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The size of batch resolved ts message from TiKV",
           "gridPos": {
             "h": 7,
@@ -7724,7 +7682,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of regions that are being scanned",
           "fill": 1,
           "fillGradient": 0,
@@ -7820,7 +7778,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Active stream count of each gRPC connection",
           "fill": 1,
           "fillGradient": 0,
@@ -7916,7 +7874,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of regions that have not connected to TiKV",
           "fieldConfig": {
             "defaults": {
@@ -8020,7 +7978,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Estimate the remaining time for a changefeed initialization (on a specific capture)",
           "fieldConfig": {
             "defaults": {
@@ -8138,7 +8096,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8223,7 +8181,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8308,7 +8266,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8393,7 +8351,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 8,
@@ -8488,7 +8446,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -8552,7 +8510,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -8622,7 +8580,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "gridPos": {
             "h": 7,
@@ -8712,7 +8670,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -8830,7 +8788,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -8896,7 +8854,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9010,7 +8968,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9076,7 +9034,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {
@@ -9195,7 +9153,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9259,7 +9217,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -9363,7 +9321,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time consumed of writing WAL into the persistent storage in .99",
           "editable": true,
           "error": false,
@@ -9461,7 +9419,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time consumed of handling etcd transactions in .99",
           "editable": true,
           "error": false,
@@ -9570,7 +9528,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "CPU usage of TiKV CDC component",
           "fill": 1,
@@ -9693,7 +9651,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "Outbound network traffic of TiKV CDC component",
           "editable": true,
@@ -9804,7 +9762,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The count of different kinds of gRPC message",
           "fill": 1,
@@ -9900,7 +9858,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -10064,7 +10022,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The min resolved ts of each TiKV",
           "editable": true,
@@ -10195,7 +10153,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The ID of the min resolved region of each TiKV",
           "editable": true,
@@ -10294,7 +10252,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -10398,7 +10356,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time consumed to CDC incremental scan",
           "gridPos": {
             "h": 7,
@@ -10468,7 +10426,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -10563,7 +10521,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The number of incremental scan task in different status.",
           "fill": 1,
@@ -10672,7 +10630,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The memory usage per TiKV instance",
           "editable": true,
@@ -10780,7 +10738,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The speed of TiKV CDC incremental scan",
           "editable": true,
@@ -10881,7 +10839,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The total bytes of TiKV CDC incremental scan",
           "editable": true,
@@ -10982,7 +10940,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "",
           "fill": 4,
@@ -11109,7 +11067,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "The total number of cache entries in the old value cache.",
           "fill": 1,
@@ -11227,7 +11185,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "",
           "editable": true,
@@ -11337,7 +11295,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The time consumed to get an old value (both from cache and from disk)",
           "gridPos": {
             "h": 7,
@@ -11406,7 +11364,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "decimals": 1,
           "description": "",
           "fill": 1,
@@ -11529,7 +11487,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11624,7 +11582,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11719,7 +11677,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -11833,7 +11791,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {
               "unit": "short"
@@ -11946,7 +11904,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -12054,7 +12012,7 @@
         },
         {
           "columns": [],
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -12185,7 +12143,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -12303,7 +12261,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "TiCDC process rss memory usage. TiCDC heap memory size in use ",
           "editable": true,
           "error": false,
@@ -12342,6 +12300,592 @@
           "renderer": "flot",
           "repeat": null,
           "repeatDirection": "h",
+          "scopedVars": {
+            "instance": {
+              "selected": false,
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
+            },
+            "runtime_instance": {
+              "selected": false,
+              "text": "172.16.6.111:8300",
+              "value": "172.16.6.111:8300"
+            }
+          },
+          "seriesOverrides": [
+            {
+              "alias": "alloc-from-os",
+              "fill": 3,
+              "lines": true,
+              "stack": false
+            },
+            {
+              "alias": "gc-threshold",
+              "bars": false,
+              "color": "#C4162A",
+              "lines": true,
+              "linewidth": 2,
+              "stack": false
+            },
+            {
+              "alias": "gc",
+              "bars": false,
+              "color": "#C4162A",
+              "hideTooltip": true,
+              "legend": false,
+              "pointradius": 3,
+              "points": true,
+              "stack": false
+            }
+          ],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "alloc-from-os",
+              "refId": "A"
+            },
+            {
+              "expr": "go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "estimate-inuse",
+              "refId": "H"
+            },
+            {
+              "expr": "go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "estimate-garbage",
+              "refId": "C"
+            },
+            {
+              "expr": "go_memstats_heap_idle_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_released_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_heap_inuse_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "reserved-by-go",
+              "refId": "B"
+            },
+            {
+              "expr": "go_memstats_stack_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mspan_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mcache_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_buck_hash_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_gc_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_other_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "used-by-go",
+              "refId": "D"
+            },
+            {
+              "expr": "go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "gc-threshold",
+              "refId": "E"
+            },
+            {
+              "expr": "(clamp_max(idelta(go_memstats_last_gc_time_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[1m]), 1) * go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}) > 0",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "gc",
+              "refId": "F"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Memory Usage",
+          "tooltip": {
+            "msResolution": true,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "cacheTimeout": null,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "cdc-metrics-playground",
+          "description": "Count of live objects.",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "id": 158,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "maxPerRow": 3,
+          "nullPointMode": "null",
+          "percentage": false,
+          "pluginVersion": "6.1.6",
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "repeat": null,
+          "repeatDirection": "h",
+          "scopedVars": {
+            "instance": {
+              "selected": false,
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
+            },
+            "runtime_instance": {
+              "selected": false,
+              "text": "172.16.6.111:8300",
+              "value": "172.16.6.111:8300"
+            }
+          },
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "go_memstats_heap_objects{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "format": "time_series",
+              "hide": false,
+              "intervalFactor": 1,
+              "legendFormat": "objects",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Estimated Live Objects",
+          "tooltip": {
+            "msResolution": true,
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "cacheTimeout": null,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "cdc-metrics-playground",
+          "description": "TiCDC process Go garbage collection STW pause duration",
+          "editable": true,
+          "error": false,
+          "fill": 1,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 13
+          },
+          "id": 160,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null as zero",
+          "percentage": false,
+          "pluginVersion": "6.1.6",
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "scopedVars": {
+            "instance": {
+              "selected": false,
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
+            },
+            "runtime_instance": {
+              "selected": false,
+              "text": "172.16.6.111:8300",
+              "value": "172.16.6.111:8300"
+            }
+          },
+          "seriesOverrides": [
+            {}
+          ],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"0\"}",
+              "format": "time_series",
+              "hide": false,
+              "instant": false,
+              "intervalFactor": 1,
+              "legendFormat": "min",
+              "refId": "A",
+              "step": 40
+            },
+            {
+              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile!~\"0|1\"}",
+              "format": "time_series",
+              "instant": false,
+              "intervalFactor": 1,
+              "legendFormat": "{{quantile}}",
+              "refId": "B"
+            },
+            {
+              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"1\"}",
+              "format": "time_series",
+              "instant": false,
+              "intervalFactor": 1,
+              "legendFormat": "max",
+              "refId": "C"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "GC STW Duration (last 256 GC cycles)",
+          "tooltip": {
+            "msResolution": false,
+            "shared": true,
+            "sort": 1,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "cdc-metrics-playground",
+          "description": "The throughput of Go's memory allocator.",
+          "fill": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 13
+          },
+          "id": 161,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "scopedVars": {
+            "instance": {
+              "selected": false,
+              "text": "172.16.5.33:47912",
+              "value": "172.16.5.33:47912"
+            },
+            "runtime_instance": {
+              "selected": false,
+              "text": "172.16.6.111:8300",
+              "value": "172.16.6.111:8300"
+            }
+          },
+          "seriesOverrides": [
+            {
+              "alias": "sweep",
+              "transform": "negative-Y"
+            },
+            {
+              "alias": "alloc-ops",
+              "yaxis": 2
+            },
+            {
+              "alias": "swepp-ops",
+              "transform": "negative-Y",
+              "yaxis": 2
+            }
+          ],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "irate(go_memstats_alloc_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "alloc",
+              "refId": "A"
+            },
+            {
+              "expr": "irate((go_memstats_alloc_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"})[30s:])",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "sweep",
+              "refId": "B"
+            },
+            {
+              "expr": "irate(go_memstats_mallocs_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "alloc-ops",
+              "refId": "C"
+            },
+            {
+              "expr": "irate(go_memstats_frees_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "swepp-ops",
+              "refId": "D"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Allocator Throughput",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "Bps",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "ops",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": true,
+            "alignLevel": null
+          }
+        }
+      ],
+      "repeat": "runtime_instance",
+      "scopedVars": {
+        "runtime_instance": {
+          "selected": false,
+          "text": "172.16.6.111:8300",
+          "value": "172.16.6.111:8300"
+        }
+      },
+      "title": "Runtime $runtime_instance",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 426,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "cacheTimeout": null,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "cdc-metrics-playground",
+          "description": "TiCDC process rss memory usage. TiCDC heap memory size in use ",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
+          "id": 427,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "maxPerRow": 3,
+          "nullPointMode": "null",
+          "percentage": false,
+          "pluginVersion": "6.1.6",
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "repeat": null,
+          "repeatDirection": "h",
+          "repeatIteration": 1644826138916,
+          "repeatPanelId": 157,
+          "repeatedByRow": true,
           "scopedVars": {
             "instance": {
               "selected": false,
@@ -12489,7 +13033,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Count of live objects.",
           "editable": true,
           "error": false,
@@ -12501,7 +13045,7 @@
             "x": 12,
             "y": 6
           },
-          "id": 158,
+          "id": 428,
           "legend": {
             "alignAsTable": false,
             "avg": false,
@@ -12528,6 +13072,9 @@
           "renderer": "flot",
           "repeat": null,
           "repeatDirection": "h",
+          "repeatIteration": 1644826138916,
+          "repeatPanelId": 158,
+          "repeatedByRow": true,
           "scopedVars": {
             "instance": {
               "selected": false,
@@ -12602,7 +13149,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "TiCDC process Go garbage collection STW pause duration",
           "editable": true,
           "error": false,
@@ -12614,7 +13161,7 @@
             "x": 0,
             "y": 13
           },
-          "id": 160,
+          "id": 429,
           "legend": {
             "alignAsTable": false,
             "avg": false,
@@ -12635,6 +13182,9 @@
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
+          "repeatIteration": 1644826138916,
+          "repeatPanelId": 160,
+          "repeatedByRow": true,
           "scopedVars": {
             "instance": {
               "selected": false,
@@ -12728,7 +13278,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The throughput of Go's memory allocator.",
           "fill": 1,
           "gridPos": {
@@ -12737,7 +13287,7 @@
             "x": 12,
             "y": 13
           },
-          "id": 161,
+          "id": 430,
           "legend": {
             "alignAsTable": false,
             "avg": false,
@@ -12757,6 +13307,9 @@
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
+          "repeatIteration": 1644826138916,
+          "repeatPanelId": 161,
+          "repeatedByRow": true,
           "scopedVars": {
             "instance": {
               "selected": false,
@@ -12859,7 +13412,9 @@
           }
         }
       ],
-      "repeat": "runtime_instance",
+      "repeat": null,
+      "repeatIteration": 1644826138916,
+      "repeatPanelId": 155,
       "scopedVars": {
         "runtime_instance": {
           "selected": false,
@@ -12876,7 +13431,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 11
       },
       "id": 187,
       "panels": [
@@ -12894,7 +13449,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The latency distributions of fsync called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -12968,7 +13523,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The latency distributions of flushall called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -13033,7 +13588,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The total count of rows that are processed by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -13143,7 +13698,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Total number of bytes redo log written",
           "fieldConfig": {
             "defaults": {},
@@ -13244,7 +13799,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 12
       },
       "id": 402,
       "panels": [
@@ -13253,7 +13808,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of bytes send for all topics.",
           "fill": 1,
           "fillGradient": 0,
@@ -13261,7 +13816,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 122
           },
           "hiddenSeries": false,
           "id": 410,
@@ -13294,11 +13849,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_batch_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -13348,7 +13903,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Records/second sent to all topics\n\nvalue = one-minute moving average of record send rate",
           "fill": 1,
           "fillGradient": 0,
@@ -13356,7 +13911,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 122
           },
           "hiddenSeries": false,
           "id": 408,
@@ -13389,11 +13944,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_record_send_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_record_send_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -13443,7 +13998,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "The number of records sent per request for all topics\n\nvalue = records per request histogram's mean",
           "fill": 1,
           "fillGradient": 0,
@@ -13451,7 +14006,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 129
           },
           "hiddenSeries": false,
           "id": 409,
@@ -13484,11 +14039,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_records_per_request{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_records_per_request{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}",
+              "legendFormat": "{{changefeed}}-{{capture}}",
               "refId": "A"
             }
           ],
@@ -13538,7 +14093,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "the compression ratio times 100 of record batches for all topics",
           "fill": 1,
           "fillGradient": 0,
@@ -13546,7 +14101,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 129
           },
           "hiddenSeries": false,
           "id": 416,
@@ -13579,20 +14134,12 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "max(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
-              "format": "time_series",
-              "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
-              "refId": "A"
-            },
-            {
-              "expr": "sum(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (capture,changefeed)",
+              "expr": "sum(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{capture}}",
-              "refId": "B"
+              "refId": "A"
             }
           ],
           "thresholds": [],
@@ -13641,7 +14188,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Bytes/second write to brokers\n\nvalue = one-minute moving average rate of sent bytes",
           "fill": 1,
           "fillGradient": 0,
@@ -13649,7 +14196,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 26
+            "y": 136
           },
           "hiddenSeries": false,
           "id": 418,
@@ -13682,11 +14229,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_outgoing_byte_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_outgoing_byte_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -13736,7 +14283,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Bytes/second read from different brokers.\n\nvalue = one-minute moving average rate of all read bytes",
           "fill": 1,
           "fillGradient": 0,
@@ -13744,7 +14291,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 26
+            "y": 136
           },
           "hiddenSeries": false,
           "id": 417,
@@ -13777,11 +14324,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_incoming_byte_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_incoming_byte_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -13831,7 +14378,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Requests/second sent to all brokers\n\nvalue = one-minute moving average rate of events per second",
           "fill": 1,
           "fillGradient": 0,
@@ -13839,7 +14386,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 143
           },
           "hiddenSeries": false,
           "id": 419,
@@ -13872,11 +14419,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_request_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_request_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -13926,7 +14473,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "Responses/second received from all brokers\n\nvalue = one-minute moving average of response receive rate",
           "fill": 1,
           "fillGradient": 0,
@@ -13934,7 +14481,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 33
+            "y": 143
           },
           "hiddenSeries": false,
           "id": 423,
@@ -13967,11 +14514,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_response_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_response_rate{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -14021,7 +14568,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "the request size in bytes for all brokers\n\nvalue = requests histogram's mean",
           "fill": 1,
           "fillGradient": 0,
@@ -14029,7 +14576,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 150
           },
           "hiddenSeries": false,
           "id": 425,
@@ -14062,11 +14609,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_request_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_request_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -14116,7 +14663,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "the response size in bytes\n\nvalue = response size histogram's mean",
           "fill": 1,
           "fillGradient": 0,
@@ -14124,7 +14671,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 150
           },
           "hiddenSeries": false,
           "id": 424,
@@ -14157,11 +14704,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_response_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_response_size{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -14211,7 +14758,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "cdc-metrics-playground",
           "description": "the request latency in ms for all brokers\n\nvalue = request latency histogram's mean",
           "fill": 1,
           "fillGradient": 0,
@@ -14219,7 +14766,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 157
           },
           "hiddenSeries": false,
           "id": 420,
@@ -14252,11 +14799,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_request_latency{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_request_latency{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -14306,15 +14853,15 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "the current number of in-flight requests awaiting a response\n\nvalue = the count of inflight requests.\n\nupdated each 5s, in a good network environment, this value should be very small.",
+          "datasource": "cdc-metrics-playground",
+          "description": "the current number of in-flight requests awaiting a response\n\nvalue = the count of inflight requests.\n\nupdated each 1s, in a good network environment, this value should be very small.",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 164
           },
           "hiddenSeries": false,
           "id": 422,
@@ -14347,11 +14894,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "ticdc_sink_kafka_producer_in_flight_requests{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}",
+              "expr": "sum(ticdc_sink_kafka_producer_in_flight_requests{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}) by (changefeed, capture, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{changefeed}}-{{broker}}",
+              "legendFormat": "{{changefeed}}-{{capture}}-{{broker}}",
               "refId": "A"
             }
           ],
@@ -14414,7 +14961,7 @@
           "text": "None",
           "value": ""
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "definition": "",
         "hide": 0,
         "includeAll": false,
@@ -14439,7 +14986,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "hide": 0,
         "includeAll": true,
@@ -14464,7 +15011,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "hide": 0,
         "includeAll": true,
@@ -14489,7 +15036,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "hide": 0,
         "includeAll": true,
@@ -14567,7 +15114,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "cdc-metrics-playground",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "hide": 0,
         "includeAll": true,
@@ -14589,7 +15136,7 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {
@@ -14620,5 +15167,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 34
+  "version": 62
 }
