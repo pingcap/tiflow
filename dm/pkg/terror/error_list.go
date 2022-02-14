@@ -251,6 +251,7 @@ const (
 	codeConfigInvalidLoadDuplicateResolution
 	codeConfigValidationMode
 	codeContinuousValidatorCfgNotFound
+	codeConfigStartTimeTooLate
 )
 
 // Binlog operation error code list.
@@ -914,6 +915,7 @@ var (
 	ErrConfigInvalidDuplicateResolution    = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate '%s'", "Please choose a valid value in ['replace', 'error', 'ignore']")
 	ErrConfigValidationMode                = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
 	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `continuous-validator-config-name` config in task configuration file.")
+	ErrConfigStartTimeTooLate              = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
