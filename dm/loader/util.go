@@ -153,7 +153,7 @@ func getMydumpMetadataByExternalStorage(ctx context.Context, cli *clientv3.Clien
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
 	})
-	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.Dir, metafile, cfg.Flavor)
+	loc, _, err := dumpling.ParseMetaDataByExternalStore(ctx, cfg.LoaderConfig.Dir, metafile, cfg.Flavor)
 	if err != nil {
 		if exstorage.IsNotExistError(err) {
 			failpoint.Inject("TestRemoveMetaFile", func() {
