@@ -266,6 +266,7 @@ func (k *kafkaSaramaProducer) Close() error {
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
 		log.Warn("close kafka cluster admin with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
 		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
