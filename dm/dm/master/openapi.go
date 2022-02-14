@@ -24,10 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
-	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -415,8 +413,7 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		return
 	}
 	// check subtask config
-	msg, err := checker.CheckSyncConfigFunc(newCtx, subTaskConfigList,
-		common.DefaultErrorCnt, common.DefaultWarnCnt)
+	msg, err := s.checkTask(newCtx, subTaskConfigList, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	if err != nil {
 		_ = c.Error(terror.WithClass(err, terror.ClassDMMaster))
 		return
@@ -425,53 +422,19 @@ func (s *Server) DMAPIStartTask(c *gin.Context) {
 		// TODO: return warning msg with http.StatusCreated and task together
 		log.L().Warn("openapi pre-check warning before start task", zap.String("warning", msg))
 	}
-	// specify only start task on partial sources
-	var needStartSubTaskList []*config.SubTaskConfig
-	if req.SourceNameList != nil {
-		// source name -> sub task config
-		subTaskCfgM := make(map[string]*config.SubTaskConfig, len(subTaskConfigList))
-		for idx := range subTaskConfigList {
-			cfg := subTaskConfigList[idx]
-			subTaskCfgM[cfg.SourceID] = cfg
-		}
-		for _, sourceName := range *req.SourceNameList {
-			subTaskCfg, ok := subTaskCfgM[sourceName]
-			if !ok {
-				_ = c.Error(terror.ErrOpenAPITaskSourceNotFound.Generatef("source name %s", sourceName))
-				return
-			}
-			needStartSubTaskList = append(needStartSubTaskList, subTaskCfg)
-		}
-	} else {
-		needStartSubTaskList = subTaskConfigList
-	}
-	// end all pre-check, start to create task
-	var (
-		latched = false
-		release scheduler.ReleaseFunc
-	)
-	if req.RemoveMeta {
-		// use same latch for remove-meta and start-task
-		release, err = s.scheduler.AcquireSubtaskLatch(task.Name)
-		if err != nil {
-			_ = c.Error(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", task.Name))
-			return
-		}
-		defer release()
-		latched = true
-		err = s.removeMetaData(newCtx, task.Name, *task.MetaSchema, toDBCfg)
-		if err != nil {
-			_ = c.Error(terror.Annotate(err, "while removing metadata"))
-			return
-		}
-	}
-	err = s.scheduler.AddSubTasks(latched, pb.Stage_Running, subtaskCfgPointersToInstances(needStartSubTaskList...)...)
-	if err != nil {
-		_ = c.Error(err)
+
+	if createErr := s.createTask(newCtx, subTaskConfigList); createErr != nil {
+		_ = c.Error(terror.WithClass(createErr, terror.ClassDMMaster))
 		return
 	}
-	if release != nil {
-		release()
+	sourceNameList := s.scheduler.GetSourceNameListByTaskName(task.Name)
+	// specify only start task on partial sources
+	if req.SourceNameList != nil {
+		sourceNameList = *req.SourceNameList
+	}
+	if startErr := s.startTask(newCtx, task.Name, sourceNameList, req.RemoveMeta, nil); startErr != nil {
+		_ = c.Error(terror.WithClass(startErr, terror.ClassDMMaster))
+		return
 	}
 	c.IndentedJSON(http.StatusCreated, task)
 }

@@ -337,7 +337,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	return err
 }
 
-// AddSourceCfg only adds the upstream source config to the cluster
+// AddSourceCfg only adds the upstream source config to the cluster.
 func (s *Scheduler) AddSourceConfig(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -671,7 +671,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
-// if input worker is emptry means try bound this source to a free worker
+// if input worker is emptry means try bound this source to a free worker.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
@@ -1104,6 +1104,20 @@ func (s *Scheduler) GetTaskNameListBySourceName(sourceName string) []string {
 		return true
 	})
 	return taskNameList
+}
+
+// GetSourceNameListByTaskName gets source name list by task name.
+func (s *Scheduler) GetSourceNameListByTaskName(taskName string) []string {
+	v, ok := s.subTaskCfgs.Load(taskName)
+	if !ok {
+		return nil
+	}
+	subtaskCfgMap := v.(map[string]config.SubTaskConfig)
+	sourceNameList := make([]string, 0, len(subtaskCfgMap))
+	for sourceName := range subtaskCfgMap {
+		sourceNameList = append(sourceNameList, sourceName)
+	}
+	return sourceNameList
 }
 
 // AddWorker adds the information of the DM-worker when registering a new instance.
@@ -1550,12 +1564,12 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 // NOTE: from `Running` to `Running` and `Paused` to `Paused` still update the data in etcd,
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
-func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sources ...string) error {
+func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, taskName string, sources ...string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
-	if task == "" || len(sources) == 0 {
+	if taskName == "" || len(sources) == 0 {
 		return nil // no subtask need to update, this should not happen.
 	}
 
@@ -1566,16 +1580,16 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sou
 		return terror.ErrSchedulerSubTaskStageInvalidUpdate.Generate(newStage)
 	}
 
-	release, err := s.subtaskLatch.tryAcquire(task)
+	release, err := s.subtaskLatch.tryAcquire(taskName)
 	if err != nil {
-		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", task)
+		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", taskName)
 	}
 	defer release()
 
 	// 2. check the task exists.
-	v, ok := s.expectSubTaskStages.Load(task)
+	v, ok := s.expectSubTaskStages.Load(taskName)
 	if !ok {
-		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(task)
+		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(taskName)
 	}
 
 	var (
@@ -1590,7 +1604,7 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sou
 		} else {
 			currStagesM[currStage.Expect.String()] = struct{}{}
 		}
-		stages = append(stages, ha.NewSubTaskStage(newStage, source, task))
+		stages = append(stages, ha.NewSubTaskStage(newStage, source, taskName))
 	}
 	notExistSources := strMapToSlice(notExistSourcesM)
 	currStages := strMapToSlice(currStagesM)

@@ -484,23 +484,18 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		return respWithErr(err)
 	}
 
-	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
 	if err != nil {
 		return respWithErr(err)
 	}
-	stCfgs, err := s.generateSubTaskConfigs(taskCfg)
-	if err != nil {
-		return respWithErr(err)
-	}
-
-	msg, err := s.checkTask(ctx, taskCfg, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
 	resp.Msg = msg
 
-	log.L().Info("", zap.String("task name", taskCfg.Name), zap.String("task", taskCfg.JSON()), zap.String("request", "StartTask"))
+	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
@@ -538,30 +533,30 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		if req.RemoveMeta {
 			// TODO: Remove lightning checkpoint and meta.
 			// use same latch for remove-meta and start-task
-			release, err3 = s.scheduler.AcquireSubtaskLatch(taskCfg.Name)
+			release, err3 = s.scheduler.AcquireSubtaskLatch(cfg.Name)
 			if err3 != nil {
-				return respWithErr(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskCfg.Name))
+				return respWithErr(terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", cfg.Name))
 			}
 			defer release()
 			latched = true
 
-			if scm := s.scheduler.GetSubTaskCfgsByTask(taskCfg.Name); len(scm) > 0 {
-				return respWithErr(terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(taskCfg.Name, sources),
+			if scm := s.scheduler.GetSubTaskCfgsByTask(cfg.Name); len(scm) > 0 {
+				return respWithErr(terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 					"while remove-meta is true"))
 			}
-			err = s.removeMetaData(ctx, taskCfg.Name, taskCfg.MetaSchema, taskCfg.TargetDB)
+			err = s.removeMetaData(ctx, cfg.Name, cfg.MetaSchema, cfg.TargetDB)
 			if err != nil {
 				return respWithErr(terror.Annotate(err, "while removing metadata"))
 			}
 		}
 
 		if req.StartTime == "" {
-			err = ha.DeleteAllTaskCliArgs(s.etcdClient, taskCfg.Name)
+			err = ha.DeleteAllTaskCliArgs(s.etcdClient, cfg.Name)
 			if err != nil {
 				return respWithErr(terror.Annotate(err, "while removing task command line arguments"))
 			}
 		} else {
-			err = ha.PutTaskCliArgs(s.etcdClient, taskCfg.Name, sources, cliArgs)
+			err = ha.PutTaskCliArgs(s.etcdClient, cfg.Name, sources, cliArgs)
 			if err != nil {
 				return respWithErr(terror.Annotate(err, "while putting task command line arguments"))
 			}
@@ -578,10 +573,10 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		go s.scheduler.TryResolveLoadTask(sources)
 
 		resp.Result = true
-		if taskCfg.RemoveMeta {
+		if cfg.RemoveMeta {
 			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
-		sourceResps = s.getSourceRespsAfterOperation(ctx, taskCfg.Name, sources, []string{}, req)
+		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
 
 	resp.Sources = sourceResps
@@ -703,26 +698,22 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 	if shouldRet {
 		return resp2, err2
 	}
+
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
 	resp := &pb.UpdateTaskResponse{}
-	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
-	stCfgs, err := s.generateSubTaskConfigs(taskCfg)
-	if err != nil {
-		resp.Msg = err.Error()
-		// nolint:nilerr
-		return resp, nil
-	}
+
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
 	resp.Msg = msg
-	log.L().Info("update task", zap.String("task name", taskCfg.Name), zap.Stringer("task", taskCfg))
+	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
 	if len(req.Sources) > 0 {
@@ -1282,19 +1273,21 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		}, nil
 	}
 	resp := &pb.CheckTaskResponse{}
-	taskCfg, err := generateTaskConfig(ctx, req.Task, nil)
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
-	msg, err := s.checkTask(ctx, taskCfg, req.ErrCnt, req.WarnCnt)
+
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
 	resp.Msg = msg
 	resp.Result = true
+
 	return resp, nil
 }
 
@@ -1545,6 +1538,38 @@ func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest
 	return &pb.OperateLeaderResponse{
 		Result: true,
 	}, nil
+}
+
+func (s *Server) generateSubTask(
+	ctx context.Context,
+	task string,
+	cliArgs *config.TaskCliArgs,
+) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+	cfg := config.NewTaskConfig()
+	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
+	if cliArgs != nil && cliArgs.StartTime != "" {
+		for _, inst := range cfg.MySQLInstances {
+			inst.Meta = &config.Meta{BinLogName: cliArgs.StartTime}
+		}
+	}
+	err := cfg.Decode(task)
+	if err != nil {
+		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
+	}
+
+	err = adjustTargetDB(ctx, cfg.TargetDB)
+	if err != nil {
+		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
+	}
+
+	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
+
+	stCfgs, err := config.TaskConfigToSubTaskConfigs(cfg, sourceCfgs)
+	if err != nil {
+		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
+	}
+
+	return cfg, stCfgs, nil
 }
 
 func setUseTLS(tlsCfg *config.Security) {

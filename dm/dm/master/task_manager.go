@@ -22,57 +22,21 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-func generateTaskConfig(ctx context.Context, taskYamlString string, cliArgs *config.TaskCliArgs) (*config.TaskConfig, error) {
-	cfg := config.NewTaskConfig()
-	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
-	if cliArgs != nil && cliArgs.StartTime != "" {
-		for _, inst := range cfg.MySQLInstances {
-			inst.Meta = &config.Meta{BinLogName: cliArgs.StartTime}
-		}
-	}
-	err := cfg.Decode(taskYamlString)
-	if err != nil {
-		return nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-	err = adjustTargetDB(ctx, cfg.TargetDB)
-	if err != nil {
-		return nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-	return cfg, nil
-}
-
-func (s *Server) generateSubTaskConfigs(taskCfg *config.TaskConfig) ([]*config.SubTaskConfig, error) {
-	sourceCfgs := s.getSourceConfigs(taskCfg.MySQLInstances)
-	subtaskCfgList, err := config.TaskConfigToSubTaskConfigs(taskCfg, sourceCfgs)
-	if err != nil {
-		return nil, terror.WithClass(err, terror.ClassDMMaster)
-	}
-	return subtaskCfgList, nil
-}
-
-// checkTask checks legality of task configuration.
-func (s *Server) checkTask(ctx context.Context, taskCfg *config.TaskConfig, errCnt, warnCnt int64) (string, error) {
-	subtaskCfgList, err := s.generateSubTaskConfigs(taskCfg)
-	if err != nil {
-		return "", err
-	}
+func (s *Server) checkTask(ctx context.Context, subtaskCfgList []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
 	return checker.CheckSyncConfigFunc(ctx, subtaskCfgList, errCnt, warnCnt)
 }
 
-// createTask convert task to subtasks and put these subtasks with stopped stage to etcd.
-func (s *Server) createTask(ctx context.Context, taskCfg *config.TaskConfig) error {
-	subtaskCfgList, err := s.generateSubTaskConfigs(taskCfg)
-	if err != nil {
-		return err
-	}
+func (s *Server) createTask(ctx context.Context, subtaskCfgList []*config.SubTaskConfig) error {
 	return s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subtaskCfgList...)...)
 }
 
+// nolint:unused
 func (s *Server) updateTask(ctx context.Context, taskCfg *config.TaskConfig) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
 }
 
+// nolint:unused
 func (s *Server) deleteTask(ctx context.Context, taskCfg *config.TaskConfig) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
@@ -83,21 +47,48 @@ func (s *Server) getTask(ctx context.Context, req interface{}) error {
 	return nil
 }
 
+func (s *Server) getTaskStatus(ctx context.Context, req interface{}) error {
+	// TODO(ehco) no caller now , will implement later
+	return nil
+}
+
 func (s *Server) listTask(ctx context.Context, req interface{}) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
 }
 
-func (s *Server) listTaskStatus(ctx context.Context, req interface{}) error {
-	// TODO(ehco) no caller now , will implement later
-	return nil
+func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList []string, remoteMeta bool, req interface{}) error {
+	subTaskConfigM := s.scheduler.GetSubTaskCfgsByTask(taskName)
+	var needStartSubTaskList []*config.SubTaskConfig
+	for _, sourceName := range sourceNameList {
+		subTaskCfg, ok := subTaskConfigM[sourceName]
+		if !ok {
+			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
+		}
+		needStartSubTaskList = append(needStartSubTaskList, subTaskCfg)
+	}
+	if len(needStartSubTaskList) == 0 {
+		return nil
+	}
+	if remoteMeta {
+		// use same latch for remove-meta and start-task
+		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err != nil {
+			return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
+		}
+		defer release()
+		metaSchema := needStartSubTaskList[0].MetaSchema
+		targetDB := needStartSubTaskList[0].To
+		err = s.removeMetaData(ctx, taskName, metaSchema, &targetDB)
+		if err != nil {
+			return terror.Annotate(err, "while removing metadata")
+		}
+		release()
+	}
+	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, sourceNameList...)
 }
 
-func (s *Server) startTask(ctx context.Context, req interface{}) error {
-	// TODO(ehco) no caller now , will implement later
-	return nil
-}
-
+// nolint:unused
 func (s *Server) stopTask(ctx context.Context, req interface{}) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil

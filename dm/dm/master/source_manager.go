@@ -48,19 +48,24 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 	return sourceStatusList, nil
 }
 
+// nolint:unparam
 func (s *Server) createSource(ctx context.Context, cfg *config.SourceConfig) error {
 	return s.scheduler.AddSourceConfig(cfg)
 }
 
-func (s *Server) updateSource(ctx context.Context, SourceCfg *config.SourceConfig) error {
+// nolint:unparam
+func (s *Server) updateSource(ctx context.Context, cfg *config.SourceConfig) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
 }
 
+// nolint:unparam
 func (s *Server) deleteSource(ctx context.Context, sourceName string) error {
 	return s.scheduler.RemoveSourceCfg(sourceName)
 }
 
+// nolint:unparam
+// nolint:unused
 func (s *Server) getSource(ctx context.Context, sourceName string) *config.SourceConfig {
 	return s.scheduler.GetSourceCfgByID(sourceName)
 }
@@ -69,6 +74,7 @@ func (s *Server) getSourceStatus(ctx context.Context, sourceName string) ([]open
 	return s.getSourceStatusListFromWorker(ctx, sourceName, true)
 }
 
+// nolint:unparam
 func (s *Server) listSource(ctx context.Context, req interface{}) []*config.SourceConfig {
 	// TODO(ehco) implement filter later
 	sourceM := s.scheduler.GetSourceCfgs()
