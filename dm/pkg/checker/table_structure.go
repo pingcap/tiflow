@@ -689,7 +689,6 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 			c.joinedMu.Unlock()
 		}
 	}
-
 }
 
 func dispatchTableItem(ctx context.Context, tableMap map[string][]*filter.Table, inCh chan *checkItem) {
