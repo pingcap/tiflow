@@ -33,6 +33,7 @@ type testElectionSuite struct{}
 
 func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -47,6 +48,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -67,6 +69,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
 	defer cancel() // this cancel must call before s.Close() to avoid deadlock
+
 	// wait the second master ready
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s2.election.IsLeader()
