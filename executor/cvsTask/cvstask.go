@@ -79,18 +79,19 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
+	task.status = lib.WorkerStatusNormal
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
-			log.L().Info("error happened when reading data from the upstream ", zap.Any("message", err.Error()))
+			log.L().Error("error happened when reading data from the upstream ", zap.Any("message", err.Error()))
 			task.status = lib.WorkerStatusError
 		}
 	}()
 	go func() {
 		err := task.Send(ctx)
 		if err != nil {
-			log.L().Info("error happened when writing data to the downstream ", zap.Any("message", err.Error()))
+			log.L().Error("error happened when writing data to the downstream ", zap.Any("message", err.Error()))
 			task.status = lib.WorkerStatusError
 		}
 	}()
@@ -128,20 +129,20 @@ func (task *cvsTask) CloseImpl(ctx context.Context) error {
 func (task *cvsTask) Receive(ctx context.Context) error {
 	conn, err := grpc.Dial(task.srcHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the source address ", zap.Any("message", task.srcHost))
+		log.L().Error("cann't connect with the source address ", zap.Any("message", task.srcHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
 	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileName: task.srcDir, LineNo: task.index})
 	if err != nil {
-		log.L().Info("read data from file failed ", zap.Any("message", task.srcDir))
+		log.L().Error("read data from file failed ", zap.Any("message", task.srcDir))
 		return err
 	}
 	for {
 		reply, err := reader.Recv()
 		if err != nil {
-			log.L().Info("read data failed", zap.Any("error:", err.Error()))
+			log.L().Error("read data failed", zap.Error(err))
 			if !task.isEOF {
 				task.cancelFn()
 			}
@@ -149,7 +150,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 		}
 		if reply.IsEof {
 			log.L().Info("Reach the end of the file ", zap.Any("fileName:", task.srcDir))
-			task.isEOF = true
+			close(task.buffer)
 			break
 		}
 		strs := strings.Split(reply.Linestr, ",")
@@ -161,7 +162,8 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 			return nil
 		case task.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
 		}
-		time.Sleep(time.Microsecond * 10)
+		// waiting longer time to read lines slowly
+		time.Sleep(time.Millisecond * 10)
 	}
 	return nil
 }
@@ -169,25 +171,31 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 func (task *cvsTask) Send(ctx context.Context) error {
 	conn, err := grpc.Dial(task.dstHost, grpc.WithInsecure())
 	if err != nil {
-		log.L().Info("cann't connect with the destination address ", zap.Any("message", task.dstHost))
+		log.L().Error("cann't connect with the destination address ", zap.Any("message", task.dstHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
-		log.L().Info("call write data rpc failed ")
+		log.L().Error("call write data rpc failed", zap.Error(err))
 		task.status = lib.WorkerStatusError
 		task.cancelFn()
 		return err
 	}
 	for {
 		select {
-		case kv := <-task.buffer:
+		case kv, more := <-task.buffer:
+			if !more {
+				log.L().Info("Reach the end of the file ")
+				task.status = lib.WorkerStatusFinished
+				_, err = writer.CloseAndRecv()
+				return err
+			}
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
 			task.counter++
 			if err != nil {
-				log.L().Info("call write data rpc failed ")
+				log.L().Error("call write data rpc failed ", zap.Error(err))
 				task.status = lib.WorkerStatusError
 				task.cancelFn()
 				return err
@@ -195,14 +203,6 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		case <-ctx.Done():
 			task.status = lib.WorkerStatusError
 			return nil
-		default:
-			if task.isEOF {
-				log.L().Info("Reach the end of the file ")
-				task.status = lib.WorkerStatusFinished
-				err = writer.CloseSend()
-				return err
-			}
-			time.Sleep(time.Second)
 
 		}
 	}

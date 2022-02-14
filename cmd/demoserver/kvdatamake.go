@@ -66,7 +66,7 @@ func main() {
 				fmt.Printf("the third parameter should be an interger")
 			}
 		}
-		generateData(folder, recorderNum)
+		go generateData(folder, recorderNum)
 	} else {
 		fmt.Printf("the args should be : dir [100000]")
 	}
@@ -200,7 +200,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	log.L().Info("receive the request for reading file ")
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0o666)
 	if err != nil {
-		log.L().Info("make sure the file exist ",
+		log.L().Error("make sure the file exist ",
 			zap.String("fileName ", fileName))
 		fmt.Printf("open file %v failed  \n", fileName)
 		return err
@@ -261,7 +261,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					} else {
 						index := strings.LastIndex(fileName, "/")
 						if index <= 1 {
-							log.L().Info("bad file name ",
+							log.L().Error("bad file name ",
 								zap.Int("index ", index))
 							return &ErrorInfo{info: " bad file name :" + fileName}
 						}
@@ -277,7 +277,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 							if err != nil {
 								return &ErrorInfo{info: "create the folder " + folder + " failed"}
 							}
-							log.L().Info("create the folder ",
+							log.L().Error("create the folder ",
 								zap.String("folder  ", folder))
 						}
 						// create the file
@@ -299,12 +299,12 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					err = writer.Flush()
 				}
 				if err != nil {
-					log.L().Info("write data failed  ",
+					log.L().Error("write data failed  ",
 						zap.String("error   ", err.Error()))
 				}
 
 			} else if err == io.EOF {
-				fmt.Printf("receive the eof %v \n", res.Key)
+				log.L().Info("receive the eof")
 				s.mu.Lock()
 				for _, w := range s.fileWriterMap {
 					w.Flush()

@@ -400,7 +400,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	s.info = &model.NodeInfo{
 		Type: model.NodeTypeExecutor,
 		ID:   model.ExecutorID(resp.ExecutorId),
-		Addr: s.cfg.WorkerAddr,
+		Addr: s.cfg.AdvertiseAddr,
 	}
 	log.L().Logger.Info("register successful", zap.Any("info", s.info))
 	return nil

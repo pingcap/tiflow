@@ -61,7 +61,7 @@ func (c *RunnableContainer) OnInitialized() {
 
 func (c *RunnableContainer) OnStopped() {
 	oldStatus := c.status.Swap(TaskClosing)
-	if oldStatus != TaskRunning {
+	if oldStatus != TaskRunning && oldStatus != TaskSubmitted {
 		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
 	}
 }
