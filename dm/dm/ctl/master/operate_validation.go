@@ -106,7 +106,7 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 			ctx,
 			"OperateValidationError",
 			&pb.OperateValidationErrorRequest{
-				Op:         string(typ),
+				Op:         typ,
 				TaskName:   taskName,
 				Id:         int32(errID),
 				IsAllError: isAll,

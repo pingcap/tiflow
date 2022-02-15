@@ -69,18 +69,19 @@ func startStopValidation(typ string) func(*cobra.Command, []string) error {
 		if err != nil {
 			return err
 		}
-		if len(cmd.Flags().Args()) == 1 {
+		switch len(cmd.Flags().Args()) {
+		case 1:
 			taskName = cmd.Flags().Arg(0)
 			if isAllTask {
 				// contradiction
 				return formatStartStopValidationError(cmd, "either `task-name` or `all-task` should be set")
 			}
-		} else if len(cmd.Flags().Args()) == 0 {
+		case 0:
 			if !isAllTask {
 				// contradiction
 				return formatStartStopValidationError(cmd, "either `task-name` or `all-task` should be set")
 			}
-		} else {
+		default:
 			return formatStartStopValidationError(cmd, "too many arguments are specified")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
