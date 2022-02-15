@@ -2743,7 +2743,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.IsAllError && req.Id >= 0 {
+	if req.IsAllError && req.ErrId != "" {
 		resp.Result = false
 		resp.Msg = "either `all` error flags or `error id` should be set"
 		return resp, nil

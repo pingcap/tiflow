@@ -529,7 +529,7 @@ message GetValidationErrorRequest {
 }
 
 message ValidationError {
-    int32 id = 1; // error-id
+    string id = 1; // error-id
     string source = 2;
     string srcTable = 3;
     string srcData = 4;
@@ -551,7 +551,7 @@ message OperateValidationErrorRequest {
     string op = 1; // ignore/resolve/clear
     bool isAllError = 2;
     string taskName = 3;
-    int32 id = 4; // error-id
+    string errId = 4; // error-id
 }
 
 message OperateValidationErrorResponse {

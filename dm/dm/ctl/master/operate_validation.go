@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -64,11 +63,11 @@ func NewClearValidationErrorCmd() *cobra.Command {
 func operateValidationError(typ string) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
 		var (
-			resp               *pb.OperateValidationErrorResponse
-			taskName, errIDStr string
-			errID              int
-			isAll              bool
-			err                error
+			resp     *pb.OperateValidationErrorResponse
+			taskName string
+			isAll    bool
+			errId    string
+			err      error
 		)
 		if len(cmd.Flags().Args()) < 1 {
 			cmd.SetOut(os.Stdout)
@@ -82,19 +81,13 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 		}
 		taskName = cmd.Flags().Arg(0)
 		if len(cmd.Flags().Args()) > 1 {
-			errIDStr = cmd.Flags().Arg(1)
-			errID, err = strconv.Atoi(errIDStr)
-			if err != nil {
-				return errors.New("error-id not valid")
-			}
-		} else {
-			errID = -1
+			errId = cmd.Flags().Arg(1)
 		}
 		isAll, err = cmd.Flags().GetBool("all")
 		if err != nil {
 			return err
 		}
-		if (errID < 0 && !isAll) || (errID > 0 && isAll) {
+		if (errId == "" && !isAll) || (errId != "" && isAll) {
 			cmd.SetOut(os.Stdout)
 			common.PrintCmdUsage(cmd)
 			return errors.New("either `--all` or `error-id` should be set")
@@ -108,7 +101,7 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 			&pb.OperateValidationErrorRequest{
 				Op:         typ,
 				TaskName:   taskName,
-				Id:         int32(errID),
+				ErrId:      errId,
 				IsAllError: isAll,
 			},
 			&resp,
