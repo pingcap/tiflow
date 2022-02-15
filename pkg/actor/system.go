@@ -503,7 +503,7 @@ func (s *System) poll(ctx context.Context, id int) {
 			actorPollDuration := now().Sub(actorPollStartTime)
 			actorPollStartTime = approximateCurrentTime
 			if actorPollDuration > slowPollThreshold {
-				// Prometheus histogram is expensive, we only recrod slow poll.
+				// Prometheus histogram is expensive, we only record slow poll.
 				s.metricSlowPollDuration.Observe(actorPollDuration.Seconds())
 				if actorPollDuration > 10*slowPollThreshold { // 1s
 					log.Warn("actor poll received messages too slow",
