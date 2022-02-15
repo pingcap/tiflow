@@ -69,6 +69,7 @@ enum JobType {
     CVSDemo = 0;
     DM = 1;
     CDC = 2;
+    FakeJob = 3;
 }
 
 message SubmitJobRequest {

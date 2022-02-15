@@ -15,10 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	WorkerTypeFakeWorker = 10001
-)
-
 type Config struct{}
 
 var _ lib.BaseJobMaster = (*Master)(nil)
@@ -69,7 +65,7 @@ OUT:
 				}
 			}
 
-			workerID, err := m.CreateWorker(WorkerTypeFakeWorker, &Config{}, 1)
+			workerID, err := m.CreateWorker(lib.FakeTask, &Config{}, 1)
 			if err != nil {
 				return errors.Trace(err)
 			}

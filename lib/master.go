@@ -285,12 +285,38 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		for _, workerInfo := range offlinedWorkers {
 			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, workerInfo.status)
-			err := m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
+			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
+			if err != nil {
+				return err
+			}
+			err = m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
+}
+
+func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, workerID WorkerID) error {
+	topic := HeartbeatPingTopic(m.id, workerID)
+	removed, err := m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
+	}
+
+	topic = StatusUpdateTopic(m.id, workerID)
+	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !removed {
+		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
+	}
+
+	return nil
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
@@ -408,6 +434,22 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 	return nil
 }
 
+// generateWorkerID assigns a new worker id.
+// When creating a job master, job manager provides a pre allocated ID, in other
+// cases, we need to generate a random WorkerID.
+func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
+	switch workerType {
+	case CvsJobMaster, FakeJobMaster:
+		masterCfg, ok := config.(*JobMasterV2)
+		if !ok {
+			log.L().Warn("invalid master config, will gen random worker id")
+		}
+		return masterCfg.ID
+	default:
+	}
+	return m.uuidGen.NewString()
+}
+
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
@@ -419,7 +461,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}
 
 	// workerID is expected to be globally unique.
-	workerID := m.uuidGen.NewString()
+	workerID := m.generateWorkerID(workerType, config)
 
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
@@ -428,6 +470,10 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	go func() {
 		defer m.createWorkerQuota.Release()
 
+		// When CreateWorker failed, we need to pass the worker id to
+		// OnWorkerDispatched, so we use a dummy WorkerHandle.
+		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
+			workerID, WorkerStatus{Code: WorkerStatusError})
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.
@@ -440,7 +486,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			// TODO (zixiong) make the timeout configurable
 			time.Second*10)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -454,7 +500,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 
 		err = m.executorClientManager.AddExecutor(executorID, schedule[0].Addr)
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -471,7 +517,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			},
 		})
 		if err != nil {
-			err1 := m.Impl.OnWorkerDispatched(nil, errors.Trace(err))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler, errors.Trace(err))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}
@@ -481,8 +527,8 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
-			err1 := m.Impl.OnWorkerDispatched(
-				nil, errors.Errorf("dispatch worker failed with error code: %d", errCode))
+			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,
+				errors.Errorf("dispatch worker failed with error code: %d", errCode))
 			if err1 != nil {
 				m.OnError(errors.Trace(err1))
 			}

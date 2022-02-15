@@ -60,6 +60,7 @@ var (
 	ErrWorkerOffline      = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
 	ErrWorkerTimedOut     = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
 	ErrWorkerSuicide      = errors.Normalize("worker has committed suicide due to master having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
+	ErrInvalidJobType     = errors.Normalize("invalid job type: %s", errors.RFCCodeText("DFLOW:ErrInvalidJobType"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

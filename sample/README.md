@@ -20,4 +20,4 @@ docker-compose -f ./3m3e.yaml -f ./demo.yaml up
 
 ## Use Master Client to Run Demo workload
 
-./client.sh --master-addr server-master-0:10240 submit-job --job-config ./sample/config/demo.json
+./client.sh --master-addr server-master-0:10240 submit-job --job-type CVSDemo --job-config ./sample/config/demo.json
