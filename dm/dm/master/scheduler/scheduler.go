@@ -1084,6 +1084,46 @@ func (s *Scheduler) GetSubTaskCfgsByTask(task string) map[string]*config.SubTask
 	return cloneM
 }
 
+func (s *Scheduler) GetSubTaskCfgsByTaskAndSource(taskName string, sources []string) (map[string]map[string]config.SubTaskConfig, error) {
+	var ret map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	if len(taskName) == 0 {
+		ret = s.GetSubTaskCfgs()
+	} else {
+		// get subtask by name
+		tmp := s.GetSubTaskCfgsByTask(taskName)
+		if tmp == nil {
+			// no subtask matches the `task-name`
+			return nil, terror.Annotatef(errors.New("no such subtask"), "fail to get subtask config by task name `%s`", taskName)
+		}
+		ret = map[string]map[string]config.SubTaskConfig{}
+		ret[taskName] = map[string]config.SubTaskConfig{}
+		for source, cfg := range tmp {
+			ret[taskName][source] = *cfg
+		}
+	}
+	// filter the source that we don't want
+	if len(sources) > 0 {
+		filterSource := map[string]interface{}{}
+		for _, source := range sources {
+			filterSource[source] = true // the source we want
+		}
+		for taskName, sourceCfgs := range ret {
+			for source := range sourceCfgs {
+				if _, ok := filterSource[source]; !ok {
+					delete(sourceCfgs, source)
+				}
+			}
+			if len(ret[taskName]) == 0 {
+				delete(ret, taskName)
+			}
+		}
+	}
+	if len(ret) == 0 {
+		return nil, terror.Annotate(errors.New("no such subtask or source"), "fail to get subtask config by task name and source")
+	}
+	return ret, nil
+}
+
 // GetSubTaskCfgs gets all subconfig, return nil when error happens.
 func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig {
 	// taskName -> sourceName -> SubTaskConfig

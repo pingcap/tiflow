@@ -42,6 +42,7 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -2589,46 +2590,6 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	return true
 }
 
-func (s *Server) getSubTaskCfgs(taskName string, sources []string) (map[string]map[string]config.SubTaskConfig, error) {
-	var ret map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
-	if len(taskName) == 0 {
-		ret = s.scheduler.GetSubTaskCfgs()
-	} else {
-		// get subtask by name
-		tmp := s.scheduler.GetSubTaskCfgsByTask(taskName)
-		if tmp == nil {
-			// no subtask matches the `task-name`
-			return nil, errors.Errorf("no subtask matched by `task-name` %s", taskName)
-		}
-		ret = map[string]map[string]config.SubTaskConfig{}
-		ret[taskName] = map[string]config.SubTaskConfig{}
-		for source, cfg := range tmp {
-			ret[taskName][source] = *cfg
-		}
-	}
-	// filter the source that we don't want
-	if len(sources) > 0 {
-		filterSource := map[string]interface{}{}
-		for _, source := range sources {
-			filterSource[source] = true // the source we want
-		}
-		for taskName, sourceCfgs := range ret {
-			for source := range sourceCfgs {
-				if _, ok := filterSource[source]; !ok {
-					delete(ret[taskName], source)
-				}
-			}
-			if len(ret[taskName]) == 0 {
-				delete(ret, taskName)
-			}
-		}
-	}
-	if len(ret) == 0 {
-		return nil, errors.Errorf("no subtask matched by the current rule")
-	}
-	return ret, nil
-}
-
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
 		resp2       *pb.StartValidationResponse
@@ -2645,8 +2606,12 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 		resp.Msg = "either `task-name` or `all-task` should be set"
 		return resp, nil
 	}
-
-	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, req.Sources)
+	if req.Mode != config.ValidationFull && req.Mode != config.ValidationFast {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
+		return resp, nil
+	}
+	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2678,7 +2643,7 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 		resp.Msg = "either `task-name` or `all-task` should be set"
 		return resp, nil
 	}
-	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, req.Sources)
+	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2703,7 +2668,17 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	resp := &pb.GetValidationStatusResponse{
 		Result: true,
 	}
-	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.FilterStatus != ctlmaster.ValidationStageRunning && req.FilterStatus != ctlmaster.ValidationStageStopped {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", ctlmaster.ValidationStageRunning, ctlmaster.ValidationStageStopped)
+		return resp, err
+	}
+	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2728,7 +2703,17 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 	resp := &pb.GetValidationErrorResponse{
 		Result: true,
 	}
-	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.ErrType != ctlmaster.ValidationAllErr && req.ErrType != ctlmaster.ValidationIgnoredErr {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("error flag should be either `%s` or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr)
+		return resp, nil
+	}
+	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2753,7 +2738,17 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
 	}
-	subTaskCfgs, err = s.getSubTaskCfgs(req.TaskName, []string{})
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.IsAllError && req.Id >= 0 {
+		resp.Result = false
+		resp.Msg = "either `all` error flags or `error id` should be set"
+		return resp, nil
+	}
+	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()

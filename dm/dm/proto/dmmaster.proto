@@ -520,13 +520,12 @@ message ValidationStatus {
 message GetValidationStatusResponse {
     bool result = 1;
     string msg = 2;
-    ValidationStatus status = 3;
+    repeated ValidationStatus status = 3;
 }
 
 message GetValidationErrorRequest {
-    bool isIgnoredError = 1;
-    bool isAllError = 2;
-    string taskName = 3;
+    string errType = 1;
+    string taskName = 2;
 }
 
 message ValidationError {
@@ -545,7 +544,7 @@ message ValidationError {
 message GetValidationErrorResponse {
     bool result = 1;
     string msg = 2;
-    ValidationError error = 3;
+    repeated ValidationError error = 3;
 }
 
 message OperateValidationErrorRequest {
