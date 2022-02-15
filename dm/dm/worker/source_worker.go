@@ -472,7 +472,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		if s, ok := validatorStages[subTaskCfg.Name]; ok {
 			validatorStage = s.Expect
 		}
-		w.l.Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
+		w.l.Info("start to create subtask in EnableHandleSubtasks", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 		// "for range" of a map will use same value address, so we'd better not pass value address to other function
 		clone := subTaskCfg
 		if err2 := w.StartSubTask(&clone, expectStage.Expect, validatorStage, false); err2 != nil {
@@ -795,7 +795,7 @@ func (w *SourceWorker) handleSubTaskStage(ctx context.Context, stageCh chan ha.S
 // operateSubTaskStage returns TaskOp.String() additionally to record metrics.
 func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.SubTaskConfig) (string, error) {
 	var op pb.TaskOp
-	log.L().Info("operateSubTaskStage start to create subtask",
+	log.L().Info("operateSubTaskStage",
 		zap.String("sourceID", subTaskCfg.SourceID),
 		zap.String("task", subTaskCfg.Name),
 		zap.Stringer("stage", stage))
@@ -803,8 +803,8 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 	// new sub task
 	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 		switch stage.Expect {
-		case pb.Stage_Stopped, pb.Stage_Running:
-			log.L().Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
+		case pb.Stage_Running, pb.Stage_Stopped:
+			log.L().Info("start to create subtask in operateSubTaskStage", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 			expectValidatorStage, err := getExpectValidatorStage(subTaskCfg.ValidatorCfg, w.etcdClient, stage.Source, stage.Task, stage.Revision)
 			if err != nil {
 				return opErrTypeBeforeOp, terror.Annotate(err, "fail to get validator stage from etcd")
@@ -831,7 +831,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 // operateSubTaskStageWithoutConfig returns TaskOp additionally to record metrics.
 func (w *SourceWorker) operateSubTaskStageWithoutConfig(stage ha.Stage) (string, error) {
 	var subTaskCfg config.SubTaskConfig
-	if stage.Expect == pb.Stage_Running {
+	if stage.Expect == pb.Stage_Running || stage.Expect == pb.Stage_Stopped {
 		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 			tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, stage.Source, stage.Task, stage.Revision)
 			if err != nil {
