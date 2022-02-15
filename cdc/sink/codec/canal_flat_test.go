@@ -163,10 +163,6 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		result, err = encoder.AppendResolvedEvent(417318403368288260)
-		c.Assert(err, check.IsNil)
-		c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
 		mqMessages := encoder.Build()
 		c.Assert(len(mqMessages), check.Equals, 1)
 
@@ -308,11 +304,6 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 			if i == 999 {
 				resolvedTs = 999
 			}
-			result, err := encoder.AppendResolvedEvent(resolvedTs)
-
-			c.Assert(err, check.IsNil)
-			c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
 			msgs := encoder.Build()
 			c.Assert(msgs, check.NotNil)
 			c.Assert(msgs, check.HasLen, int(resolvedTs-lastResolved))
@@ -331,8 +322,7 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 		}
 	}
 
-	c.Assert(encoder.unresolvedBuf, check.HasLen, 0)
-	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
+	c.Assert(encoder.messageBuf, check.HasLen, 0)
 }
 
 func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {

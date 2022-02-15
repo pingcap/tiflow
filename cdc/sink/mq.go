@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -32,17 +31,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
-
-type mqEvent struct {
-	row        *model.RowChangedEvent
-	resolvedTs model.Ts
-}
 
 type resolvedTsEvent struct {
 	tableID    model.TableID
@@ -68,12 +61,10 @@ type mqSink struct {
 	protocol       config.Protocol
 
 	partitionNum         int32
-	partitionInput       []chan mqEvent
+	partitionInput       []chan *model.RowChangedEvent
 	partitionResolvedTs  []uint64
 	tableCheckpointTsMap sync.Map
 	resolvedBuffer       chan resolvedTsEvent
-	resolvedNotifier     *notify.Notifier
-	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
 
@@ -106,15 +97,9 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
-	partitionInput := make([]chan mqEvent, partitionNum)
+	partitionInput := make([]chan *model.RowChangedEvent, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
-	}
-
-	notifier := new(notify.Notifier)
-	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, errors.Trace(err)
+		partitionInput[i] = make(chan *model.RowChangedEvent, defaultPartitionInputChSize)
 	}
 
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -131,9 +116,7 @@ func newMqSink(
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 
-		resolvedBuffer:   make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
-		resolvedNotifier: notifier,
-		resolvedReceiver: resolvedReceiver,
+		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
 
 		statistics: NewStatistics(ctx, "MQ", opts),
 
@@ -181,10 +164,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
+		case k.partitionInput[partition] <- row:
 		}
 		rowsCount++
 	}
@@ -222,11 +202,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case msg := <-k.resolvedBuffer:
 			resolvedTs := msg.resolvedTs
-			err := k.flushTsToWorker(ctx, resolvedTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = k.mqProducer.Flush(ctx)
+			err := k.mqProducer.Flush(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -234,33 +210,6 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
 			k.tableCheckpointTsMap.Store(msg.tableID, resolvedTs)
-		}
-	}
-}
-
-func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	// flush resolvedTs to all partition workers
-	for i := 0; i < int(k.partitionNum); i++ {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
-		}
-	}
-
-	// waiting for all row events are sent to mq producer
-flushLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-k.resolvedReceiver.C:
-			for i := 0; i < int(k.partitionNum); i++ {
-				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
-					continue flushLoop
-				}
-			}
-			return nil
 		}
 	}
 }
@@ -328,14 +277,13 @@ func (k *mqSink) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
+func (k *mqSink) Barrier(_ context.Context, _ model.TableID) error {
 	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
 	// all buffered events by force.
 	return nil
 }
 
 func (k *mqSink) run(ctx context.Context) error {
-	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
 		return k.bgFlushTs(ctx)
@@ -388,7 +336,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		})
 	}
 	for {
-		var e mqEvent
+		var row *model.RowChangedEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -397,26 +345,9 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				return errors.Trace(err)
 			}
 			continue
-		case e = <-input:
+		case row = <-input:
 		}
-		// flush resolvedTs event
-		if e.row == nil {
-			if e.resolvedTs != 0 {
-				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				if err := flushToProducer(op); err != nil {
-					return errors.Trace(err)
-				}
-
-				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				k.resolvedNotifier.Notify()
-			}
-			continue
-		}
-		op, err := encoder.AppendRowChangedEvent(e.row)
+		op, err := encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return errors.Trace(err)
 		}
