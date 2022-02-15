@@ -76,6 +76,7 @@ function run_with_prepared_source_config() {
 
 	server_uuid=$(tail -n 1 $WORK_DIR/worker2/relay-dir/server-uuid.index)
 	relay_log_size=$(ls -al $WORK_DIR/worker2/relay-dir/$server_uuid/$binlog_file | awk '{print $5}')
+	echo "binlog_pos: $binlog_pos relay_log_size: $relay_log_size"
 	[ "$binlog_pos" -eq "$relay_log_size" ]
 
 	echo "============== run_with_prepared_source_config success ==================="

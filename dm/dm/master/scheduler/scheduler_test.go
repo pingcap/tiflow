@@ -131,6 +131,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(subtaskCfg21.Adjust(true), IsNil)
 	subtaskCfg22 := subtaskCfg21
 	subtaskCfg22.SourceID = sourceID2
+	subtaskCfg22.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
 	c.Assert(subtaskCfg22.Adjust(true), IsNil)
 
 	// not started scheduler can't do anything.
@@ -254,12 +255,15 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(s.AddSubTasks(false), IsNil) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(c, s, taskName1, sourceID1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_InvalidStage)
+	t.downstreamMetaNotExist(c, s, taskName1)
 	// start the task.
 	c.Assert(s.AddSubTasks(false, subtaskCfg1), IsNil)
 	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue) // add again.
 	// subtask config and stage exist.
 	t.subTaskCfgExist(c, s, subtaskCfg1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_Running)
+	t.downstreamMetaExist(c, s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
+	t.downstreamMetaNotExist(c, s, taskName2)
 
 	// update source config when task already started will failed
 	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
@@ -422,6 +426,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskCfgExist(c, s, subtaskCfg22)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4.2 fail to stop any task.
@@ -468,6 +473,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
 	// CASE 4.7: remove source2.
@@ -629,6 +635,19 @@ func (t *testScheduler) subTaskCfgExist(c *C, s *Scheduler, expectCfg config.Sub
 	c.Assert(cfgM[expectCfg.Name], DeepEquals, expectCfg)
 }
 
+func (t *testScheduler) downstreamMetaNotExist(c *C, s *Scheduler, task string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, IsNil)
+	c.Assert(metaConfig, Equals, "")
+}
+
+func (t *testScheduler) downstreamMetaExist(c *C, s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, NotNil)
+	c.Assert(dbConfig, DeepEquals, &expectDBCfg)
+	c.Assert(metaConfig, Equals, expectMetaConfig)
+}
+
 func (t *testScheduler) workerNotExist(c *C, s *Scheduler, worker string) {
 	c.Assert(s.GetWorkerByName(worker), IsNil)
 	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
@@ -749,6 +768,29 @@ func (t *testScheduler) subTaskStageMatch(c *C, s *Scheduler, task, source strin
 		stageDeepEqualExcludeRev(c, eStageM[task], stage)
 	default:
 		c.Assert(eStageM, HasLen, 0)
+	}
+}
+
+func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, task)
+	var m map[string]ha.Stage
+	if v, ok := s.expectValidatorStages.Load(task); ok {
+		m = v.(map[string]ha.Stage)
+	}
+	if expectStage == pb.Stage_InvalidStage {
+		_, ok := m[source]
+		c.Assert(ok, IsFalse)
+	} else {
+		stageDeepEqualExcludeRev(c, m[source], stage)
+	}
+	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task, 0)
+	c.Assert(err, IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[task], stage)
+	default:
+		c.Assert(stageM, HasLen, 0)
 	}
 }
 

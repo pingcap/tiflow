@@ -138,7 +138,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 		if req.Flush {
 			log.L().Info("flush table info", zap.String("table info", newSQL))
-			err = s.checkpoint.FlushPointWithTableInfo(tcontext.NewContext(ctx, log.L()), sourceTable, ti)
+			err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
 			if err != nil {
 				return "", err
 			}

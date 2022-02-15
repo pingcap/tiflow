@@ -1114,6 +1114,24 @@ description = ""
 workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
 tags = ["internal", "medium"]
 
+[error.DM-config-20055]
+message = "invalid validation mode"
+description = ""
+workaround = "Please check `validation-mode` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20056]
+message = "mysql-instance(%d)'s continuous validator config %s not exist"
+description = ""
+workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+tags = ["internal", "medium"]
+
+[error.DM-config-20057]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -1285,7 +1303,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]
@@ -2376,6 +2394,18 @@ tags = ["internal", "high"]
 
 [error.DM-dm-master-38055]
 message = "table-info-before not exist in optimistic ddls: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38057]
+message = "invalid cluster id: %v"
 description = ""
 workaround = ""
 tags = ["internal", "high"]

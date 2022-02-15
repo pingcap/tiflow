@@ -85,25 +85,26 @@ func DeleteSourceCfgRelayStageSourceBound(cli *clientv3.Client, source, worker s
 // - subtask config.
 // - subtask stage.
 // NOTE: golang can't use two `...` in the func, so use `[]` instead.
-func PutSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, stages []Stage) (int64, error) {
-	return opSubTaskCfgStage(cli, mvccpb.PUT, cfgs, stages)
+func PutSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, stages []Stage, validatorStages []Stage) (int64, error) {
+	return operateSubtask(cli, mvccpb.PUT, cfgs, stages, validatorStages)
 }
 
 // DeleteSubTaskCfgStage deletes the following data in one txn.
 // - subtask config.
 // - subtask stage.
 // NOTE: golang can't use two `...` in the func, so use `[]` instead.
-func DeleteSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, stages []Stage) (int64, error) {
-	return opSubTaskCfgStage(cli, mvccpb.DELETE, cfgs, stages)
+func DeleteSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, stages []Stage, validatorStages []Stage) (int64, error) {
+	return operateSubtask(cli, mvccpb.DELETE, cfgs, stages, validatorStages)
 }
 
-// opSubTaskCfgStage puts/deletes for subtask config and stage in one txn.
-func opSubTaskCfgStage(cli *clientv3.Client, evType mvccpb.Event_EventType,
-	cfgs []config.SubTaskConfig, stages []Stage) (int64, error) {
+// operateSubtask puts/deletes KVs for the subtask in one txn.
+func operateSubtask(cli *clientv3.Client, evType mvccpb.Event_EventType, cfgs []config.SubTaskConfig, stages []Stage,
+	validatorStages []Stage) (int64, error) {
 	var (
-		ops1 []clientv3.Op
-		ops2 []clientv3.Op
-		err  error
+		ops1         []clientv3.Op
+		ops2         []clientv3.Op
+		validatorOps []clientv3.Op
+		err          error
 	)
 	switch evType {
 	case mvccpb.PUT:
@@ -115,14 +116,20 @@ func opSubTaskCfgStage(cli *clientv3.Client, evType mvccpb.Event_EventType,
 		if err != nil {
 			return 0, err
 		}
+		validatorOps, err = putValidatorStageOps(validatorStages...)
+		if err != nil {
+			return 0, err
+		}
 	case mvccpb.DELETE:
 		ops1 = deleteSubTaskCfgOp(cfgs...)
 		ops2 = deleteSubTaskStageOp(stages...)
+		validatorOps = deleteValidatorStageOps(validatorStages...)
 	}
 
-	ops := make([]clientv3.Op, 0, len(ops1)+len(ops2))
+	ops := make([]clientv3.Op, 0, 2*len(cfgs)+len(stages))
 	ops = append(ops, ops1...)
 	ops = append(ops, ops2...)
+	ops = append(ops, validatorOps...)
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err
 }

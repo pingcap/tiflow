@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -61,6 +63,7 @@ var (
 	globalCpSchema       = "" // global checkpoint's cp_schema
 	globalCpTable        = "" // global checkpoint's cp_table
 	maxCheckPointTimeout = "1m"
+	batchFlushPoints     = 100
 )
 
 type tablePoint struct {
@@ -225,6 +228,9 @@ type CheckPoint interface {
 	// DeleteTablePoint deletes checkpoint for specified table in memory and storage
 	DeleteTablePoint(tctx *tcontext.Context, table *filter.Table) error
 
+	// DeleteAllTablePoint deletes all checkpoints for table in memory and storage
+	DeleteAllTablePoint(tctx *tcontext.Context) error
+
 	// DeleteSchemaPoint deletes checkpoint for specified schema
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
@@ -235,18 +241,21 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
+	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
+	SaveGlobalPointForcibly(location binlog.Location)
+
 	// Snapshot make a snapshot of current checkpoint
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
-	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
+	// FlushPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
 	// by extraSQLs and extraArgs. Currently extraSQLs contain shard meta only.
 	// @exceptTables: [[schema, table]... ]
 	// corresponding to Meta.Flush
 	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]interface{}) error
 
-	// FlushPointWithTableInfo flushed the table point with given table info
-	FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error
+	// FlushPointsWithTableInfos flushed the table points with given table infos
+	FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error
 
 	// FlushSafeModeExitPoint flushed the global checkpoint's with given table info
 	FlushSafeModeExitPoint(tctx *tcontext.Context) error
@@ -549,6 +558,26 @@ func (cp *RemoteCheckPoint) DeleteTablePoint(tctx *tcontext.Context, table *filt
 	return nil
 }
 
+// DeleteAllTablePoint implements CheckPoint.DeleteAllTablePoint.
+func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
+	cp.Lock()
+	defer cp.Unlock()
+
+	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
+	defer cancel()
+	cp.logCtx.L().Info("delete all table checkpoint")
+	_, err := cp.dbConn.ExecuteSQL(
+		tctx2,
+		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
+		[]interface{}{cp.id, false},
+	)
+	if err != nil {
+		return err
+	}
+	cp.points = make(map[string]map[string]*binlogPoint)
+	return nil
+}
+
 // DeleteSchemaPoint implements CheckPoint.DeleteSchemaPoint.
 func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error {
 	cp.Lock()
@@ -612,7 +641,16 @@ func (cp *RemoteCheckPoint) SaveGlobalPoint(location binlog.Location) {
 	}
 }
 
-// FlushPointsExcept implements CheckPoint.FlushSnapshotPointsExcept.
+// SaveGlobalPointForcibly implements CheckPoint.SaveGlobalPointForcibly.
+func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
+	cp.Lock()
+	defer cp.Unlock()
+
+	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
+	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+}
+
+// FlushPointsExcept implements CheckPoint.FlushPointsExcept.
 func (cp *RemoteCheckPoint) FlushPointsExcept(
 	tctx *tcontext.Context,
 	snapshotID int,
@@ -712,45 +750,63 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	return nil
 }
 
-// FlushPointWithTableInfo implements CheckPoint.FlushPointWithTableInfo.
-func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, table *filter.Table, ti *model.TableInfo) error {
+// FlushPointsWithTableInfos implements CheckPoint.FlushPointsWithTableInfos.
+func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error {
 	cp.Lock()
 	defer cp.Unlock()
-	sourceSchema, sourceTable := table.Schema, table.Name
-	sqls := make([]string, 0, 1)
-	args := make([][]interface{}, 0, 10)
-	point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	// should not happened
+	if len(tables) != len(tis) {
+		return errors.Errorf("the length of the tables is not equal to the length of the table infos, left: %d, right: %d", len(tables), len(tis))
+	}
 
-	if tablePoints, ok := cp.points[sourceSchema]; ok {
-		if p, ok2 := tablePoints[sourceTable]; ok2 {
-			point = p
+	for i := 0; i < len(tables); i += batchFlushPoints {
+		end := i + batchFlushPoints
+		if end > len(tables) {
+			end = len(tables)
+		}
+
+		sqls := make([]string, 0, batchFlushPoints)
+		args := make([][]interface{}, 0, batchFlushPoints)
+		points := make([]*binlogPoint, 0, batchFlushPoints)
+		for j := i; j < end; j++ {
+			table := tables[j]
+			ti := tis[j]
+			sourceSchema, sourceTable := table.Schema, table.Name
+
+			var point *binlogPoint
+			// if point already in memory, use it
+			if tablePoints, ok := cp.points[sourceSchema]; ok {
+				if p, ok2 := tablePoints[sourceTable]; ok2 {
+					point = p
+				}
+			}
+			// create new point
+			if point == nil {
+				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
+				point = cp.points[sourceSchema][sourceTable]
+			}
+			tiBytes, err := json.Marshal(ti)
+			if err != nil {
+				return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
+			}
+			location := point.MySQLLocation()
+			sql, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
+			sqls = append(sqls, sql)
+			args = append(args, arg)
+			points = append(points, point)
+		}
+		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
+		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
+		defer cancel()
+		_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+		if err != nil {
+			return err
+		}
+
+		for _, point := range points {
+			point.flush()
 		}
 	}
-
-	tiBytes, err := json.Marshal(ti)
-	if err != nil {
-		return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
-	}
-
-	location := point.MySQLLocation()
-	sql2, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
-	sqls = append(sqls, sql2)
-	args = append(args, arg)
-
-	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
-	defer cancel()
-	_, err = cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
-	if err != nil {
-		return err
-	}
-
-	err = point.save(point.savedPoint.location, ti)
-	if err != nil {
-		return err
-	}
-	point.flush()
-
 	return nil
 }
 
