@@ -66,7 +66,7 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 			resp     *pb.OperateValidationErrorResponse
 			taskName string
 			isAll    bool
-			errId    string
+			errID    string
 			err      error
 		)
 		if len(cmd.Flags().Args()) < 1 {
@@ -81,13 +81,13 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 		}
 		taskName = cmd.Flags().Arg(0)
 		if len(cmd.Flags().Args()) > 1 {
-			errId = cmd.Flags().Arg(1)
+			errID = cmd.Flags().Arg(1)
 		}
 		isAll, err = cmd.Flags().GetBool("all")
 		if err != nil {
 			return err
 		}
-		if (errId == "" && !isAll) || (errId != "" && isAll) {
+		if (errID == "" && !isAll) || (errID != "" && isAll) {
 			cmd.SetOut(os.Stdout)
 			common.PrintCmdUsage(cmd)
 			return errors.New("either `--all` or `error-id` should be set")
@@ -101,7 +101,7 @@ func operateValidationError(typ string) func(*cobra.Command, []string) error {
 			&pb.OperateValidationErrorRequest{
 				Op:         typ,
 				TaskName:   taskName,
-				ErrId:      errId,
+				ErrId:      errID,
 				IsAllError: isAll,
 			},
 			&resp,
