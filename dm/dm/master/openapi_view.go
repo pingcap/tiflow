@@ -69,7 +69,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	}
 	// disables swagger server name validation. it seems to work poorly
 	swagger.Servers = nil
-
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	// middlewares
 	r.Use(gin.Recovery())
@@ -81,7 +81,6 @@ func (s *Server) InitOpenAPIHandles() error {
 	// register handlers
 	openapi.RegisterHandlers(r, s)
 	s.openapiHandles = r
-	gin.SetMode(gin.ReleaseMode)
 	return nil
 }
 
@@ -186,7 +185,7 @@ func (s *Server) DMAPICreateSource(c *gin.Context) {
 		return
 	}
 	// TODO support specify worker name
-	if err := s.enableSource(ctx, createSourceReq.SourceName, ""); err != nil {
+	if err := s.enableSource(ctx, createSourceReq.SourceName, ""); err != nil && !terror.ErrWorkerNoStart.Equal(err) {
 		_ = c.Error(err)
 		return
 	}

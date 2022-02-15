@@ -534,7 +534,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	pauseTaskURL := fmt.Sprintf("%s/%s/pause", taskURL, task.Name)
 	result = testutil.NewRequest().Post(pauseTaskURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Paused)
+	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Stopped)
 
 	resumeTaskURL := fmt.Sprintf("%s/%s/resume", taskURL, task.Name)
 	result = testutil.NewRequest().Post(resumeTaskURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
