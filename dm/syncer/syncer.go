@@ -1527,6 +1527,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		s.closeJobChans()
 		s.checkpointFlushWorker.Close()
 		s.runWg.Wait()
+		// s.syncCancel won't be called when normal exit, this call just to follow the best practice of use context.
+		s.syncCancel()
 	}()
 
 	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
