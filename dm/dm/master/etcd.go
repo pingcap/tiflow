@@ -97,7 +97,7 @@ func prepareJoinEtcd(cfg *Config) error {
 	}
 
 	// try to join self, invalid
-	if cfg.Join == cfg.MasterAddr {
+	if cfg.Join == cfg.AdvertiseAddr {
 		return terror.ErrMasterJoinEmbedEtcdFail.Generate(fmt.Sprintf("join self %s is forbidden", cfg.Join))
 	}
 
