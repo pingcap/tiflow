@@ -36,8 +36,8 @@ function run() {
 
 	# TiCDC discards all SEQUENCE DDL for now.
 	# See https://github.com/pingcap/tiflow/issues/4559
-	! run_sql "SHOW CREATE SEQUENCE test.seq0;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	run_sql "DROP SEQUENCE test.seq0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	! run_sql "SHOW CREATE SEQUENCE sequence_test.seq0;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "DROP SEQUENCE sequence_test.seq0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# Make sure changefeed is normal.
 	run_sql "CREATE table sequence_test.mark_table(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
