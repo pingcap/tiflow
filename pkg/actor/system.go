@@ -34,9 +34,9 @@ import (
 const (
 	// The max number of workers of a system.
 	maxWorkerNum = 64
-	// The default size of polled actor batch.
+	// defaultActorBatchSize is the default size of polled actor batch.
 	defaultActorBatchSize = 1
-	// The default size of receive message batch.
+	// defaultMsgBatchSizePerActor is the default size of receive message batch.
 	defaultMsgBatchSizePerActor = 64
 )
 
@@ -346,9 +346,11 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 		metricTotalWorkers:     totalWorkers.WithLabelValues(b.name),
 		metricWorkingWorkers:   workingWorkers.WithLabelValues(b.name),
 		metricWorkingDurations: metricWorkingDurations,
-		metricPollDuration:     pollActorDuration.WithLabelValues(b.name),
-		metricProcBatch:        batchSizeHistogram.WithLabelValues(b.name, "proc"),
-		metricMsgBatch:         batchSizeHistogram.WithLabelValues(b.name, "msg"),
+		metricSystemPollLoop:   pollCounter.WithLabelValues(b.name, "system"),
+		metricActorPollLoop:    pollCounter.WithLabelValues(b.name, "actor"),
+		metricSlowPollDuration: slowPollActorDuration.WithLabelValues(b.name),
+		metricProcBatch:        batchSizeCounter.WithLabelValues(b.name, "proc"),
+		metricMsgBatch:         batchSizeCounter.WithLabelValues(b.name, "msg"),
 	}, router
 }
 
@@ -370,9 +372,11 @@ type System struct {
 	metricTotalWorkers     prometheus.Gauge
 	metricWorkingWorkers   prometheus.Gauge
 	metricWorkingDurations []prometheus.Counter
-	metricPollDuration     prometheus.Observer
-	metricProcBatch        prometheus.Observer
-	metricMsgBatch         prometheus.Observer
+	metricSystemPollLoop   prometheus.Counter
+	metricActorPollLoop    prometheus.Counter
+	metricSlowPollDuration prometheus.Observer
+	metricProcBatch        prometheus.Counter
+	metricMsgBatch         prometheus.Counter
 }
 
 // Start the system. Cancelling the context to stop the system.
@@ -414,8 +418,6 @@ func (s *System) Spawn(mb Mailbox, actor Actor) error {
 	return s.router.insert(id, p)
 }
 
-const slowReceiveThreshold = time.Second
-
 // The main poll of actor system.
 func (s *System) poll(ctx context.Context, id int) {
 	batchPBuf := make([]*proc, s.actorBatchSize)
@@ -423,9 +425,32 @@ func (s *System) poll(ctx context.Context, id int) {
 	rd := s.rd
 	rd.Lock()
 
-	startTime := time.Now()
+	// Approximate current time. It is updated when calling `now`.
+	var approximateCurrentTime time.Time
+	now := func() time.Time {
+		approximateCurrentTime = time.Now()
+		return approximateCurrentTime
+	}
+	// Start time of polling procs.
+	systemPollStartTime := now()
+	// The last time of recording metrics.
+	lastRecordMetricTime := systemPollStartTime
+	procBatchCnt, systemPollLoopCnt := 0, 0
+	msgBatchCnt, actorPollLoopCnt := 0, 0
 	s.metricWorkingWorkers.Inc()
 	for {
+		// Recording batch and loop metrics.
+		// We update metrics every `metricsInterval` to reduce overhead.
+		if approximateCurrentTime.Sub(lastRecordMetricTime) > metricsInterval {
+			lastRecordMetricTime = approximateCurrentTime
+			s.metricProcBatch.Add(float64(procBatchCnt))
+			s.metricSystemPollLoop.Add(float64(systemPollLoopCnt))
+			procBatchCnt, systemPollLoopCnt = 0, 0
+			s.metricMsgBatch.Add(float64(msgBatchCnt))
+			s.metricActorPollLoop.Add(float64(actorPollLoopCnt))
+			msgBatchCnt, actorPollLoopCnt = 0, 0
+		}
+
 		var batchP []*proc
 		for {
 			if rd.stopped {
@@ -436,19 +461,23 @@ func (s *System) poll(ctx context.Context, id int) {
 			n := rd.batchReceiveProcs(batchPBuf)
 			if n != 0 {
 				batchP = batchPBuf[:n]
-				s.metricProcBatch.Observe(float64(n))
+				procBatchCnt += n
+				systemPollLoopCnt++
 				break
 			}
-			// Recording metrics.
-			s.metricWorkingDurations[id].Add(time.Since(startTime).Seconds())
+			// Recording working metrics.
+			systemPollDuration := now().Sub(systemPollStartTime)
+			s.metricWorkingDurations[id].Add(systemPollDuration.Seconds())
 			s.metricWorkingWorkers.Dec()
 			// Park the poll until it is awakened.
 			rd.cond.Wait()
-			startTime = time.Now()
+			systemPollStartTime = now()
 			s.metricWorkingWorkers.Inc()
 		}
 		rd.Unlock()
 
+		actorPollLoopCnt += len(batchP)
+		actorPollStartTime := now()
 		for _, p := range batchP {
 			closed := p.isClosed()
 			if closed {
@@ -463,23 +492,26 @@ func (s *System) poll(ctx context.Context, id int) {
 				continue
 			}
 			batchMsg := batchMsgBuf[:n]
-			s.metricMsgBatch.Observe(float64(n))
+			msgBatchCnt += n
 
 			// Poll actor.
-			pollStartTime := time.Now()
 			running := p.actor.Poll(ctx, batchMsg)
 			if !running {
 				// Close the actor.
 				p.close()
 			}
-			receiveDuration := time.Since(pollStartTime)
-			if receiveDuration > slowReceiveThreshold {
-				log.Warn("actor handle received messages too slow",
-					zap.Duration("duration", receiveDuration),
-					zap.Uint64("id", uint64(p.mb.ID())),
-					zap.String("name", s.name))
+			actorPollDuration := now().Sub(actorPollStartTime)
+			actorPollStartTime = approximateCurrentTime
+			if actorPollDuration > slowPollThreshold {
+				// Prometheus histogram is expensive, we only record slow poll.
+				s.metricSlowPollDuration.Observe(actorPollDuration.Seconds())
+				if actorPollDuration > 10*slowPollThreshold { // 1s
+					log.Warn("actor poll received messages too slow",
+						zap.Duration("duration", actorPollDuration),
+						zap.Uint64("id", uint64(p.mb.ID())),
+						zap.String("name", s.name))
+				}
 			}
-			s.metricPollDuration.Observe(receiveDuration.Seconds())
 		}
 
 		rd.Lock()
