@@ -164,7 +164,10 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed atomic.Bool
+	// int value of pb.Stage, stage diagram:
+	// new --> running --> stopped --> finished
+	//     |-> finished
+	stage atomic.Int32
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -248,7 +251,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.jobsClosed.Store(true) // not open yet
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
-	syncer.closed.Store(false)
+	syncer.stage.Store(int32(pb.Stage_New))
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -672,12 +675,16 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		<-newCtx.Done() // ctx or newCtx
 	}()
 
+	s.stage.Store(int32(pb.Stage_Running))
+	defer s.stage.Store(int32(pb.Stage_Stopped))
+
 	err := s.Run(newCtx)
 	if err != nil {
 		// returned error rather than sent to runFatalChan
 		// cancel goroutines created in s.Run
 		cancel()
 	}
+
 	s.closeJobChans()   // Run returned, all jobs sent, we can close s.jobs
 	s.wg.Wait()         // wait for sync goroutine to return
 	close(runFatalChan) // Run returned, all potential fatal sent to s.runFatalChan
@@ -3374,8 +3381,12 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
+func (s *Syncer) IsRunning() bool {
+	return s.stage.Load() == int32(pb.Stage_Running)
+}
+
 func (s *Syncer) isClosed() bool {
-	return s.closed.Load()
+	return s.stage.Load() == int32(pb.Stage_Finished)
 }
 
 // Close closes syncer.
@@ -3407,7 +3418,7 @@ func (s *Syncer) Close() {
 
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
 
-	s.closed.Store(true)
+	s.stage.Store(int32(pb.Stage_Finished))
 }
 
 // stopSync stops syncing, now it used by Close and Pause

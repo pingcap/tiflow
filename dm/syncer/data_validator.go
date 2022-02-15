@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/atomic"
@@ -41,20 +41,19 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 const (
-	defaultDelay       = 5 * time.Second
-	retryInterval      = 5 * time.Second
-	validationInterval = time.Second
-	batchRowCount      = 200
-	defaultWorkerCnt   = 5
+	checkInterval        = 5 * time.Second
+	retryInterval        = 5 * time.Second
+	validationInterval   = 10 * time.Second
+	defaultBatchRowCount = 500
+	defaultWorkerCnt     = 5
 )
-
-type rowChangeType int
 
 type validateTableInfo struct {
 	Schema     string
@@ -62,6 +61,7 @@ type validateTableInfo struct {
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	ColumnMap  map[string]*model.ColumnInfo
+	Target     *filter.Table // target table after route
 }
 
 type RowDataIterator interface {
@@ -105,6 +105,8 @@ func (b *RowChangeIteratorImpl) Close() {
 	// skip: nothing to do
 }
 
+type rowChangeType int
+
 const (
 	rowInvalidChange rowChangeType = iota
 	rowInsert
@@ -126,6 +128,7 @@ type rowChange struct {
 	data       []interface{}
 	theType    rowChangeType
 	lastMeetTs int64 // the last meet timestamp(in seconds)
+	retryCnt   int   // retry count
 }
 
 // DataValidator
@@ -172,6 +175,9 @@ type DataValidator struct {
 	workerCnt          int
 	pendingChangeChs   map[int]chan map[string]*tableChange // replace pendingChangeCh
 	failedChangesMap   map[int]map[string]*tableChange      // replace failedChanges
+
+	// such as table without primary key
+	unsupportedTable map[string]string
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -190,7 +196,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 		c.pendingChangeChs[i] = make(chan map[string]*tableChange)
 		c.failedChangesMap[i] = make(map[string]*tableChange)
 	}
-	c.batchRowCnt = batchRowCount
+	c.batchRowCnt = defaultBatchRowCount
 	c.validationTimer = time.NewTimer(validationInterval)
 	c.rowsEventChan = make(chan *replication.BinlogEvent)
 	c.pendingChangeCh = make(chan map[string]*tableChange)
@@ -315,6 +321,7 @@ func (v *DataValidator) errorProcessRoutine() {
 			v.fillResult(err, true)
 
 			if errors.Cause(err) != context.Canceled {
+				// todo: need a better way to handle err(auto resuming on some error, etc.)
 				v.stopInner()
 			}
 		case <-v.ctx.Done():
@@ -328,17 +335,33 @@ func (v *DataValidator) waitSyncerSynced(loc *binlog.Location, event *replicatio
 	return nil
 }
 
+func (v *DataValidator) waitSyncerRunning() error {
+	for {
+		select {
+		case <-v.ctx.Done():
+			return v.ctx.Err()
+		case <-time.After(checkInterval):
+			if v.syncer.IsRunning() {
+				return nil
+			}
+		}
+	}
+}
+
 // doValidate: runs in a separate goroutine
 func (v *DataValidator) doValidate() {
-	// todo: wait syncer started, get syncer checkpoint
-	var location binlog.Location
+	if err := v.waitSyncerRunning(); err != nil {
+		v.errChan <- terror.Annotate(err, "failed to wait syncer running")
+		return
+	}
+
 	tctx := tcontext.NewContext(v.ctx, v.L)
-	if v.streamerController.IsClosed() {
-		err := v.streamerController.Start(tctx, location)
-		if err != nil {
-			v.errChan <- terror.Annotate(err, "fail to start streamer controller")
-			return
-		}
+	// todo: syncer may change replication location(start from timestamp, sharding resync), how validator react?
+	location := v.syncer.checkpoint.GlobalPoint()
+	err := v.streamerController.Start(tctx, location)
+	if err != nil {
+		v.errChan <- terror.Annotate(err, "fail to start streamer controller")
+		return
 	}
 
 	v.L.Info("start continuous validation")
@@ -353,27 +376,40 @@ func (v *DataValidator) doValidate() {
 			v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
 			return
 		}
-		if utils.IsFakeRotateEvent(e.Header) {
-			continue
-		}
 
-		// wait until syncer synced that event
-		if err := v.waitSyncerSynced(&currLoc, e); err != nil {
-			v.errChan <- terror.Annotate(err, "failed to wait syncer")
-			return
+		if !utils.IsFakeRotateEvent(e.Header) {
+			// wait until syncer synced that event
+			err := v.waitSyncerSynced(&currLoc, e)
+			if err != nil {
+				v.errChan <- terror.Annotate(err, "failed to wait syncer")
+				return
+			}
 		}
 
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
-			currLoc.Position = mysql.Position{Name: string(ev.NextLogName), Pos: binlog.FileHeaderLen}
+			currLoc.Position.Name = string(ev.NextLogName)
+			currLoc.Position.Pos = uint32(ev.Position)
 		case *replication.QueryEvent:
 			// TODO not processed now
 			currLoc.Position.Pos = e.Header.LogPos
+			err2 := currLoc.SetGTID(ev.GSet)
+			if err2 != nil {
+				v.errChan <- terror.Annotate(err2, "failed to set gtid")
+				return
+			}
 		case *replication.RowsEvent:
 			currLoc.Position.Pos = e.Header.LogPos
 			select {
 			case v.rowsEventChan <- e:
 			case <-v.ctx.Done():
+				return
+			}
+		case *replication.XIDEvent:
+			currLoc.Position.Pos = e.Header.LogPos
+			err2 := currLoc.SetGTID(ev.GSet)
+			if err2 != nil {
+				v.errChan <- terror.Annotate(err2, "failed to set gtid")
 				return
 			}
 		}
@@ -424,6 +460,7 @@ func (v *DataValidator) rowsEventProcessRoutine() {
 		case e := <-v.rowsEventChan:
 			if err := v.processEventRows(e.Header, e.Event.(*replication.RowsEvent)); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
+				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
 			}
 		case <-v.validationTimer.C:
@@ -516,64 +553,58 @@ func (v *DataValidator) dispatchRowChange(change map[string]*tableChange) {
 }
 
 func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *replication.RowsEvent) error {
-	schemaName, tableName := string(ev.Table.Schema), string(ev.Table.Table)
-	fullTableName := fmt.Sprintf("%s.%s", schemaName, tableName)
-	var (
-		table *validateTableInfo
-		ok    bool
-	)
-	if table, ok = v.tables[fullTableName]; !ok {
-		// table not found in cache
-		// try getting table info from the upstream
-		tctx := tcontext.NewContext(v.ctx, v.L)
-		fullTableQueryName := fmt.Sprintf("`%s`.`%s`", schemaName, tableName)
-		createSQL, err := dbconn.GetTableCreateSQL(tctx, v.fromDBConn, fullTableQueryName)
-		if err != nil {
-			// get create table stmt failed
-			return err
-		}
-		parser, err := utils.GetParser(v.ctx, v.fromDB.DB)
-		if err != nil {
-			return err
-		}
-		tableInfo, err := dbutil.GetTableInfoBySQL(createSQL, parser)
-		if err != nil {
-			return err
-		}
-		columnMap := make(map[string]*model.ColumnInfo)
-		for _, col := range tableInfo.Columns {
-			columnMap[col.Name.O] = col
-		}
-		var primaryIdx *model.IndexInfo
-		for _, idx := range tableInfo.Indices {
-			if idx.Primary {
-				primaryIdx = idx
-			}
-		}
-		v.tables[fullTableName] = &validateTableInfo{
-			Schema:     schemaName,
-			Name:       tableName,
-			Info:       tableInfo,
-			PrimaryKey: primaryIdx,
-			ColumnMap:  columnMap,
-		}
-		table = v.tables[fullTableName]
+	sourceTable := &filter.Table{
+		Schema: string(ev.Table.Schema),
+		Name:   string(ev.Table.Table),
 	}
-	if table.PrimaryKey == nil {
-		err := errors.Errorf("missing primary key for table `%s`.`%s`", schemaName, tableName)
-		return err
-	}
-	for _, cols := range ev.SkippedColumns {
-		if len(cols) > 0 {
-			err := errors.Errorf("unexpected skipped columns for table `%s`.`%s`", schemaName, tableName)
-			return err
-		}
-	}
-	changeType := getRowChangeType(header.EventType)
-	if changeType == rowInvalidChange {
-		v.L.Info("ignoring unrecognized event", zap.Reflect("event header", header))
+	fullTableName := sourceTable.String()
+	if _, ok := v.unsupportedTable[fullTableName]; ok {
 		return nil
 	}
+
+	targetTable := v.syncer.route(sourceTable)
+	tableInfo, err := v.syncer.schemaTracker.GetTableInfo(sourceTable)
+	if err != nil {
+		if schema.IsTableNotExists(err) {
+			// not a table need to sync
+			return nil
+		}
+		return terror.Annotate(err, "failed to get table info")
+	}
+
+	columnMap := make(map[string]*model.ColumnInfo)
+	for _, col := range tableInfo.Columns {
+		columnMap[col.Name.O] = col
+	}
+	var primaryIdx *model.IndexInfo
+	for _, idx := range tableInfo.Indices {
+		if idx.Primary {
+			primaryIdx = idx
+		}
+	}
+	if primaryIdx == nil {
+		// todo: for table without primary index, need to record in the failed table, will add it later together with checkpoint
+		v.unsupportedTable[fullTableName] = "without primary key"
+		return nil
+	}
+
+	table := &validateTableInfo{
+		Schema:     sourceTable.Schema,
+		Name:       sourceTable.Name,
+		Info:       tableInfo,
+		PrimaryKey: primaryIdx,
+		ColumnMap:  columnMap,
+		Target:     targetTable,
+	}
+
+	for _, cols := range ev.SkippedColumns {
+		if len(cols) > 0 {
+			err := errors.Errorf("unexpected skipped columns for table `%s`.`%s`", table.Schema, table.Name)
+			return err
+		}
+	}
+
+	changeType := getRowChangeType(header.EventType)
 	v.changeEventCount[changeType]++
 
 	pk := table.PrimaryKey
@@ -584,13 +615,25 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 
 	rowCount := v.getRowCount(v.accumulatedChanges)
 	change := v.accumulatedChanges[fullTableName]
-	for i := 0; i < len(ev.Rows); i++ {
-		row := ev.Rows[i]
-		pkValue := make([]string, len(pk.Columns))
-		for _, idx := range pkIndices {
-			pkValue[idx] = fmt.Sprintf("%v", row[idx])
-		}
 
+	updateRowChange := func(key string, row *rowChange) {
+		if val, ok := change.rows[key]; ok {
+			val.data = row.data
+			val.theType = row.theType
+			val.lastMeetTs = row.lastMeetTs
+			val.retryCnt = row.retryCnt
+		} else {
+			change.rows[key] = row
+			rowCount++
+			v.pendingRowCnt.Inc()
+		}
+	}
+
+	step := 1
+	if changeType == rowUpdated {
+		step = 2
+	}
+	for i := 0; i < len(ev.Rows); i += step {
 		if change == nil {
 			// no change of this table
 			change = &tableChange{
@@ -599,30 +642,44 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 			}
 			v.accumulatedChanges[fullTableName] = change
 		}
-		key := strings.Join(pkValue, "-")
-		val, ok := change.rows[key]
-		if !ok && (changeType != rowUpdated || i%2 != 0) {
-			// insert a new row change iff:
-			// 1. not an update binlog record (e.g. insert/delete) OR
-			// 2. the new value in the update binlog
-			val = &rowChange{pk: pkValue}
-			change.rows[key] = val
-			rowCount++
-			v.pendingRowCnt.Inc()
-		} else if ok && changeType == rowUpdated && i%2 == 0 {
-			// if this row change exists and updated now:
-			// mark the `old_row_val` as deleted
-			// delete it and replace this record with the `new_row_val` later in the next iteration
-			val.theType = rowDeleted
-			continue
+		row := ev.Rows[i]
+		pkValue := make([]string, len(pk.Columns))
+		for _, idx := range pkIndices {
+			pkValue[idx] = fmt.Sprintf("%v", row[idx])
 		}
-		if val != nil {
-			val.data = row
-			val.theType = changeType
-			val.lastMeetTs = int64(header.Timestamp)
+		key := strings.Join(pkValue, "-")
+
+		if changeType == rowUpdated {
+			afterRowChangeType := changeType
+			afterRow := ev.Rows[i+1]
+			afterPkValue := make([]string, len(pk.Columns))
+			for _, idx := range pkIndices {
+				afterPkValue[idx] = fmt.Sprintf("%v", afterRow[idx])
+			}
+			afterKey := strings.Join(afterPkValue, "-")
+			if afterKey != key {
+				// convert to delete and insert
+				updateRowChange(key, &rowChange{
+					pk:         pkValue,
+					data:       row,
+					theType:    rowDeleted,
+					lastMeetTs: int64(header.Timestamp),
+				})
+				afterRowChangeType = rowInsert
+			}
+			updateRowChange(afterKey, &rowChange{
+				pk:         afterPkValue,
+				data:       afterRow,
+				theType:    afterRowChangeType,
+				lastMeetTs: int64(header.Timestamp),
+			})
 		} else {
-			// row change NOT exists and this row change record is an update binlog with `old_row_val`
-			continue
+			updateRowChange(key, &rowChange{
+				pk:         pkValue,
+				data:       row,
+				theType:    changeType,
+				lastMeetTs: int64(header.Timestamp),
+			})
 		}
 
 		if rowCount >= v.batchRowCnt {
@@ -649,16 +706,16 @@ func (v *DataValidator) getRowCount(c map[string]*tableChange) int {
 	return res
 }
 
+// getRowChangeType should be called only when the event type is RowsEvent
 func getRowChangeType(t replication.EventType) rowChangeType {
 	switch t {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
 		return rowInsert
 	case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
 		return rowUpdated
-	case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
-		return rowDeleted
 	default:
-		return rowInvalidChange
+		// replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
+		return rowDeleted
 	}
 }
 
