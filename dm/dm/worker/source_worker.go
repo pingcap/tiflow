@@ -800,7 +800,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 		zap.String("task", subTaskCfg.Name),
 		zap.Stringer("stage", stage))
 
-	// new sub task
+	// for new added subtask
 	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 		switch stage.Expect {
 		case pb.Stage_Running, pb.Stage_Stopped:

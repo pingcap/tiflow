@@ -13,7 +13,7 @@
 //
 // MVC for dm-master's openapi server
 // Model(data in etcd): source of truth
-// View(openapi_view): handle(validate,filter,prepare parameters) request from user and call controller to update model.
+// View(openapi_view): do some inner work such as validate, filter, prepare parameters/response and call controller to update model.
 // Controller(openapi_controller): call model func to update data.
 
 package master
