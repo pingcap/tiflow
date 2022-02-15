@@ -42,7 +42,7 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	}
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
-	ret.messageSender = ret.DefaultBaseMaster.messageRouter
+	ret.messageSender = ret.DefaultBaseMaster.messageSender
 	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*metadata.MetaMock)
 	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)

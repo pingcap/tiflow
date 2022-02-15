@@ -162,6 +162,13 @@ type (
 	}
 )
 
+type WorkerMetaKVData struct {
+	MasterID   Master           `json:"id"`
+	NodeID     p2p.NodeID       `json:"node-id"`
+	StatusCode WorkerStatusCode `json:"status-code"`
+	Message    string           `json:"message"`
+}
+
 type MasterFailoverReasonCode int32
 
 const (

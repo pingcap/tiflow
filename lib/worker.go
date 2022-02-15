@@ -332,7 +332,7 @@ func newMasterClient(
 }
 
 func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := NewMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -346,8 +346,12 @@ func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
 	return nil
 }
 
+func (m *masterClient) MasterNodeID() p2p.NodeID {
+	return m.masterID
+}
+
 func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
-	metaClient := NewMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -371,6 +375,18 @@ func (m *masterClient) MasterID() MasterID {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.masterID
+}
+
+func (m *masterClient) MasterNode() p2p.NodeID {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.masterNode
+}
+
+func (m *masterClient) Epoch() Epoch {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.masterEpoch
 }
 
 func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *HeartbeatPongMessage) {
