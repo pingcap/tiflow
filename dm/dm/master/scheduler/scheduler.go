@@ -682,7 +682,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
-// if input worker is emptry means try bound this source to a free worker.
+// if input worker is empty means try transfer this source to a free worker.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
