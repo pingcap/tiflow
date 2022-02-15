@@ -130,11 +130,10 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 		// Sequence is not supported yet, and always ineligible.
 		// Skip Warn to avoid confusion.
 		// See https://github.com/pingcap/tiflow/issues/4559
-		if t.IsSequence() {
-			return true
+		if !t.IsSequence() {
+			log.Warn("skip ineligible table",
+				zap.Int64("tableID", t.ID), zap.Stringer("tableName", t.TableName))
 		}
-		log.Warn("skip ineligible table",
-			zap.Int64("tableID", t.ID), zap.Stringer("tableName", t.TableName))
 		return true
 	}
 	return false
