@@ -14,18 +14,25 @@
 package syncer
 
 import (
+	"crypto/tls"
 	"fmt"
+	"time"
 
+	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 )
 
@@ -117,4 +124,54 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 		return
 	}
 	version.ParseServerInfo(versionInfo)
+}
+
+func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, error) {
+	var err error
+	if len(tzStr) == 0 {
+		tzStr, err = conn.FetchTimeZoneSetting(tctx.Ctx, dbCfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	loc, err := utils.ParseTimeZone(tzStr)
+	if err != nil {
+		return nil, err
+	}
+	tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	return loc, nil
+}
+
+func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location) (replication.BinlogSyncerConfig, error) {
+	var tlsConfig *tls.Config
+	var err error
+	if cfg.From.Security != nil {
+		if loadErr := cfg.From.Security.LoadTLSContent(); loadErr != nil {
+			return replication.BinlogSyncerConfig{}, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
+		}
+		tlsConfig, err = toolutils.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
+			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKEYBytes, cfg.From.Security.CertAllowedCN)
+		if err != nil {
+			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
+		}
+		if tlsConfig != nil {
+			tlsConfig.InsecureSkipVerify = true
+		}
+	}
+
+	syncCfg := replication.BinlogSyncerConfig{
+		ServerID:                cfg.ServerID,
+		Flavor:                  cfg.Flavor,
+		Host:                    cfg.From.Host,
+		Port:                    uint16(cfg.From.Port),
+		User:                    cfg.From.User,
+		Password:                cfg.From.Password,
+		TimestampStringLocation: timezone,
+		TLSConfig:               tlsConfig,
+	}
+	// when retry count > 1, go-mysql will retry sync from the previous GTID set in GTID mode,
+	// which may get duplicate binlog event after retry success. so just set retry count = 1, and task
+	// will exit when meet error, and then auto resume by DM itself.
+	common.SetDefaultReplicationCfg(&syncCfg, 1)
+	return syncCfg, nil
 }
