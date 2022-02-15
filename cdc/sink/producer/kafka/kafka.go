@@ -48,10 +48,20 @@ type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncClient and syncClient.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
+<<<<<<< HEAD
 	clientLock  sync.RWMutex
 	asyncClient sarama.AsyncProducer
 	syncClient  sarama.SyncProducer
 	// producersReleased records whether asyncClient and syncClient have been closed properly
+=======
+	clientLock    sync.RWMutex
+	admin         kafka.ClusterAdminClient
+	client        sarama.Client
+	asyncProducer sarama.AsyncProducer
+	syncProducer  sarama.SyncProducer
+
+	// producersReleased records whether asyncProducer and syncProducer have been closed properly
+>>>>>>> 28fe713de (cdc/sink: kafka sink integrate broker level metrics (#4517))
 	producersReleased bool
 	topic             string
 	partitionNum      int32
@@ -221,6 +231,21 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 	}
+<<<<<<< HEAD
+=======
+
+	start = time.Now()
+	if err := k.admin.Close(); err != nil {
+		log.Warn("close kafka cluster admin with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+
+	k.metricsMonitor.Cleanup()
+>>>>>>> 28fe713de (cdc/sink: kafka sink integrate broker level metrics (#4517))
 	return nil
 }
 
@@ -274,11 +299,14 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+<<<<<<< HEAD
 	defer func() {
 		if err := admin.Close(); err != nil {
 			log.Warn("close kafka cluster admin failed", zap.Error(err))
 		}
 	}()
+=======
+>>>>>>> 28fe713de (cdc/sink: kafka sink integrate broker level metrics (#4517))
 
 	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -299,10 +327,19 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, err
 	}
 	k := &kafkaSaramaProducer{
+<<<<<<< HEAD
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
 		topic:        topic,
 		partitionNum: config.PartitionNum,
+=======
+		admin:         admin,
+		client:        client,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
+		topic:         topic,
+		partitionNum:  config.PartitionNum,
+>>>>>>> 28fe713de (cdc/sink: kafka sink integrate broker level metrics (#4517))
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
@@ -312,6 +349,15 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
+<<<<<<< HEAD
+=======
+
+		id:   changefeedID,
+		role: role,
+
+		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
+>>>>>>> 28fe713de (cdc/sink: kafka sink integrate broker level metrics (#4517))
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
