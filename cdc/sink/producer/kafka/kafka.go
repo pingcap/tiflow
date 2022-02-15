@@ -268,6 +268,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	ticker := time.NewTicker(flushMetricsInterval)
 	defer ticker.Stop()
 	for {
+		var ack *sarama.ProducerMessage
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -279,10 +280,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
-		case msg := <-k.asyncProducer.Successes():
-			if msg == nil {
-				continue
-			}
+		case ack = <-k.asyncProducer.Successes():
 		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
@@ -292,13 +290,15 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			}
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
-		k.mu.Lock()
-		k.mu.inflight--
-		if k.mu.inflight == 0 && k.mu.down != nil {
-			k.mu.down <- struct{}{}
-			k.mu.down = nil
+		if ack != nil {
+			k.mu.Lock()
+			k.mu.inflight--
+			if k.mu.inflight == 0 && k.mu.down != nil {
+				k.mu.down <- struct{}{}
+				k.mu.down = nil
+			}
+			k.mu.Unlock()
 		}
-		k.mu.Unlock()
 	}
 }
 
