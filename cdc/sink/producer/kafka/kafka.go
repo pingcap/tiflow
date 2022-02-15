@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -64,12 +63,11 @@ type kafkaSaramaProducer struct {
 	topic             string
 	partitionNum      int32
 
-	partitionOffset []struct {
-		flushed uint64
-		sent    uint64
+	mu struct {
+		sync.Mutex
+		inflight int64
+		down     chan struct{}
 	}
-	flushedNotifier *notify.Notifier
-	flushedReceiver *notify.Receiver
 
 	failpointCh chan error
 
@@ -101,7 +99,6 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
 	}
-	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
 
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
@@ -116,6 +113,10 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 		log.Panic("SinkFlushDMLPanic",
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
+
+	k.mu.Lock()
+	k.mu.inflight++
+	k.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
@@ -151,49 +152,27 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	targetOffsets := make([]uint64, k.partitionNum)
-	for i := 0; i < len(k.partitionOffset); i++ {
-		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
-	}
+	down := make(chan struct{}, 1)
 
-	noEventsToFLush := true
-	for i, target := range targetOffsets {
-		if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
-			noEventsToFLush = false
-			break
-		}
+	k.mu.Lock()
+	inflight := k.mu.inflight
+	immediateFlush := inflight == 0
+	if !immediateFlush {
+		k.mu.down = down
 	}
-	if noEventsToFLush {
-		// no events to flush
+	k.mu.Unlock()
+
+	if immediateFlush {
 		return nil
 	}
 
-	// checkAllPartitionFlushed checks whether data in each partition is flushed
-	checkAllPartitionFlushed := func() bool {
-		for i, target := range targetOffsets {
-			if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
-				return false
-			}
-		}
-		return true
-	}
-
-flushLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-k.closeCh:
-			if checkAllPartitionFlushed() {
-				return nil
-			}
-			return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
-		case <-k.flushedReceiver.C:
-			if !checkAllPartitionFlushed() {
-				continue flushLoop
-			}
-			return nil
-		}
+	select {
+	case <-k.closeCh:
+		return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-down:
+		return nil
 	}
 }
 
@@ -281,7 +260,6 @@ func (k *kafkaSaramaProducer) Close() error {
 
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
-		k.flushedReceiver.Stop()
 		log.Info("stop the kafka producer",
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
@@ -302,12 +280,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
 		case msg := <-k.asyncProducer.Successes():
-			if msg == nil || msg.Metadata == nil {
+			if msg == nil {
 				continue
 			}
-			flushedOffset := msg.Metadata.(uint64)
-			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
-			k.flushedNotifier.Notify()
 		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
@@ -317,6 +292,13 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			}
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
+		k.mu.Lock()
+		k.mu.inflight--
+		if k.mu.inflight == 0 && k.mu.down != nil {
+			k.mu.down <- struct{}{}
+			k.mu.down = nil
+		}
+		k.mu.Unlock()
 	}
 }
 
@@ -363,8 +345,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	notifier := new(notify.Notifier)
-	flushedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
@@ -375,15 +355,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		syncProducer:  syncProducer,
 		topic:         topic,
 		partitionNum:  config.PartitionNum,
-		partitionOffset: make([]struct {
-			flushed uint64
-			sent    uint64
-		}, config.PartitionNum),
-		flushedNotifier: notifier,
-		flushedReceiver: flushedReceiver,
-		closeCh:         make(chan struct{}),
-		failpointCh:     make(chan error, 1),
-		closing:         kafkaProducerRunning,
+		closeCh:       make(chan struct{}),
+		failpointCh:   make(chan error, 1),
+		closing:       kafkaProducerRunning,
 
 		id:   changefeedID,
 		role: role,
