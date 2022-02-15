@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	tidbconfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
@@ -36,7 +35,7 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, credential *security.Credential) (kv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
