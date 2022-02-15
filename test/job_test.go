@@ -40,7 +40,7 @@ func (t *testJobSuite) testSubmit(c *C) {
 	configBytes, err := json.Marshal(testJobConfig)
 	c.Assert(err, IsNil)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_Benchmark,
+		Tp:     pb.JobType_CVSDemo,
 		Config: configBytes,
 	}
 	resp, err := client.SubmitJob(context.Background(), req)
@@ -99,7 +99,7 @@ func (t *testJobSuite) testPause(c *C) {
 	configBytes, err := json.Marshal(testJobConfig)
 	c.Assert(err, IsNil)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_Benchmark,
+		Tp:     pb.JobType_CVSDemo,
 		Config: configBytes,
 	}
 	resp, err := client.SubmitJob(context.Background(), req)

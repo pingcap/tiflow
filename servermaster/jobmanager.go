@@ -2,12 +2,12 @@ package servermaster
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/hanfei1991/microcosm/client"
+	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/lib/registry"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -57,29 +57,32 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
-	var masterConfig *model.JobMaster
+	var (
+		id  lib.WorkerID
+		err error
+	)
+	// CreateWorker here is to create job master actually
+	// TODO: use correct worker cost
 	switch req.Tp {
-	case pb.JobType_Benchmark:
-		masterConfig = &model.JobMaster{
-			Tp:     model.Benchmark,
-			Config: req.Config,
+	case pb.JobType_CVSDemo:
+		config := &cvs.Config{}
+		err = json.Unmarshal(req.Config, config)
+		if err != nil {
+			break
 		}
+		id, err = jm.BaseMaster.CreateWorker(
+			lib.CvsJobMaster, config, defaultJobMasterCost)
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	// CreateWorker here is to create job master actually
-	// TODO: use correct worker type and worker cost
-	id, err := jm.BaseMaster.CreateWorker(
-		registry.WorkerTypeFakeMaster, masterConfig, defaultJobMasterCost)
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
 	resp.JobIdStr = id
-
 	return resp
 }
 

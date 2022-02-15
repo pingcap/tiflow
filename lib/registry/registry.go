@@ -40,6 +40,7 @@ func (r *registryImpl) MustRegisterWorkerType(tp lib.WorkerType, factory WorkerF
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
 		log.L().Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
 	}
+	log.L().Info("register worker", zap.Int64("worker-type", int64(tp)))
 }
 
 func (r *registryImpl) RegisterWorkerType(tp lib.WorkerType, factory WorkerFactory) (ok bool) {

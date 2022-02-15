@@ -55,6 +55,6 @@ func TestRegistryWorkerTypeNotFound(t *testing.T) {
 func TestLoadFake(t *testing.T) {
 	registry := NewRegistry()
 	require.NotPanics(t, func() {
-		LoadFake(registry)
+		RegisterFake(registry)
 	})
 }

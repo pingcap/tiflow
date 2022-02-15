@@ -13,7 +13,8 @@ const (
 
 type FakeConfig struct{}
 
-func LoadFake(registry Registry) {
+// only for test.
+func RegisterFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
 		return fake.NewFakeMaster(ctx, id, masterID, config)
 	}, &FakeConfig{})

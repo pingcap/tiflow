@@ -46,7 +46,7 @@ type JobMaster struct {
 	workerID      lib.WorkerID
 }
 
-func init() {
+func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCVSJobMaster(ctx, id, masterID, config)
 	}
@@ -113,10 +113,10 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		}
 		status := worker.handle.Status()
 		if status.Code == lib.WorkerStatusNormal {
-			num := status.Ext.(int64)
-			worker.curLoc = num
-			jm.counter += num
-			log.L().Info("cvs job tmp num ", zap.Any("id :", worker.handle.ID()), zap.Int64("counter: ", num))
+			num := status.Ext.(*int64)
+			worker.curLoc = *num
+			jm.counter += *num
+			log.L().Debug("cvs job tmp num ", zap.Any("id :", worker.handle.ID()), zap.Int64("counter: ", *num))
 			// todo : store the sync progress into the meta store for each file
 		} else if status.Code == lib.WorkerStatusFinished {
 			// todo : handle error case here

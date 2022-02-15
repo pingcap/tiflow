@@ -46,7 +46,7 @@ type cvsTask struct {
 	isEOF    bool
 }
 
-func init() {
+func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
 		return NewCvsTask(ctx, id, masterID, config)
 	}

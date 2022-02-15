@@ -6,10 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/google/uuid"
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/spf13/cobra"
@@ -18,7 +14,7 @@ import (
 
 func NewRunFake() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run-fake [--executor-addr addr] [--executor-id id]",
+		Use:   "submit-job",
 		Short: "Run a fake workload to a specific executor",
 		RunE:  runFakeFunc,
 	}
@@ -38,16 +34,6 @@ func openFileAndReadString(path string) (content []byte, err error) {
 }
 
 func runFakeFunc(cmd *cobra.Command, _ []string) error {
-	execAddr, err := cmd.Flags().GetString("executor-addr")
-	if err != nil {
-		fmt.Print("error in parse `--executor-addr`")
-		return err
-	}
-	execID, err := cmd.Flags().GetString("executor-id")
-	if err != nil {
-		fmt.Print("error in parse `--executor-id`")
-		return err
-	}
 	path, err := cmd.Flags().GetString("job-config")
 	if err != nil {
 		fmt.Print("error in parse `--job-config`")
@@ -58,25 +44,16 @@ func runFakeFunc(cmd *cobra.Command, _ []string) error {
 		fmt.Print("error in parse job-config")
 		return err
 	}
-	err = cltManager.AddExecutor(model.ExecutorID(execID), execAddr)
-	if err != nil {
-		return err
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 
-	log.L().Info("sending request to executor", zap.String("address", execAddr))
-	resp, err := cltManager.ExecutorClient(model.ExecutorID(execID)).Send(ctx, &client.ExecutorRequest{
-		Cmd: client.CmdDispatchTask,
-		Req: &pb.DispatchTaskRequest{
-			TaskTypeId: int64(lib.CvsJobMaster),
-			TaskConfig: jobConfig,
-			MasterId:   uuid.New().String(), //  use a unique ID to force Init the master each time,
-			WorkerId:   uuid.New().String(),
-		},
+	resp, err := cltManager.MasterClient().SubmitJob(ctx, &pb.SubmitJobRequest{
+		Tp:     pb.JobType_CVSDemo, // TODO: Support different job types.
+		Config: jobConfig,
+		User:   "hanfei",
 	})
 	if err != nil {
-		log.L().Error("failed to dispatch master", zap.Error(err))
+		log.L().Error("failed to submit job", zap.Error(err))
 		os.Exit(1)
 	}
 	log.L().Info("resp", zap.Any("resp", resp))

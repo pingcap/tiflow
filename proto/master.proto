@@ -66,7 +66,7 @@ message HeartbeatResponse {
 }
 
 enum JobType {
-    Benchmark = 0;
+    CVSDemo = 0;
     DM = 1;
     CDC = 2;
 }
