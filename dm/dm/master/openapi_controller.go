@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// contains all controllers for openapi: source controller，task controller...
+// MVC for dm-master's openapi server
 // Model(data in etcd): source of truth
 // View(openapi_view): handle(validate,filter,prepare parameters) request from user and call controller to update model.
 // Controller(openapi_controller): call model func to update data.
@@ -59,7 +59,7 @@ func (s *Server) createSource(ctx context.Context, cfg *config.SourceConfig) err
 	return s.scheduler.AddSourceConfig(cfg)
 }
 
-// nolint:unparam
+// nolint:unparam,unused
 func (s *Server) updateSource(ctx context.Context, cfg *config.SourceConfig) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
@@ -77,8 +77,7 @@ func (s *Server) deleteSource(ctx context.Context, sourceName string, force bool
 	return s.scheduler.RemoveSourceCfg(sourceName)
 }
 
-// nolint:unparam
-// nolint:unused
+// nolint:unparam,unused
 func (s *Server) getSource(ctx context.Context, sourceName string) (openapiSource openapi.Source, err error) {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
@@ -115,6 +114,7 @@ func (s *Server) enableSource(ctx context.Context, sourceName, workerName string
 	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Running, true)
 }
 
+// nolint:unused
 func (s *Server) disableSource(ctx context.Context, sourceName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
@@ -133,6 +133,7 @@ func (s *Server) checkTask(ctx context.Context, subtaskCfgList []*config.SubTask
 	return checker.CheckSyncConfigFunc(ctx, subtaskCfgList, errCnt, warnCnt)
 }
 
+// nolint:unparam,unused
 func (s *Server) createTask(ctx context.Context, subtaskCfgList []*config.SubTaskConfig) error {
 	return s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subtaskCfgList...)...)
 }
@@ -143,11 +144,13 @@ func (s *Server) updateTask(ctx context.Context, taskCfg *config.TaskConfig) err
 	return nil
 }
 
+// nolint:unparam,unused
 func (s *Server) deleteTask(ctx context.Context, taskName string) error {
 	sourceNameList := s.getTaskSourceNameList(taskName)
 	return s.scheduler.RemoveSubTasks(taskName, sourceNameList...)
 }
 
+// nolint:unused
 func (s *Server) getTask(ctx context.Context, taskName string) error {
 	// TODO(ehco) no caller now , will implement later
 	return nil
@@ -239,13 +242,16 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, sourceNameL
 	return subTaskStatusList, nil
 }
 
+// nolint:unparam,unused
 func (s *Server) listTask(ctx context.Context, req interface{}) []openapi.Task {
 	// TODO(ehco) implement filter later
 	subTaskConfigMap := s.scheduler.GetSubTaskCfgs()
 	return config.SubTaskConfigsToOpenAPITask(subTaskConfigMap)
 }
 
+// nolint:unparam,unused
 func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList []string, remoteMeta bool, req interface{}) error {
+	// TODO(ehco) merge start-task req
 	subTaskConfigM := s.scheduler.GetSubTaskCfgsByTask(taskName)
 	needStartSubTaskList := make([]*config.SubTaskConfig, 0, len(subTaskConfigM))
 	for _, sourceName := range sourceNameList {
@@ -276,7 +282,7 @@ func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList 
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, sourceNameList...)
 }
 
-// nolint:unused
+// nolint:unparam,unused
 func (s *Server) stopTask(ctx context.Context, taskName string, sourceNameList []string) error {
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, sourceNameList...)
 }
