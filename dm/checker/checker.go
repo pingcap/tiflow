@@ -40,7 +40,6 @@ import (
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
@@ -126,7 +125,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// sourceID => []table
 	checkTablesMap := make(map[string][]*filter.Table)
 	dbs := make(map[string]*sql.DB)
-	columnMapping := make(map[string]*column.Mapping)
 
 	for _, instance := range c.instances {
 		bw, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
@@ -146,7 +144,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			rollbackHolder.Add(fr.FuncRollback{Name: "close-onlineDDL", Fn: c.closeOnlineDDL})
 		}
 
-		columnMapping[instance.cfg.SourceID], err = column.NewMapping(instance.cfg.CaseSensitive, instance.cfg.ColumnMappingRules)
 		if err != nil {
 			return terror.ErrTaskCheckGenColumnMapping.Delegate(err)
 		}
@@ -267,7 +264,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					continue
 				}
 				if instance.cfg.ShardMode == config.ShardPessimistic {
-					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, checkingShardID, dumpThreads))
 				} else {
 					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
 				}
@@ -374,7 +371,6 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
 		}
 	}
-	fmt.Printf("rawresult: %s\n", rawResult)
 	c.result.Lock()
 	c.result.detail = result
 	c.result.Unlock()

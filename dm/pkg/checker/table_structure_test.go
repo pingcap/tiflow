@@ -44,7 +44,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	result := checker.Check(ctx)
@@ -58,7 +57,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	mock = initShardingMock(mock)
@@ -82,7 +80,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	mock = initShardingMock(mock)

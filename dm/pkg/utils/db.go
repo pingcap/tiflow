@@ -182,10 +182,6 @@ func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
 	}
 
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
-	if err != nil {
-		return
-	}
-
 	return
 }
 
