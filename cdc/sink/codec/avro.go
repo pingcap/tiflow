@@ -170,9 +170,8 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetParams is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(config *Config) error {
+func (a *AvroEventBatchEncoder) SetParams(config *Config) {
 	// no op
-	return nil
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
@@ -533,9 +532,9 @@ const (
 )
 
 func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Config) (EncoderBuilder, error) {
-	if config.avroRegistry == "" {
-		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-	}
+	//if config.avroRegistry == "" {
+	//	return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+	//}
 
 	ctx := context.Background()
 	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, keySchemaSuffix)
@@ -558,9 +557,7 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Co
 // Build an AvroEventBatchEncoder.
 func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := newAvroEventBatchEncoder()
-	if err := encoder.SetParams(nil); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	encoder.SetParams(b.config)
 
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)

@@ -13,29 +13,74 @@
 
 package codec
 
-import "github.com/pingcap/tiflow/pkg/config"
+import (
+	"net/url"
+	"strconv"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+)
 
 // defaultMaxBatchSize sets the default value for max-batch-size
 const defaultMaxBatchSize int = 16
 
 // Config use to create the encoder
 type Config struct {
+	protocol string
+
+	// control batch behavior
 	maxMessageBytes int
 	maxBatchSize    int
 
-	// canal-json
+	// canal-json only
 	enableTiDBExtension bool
 
-	// Avro
+	// avro only
 	avroRegistry string
 }
 
-func NewConfig() *Config {
+func NewConfig(protocol string) *Config {
 	return &Config{
+		protocol: protocol,
+
 		maxMessageBytes:     config.DefaultMaxMessageBytes,
 		maxBatchSize:        defaultMaxBatchSize,
 		enableTiDBExtension: false,
 	}
+}
+
+func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
+	params := sinkURI.Query()
+	if s := params.Get("enable-tidb-extension"); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.enableTiDBExtension = b
+	}
+
+	if s := params.Get("max-batch-size"); s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		c.maxBatchSize = a
+	}
+
+	if s := params.Get("max-message-bytes"); s != "" {
+		a, err := strconv.Atoi(s)
+		if err != nil {
+			return err
+		}
+		c.maxMessageBytes = a
+	}
+
+	if s, ok := opts["registry"]; ok {
+		c.avroRegistry = s
+	}
+
+	return nil
 }
 
 func (c *Config) WithMaxMessageBytes(bytes int) *Config {
@@ -56,4 +101,24 @@ func (c *Config) WithEnableTiDBExtension() *Config {
 func (c *Config) WithAvroRegistry(registry string) *Config {
 	c.avroRegistry = registry
 	return c
+}
+
+func (c *Config) Validate(protocol string) error {
+	if c.enableTiDBExtension && protocol != "canal-json" {
+		return errors.New("enable-tidb-extension only support canal-json protocol")
+	}
+
+	if protocol == "avro" && c.avroRegistry == "" {
+		return cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+	}
+
+	if c.maxMessageBytes <= 0 {
+		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes))
+	}
+
+	if c.maxBatchSize <= 0 {
+		cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
+	}
+
+	return nil
 }

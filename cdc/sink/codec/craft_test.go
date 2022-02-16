@@ -84,7 +84,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
-		err := encoder.SetParams(nil)
+		encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		events := 0
@@ -106,7 +106,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
-		err := encoder.SetParams(nil)
+		encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		for i, ddl := range cs {
@@ -121,7 +121,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
-		err := encoder.SetParams(nil)
+		encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		for i, ts := range cs {
@@ -138,47 +138,47 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder().(*CraftEventBatchEncoder)
-	err := encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, defaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, defaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.NotNil)
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, int(math.MaxUint16))
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.NotNil)
 
-	err = encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.NotNil)
 }
 
 func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Check(err, check.IsNil)
 
 	testEvent := &model.RowChangedEvent{
@@ -202,7 +202,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Check(err, check.IsNil)
 
 	testEvent := &model.RowChangedEvent{

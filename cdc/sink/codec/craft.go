@@ -92,35 +92,9 @@ func (e *CraftEventBatchEncoder) Reset() {
 }
 
 // SetParams reads relevant parameters for craft protocol
-func (e *CraftEventBatchEncoder) SetParams(config *Config) error {
+func (e *CraftEventBatchEncoder) SetParams(config *Config) {
 	e.maxMessageBytes = config.maxMessageBytes
 	e.maxBatchSize = config.maxBatchSize
-
-	return nil
-	//var err error
-	//maxMessageBytes, ok := params["max-message-bytes"]
-	//if !ok {
-	//	return cerror.ErrSinkInvalidConfig.GenWithStack("max-message-bytes not found")
-	//}
-	//
-	//e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
-	//if err != nil {
-	//	return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
-	//}
-	//if e.maxMessageBytes <= 0 || e.maxMessageBytes > math.MaxInt32 {
-	//	return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageBytes))
-	//}
-	//
-	//e.maxBatchSize = defaultMaxBatchSize
-	//if maxBatchSize, ok := params["max-batch-size"]; ok {
-	//	e.maxBatchSize, err = strconv.Atoi(maxBatchSize)
-	//	if err != nil {
-	//		return cerror.ErrSinkInvalidConfig.Wrap(err)
-	//	}
-	//}
-	//if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
-	//	return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
-	//}
 }
 
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
@@ -138,10 +112,7 @@ type craftEventBatchEncoderBuilder struct {
 // Build a CraftEventBatchEncoder
 func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := NewCraftEventBatchEncoder()
-	if err := encoder.SetParams(nil); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
+	encoder.SetParams(b.config)
 	return encoder, nil
 }
 

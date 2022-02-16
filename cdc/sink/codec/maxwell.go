@@ -35,10 +35,7 @@ type maxwellEventBatchEncoderBuilder struct {
 // Build a `MaxwellEventBatchEncoder`
 func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := NewMaxwellEventBatchEncoder()
-	if err := encoder.SetParams(nil); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
+	encoder.SetParams(b.config)
 	return encoder, nil
 }
 
@@ -183,8 +180,8 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 // SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(config *Config) error {
-	return nil
+func (d *MaxwellEventBatchEncoder) SetParams(config *Config) {
+	return
 }
 
 // Column represents a column in maxwell

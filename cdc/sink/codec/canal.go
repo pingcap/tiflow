@@ -494,9 +494,9 @@ func (d *CanalEventBatchEncoder) Reset() {
 }
 
 // SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(config *Config) error {
+func (d *CanalEventBatchEncoder) SetParams(config *Config) {
 	// no op
-	return nil
+	return
 }
 
 // refreshPacketBody() marshals the messages to the packet body
@@ -541,9 +541,7 @@ type canalEventBatchEncoderBuilder struct {
 // Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := NewCanalEventBatchEncoder()
-	if err := encoder.SetParams(nil); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	encoder.SetParams(b.config)
 
 	return encoder, nil
 }

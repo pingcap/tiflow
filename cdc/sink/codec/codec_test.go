@@ -349,7 +349,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 }
 
 func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
-	err := encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	if err != nil {
 		return nil, err
 	}

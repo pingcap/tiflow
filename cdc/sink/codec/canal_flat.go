@@ -57,9 +57,7 @@ type canalFlatEventBatchEncoderBuilder struct {
 // Build a `CanalFlatEventBatchEncoder`
 func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) (EventBatchEncoder, error) {
 	encoder := NewCanalFlatEventBatchEncoder()
-	if err := encoder.SetParams(nil); err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrKafkaInvalidConfig, err)
-	}
+	encoder.SetParams(b.config)
 
 	return encoder, nil
 }
@@ -368,17 +366,8 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
-func (c *CanalFlatEventBatchEncoder) SetParams(config *Config) error {
+func (c *CanalFlatEventBatchEncoder) SetParams(config *Config) {
 	c.enableTiDBExtension = config.enableTiDBExtension
-	return nil
-	//if s, ok := params["enable-tidb-extension"]; ok {
-	//	a, err := strconv.ParseBool(s)
-	//	if err != nil {
-	//		return cerrors.WrapError(cerrors.ErrSinkInvalidConfig, err)
-	//	}
-	//	c.enableTiDBExtension = a
-	//}
-	//return nil
 }
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.

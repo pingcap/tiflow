@@ -467,8 +467,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	producerConfig := kafka.NewConfig()
-	if err := kafka.CompleteConfigs(sinkURI, producerConfig, replicaConfig); err != nil {
+	baseConfig := kafka.NewConfig()
+	if err := kafka.CompleteConfigs(sinkURI, baseConfig, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
@@ -477,26 +477,35 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, err
 	}
 
-	saramaConfig, err := kafka.NewSaramaConfigImpl(ctx, producerConfig)
+	saramaConfig, err := kafka.NewSaramaConfigImpl(ctx, baseConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := kafka.ValidateConfig(topic, producerConfig, saramaConfig); err != nil {
+	if err := kafka.ValidateConfig(topic, baseConfig, saramaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	if err := kafka.CreateTopic(topic, producerConfig, saramaConfig); err != nil {
+	if err := kafka.CreateTopic(topic, baseConfig, saramaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, saramaConfig, errCh)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, baseConfig, saramaConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig := codec.NewConfig().WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, encoderConfig, errCh)
+	encoderConfig := codec.NewConfig()
+	if err := encoderConfig.Apply(sinkURI, opts, replicaConfig.Sink.Protocol); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+
+	if err := encoderConfig.Validate(); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	sink, err := newMqSink(ctx, baseConfig.Credential, sProducer, filter, replicaConfig, encoderConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

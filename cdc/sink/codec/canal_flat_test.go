@@ -78,7 +78,7 @@ func (s *canalFlatSuite) TestSetParams(c *check.C) {
 
 	params := make(map[string]string)
 	params["enable-tidb-extension"] = "true"
-	err := encoder.SetParams(nil)
+	encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
 }

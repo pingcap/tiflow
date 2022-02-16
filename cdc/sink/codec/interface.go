@@ -48,7 +48,7 @@ type EventBatchEncoder interface {
 	// Reset reset the kv buffer
 	Reset()
 	// SetParams provides the encoder with more info on the sink
-	SetParams(config *Config) error
+	SetParams(config *Config)
 }
 
 // MQMessage represents an MQ message to the mqSink
