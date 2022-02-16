@@ -472,6 +472,9 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
 	)
+	mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+	)
 	mock.ExpectClose()
 	return db, nil
 }
