@@ -600,6 +600,31 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
+func convert2RowChange(row *model.RowChangedEvent) *sqlmodel.RowChange {
+	preValues := make([]interface{}, 0, len(row.PreColumns))
+	for _, col := range row.PreColumns {
+		if col == nil {
+			// represent what?
+			continue
+		}
+		preValues = append(preValues, col.Value)
+	}
+	postValues := make([]interface{}, 0, len(row.Columns))
+	for _, col := range row.Columns {
+		if col == nil {
+			continue
+		}
+		postValues = append(postValues, col.Value)
+	}
+
+	// when this RowChangedEvent is generated from redo or unit tests
+	if row.TableInfo == nil {
+		row.TableInfo = recoverTableInfo(row.PreColumns, row.Columns, row.IndexColumns)
+	}
+
+	return sqlmodel.NewRowChange(row.Table, nil, preValues, postValues, row.TableInfo, nil, nil)
+}
+
 type preparedDMLs struct {
 	sqls     []string
 	values   [][]interface{}
@@ -631,38 +656,16 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
 
-		preValues := make([]interface{}, 0, len(row.PreColumns))
-		for _, col := range row.PreColumns {
-			if col == nil {
-				// represent what?
-				continue
-			}
-			preValues = append(preValues, col.Value)
-		}
-		postValues := make([]interface{}, 0, len(row.Columns))
-		for _, col := range row.Columns {
-			if col == nil {
-				continue
-			}
-			postValues = append(postValues, col.Value)
-		}
-
-		// when this RowChangedEvent is generated from redo or unit tests
-		if row.TableInfo == nil {
-			row.TableInfo = recoverTableInfo(row.PreColumns, row.Columns, row.IndexColumns)
-		}
-
-		rowChange := sqlmodel.NewRowChange(row.Table, nil, preValues, postValues, row.TableInfo, nil, nil)
+		rowChange := convert2RowChange(row)
 
 		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			if s.forceReplicate {
-				query, args = rowChange.GenSQL(sqlmodel.DMLUpdate)
-			} else {
-				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
+			if !s.forceReplicate && !rowChange.HasNotNullUniqueIdx() {
+				continue
 			}
+			query, args = rowChange.GenSQL(sqlmodel.DMLUpdate)
 
 			if query != "" {
 				sqls = append(sqls, query)
@@ -680,15 +683,13 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			if s.forceReplicate {
+			if s.forceReplicate || rowChange.HasNotNullUniqueIdx() {
 				query, args = rowChange.GenSQL(sqlmodel.DMLDelete)
-			} else {
-				query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
-			}
-			if query != "" {
-				sqls = append(sqls, query)
-				values = append(values, args)
-				rowCount++
+				if query != "" {
+					sqls = append(sqls, query)
+					values = append(values, args)
+					rowCount++
+				}
 			}
 		}
 
@@ -834,51 +835,6 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
-	var builder strings.Builder
-	builder.WriteString("UPDATE " + quoteTable + " SET ")
-
-	columnNames := make([]string, 0, len(cols))
-	args := make([]interface{}, 0, len(cols)+len(preCols))
-	for _, col := range cols {
-		if col == nil || col.Flag.IsGeneratedColumn() {
-			continue
-		}
-		columnNames = append(columnNames, col.Name)
-		args = append(args, col.Value)
-	}
-	if len(args) == 0 {
-		return "", nil
-	}
-	for i, column := range columnNames {
-		if i == len(columnNames)-1 {
-			builder.WriteString("`" + quotes.EscapeName(column) + "`=?")
-		} else {
-			builder.WriteString("`" + quotes.EscapeName(column) + "`=?,")
-		}
-	}
-
-	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols, forceReplicate)
-	if len(wargs) == 0 {
-		return "", nil
-	}
-	for i := 0; i < len(colNames); i++ {
-		if i > 0 {
-			builder.WriteString(" AND ")
-		}
-		if wargs[i] == nil {
-			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
-		} else {
-			builder.WriteString(quotes.QuoteName(colNames[i]) + "=?")
-			args = append(args, wargs[i])
-		}
-	}
-	builder.WriteString(" LIMIT 1;")
-	sql := builder.String()
-	return sql, args
-}
-
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
@@ -957,7 +913,7 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 	// in fact nowhere will use this field, so we set a debug message
 	tableInfo.Name = timodel.NewCIStr("generated_by_redo")
 
-	for _, column := range nonEmptyColumns {
+	for i, column := range nonEmptyColumns {
 		columnInfo := &timodel.ColumnInfo{}
 		if column == nil {
 			// should not happen? please help check it
@@ -965,27 +921,28 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 		}
 		columnInfo.Name = timodel.NewCIStr(column.Name)
 		columnInfo.Tp = column.Type
+		columnInfo.Offset = i
 
 		flag := column.Flag
 		if flag.IsBinary() {
 			columnInfo.Charset = "binary"
 		}
 		if flag.IsGeneratedColumn() {
-			// will this happen?
+			// we do not use this field, so we set it to any non-empty string
+			columnInfo.GeneratedExprString = "generated_by_recoverTableInfo"
 		}
 		// now we will mark all column of an index as PriKeyFlag, however a real
 		// TableInfo from TiDB only mark the first column
 		// This also applies for UniqueKeyFlag, MultipleKeyFlag
-		if flag.IsPrimaryKey() {
+		if flag.IsPrimaryKey() || flag.IsHandleKey() {
+			// simply revert the TableInfo to a PK
 			columnInfo.Flag |= mysql.PriKeyFlag
-			if flag.IsHandleKey() {
-				tableInfo.IsCommonHandle = true
-			}
+			tableInfo.IsCommonHandle = true
 		}
 		if flag.IsUniqueKey() {
 			columnInfo.Flag |= mysql.UniqueKeyFlag
 		}
-		if !flag.IsNullable() {
+		if !flag.IsNullable() || flag.IsHandleKey() {
 			columnInfo.Flag |= mysql.NotNullFlag
 		}
 		if flag.IsMultipleKey() {
@@ -1011,13 +968,16 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 		}
 
 		for _, colOffset := range colOffsets {
+			col := tableInfo.Columns[colOffset]
+
 			indexCol := &timodel.IndexColumn{}
+			indexCol.Name = col.Name
 			indexCol.Offset = colOffset
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
 		}
 
-		// TODO: revert the "all column set index related flag" to "only the first
-		// column set index related flag"
+		// TODO: revert the "all column set index related flag" to "only the
+		// first column set index related flag"
 
 		tableInfo.Indices = append(tableInfo.Indices, indexInfo)
 	}

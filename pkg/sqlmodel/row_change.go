@@ -189,21 +189,6 @@ func (r *RowChange) lazyInitIdentityInfo() {
 	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
 }
 
-func getColsAndValuesOfIdx(
-	columns []*timodel.ColumnInfo,
-	indexColumns *timodel.IndexInfo,
-	data []interface{},
-) ([]*timodel.ColumnInfo, []interface{}) {
-	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	values := make([]interface{}, 0, len(indexColumns.Columns))
-	for _, col := range indexColumns.Columns {
-		cols = append(cols, columns[col.Offset])
-		values = append(values, data[col.Offset])
-	}
-
-	return cols, values
-}
-
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
@@ -256,21 +241,6 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	return whereValues
 }
 
-// valuesHolder gens values holder like (?,?,?).
-func valuesHolder(n int) string {
-	var builder strings.Builder
-	builder.Grow((n-1)*2 + 3)
-	builder.WriteByte('(')
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("?")
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
@@ -288,15 +258,6 @@ func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	buf.WriteString(" LIMIT 1")
 
 	return buf.String(), whereArgs
-}
-
-func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
-	for _, col := range columns {
-		if col.Name.L == name.L {
-			return col.IsGenerated()
-		}
-	}
-	return false
 }
 
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {

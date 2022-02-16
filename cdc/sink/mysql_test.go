@@ -40,6 +40,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
@@ -126,21 +127,15 @@ func TestPrepareDML(t *testing.T) {
 
 func TestPrepareUpdate(t *testing.T) {
 	testCases := []struct {
-		quoteTable   string
+		tableName    *model.TableName
 		preCols      []*model.Column
 		cols         []*model.Column
+		indexColumns [][]int
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
-			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
-			cols:         []*model.Column{},
-			expectedSQL:  "",
-			expectedArgs: nil,
-		},
-		{
-			quoteTable: "`test`.`t1`",
+			tableName: &model.TableName{Schema: "test", Table: "t1"},
 			preCols: []*model.Column{
 				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
@@ -149,11 +144,12 @@ func TestPrepareUpdate(t *testing.T) {
 				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1;",
+			indexColumns: [][]int{{0}},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, "test2", 1},
 		},
 		{
-			quoteTable: "`test`.`t1`",
+			tableName: &model.TableName{Schema: "test", Table: "t1"},
 			preCols: []*model.Column{
 				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
 				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
@@ -164,12 +160,20 @@ func TestPrepareUpdate(t *testing.T) {
 				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test2"},
 				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			indexColumns: [][]int{{0, 1}},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{2, "test2", 1, "test"},
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		row := &model.RowChangedEvent{
+			Table:        tc.tableName,
+			PreColumns:   tc.preCols,
+			Columns:      tc.cols,
+			IndexColumns: tc.indexColumns,
+		}
+		rowChange := convert2RowChange(row)
+		query, args := rowChange.GenSQL(sqlmodel.DMLUpdate)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -177,39 +181,42 @@ func TestPrepareUpdate(t *testing.T) {
 
 func TestPrepareDelete(t *testing.T) {
 	testCases := []struct {
-		quoteTable   string
+		tableName    *model.TableName
 		preCols      []*model.Column
+		indexColumns [][]int
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
-			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
-			expectedSQL:  "",
-			expectedArgs: nil,
-		},
-		{
-			quoteTable: "`test`.`t1`",
+			tableName: &model.TableName{Schema: "test", Table: "t1"},
 			preCols: []*model.Column{
 				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;",
+			indexColumns: [][]int{{0}},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1",
 			expectedArgs: []interface{}{1},
 		},
 		{
-			quoteTable: "`test`.`t1`",
+			tableName: &model.TableName{Schema: "test", Table: "t1"},
 			preCols: []*model.Column{
 				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
 				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
 				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			indexColumns: [][]int{{0, 1}},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, "test"},
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		row := &model.RowChangedEvent{
+			Table:        tc.tableName,
+			PreColumns:   tc.preCols,
+			IndexColumns: tc.indexColumns,
+		}
+		rowChange := convert2RowChange(row)
+		query, args := rowChange.GenSQL(sqlmodel.DMLDelete)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
