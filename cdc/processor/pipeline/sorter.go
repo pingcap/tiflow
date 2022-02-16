@@ -89,10 +89,10 @@ func newSorterNode(
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.StartActorNode(ctx, false, &wg)
+	return n.StartActorNode(ctx, false, &wg, 0, nil)
 }
 
-func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group) error {
+func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
@@ -226,6 +226,9 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
 						continue
+					}
+					if isTableActorMode {
+						_ = tableActorRouter.Send(0, message.TickMessage())
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()

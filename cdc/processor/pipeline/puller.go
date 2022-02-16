@@ -61,10 +61,10 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.InitWithWaitGroup(ctx, new(errgroup.Group))
+	return n.InitWithWaitGroup(ctx, new(errgroup.Group), false, nil)
 }
 
-func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group) error {
+func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -95,6 +95,9 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
+				if isActorMode {
+					sorter.sorter.AddEntry(ctx, pEvent)
+				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 			}
 		}

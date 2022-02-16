@@ -247,20 +247,6 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
-	pullerActorNodeContext := NewContext(sdtTableContext,
-		t.tableName,
-		t.globalVars.TableActorSystem.Router(),
-		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.InitWithWaitGroup(pullerActorNodeContext, t.wg); err != nil {
-		log.Error("puller fails to start",
-			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
-			zap.Error(err))
-		return err
-	}
-	t.pullerNode = pullerNode
-
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
@@ -269,21 +255,31 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	sortActorNodeContext := NewContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := sorterNode.StartActorNode(sortActorNodeContext, true, t.wg); err != nil {
+	if err := sorterNode.StartActorNode(sortActorNodeContext, true, t.wg, t.actorID, t.router); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
 		return err
 	}
-
-	// construct sorter actor node, it gets message from pullerNode, and send it to sorter
 	t.sortNode = sorterNode
-	var messageFetchFunc AsyncMessageHolderFunc = func() *pipeline.Message { return pullerActorNodeContext.tryGetProcessedMessage() }
-	var messageProcessFunc AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
-		return sorterNode.TryHandleDataMessage(sortActorNodeContext, msg)
+
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pullerActorNodeContext := NewContext(sdtTableContext,
+		t.tableName,
+		t.globalVars.TableActorSystem.Router(),
+		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
+	if err := pullerNode.InitWithWaitGroup(pullerActorNodeContext, t.wg, true, sorterNode); err != nil {
+		log.Error("puller fails to start",
+			zap.String("tableName", t.tableName),
+			zap.Int64("tableID", t.tableID),
+			zap.Error(err))
+		return err
 	}
-	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
+	t.pullerNode = pullerNode
+
+	var messageFetchFunc AsyncMessageHolderFunc
+	var messageProcessFunc AsyncMessageProcessorFunc
 
 	var cyclicActorNodeContext *cyclicNodeContext
 	if t.cyclicEnabled {
