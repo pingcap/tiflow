@@ -474,15 +474,25 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
 	err := replicaConfig.Validate()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	saramaConfig, err := kafka.NewSaramaConfigImpl(ctx, baseConfig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	if err := kafka.ValidateConfig(topic, baseConfig, saramaConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
+	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+
+	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
@@ -495,16 +505,6 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig := codec.NewConfig()
-	if err := encoderConfig.Apply(sinkURI, opts, replicaConfig.Sink.Protocol); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
-
-	if err := encoderConfig.Validate(); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
 	sink, err := newMqSink(ctx, baseConfig.Credential, sProducer, filter, replicaConfig, encoderConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -514,29 +514,29 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	producer, err := pulsar.NewProducer(sinkURI, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
-	// These two options are not used by Pulsar producer itself, but the encoders
-	encoderConfig := codec.NewConfig()
-
-	//s = sinkURI.Query().Get("max-message-bytes")
-	//if s != "" {
-	//	opts["max-message-bytes"] = s
-	//}
-	//
-	//s = sinkURI.Query().Get("max-batch-size")
-	//if s != "" {
-	//	opts["max-batch-size"] = s
-	//}
-	err = replicaConfig.Validate()
+	err := replicaConfig.Validate()
 	if err != nil {
 		return nil, err
+	}
+
+	// These two options are not used by Pulsar producer itself, but the encoders
+	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
+	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+		return nil, errors.Trace(err)
+	}
+	// todo (3AceShowHand): set by pulsar producer's `max.message.bytes`
+	// encoderConfig = encoderConfig.WithMaxMessageBytes()
+	if err := encoderConfig.Validate(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.

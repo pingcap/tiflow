@@ -111,7 +111,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
-	//c.Assert(opts, check.HasKey, "max-message-bytes")
+	// c.Assert(opts, check.HasKey, "max-message-bytes")
 	for i := 0; i < 100; i++ {
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
@@ -368,7 +368,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	errCh := make(chan error, 1)
 	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
-	//c.Assert(opts, check.HasKey, "max-message-bytes")
+	// c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -437,7 +437,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	errCh := make(chan error, 1)
 	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
-	//c.Assert(opts, check.HasKey, "max-message-bytes")
+	// c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

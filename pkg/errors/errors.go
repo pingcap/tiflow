@@ -90,7 +90,7 @@ var (
 	ErrFileSizeExceed           = errors.Normalize("rawData size %d exceeds maximum file size %d", errors.RFCCodeText("CDC:ErrFileSizeExceed"))
 	ErrS3StorageAPI             = errors.Normalize("s3 storage api", errors.RFCCodeText("CDC:ErrS3StorageAPI"))
 	ErrS3StorageInitialize      = errors.Normalize("new s3 storage for redo log", errors.RFCCodeText("CDC:ErrS3StorageInitialize"))
-	ErrPrepareAvroFailed        = errors.Normalize("prepare avro failed", errors.RFCCodeText("CDC:ErrPrepareAvroFailed"))
+	ErrMQCodecInvalidConfig     = errors.Normalize("MQ Codec invalid config", errors.RFCCodeText("CDC:ErrMQCodecInvalidConfig"))
 	ErrAsyncBroadcastNotSupport = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"))
 	ErrSinkURIInvalid           = errors.Normalize("sink uri invalid", errors.RFCCodeText("CDC:ErrSinkURIInvalid"))
 	ErrMQSinkUnknownProtocol    = errors.Normalize("unknown '%s' protocol for Message Queue sink", errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"))

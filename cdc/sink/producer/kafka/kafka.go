@@ -498,7 +498,6 @@ func ValidateConfig(topic string, config *Config, saramaConfig *sarama.Config) e
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
 	return nil
-
 }
 
 func CreateTopic(topic string, config *Config, saramaConfig *sarama.Config) error {

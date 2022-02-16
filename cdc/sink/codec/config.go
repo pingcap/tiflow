@@ -88,36 +88,21 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 	return c
 }
 
-func (c *Config) WithMaxBatchSize(size int) *Config {
-	c.maxBatchSize = size
-	return c
-}
-
-func (c *Config) WithEnableTiDBExtension() *Config {
-	c.enableTiDBExtension = true
-	return c
-}
-
-func (c *Config) WithAvroRegistry(registry string) *Config {
-	c.avroRegistry = registry
-	return c
-}
-
-func (c *Config) Validate(protocol string) error {
-	if c.enableTiDBExtension && protocol != "canal-json" {
-		return errors.New("enable-tidb-extension only support canal-json protocol")
+func (c *Config) Validate() error {
+	if c.protocol != "canal-json" && c.enableTiDBExtension {
+		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only support canal-json protocol`)
 	}
 
-	if protocol == "avro" && c.avroRegistry == "" {
-		return cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
+	if c.protocol == "avro" && c.avroRegistry == "" {
+		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "registry"`)
 	}
 
 	if c.maxMessageBytes <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes))
 	}
 
 	if c.maxBatchSize <= 0 {
-		cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
+		cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
 	}
 
 	return nil
