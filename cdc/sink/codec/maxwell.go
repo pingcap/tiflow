@@ -29,21 +29,21 @@ import (
 )
 
 type maxwellEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a `MaxwellEventBatchEncoder`
 func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := NewMaxwellEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
+	if err := encoder.SetParams(nil); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	return encoder, nil
 }
 
-func newMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &maxwellEventBatchEncoderBuilder{opts: opts}
+func newMaxwellEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &maxwellEventBatchEncoderBuilder{config: config}
 }
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
@@ -183,7 +183,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 // SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
+func (d *MaxwellEventBatchEncoder) SetParams(config *Config) error {
 	return nil
 }
 

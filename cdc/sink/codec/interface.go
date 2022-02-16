@@ -48,7 +48,7 @@ type EventBatchEncoder interface {
 	// Reset reset the kv buffer
 	Reset()
 	// SetParams provides the encoder with more info on the sink
-	SetParams(params map[string]string) error
+	SetParams(config *Config) error
 }
 
 // MQMessage represents an MQ message to the mqSink
@@ -161,22 +161,22 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
+func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, c *Config) (EncoderBuilder, error) {
 	switch p {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(opts), nil
+		return newCanalEventBatchEncoderBuilder(c), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, opts)
+		return newAvroEventBatchEncoderBuilder(credential, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(opts), nil
+		return newMaxwellEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(opts), nil
+		return newCanalFlatEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(opts), nil
+		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocolValue", int(p)))
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

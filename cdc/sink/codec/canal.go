@@ -494,7 +494,7 @@ func (d *CanalEventBatchEncoder) Reset() {
 }
 
 // SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
+func (d *CanalEventBatchEncoder) SetParams(config *Config) error {
 	// no op
 	return nil
 }
@@ -535,19 +535,19 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 }
 
 type canalEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
 	encoder := NewCanalEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
+	if err := encoder.SetParams(nil); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	return encoder, nil
 }
 
-func newCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &canalEventBatchEncoderBuilder{opts: opts}
+func newCanalEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &canalEventBatchEncoderBuilder{config: config}
 }

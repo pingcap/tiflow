@@ -114,7 +114,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		err := encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		mixedEncoder := newEncoder()
@@ -147,7 +147,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		mixedEncoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		err := encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
@@ -175,7 +175,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
 		mixedEncoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		err := encoder.SetParams(nil)
 		c.Assert(err, check.IsNil)
 
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
@@ -204,39 +204,39 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760"})
+	err := encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
+	c.Assert(encoder.maxBatchSize, check.Equals, defaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "-1"})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
+	c.Assert(encoder.maxBatchSize, check.Equals, defaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
+	c.Assert(encoder.maxBatchSize, check.Equals, defaultMaxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.ErrorMatches, ".*invalid.*")
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
 
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint32)})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
@@ -281,21 +281,21 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := strconv.Itoa(87 + 44)
-	err := encoder.SetParams(map[string]string{"max-message-bytes": a})
+	err := encoder.SetParams(nil)
 	c.Check(err, check.IsNil)
 	r, err := encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.IsNil)
 	c.Check(r, check.Equals, EncoderNoOperation)
 
 	a = strconv.Itoa(87 + 43)
-	err = encoder.SetParams(map[string]string{"max-message-bytes": a})
+	err = encoder.SetParams(nil)
 	c.Assert(err, check.IsNil)
 	r, err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.NotNil)
 	c.Check(r, check.Equals, EncoderNoOperation)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
+	err = encoder.SetParams(nil)
 	c.Check(err, check.IsNil)
 
 	for i := 0; i < 10000; i++ {

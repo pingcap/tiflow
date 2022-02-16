@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -52,21 +51,21 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 }
 
 type canalFlatEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a `CanalFlatEventBatchEncoder`
 func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) (EventBatchEncoder, error) {
 	encoder := NewCanalFlatEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
+	if err := encoder.SetParams(nil); err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrKafkaInvalidConfig, err)
 	}
 
 	return encoder, nil
 }
 
-func newCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &canalFlatEventBatchEncoderBuilder{opts: opts}
+func newCanalFlatEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &canalFlatEventBatchEncoderBuilder{config: config}
 }
 
 // The TiCDC Canal-JSON implementation extend the official format with a TiDB extension field.
@@ -369,15 +368,17 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
-func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
-	if s, ok := params["enable-tidb-extension"]; ok {
-		a, err := strconv.ParseBool(s)
-		if err != nil {
-			return cerrors.WrapError(cerrors.ErrSinkInvalidConfig, err)
-		}
-		c.enableTiDBExtension = a
-	}
+func (c *CanalFlatEventBatchEncoder) SetParams(config *Config) error {
+	c.enableTiDBExtension = config.enableTiDBExtension
 	return nil
+	//if s, ok := params["enable-tidb-extension"]; ok {
+	//	a, err := strconv.ParseBool(s)
+	//	if err != nil {
+	//		return cerrors.WrapError(cerrors.ErrSinkInvalidConfig, err)
+	//	}
+	//	c.enableTiDBExtension = a
+	//}
+	//return nil
 }
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.

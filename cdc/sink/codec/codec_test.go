@@ -349,7 +349,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 }
 
 func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+	err := encoder.SetParams(nil)
 	if err != nil {
 		return nil, err
 	}

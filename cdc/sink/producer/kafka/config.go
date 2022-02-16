@@ -57,7 +57,7 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
-		// MaxMessageBytes will be used to initialize producer
+		// maxMessageBytes will be used to initialize producer
 		MaxMessageBytes:   config.DefaultMaxMessageBytes,
 		ReplicationFactor: 1,
 		Compression:       "none",
@@ -97,8 +97,8 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
-func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
+// CompleteConfigs the kafka producer configuration, replication configuration and opts.
+func CompleteConfigs(sinkURI *url.URL, producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
 	producerConfig.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
