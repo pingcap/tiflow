@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -488,7 +489,16 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
-	s.jobManager, err = NewJobManagerImplV2(dctx, "", s.name(),
+	masterMetaExt := &lib.MasterMetaExt{
+		ID: lib.JobManagerUUID,
+		Tp: lib.JobManager,
+	}
+	masterMetaExtBytes, err := masterMetaExt.Marshal()
+	if err != nil {
+		return
+	}
+	dctx.Environ.MasterMetaExt = masterMetaExtBytes
+	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
 		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
 		clients, metadata.NewMetaEtcd(s.etcdClient))
 	if err != nil {

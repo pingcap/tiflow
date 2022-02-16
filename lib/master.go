@@ -110,6 +110,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
+	masterMetaExt *MasterMetaExt
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -131,10 +132,16 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
+		masterMetaExt = &MasterMetaExt{}
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
+		metaBytes := ctx.Environ.MasterMetaExt
+		err := masterMetaExt.Unmarshal(metaBytes)
+		if err != nil {
+			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+		}
 	}
 	return &DefaultBaseMaster{
 		Impl:                  impl,
@@ -148,6 +155,7 @@ func NewBaseMaster(
 		clock:                 clock.New(),
 
 		timeoutConfig: defaultTimeoutConfig,
+		masterMetaExt: masterMetaExt,
 
 		errCh:   make(chan error, 1),
 		closeCh: make(chan struct{}),
@@ -359,6 +367,7 @@ func (m *DefaultBaseMaster) initMetadata(ctx context.Context) (isInit bool, epoc
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 	masterMeta.Epoch = epoch
+	masterMeta.MasterMetaExt = m.masterMetaExt
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
@@ -440,7 +449,7 @@ func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, worker
 func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config WorkerConfig) string {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster:
-		masterCfg, ok := config.(*JobMasterV2)
+		masterCfg, ok := config.(*MasterMetaExt)
 		if !ok {
 			log.L().Warn("invalid master config, will gen random worker id")
 		}

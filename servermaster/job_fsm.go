@@ -11,7 +11,7 @@ import (
 
 type jobHolder struct {
 	lib.WorkerHandle
-	*lib.JobMasterV2
+	*lib.MasterMetaExt
 }
 
 // JobFsm manages state of all job masters, job master state forms a finite-state
@@ -48,8 +48,8 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[lib.MasterID]*lib.JobMasterV2
-	waitAckJobs map[lib.MasterID]*lib.JobMasterV2
+	pendingJobs map[lib.MasterID]*lib.MasterMetaExt
+	waitAckJobs map[lib.MasterID]*lib.MasterMetaExt
 	onlineJobs  map[lib.MasterID]*jobHolder
 }
 
@@ -62,19 +62,19 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[lib.MasterID]*lib.JobMasterV2),
-		waitAckJobs: make(map[lib.MasterID]*lib.JobMasterV2),
+		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaExt),
+		waitAckJobs: make(map[lib.MasterID]*lib.MasterMetaExt),
 		onlineJobs:  make(map[lib.MasterID]*jobHolder),
 	}
 }
 
-func (fsm *JobFsm) JobDispatched(job *lib.JobMasterV2) {
+func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaExt) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = job
 }
 
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.JobMasterV2) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaExt) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -96,13 +96,13 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
-	cfg, ok := fsm.waitAckJobs[worker.ID()]
+	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &jobHolder{
-		WorkerHandle: worker,
-		JobMasterV2:  cfg,
+		WorkerHandle:  worker,
+		MasterMetaExt: job,
 	}
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
@@ -117,7 +117,7 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle) {
 		log.L().Warn("non-online worker offline, ignore it", zap.String("id", worker.ID()))
 		return
 	}
-	fsm.pendingJobs[worker.ID()] = job.JobMasterV2
+	fsm.pendingJobs[worker.ID()] = job.MasterMetaExt
 	delete(fsm.onlineJobs, worker.ID())
 }
 
@@ -125,11 +125,11 @@ func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
-	cfg, ok := fsm.waitAckJobs[worker.ID()]
+	job, ok := fsm.waitAckJobs[worker.ID()]
 	if !ok {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
-	fsm.pendingJobs[worker.ID()] = cfg
+	fsm.pendingJobs[worker.ID()] = job
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
 }

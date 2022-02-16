@@ -13,9 +13,9 @@ func TestJobFsmStateTrans(t *testing.T) {
 	fsm := NewJobFsm()
 
 	id := "fsm-test-job-master-1"
-	job := &lib.JobMasterV2{
-		ID:  id,
-		Ext: "simple config",
+	job := &lib.MasterMetaExt{
+		ID:     id,
+		Config: []byte("simple config"),
 	}
 	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal})
 
@@ -35,8 +35,8 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.PendingJobCount())
 
 	// Tick, process pending jobs, Pending -> WaitAck
-	dispatchedJobs := make([]*lib.JobMasterV2, 0)
-	err = fsm.IterPendingJobs(func(job *lib.JobMasterV2) (string, error) {
+	dispatchedJobs := make([]*lib.MasterMetaExt, 0)
+	err = fsm.IterPendingJobs(func(job *lib.MasterMetaExt) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
 		return id, nil
 	})

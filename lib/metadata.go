@@ -12,6 +12,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 )
 
+const JobManagerUUID = "dataflow-engine-job-manager"
+
 type MasterMetadataClient struct {
 	masterID     MasterID
 	metaKVClient metadata.MetaKV
@@ -60,6 +62,26 @@ func (c *MasterMetadataClient) Store(ctx context.Context, data *MasterMetaKVData
 	}
 
 	return nil
+}
+
+// LoadAllMasters loads all job masters from metastore
+func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMetaKVData, error) {
+	raw, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp := raw.(*clientv3.GetResponse)
+	meta := make([]*MasterMetaKVData, 0, resp.Count)
+	for _, kv := range resp.Kvs {
+		masterMeta := &MasterMetaKVData{}
+		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
+			return nil, errors.Trace(err)
+		}
+		if masterMeta.MasterMetaExt.Tp != JobManager {
+			meta = append(meta, masterMeta)
+		}
+	}
+	return meta, nil
 }
 
 func (c *MasterMetadataClient) GenerateEpoch(ctx context.Context) (Epoch, error) {

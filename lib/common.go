@@ -149,7 +149,6 @@ type WorkloadReportMessage struct {
 }
 
 type (
-	MasterMetaExt    = interface{}
 	MasterMetaKVData struct {
 		ID          MasterID   `json:"id"`
 		Addr        string     `json:"addr"`
@@ -158,7 +157,7 @@ type (
 		Initialized bool       `json:"initialized"`
 
 		// Ext holds business-specific data
-		Ext MasterMetaExt `json:"ext"`
+		MasterMetaExt *MasterMetaExt `json:"meta-ext"`
 	}
 )
 

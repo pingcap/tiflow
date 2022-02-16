@@ -62,13 +62,14 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		id  lib.WorkerID
 		err error
 	)
-	config := &lib.JobMasterV2{
+	job := &lib.MasterMetaExt{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID: jm.uuidGen.NewString(),
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
+		// TODO: check config is valid, refine it later
 		extConfig := &cvs.Config{}
 		err = json.Unmarshal(req.Config, extConfig)
 		if err != nil {
@@ -76,10 +77,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			resp.Err = errors.ToPBError(err)
 			return resp
 		}
-		config.Ext = extConfig
-		config.Tp = lib.CvsJobMaster
+		job.Tp = lib.CvsJobMaster
+		job.Config = req.Config
 	case pb.JobType_FakeJob:
-		config.Tp = lib.FakeJobMaster
+		job.Tp = lib.FakeJobMaster
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = errors.ToPBError(err)
@@ -91,14 +92,14 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker type and worker cost
 	id, err = jm.BaseMaster.CreateWorker(
-		config.Tp, config, defaultJobMasterCost)
+		job.Tp, job, defaultJobMasterCost)
 
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	jm.jobFsm.JobDispatched(config)
+	jm.jobFsm.JobDispatched(job)
 
 	resp.JobIdStr = id
 	return resp
@@ -149,7 +150,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.jobFsm.IterPendingJobs(
-		func(job *lib.JobMasterV2) (string, error) {
+		func(job *lib.MasterMetaExt) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
