@@ -615,11 +615,11 @@ type jsonEventBatchEncoderBuilder struct {
 }
 
 // Build a JSONEventBatchEncoder
-func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := NewJSONEventBatchEncoder()
 	encoder.SetParams(b.config)
 
-	return encoder, nil
+	return encoder
 }
 
 func newJSONEventBatchEncoderBuilder(config *Config) EncoderBuilder {

@@ -33,10 +33,10 @@ type maxwellEventBatchEncoderBuilder struct {
 }
 
 // Build a `MaxwellEventBatchEncoder`
-func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *maxwellEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewMaxwellEventBatchEncoder()
 	encoder.SetParams(b.config)
-	return encoder, nil
+	return encoder
 }
 
 func newMaxwellEventBatchEncoderBuilder(config *Config) EncoderBuilder {

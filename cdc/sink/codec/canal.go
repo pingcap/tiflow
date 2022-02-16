@@ -539,11 +539,11 @@ type canalEventBatchEncoderBuilder struct {
 }
 
 // Build a `CanalEventBatchEncoder`
-func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *canalEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewCanalEventBatchEncoder()
 	encoder.SetParams(b.config)
 
-	return encoder, nil
+	return encoder
 }
 
 func newCanalEventBatchEncoderBuilder(config *Config) EncoderBuilder {

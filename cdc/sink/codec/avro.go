@@ -532,10 +532,6 @@ const (
 )
 
 func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Config) (EncoderBuilder, error) {
-	//if config.avroRegistry == "" {
-	//	return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-	//}
-
 	ctx := context.Background()
 	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, keySchemaSuffix)
 	if err != nil {
@@ -555,13 +551,11 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Co
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
-	encoder.SetParams(b.config)
-
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
 	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 
-	return encoder, nil
+	return encoder
 }

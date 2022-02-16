@@ -95,10 +95,6 @@ func newMqSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	// pre-flight verification of encoder parameters
-	if _, err := encoderBuilder.Build(ctx); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
 
 	partitionNum := mqProducer.GetPartitionNum()
 	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
@@ -266,10 +262,7 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	encoder := k.encoderBuilder.Build(ctx)
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
@@ -293,10 +286,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+
+	encoder := k.encoderBuilder.Build(ctx)
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
@@ -353,10 +344,8 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	encoder := k.encoderBuilder.Build(ctx)
+
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 

@@ -55,11 +55,11 @@ type canalFlatEventBatchEncoderBuilder struct {
 }
 
 // Build a `CanalFlatEventBatchEncoder`
-func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) (EventBatchEncoder, error) {
+func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewCanalFlatEventBatchEncoder()
 	encoder.SetParams(b.config)
 
-	return encoder, nil
+	return encoder
 }
 
 func newCanalFlatEventBatchEncoderBuilder(config *Config) EncoderBuilder {

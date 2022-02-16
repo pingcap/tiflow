@@ -157,7 +157,7 @@ const (
 )
 
 type EncoderBuilder interface {
-	Build(ctx context.Context) (EventBatchEncoder, error)
+	Build(ctx context.Context) EventBatchEncoder
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder

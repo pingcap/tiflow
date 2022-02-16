@@ -110,10 +110,10 @@ type craftEventBatchEncoderBuilder struct {
 }
 
 // Build a CraftEventBatchEncoder
-func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := NewCraftEventBatchEncoder()
 	encoder.SetParams(b.config)
-	return encoder, nil
+	return encoder
 }
 
 func newCraftEventBatchEncoderBuilder(config *Config) EncoderBuilder {
