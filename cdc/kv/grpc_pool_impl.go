@@ -14,6 +14,7 @@
 package kv
 
 import (
+	"container/heap"
 	"context"
 	"sync"
 	"time"
@@ -38,34 +39,131 @@ const (
 	recycleConnInterval  = 10 * time.Minute
 )
 
-// connArray is an array of sharedConn
-type connArray struct {
+// connHeap is an heap of sharedConn
+type connHeap struct {
 	// target is TiKV storage address
 	target string
 
 	mu    sync.Mutex
 	conns []*sharedConn
-
-	// next is used for fetching sharedConn in a round robin way
-	next int
 }
 
-func newConnArray(target string) *connArray {
-	return &connArray{target: target}
+// the following five methods implement heap.Interface
+func (ch *connHeap) Len() int {
+	return len(ch.conns)
+}
+
+func (ch *connHeap) Less(i, j int) bool {
+	return ch.conns[i].active <= ch.conns[j].active
+}
+
+func (ch *connHeap) Swap(i, j int) {
+	h := ch.conns
+	h[i], h[j] = h[j], h[i]
+}
+
+func (ch *connHeap) Push(e interface{}) {
+	ch.conns = append(ch.conns, e.(*sharedConn))
+}
+
+func (ch *connHeap) Pop() interface{} {
+	n := len(ch.conns)
+	e := ch.conns[n-1]
+	ch.conns = ch.conns[:n-1]
+	return e
+}
+
+func newConnHeap(target string) *connHeap {
+	return &connHeap{target: target}
 }
 
 // resize increases conn array size by `size` parameter
-func (ca *connArray) resize(ctx context.Context, credential *security.Credential, size int) error {
+func (ch *connHeap) resize(ctx context.Context, credential *security.Credential, size int) error {
 	conns := make([]*sharedConn, 0, size)
 	for i := 0; i < size; i++ {
-		conn, err := createClientConn(ctx, credential, ca.target)
+		conn, err := createClientConn(ctx, credential, ch.target)
 		if err != nil {
 			return err
 		}
 		conns = append(conns, &sharedConn{ClientConn: conn, active: 0})
 	}
-	ca.conns = append(ca.conns, conns...)
+	for _, conn := range conns {
+		heap.Push(ch, conn)
+	}
 	return nil
+}
+
+// getNext gets next available sharedConn, if all conns are not available, scale
+// the connArray to double size.
+func (ch *connHeap) getNext(ctx context.Context, credential *security.Credential) (*sharedConn, error) {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+
+	if len(ch.conns) == 0 {
+		err := ch.resize(ctx, credential, resizeBucketStep)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if ch.conns[0].active >= grpcConnCapacity {
+		heap.Init(ch)
+		if ch.conns[0].active >= grpcConnCapacity {
+			// if there is no available conn, increase connArray size by 2.
+			err := ch.resize(ctx, credential, resizeBucketStep)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	conn := ch.conns[0]
+	conn.active++
+	heap.Fix(ch, 0)
+	return conn, nil
+}
+
+// recycle removes idle sharedConn, return true if no active gPRC connections remained.
+func (ch *connHeap) recycle() (empty bool) {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	i := 0
+	for _, conn := range ch.conns {
+		if conn.active > 0 {
+			ch.conns[i] = conn
+			i++
+		} else {
+			// tear down this grpc.ClientConn, we don't use it anymore, the returned
+			// not-nil error can be ignored
+			conn.Close() //nolint:errcheck
+		}
+	}
+	// erasing truncated values
+	for j := i; j < len(ch.conns); j++ {
+		ch.conns[j] = nil
+	}
+	ch.conns = ch.conns[:i]
+	heap.Init(ch)
+	return len(ch.conns) == 0
+}
+
+func (ch *connHeap) activeCount() (count int64) {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	for _, conn := range ch.conns {
+		count += conn.active
+	}
+	return
+}
+
+// close tears down all ClientConns maintained in connArray
+func (ch *connHeap) close() {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	for _, conn := range ch.conns {
+		// tear down this grpc.ClientConn, we don't use it anymore, the returned
+		// not-nil error can be ignored
+		conn.Close() //nolint:errcheck
+	}
 }
 
 func createClientConn(ctx context.Context, credential *security.Credential, target string) (*grpc.ClientConn, error) {
@@ -106,87 +204,12 @@ func createClientConn(ctx context.Context, credential *security.Credential, targ
 	return conn, nil
 }
 
-// getNext gets next available sharedConn, if all conns are not available, scale
-// the connArray to double size.
-func (ca *connArray) getNext(ctx context.Context, credential *security.Credential) (*sharedConn, error) {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-
-	if len(ca.conns) == 0 {
-		err := ca.resize(ctx, credential, resizeBucketStep)
-		if err != nil {
-			return nil, err
-		}
-	}
-	for current := ca.next; current < ca.next+len(ca.conns); current++ {
-		conn := ca.conns[current%len(ca.conns)]
-		if conn.active < grpcConnCapacity {
-			conn.active++
-			ca.next = (current + 1) % len(ca.conns)
-			return conn, nil
-		}
-	}
-
-	current := len(ca.conns)
-	// if there is no available conn, increase connArray size by 2.
-	err := ca.resize(ctx, credential, resizeBucketStep)
-	if err != nil {
-		return nil, err
-	}
-	ca.conns[current].active++
-	ca.next = current + 1
-	return ca.conns[current], nil
-}
-
-// recycle removes idle sharedConn, return true if no active gPRC connections remained.
-func (ca *connArray) recycle() (empty bool) {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	i := 0
-	for _, conn := range ca.conns {
-		if conn.active > 0 {
-			ca.conns[i] = conn
-			i++
-		} else {
-			// tear down this grpc.ClientConn, we don't use it anymore, the returned
-			// not-nil error can be ignored
-			conn.Close() //nolint:errcheck
-		}
-	}
-	// erasing truncated values
-	for j := i; j < len(ca.conns); j++ {
-		ca.conns[j] = nil
-	}
-	ca.conns = ca.conns[:i]
-	return len(ca.conns) == 0
-}
-
-func (ca *connArray) activeCount() (count int64) {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	for _, conn := range ca.conns {
-		count += conn.active
-	}
-	return
-}
-
-// close tears down all ClientConns maintained in connArray
-func (ca *connArray) close() {
-	ca.mu.Lock()
-	defer ca.mu.Unlock()
-	for _, conn := range ca.conns {
-		// tear down this grpc.ClientConn, we don't use it anymore, the returned
-		// not-nil error can be ignored
-		conn.Close() //nolint:errcheck
-	}
-}
-
 // GrpcPoolImpl implement GrpcPool interface
 type GrpcPoolImpl struct {
 	poolMu sync.RWMutex
 	// bucketConns maps from TiKV store address to a connArray, which stores a
 	// a slice of gRPC connections.
-	bucketConns map[string]*connArray
+	bucketConns map[string]*connHeap
 
 	credential *security.Credential
 
@@ -198,7 +221,7 @@ type GrpcPoolImpl struct {
 func NewGrpcPoolImpl(ctx context.Context, credential *security.Credential) *GrpcPoolImpl {
 	return &GrpcPoolImpl{
 		credential:  credential,
-		bucketConns: make(map[string]*connArray),
+		bucketConns: make(map[string]*connHeap),
 		ctx:         ctx,
 	}
 }
@@ -208,7 +231,7 @@ func (pool *GrpcPoolImpl) GetConn(addr string) (*sharedConn, error) {
 	pool.poolMu.Lock()
 	defer pool.poolMu.Unlock()
 	if _, ok := pool.bucketConns[addr]; !ok {
-		pool.bucketConns[addr] = newConnArray(addr)
+		pool.bucketConns[addr] = newConnHeap(addr)
 	}
 	return pool.bucketConns[addr].getNext(pool.ctx, pool.credential)
 }

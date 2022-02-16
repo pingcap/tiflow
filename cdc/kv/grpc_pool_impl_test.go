@@ -21,10 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Use clientSuite for some special reasons, the embed etcd uses zap as the only candidate
-// logger and in the logger initialization it also initializes the grpclog/loggerv2, which
-// is not a thread-safe operation and it must be called before any gRPC functions
-// ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func TestConnArray(t *testing.T) {
 	t.Parallel()
 
