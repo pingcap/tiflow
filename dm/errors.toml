@@ -1126,6 +1126,12 @@ description = ""
 workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
 tags = ["internal", "medium"]
 
+[error.DM-config-20057]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
