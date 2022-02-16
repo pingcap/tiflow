@@ -116,7 +116,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	}
 	k.mu.Lock()
 	k.mu.inflight++
-	log.Info("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
+	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
 	select {
@@ -167,7 +167,7 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("flush waiting for inflight messages", zap.Int64("inflight", inflight))
+	log.Debug("flush waiting for inflight messages", zap.Int64("inflight", inflight))
 	select {
 	case <-k.closeCh:
 		return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
