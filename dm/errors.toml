@@ -1127,12 +1127,18 @@ workaround = "Please check the `continuous-validator-config-name` config in task
 tags = ["internal", "medium"]
 
 [error.DM-config-20057]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
+[error.DM-config-20058]
 message = "loader's dir %s is invalid"
 description = ""
 workaround = "Please check the `dir` config in task configuration file."
 tags = ["internal", "high"]
 
-[error.DM-config-20058]
+[error.DM-config-20059]
 message = "loader's dir %s is s3 dir, but s3 is not supported"
 description = ""
 workaround = "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
