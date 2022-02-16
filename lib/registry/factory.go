@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/lib"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/pingcap/errors"
 )
 
 // WorkerFactory is an interface that should be implemented by the author of WorkerImpl's.
@@ -29,6 +30,7 @@ type SimpleWorkerFactory struct {
 	configTpi   interface{}
 }
 
+// NewSimpleWorkerFactory creates a WorkerFactory with built-in JSON codec for WorkerConfig.
 func NewSimpleWorkerFactory(constructor WorkerConstructor, configType interface{}) *SimpleWorkerFactory {
 	return &SimpleWorkerFactory{
 		constructor: constructor,

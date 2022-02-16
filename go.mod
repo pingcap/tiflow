@@ -16,6 +16,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
+	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tiflow v0.0.0-20211227085550-ccba0a4c362a
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.2.1
