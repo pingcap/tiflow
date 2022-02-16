@@ -55,8 +55,8 @@ function consistency_none() {
 	check_log_contain_with_retry "\[\"enable safe-mode for safe mode exit point, will exit at\"\] \[task=test\] \[unit=\"binlog replication\"\] \[location=\"position: ($name2, $pos2), gtid-set: $gtid2\"\]" $WORK_DIR/worker2/log/dm-worker.log
 
 	run_sql_source2 "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-	cleanup_data safe_mode_target
 	cleanup_process $*
+	cleanup_data safe_mode_target
 }
 
 function check_exit_safe_binlog() {
@@ -182,8 +182,8 @@ function safe_mode_recover() {
 
 		echo "finish running run safe mode recover case $i"
 		((i += 1))
-		cleanup_data safe_mode_target
 		cleanup_process $*
+		cleanup_data safe_mode_target
 	done
 }
 
