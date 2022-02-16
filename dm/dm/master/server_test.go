@@ -1374,14 +1374,14 @@ func (t *testMaster) TestServer(c *check.C) {
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg.AdvertiseAddr = cfg.MasterAddr
 
-	basicServiceCheck := func(c *check.C) {
+	basicServiceCheck := func(c *check.C, cfg *Config) {
 		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
 		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
 		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
 	}
-	t.testNormalServerLifecycle(c, cfg, func(c *check.C) {
-		basicServiceCheck(c)
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		basicServiceCheck(c, cfg)
 
 		// try to start another server with the same address.  Expect it to fail
 		dupServer := NewServer(cfg)
@@ -1400,7 +1400,7 @@ func (t *testMaster) TestServer(c *check.C) {
 	*cfg2 = *cfg
 	cfg2.MasterAddr = fmt.Sprintf("0.0.0.0:%s", masterPort)
 	cfg2.AdvertiseAddr = masterAddrStr
-	t.testNormalServerLifecycle(c, cfg, basicServiceCheck)
+	t.testNormalServerLifecycle(c, cfg2, basicServiceCheck)
 }
 
 func (t *testMaster) TestMasterTLS(c *check.C) {
@@ -1577,13 +1577,13 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 }
 
 func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
-	t.testNormalServerLifecycle(c, cfg, func(c *check.C) {
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
 		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
 		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 	})
 }
 
-func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C)) {
+func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C, *Config)) {
 	var err error
 	s := NewServer(cfg)
 
@@ -1591,7 +1591,7 @@ func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLog
 	err = s.Start(ctx)
 	c.Assert(err, check.IsNil)
 
-	checkLogic(c)
+	checkLogic(c, cfg)
 
 	// close
 	cancel()
