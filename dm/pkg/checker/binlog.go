@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // MySQLBinlogEnableChecker checks whether `log_bin` variable is enabled in MySQL.
@@ -168,4 +169,74 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 // Name implements the RealChecker interface.
 func (pc *MySQLBinlogRowImageChecker) Name() string {
 	return "mysql_binlog_row_image"
+}
+
+// BinlogDBChecker checks mysql/mariadb server ID.
+type BinlogDBChecker struct {
+	db      *sql.DB
+	dbinfo  *dbutil.DBConfig
+	schemas map[string]struct{}
+}
+
+// NewBinlogDBChecker returns a RealChecker.
+func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}) RealChecker {
+	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: schemas}
+}
+
+// Check implements the RealChecker interface.
+func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether dbs need replication is in binlog_do_db/binlog_ignore_db",
+		State: StateFailure,
+		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
+	}
+
+	flavor, err := utils.GetFlavor(ctx, c.db)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	binlogDoDB, binlogIgnoreDB, err := utils.GetBinlogDB(ctx, c.db, flavor)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+
+	binlogDoDB = strings.ReplaceAll(binlogDoDB, " ", "")
+	binlogIgnoreDB = strings.ReplaceAll(binlogIgnoreDB, " ", "")
+
+	binlogDoDBs := strings.Split(binlogDoDB, ",")
+	binlogIgnoreDBs := strings.Split(binlogIgnoreDB, ",")
+	// MySQL will check –binlog-do-db first, if there are any options,
+	// it will apply this one and ignore –binlog-ignore-db. If the
+	// –binlog-do-db is NOT set, then mysql will check –binlog-ignore-db.
+	// If both of them are empty, it will log changes for all DBs.
+	if len(binlogDoDB) != 0 {
+		for _, doDB := range binlogDoDBs {
+			delete(c.schemas, doDB)
+		}
+		if len(c.schemas) > 0 {
+			dbs := []string{}
+			for db := range c.schemas {
+				dbs = append(dbs, db)
+			}
+			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db", strings.Join(dbs, ","))
+			return result
+		}
+	} else {
+		for _, ignoreDB := range binlogIgnoreDBs {
+			if _, ok := c.schemas[ignoreDB]; ok {
+				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db", ignoreDB)
+				return result
+			}
+		}
+	}
+	result.State = StateSuccess
+	return result
+}
+
+// Name implements the RealChecker interface.
+func (c *BinlogDBChecker) Name() string {
+	return "binlog_do_db/binlog_ignore_db check"
 }
