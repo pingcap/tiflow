@@ -145,6 +145,7 @@ function start_multi_tasks_cluster() {
 }
 
 function cleanup() {
+	cleanup_process $*
 	cleanup_data $ha_test
 	cleanup_data $ha_test2
 	echo "clean source table"

@@ -163,10 +163,6 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		result, err = encoder.AppendResolvedEvent(417318403368288260)
-		c.Assert(err, check.IsNil)
-		c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
 		mqMessages := encoder.Build()
 		c.Assert(len(mqMessages), check.Equals, 1)
 
@@ -295,27 +291,17 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 	c.Assert(encoder, check.NotNil)
 
 	updateCase := *testCaseUpdate
-	lastResolved := uint64(0)
-	for i := 1; i < 1000; i++ {
+	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
 		result, err := encoder.AppendRowChangedEvent(&updateCase)
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		if i >= 100 && (i%100 == 0 || i == 999) {
-			resolvedTs := uint64(i - 50)
-			if i == 999 {
-				resolvedTs = 999
-			}
-			result, err := encoder.AppendResolvedEvent(resolvedTs)
-
-			c.Assert(err, check.IsNil)
-			c.Assert(result, check.Equals, EncoderNeedAsyncWrite)
-
+		if i%100 == 0 {
 			msgs := encoder.Build()
 			c.Assert(msgs, check.NotNil)
-			c.Assert(msgs, check.HasLen, int(resolvedTs-lastResolved))
+			c.Assert(msgs, check.HasLen, 100)
 
 			for j := range msgs {
 				c.Assert(msgs[j].GetRowsCount(), check.Equals, 1)
@@ -324,15 +310,11 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				c.Assert(err, check.IsNil)
 				c.Assert(msg.EventType, check.Equals, "UPDATE")
-				c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(lastResolved+uint64(i)))
 			}
-
-			lastResolved = resolvedTs
 		}
 	}
 
-	c.Assert(encoder.unresolvedBuf, check.HasLen, 0)
-	c.Assert(encoder.resolvedBuf, check.HasLen, 0)
+	c.Assert(encoder.messageBuf, check.HasLen, 0)
 }
 
 func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {

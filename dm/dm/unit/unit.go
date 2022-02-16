@@ -48,6 +48,8 @@ type Unit interface {
 	// Close shuts down the process and closes the unit, after that can not call Process to resume
 	// The implementation should not block for a long time.
 	Close()
+	// Kill shuts down the process and closes the unit without graceful.
+	Kill()
 	// Pause does some cleanups and the unit can be resumed later. The caller will make sure Process has returned.
 	// The implementation should not block for a long time.
 	Pause()

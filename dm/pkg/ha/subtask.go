@@ -98,6 +98,28 @@ func deleteSubTaskCfgOp(cfgs ...config.SubTaskConfig) []clientv3.Op {
 	return ops
 }
 
+func putValidatorStageOps(stages ...Stage) ([]clientv3.Op, error) {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		value, err := stage.toJSON()
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, clientv3.OpPut(key, value))
+	}
+	return ops, nil
+}
+
+func deleteValidatorStageOps(stages ...Stage) []clientv3.Op {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		ops = append(ops, clientv3.OpDelete(key))
+	}
+	return ops
+}
+
 func subTaskCfgFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]config.SubTaskConfig, error) {
 	cfgs := make(map[string]map[string]config.SubTaskConfig)
 	if source != "" {

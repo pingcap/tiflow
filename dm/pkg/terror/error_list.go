@@ -249,6 +249,9 @@ const (
 	codeCollationCompatibleNotSupport
 	codeConfigInvalidLoadMode
 	codeConfigInvalidLoadDuplicateResolution
+	codeConfigValidationMode
+	codeContinuousValidatorCfgNotFound
+	codeConfigStartTimeTooLate
 )
 
 // Binlog operation error code list.
@@ -581,6 +584,7 @@ const (
 	codeWorkerFailConnectMaster
 	codeWorkerWaitRelayCatchupGTID
 	codeWorkerRelayConfigChanging
+	codeWorkerRouteTableDupMatch
 )
 
 // DM-tracer error code.
@@ -910,6 +914,9 @@ var (
 	ErrConfigCollationCompatibleNotSupport = New(codeCollationCompatibleNotSupport, ClassConfig, ScopeInternal, LevelMedium, "collation compatible %s not supported", "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`.")
 	ErrConfigInvalidLoadMode               = New(codeConfigInvalidLoadMode, ClassConfig, ScopeInternal, LevelMedium, "invalid load mode '%s'", "Please choose a valid value in ['sql', 'loader']")
 	ErrConfigInvalidDuplicateResolution    = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate '%s'", "Please choose a valid value in ['replace', 'error', 'ignore']")
+	ErrConfigValidationMode                = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
+	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `continuous-validator-config-name` config in task configuration file.")
+	ErrConfigStartTimeTooLate              = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
@@ -1229,7 +1236,7 @@ var (
 	ErrWorkerTLSConfigNotValid              = New(codeWorkerTLSConfigNotValid, ClassDMWorker, ScopeInternal, LevelHigh, "TLS config not valid", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in worker configuration file.")
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
-
+	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
 	// DM-tracer error.
 	ErrTracerParseFlagSet        = New(codeTracerParseFlagSet, ClassDMTracer, ScopeInternal, LevelMedium, "parse dm-tracer config flag set", "")
 	ErrTracerConfigTomlTransform = New(codeTracerConfigTomlTransform, ClassDMTracer, ScopeInternal, LevelMedium, "config toml transform", "Please check the configuration file has correct TOML format.")
