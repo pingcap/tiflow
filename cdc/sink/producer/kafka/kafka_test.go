@@ -201,7 +201,7 @@ func (s *kafkaSuite) TestValidateAndCreateTopic(c *check.C) {
 	}()
 
 	// When topic exists and max message bytes is set correctly.
-	config.MaxMessageBytes = adminClient.GetDefaultMaxMessageBytes()
+	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	cfg, err := newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
 	err = validateAndCreateTopic(adminClient, adminClient.GetDefaultMockTopicName(), config, cfg)
@@ -209,7 +209,7 @@ func (s *kafkaSuite) TestValidateAndCreateTopic(c *check.C) {
 
 	// When topic exists and max message bytes is not set correctly.
 	// use the smaller one.
-	defaultMaxMessageBytes := adminClient.GetDefaultMaxMessageBytes()
+	defaultMaxMessageBytes := adminClient.GetBrokerMessageMaxBytes()
 	config.MaxMessageBytes = defaultMaxMessageBytes + 1
 	cfg, err = newSaramaConfigImpl(context.Background(), config)
 	c.Assert(err, check.IsNil)
