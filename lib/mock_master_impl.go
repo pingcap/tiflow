@@ -26,6 +26,7 @@ type MockMasterImpl struct {
 	onlineWorkerCount atomic.Int64
 
 	dispatchedWorkers chan WorkerHandle
+	dispatchedResult  chan error
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -39,6 +40,7 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 		masterID:          masterID,
 		id:                id,
 		dispatchedWorkers: make(chan WorkerHandle),
+		dispatchedResult:  make(chan error, 1),
 	}
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
@@ -104,6 +106,7 @@ func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) e
 	defer m.mu.Unlock()
 
 	m.dispatchedWorkers <- worker
+	m.dispatchedResult <- result
 
 	args := m.Called(worker, result)
 	return args.Error(0)
