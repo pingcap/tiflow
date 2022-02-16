@@ -584,6 +584,7 @@ const (
 	codeWorkerFailConnectMaster
 	codeWorkerWaitRelayCatchupGTID
 	codeWorkerRelayConfigChanging
+	codeWorkerRouteTableDupMatch
 )
 
 // DM-tracer error code.
@@ -1235,7 +1236,7 @@ var (
 	ErrWorkerTLSConfigNotValid              = New(codeWorkerTLSConfigNotValid, ClassDMWorker, ScopeInternal, LevelHigh, "TLS config not valid", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in worker configuration file.")
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
-
+	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
 	// DM-tracer error.
 	ErrTracerParseFlagSet        = New(codeTracerParseFlagSet, ClassDMTracer, ScopeInternal, LevelMedium, "parse dm-tracer config flag set", "")
 	ErrTracerConfigTomlTransform = New(codeTracerConfigTomlTransform, ClassDMTracer, ScopeInternal, LevelMedium, "config toml transform", "Please check the configuration file has correct TOML format.")
