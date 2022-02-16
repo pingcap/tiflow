@@ -104,11 +104,11 @@ func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
-	n.InitWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
 	return nil
 }
 
-func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) {
+func (n *sinkNode) initWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) {
 	n.isTableActorMode = isTableActorMode
 	n.replicaConfig = replicaConfig
 }
@@ -352,14 +352,14 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			}
 		}
 	case pipeline.MessageTypeBarrier:
-		if err := n.UpdateBarrierTs(ctx, msg.BarrierTs); err != nil {
+		if err := n.updateBarrierTs(ctx, msg.BarrierTs); err != nil {
 			return false, errors.Trace(err)
 		}
 	}
 	return true, nil
 }
 
-func (n *sinkNode) UpdateBarrierTs(ctx context.Context, ts model.Ts) error {
+func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 	atomic.StoreUint64(&n.barrierTs, ts)
 	if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 		return errors.Trace(err)
@@ -368,10 +368,10 @@ func (n *sinkNode) UpdateBarrierTs(ctx context.Context, ts model.Ts) error {
 }
 
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	return n.ReleaseResource(ctx)
+	return n.releaseResource(ctx)
 }
 
-func (n *sinkNode) ReleaseResource(ctx context.Context) error {
+func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)

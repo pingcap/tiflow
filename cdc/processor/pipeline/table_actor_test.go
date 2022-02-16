@@ -37,7 +37,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
-	require.Panics(t, func() { tbl.AsyncStop(1) })
+	require.True(t, tbl.AsyncStop(1))
 
 	mb := actor.NewMailbox(actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)

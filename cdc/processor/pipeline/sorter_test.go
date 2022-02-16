@@ -152,8 +152,8 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 func TestSorterUpdateBarrierTs(t *testing.T) {
 	t.Parallel()
 	s := &sorterNode{barrierTs: 1}
-	s.UpdateBarrierTs(model.Ts(2))
+	s.updateBarrierTs(model.Ts(2))
 	require.Equal(t, model.Ts(2), s.barrierTs)
-	s.UpdateBarrierTs(model.Ts(1))
+	s.updateBarrierTs(model.Ts(1))
 	require.Equal(t, model.Ts(2), s.barrierTs)
 }

@@ -193,7 +193,14 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			break
 		}
 	}
-	return atomic.LoadUint32(&t.stopped) != stopped
+	if atomic.LoadUint32(&t.stopped) == stopped {
+		log.Error("table actor removed",
+			zap.String("changefeed", t.changefeedID),
+			zap.String("tableName", t.tableName),
+			zap.Int64("tableID", t.tableID))
+		return true
+	}
+	return false
 }
 
 func (t *tableActor) handleDataMsg(ctx context.Context) error {
@@ -206,8 +213,8 @@ func (t *tableActor) handleDataMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleBarrierMsg(ctx context.Context, barrierTs model.Ts) error {
-	t.sortNode.UpdateBarrierTs(barrierTs)
-	return t.sinkNode.UpdateBarrierTs(ctx, barrierTs)
+	t.sortNode.updateBarrierTs(barrierTs)
+	return t.sinkNode.updateBarrierTs(ctx, barrierTs)
 }
 
 func (t *tableActor) handleTickMsg(ctx context.Context) error {
@@ -255,7 +262,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	sortActorNodeContext := NewContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := sorterNode.StartActorNode(sortActorNodeContext, true, t.wg, t.actorID, t.router); err != nil {
+	if err := sorterNode.start(sortActorNodeContext, true, t.wg, t.actorID, t.router); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -269,7 +276,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.InitWithWaitGroup(pullerActorNodeContext, t.wg, true, sorterNode); err != nil {
+	if err := pullerNode.start(pullerActorNodeContext, t.wg, true, sorterNode); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
@@ -307,7 +314,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
 		t.targetTs, flowController)
-	actorSinkNode.InitWithReplicaConfig(true, t.replicConfig)
+	actorSinkNode.initWithReplicaConfig(true, t.replicConfig)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
@@ -331,6 +338,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
 func (t *tableActor) stop(err error) {
+	log.Info("table actor begin to stop....")
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadUint32(&t.stopped) == stopped {
@@ -338,10 +346,10 @@ func (t *tableActor) stop(err error) {
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
 	if t.sortNode != nil {
-		t.sortNode.ReleaseResource(t.stopCtx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
+		t.sortNode.releaseResource(t.stopCtx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
 	}
 	if t.sinkNode != nil {
-		if err := t.sinkNode.ReleaseResource(t.stopCtx); err != nil {
+		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
 			log.Warn("close sink failed",
 				zap.String("changefeed", t.changefeedID),
 				zap.String("tableName", t.tableName),
@@ -349,7 +357,7 @@ func (t *tableActor) stop(err error) {
 		}
 	}
 	t.cancel()
-	log.Info("table actor will be stopped",
+	log.Info("table actor stopped",
 		zap.String("changefeed", t.changefeedID),
 		zap.String("tableName", t.tableName),
 		zap.Int64("tableID", t.tableID),

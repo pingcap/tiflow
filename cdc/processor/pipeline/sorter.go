@@ -89,10 +89,10 @@ func newSorterNode(
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.StartActorNode(ctx, false, &wg, 0, nil)
+	return n.start(ctx, false, &wg, 0, nil)
 }
 
-func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
+func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
@@ -285,7 +285,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 		n.handleRawEvent(ctx, msg.PolymorphicEvent)
 		return true, nil
 	case pipeline.MessageTypeBarrier:
-		n.UpdateBarrierTs(msg.BarrierTs)
+		n.updateBarrierTs(msg.BarrierTs)
 		fallthrough
 	default:
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)
@@ -293,13 +293,13 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 	}
 }
 
-func (n *sorterNode) UpdateBarrierTs(barrierTs model.Ts) {
+func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	if barrierTs > atomic.LoadUint64(&n.barrierTs) {
 		atomic.StoreUint64(&n.barrierTs, barrierTs)
 	}
 }
 
-func (n *sorterNode) ReleaseResource(ctx context.Context, changefeedID, captureAddr string) {
+func (n *sorterNode) releaseResource(ctx context.Context, changefeedID, captureAddr string) {
 	defer tableMemoryHistogram.DeleteLabelValues(changefeedID, captureAddr)
 	if n.cleanRouter != nil {
 		// Clean up data when the table sorter is canceled.
@@ -316,7 +316,7 @@ func (n *sorterNode) ReleaseResource(ctx context.Context, changefeedID, captureA
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
-	n.ReleaseResource(ctx, ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	n.releaseResource(ctx, ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	return n.eg.Wait()
 }
 
