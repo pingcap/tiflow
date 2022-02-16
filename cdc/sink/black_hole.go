@@ -22,10 +22,15 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
 // newBlackHoleSink creates a block hole sink
 func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
+=======
+// newBlackHoleSink creates a black hole sink
+func newBlackHoleSink(ctx context.Context) *blackHoleSink {
+>>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	return &blackHoleSink{
-		statistics: NewStatistics(ctx, "blackhole", opts),
+		statistics: NewStatistics(ctx, "blackhole"),
 	}
 }
 
