@@ -68,20 +68,23 @@ func (t *testCheckSuite) TestBinlogDb(c *tc.C) {
 				"do": {},
 			},
 			state: StateSuccess,
-		}, {
+		},
+		{
 			doDb: "do",
 			schemas: map[string]struct{}{
 				"do":  {},
 				"do2": {},
 			},
 			state: StateFailure,
-		}, {
+		},
+		{
 			doDb: "do",
 			schemas: map[string]struct{}{
 				"do2": {},
 			},
 			state: StateFailure,
-		}, {
+		},
+		{
 			doDb: "do, do2",
 			schemas: map[string]struct{}{
 				"do2": {},
@@ -96,21 +99,24 @@ func (t *testCheckSuite) TestBinlogDb(c *tc.C) {
 				"ignore": {},
 			},
 			state: StateFailure,
-		}, {
+		},
+		{
 			ignoreDb: "ignore",
 			schemas: map[string]struct{}{
 				"do":  {},
 				"do2": {},
 			},
 			state: StateSuccess,
-		}, {
+		},
+		{
 			ignoreDb: "ignore, ignore2",
 			schemas: map[string]struct{}{
 				"do":      {},
 				"ignore2": {},
 			},
 			state: StateFailure,
-		}, {
+		},
+		{
 			ignoreDb: "ignore, ignore2",
 			schemas: map[string]struct{}{
 				"ignore3": {},
