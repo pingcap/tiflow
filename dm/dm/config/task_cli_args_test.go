@@ -31,12 +31,12 @@ func (t *testStruct) ToJSON() string {
 
 func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
 	s := testStruct{
-		TaskCliArgs: TaskCliArgs{"123"},
+		TaskCliArgs: TaskCliArgs{"123", "1s"},
 		FutureField: "456",
 	}
 	data := s.ToJSON()
 
-	expected := `{"start_time":"123","future_field":"456"}`
+	expected := `{"start_time":"123","safe_mode_duration":"1s","future_field":"456"}`
 	c.Assert(data, Equals, expected)
 
 	afterDowngrade := &TaskCliArgs{}
@@ -53,4 +53,9 @@ func (t *testConfig) TestTaskCliArgsVerify(c *C) {
 	c.Assert(rightStartTime.Verify(), IsNil)
 	wrongStartTime := TaskCliArgs{StartTime: "15:04:05"}
 	c.Assert(wrongStartTime.Verify(), NotNil)
+
+	rightSafeModeDuration := TaskCliArgs{SafeModeDuration: "1s"}
+	c.Assert(rightSafeModeDuration.Verify(), IsNil)
+	wrongSafeModeDuration := TaskCliArgs{SafeModeDuration: "1"}
+	c.Assert(wrongSafeModeDuration.Verify(), NotNil)
 }
