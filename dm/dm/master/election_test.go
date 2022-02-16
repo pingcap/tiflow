@@ -33,7 +33,17 @@ type testElectionSuite struct{}
 
 func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
+	var s1, s2 *Server
+	defer func() {
+		cancel()
+		if s1 != nil {
+			s1.Close()
+		}
+		if s2 != nil {
+			s2.Close()
+		}
+	}()
 
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -45,13 +55,11 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
 
-	s1 := NewServer(cfg1)
+	s1 = NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
-	defer s1.Close()
-
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -64,9 +72,12 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
 
-	s2 := NewServer(cfg2)
+	s2 = NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
-	defer s2.Close()
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
 
 	client, err := etcdutil.CreateClient(strings.Split(cfg1.AdvertisePeerUrls, ","), nil)
 	c.Assert(err, check.IsNil)
@@ -103,6 +114,4 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(leaderID, check.Equals, cfg2.Name)
 	c.Assert(clusterID, check.Equals, s2.ClusterID())
-
-	cancel()
 }

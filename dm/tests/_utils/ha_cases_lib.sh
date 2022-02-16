@@ -145,6 +145,7 @@ function start_multi_tasks_cluster() {
 }
 
 function cleanup() {
+	cleanup_process $*
 	cleanup_data $ha_test
 	cleanup_data $ha_test2
 	echo "clean source table"
@@ -154,7 +155,6 @@ function cleanup() {
 		$(mysql -h127.0.0.1 -p123456 -P${i} -uroot -e "drop database if exists ha_test2;")
 		sleep 1
 	done
-	cleanup_process $*
 }
 
 function isolate_master() {

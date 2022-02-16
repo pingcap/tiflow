@@ -31,9 +31,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
@@ -42,8 +44,8 @@ import (
 	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -135,7 +137,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return terror.ErrTaskCheckGenBAList.Delegate(err)
 		}
-		r, err := router.NewTableRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
+		r, err := router.NewRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 		if err != nil {
 			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
 		}
@@ -243,13 +245,25 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
 	}
 
-	if checkingShard {
-		for name, shardingSet := range sharding {
-			if shardingCounter[name] <= 1 {
-				continue
+	instance := c.instances[0]
+	// Not check the sharding tables’ schema when the mode is increment.
+	// Because the table schema obtained from `show create table` is not the schema at the point of binlog.
+	if checkingShard && instance.cfg.Mode != config.ModeIncrement {
+		isFresh, err := c.IsFreshTask()
+		if err != nil {
+			return err
+		}
+		if isFresh {
+			for targetTableID, shardingSet := range sharding {
+				if shardingCounter[targetTableID] <= 1 {
+					continue
+				}
+				if instance.cfg.ShardMode == config.ShardPessimistic {
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
+				} else {
+					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
+				}
 			}
-
-			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
 		}
 	}
 
@@ -448,7 +462,31 @@ func (c *Checker) Type() pb.UnitType {
 
 // IsFreshTask implements Unit.IsFreshTask.
 func (c *Checker) IsFreshTask() (bool, error) {
-	return true, nil
+	instance := c.instances[0]
+	checkpointSQLs := []string{
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name))),
+	}
+	var existCheckpoint bool
+	for _, sql := range checkpointSQLs {
+		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
+		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
+		if err != nil {
+			if utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+				continue
+			}
+			return false, err
+		}
+		defer rows.Close()
+		if rows.Err() != nil {
+			return false, rows.Err()
+		}
+		existCheckpoint = true
+		c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
+		break
+	}
+	return !existCheckpoint, nil
 }
 
 // Status implements Unit interface.

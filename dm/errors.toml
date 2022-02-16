@@ -1114,6 +1114,24 @@ description = ""
 workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
 tags = ["internal", "medium"]
 
+[error.DM-config-20055]
+message = "invalid validation mode"
+description = ""
+workaround = "Please check `validation-mode` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20056]
+message = "mysql-instance(%d)'s continuous validator config %s not exist"
+description = ""
+workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+tags = ["internal", "medium"]
+
+[error.DM-config-20057]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -2865,6 +2883,12 @@ message = "relay config of worker %s is changed too frequently, last relay sourc
 description = ""
 workaround = "Please try again later"
 tags = ["internal", "low"]
+
+[error.DM-dm-worker-40080]
+message = "table %s.%s matches more than one rule"
+description = ""
+workaround = "please check the route rules in the task config"
+tags = ["internal", "high"]
 
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
