@@ -147,7 +147,14 @@ func newMqSink(
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
+<<<<<<< HEAD
 		statistics: NewStatistics(ctx, "MQ", opts),
+=======
+		statistics: NewStatistics(ctx, "MQ"),
+
+		role: role,
+		id:   changefeedID,
+>>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	}
 
 	go func() {
