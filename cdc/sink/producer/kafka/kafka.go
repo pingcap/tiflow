@@ -63,10 +63,11 @@ type kafkaSaramaProducer struct {
 	topic             string
 	partitionNum      int32
 
+	// It is used to count the number of messages sent out and messages received when flushing data.
 	mu struct {
 		sync.Mutex
-		inflight int64
-		down     chan struct{}
+		inflight  int64
+		flushDown chan struct{}
 	}
 
 	failpointCh chan error
@@ -93,13 +94,6 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 		return nil
 	}
 
-	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Partition: partition,
-	}
-
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
@@ -114,8 +108,15 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
 
+	msg := &sarama.ProducerMessage{
+		Topic:     k.topic,
+		Key:       sarama.ByteEncoder(message.Key),
+		Value:     sarama.ByteEncoder(message.Value),
+		Partition: partition,
+	}
 	k.mu.Lock()
 	k.mu.inflight++
+	log.Info("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
 	select {
@@ -158,7 +159,7 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	inflight := k.mu.inflight
 	immediateFlush := inflight == 0
 	if !immediateFlush {
-		k.mu.down = down
+		k.mu.flushDown = down
 	}
 	k.mu.Unlock()
 
@@ -166,6 +167,7 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 		return nil
 	}
 
+	log.Info("flush waiting for inflight messages", zap.Int64("inflight", inflight))
 	select {
 	case <-k.closeCh:
 		return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
@@ -293,9 +295,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		if ack != nil {
 			k.mu.Lock()
 			k.mu.inflight--
-			if k.mu.inflight == 0 && k.mu.down != nil {
-				k.mu.down <- struct{}{}
-				k.mu.down = nil
+			if k.mu.inflight == 0 && k.mu.flushDown != nil {
+				k.mu.flushDown <- struct{}{}
+				k.mu.flushDown = nil
 			}
 			k.mu.Unlock()
 		}
