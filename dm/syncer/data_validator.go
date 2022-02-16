@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -178,6 +179,7 @@ type DataValidator struct {
 
 	// such as table without primary key
 	unsupportedTable map[string]string
+	waitSyncerTimer  *time.Timer
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -204,6 +206,8 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	c.changeEventCount = make([]int, 4)
 	c.accumulatedChanges = make(map[string]*tableChange)
 	c.retryInterval = retryInterval
+
+	c.waitSyncerTimer = utils.NewStoppedTimer()
 
 	return c
 }
@@ -330,9 +334,39 @@ func (v *DataValidator) errorProcessRoutine() {
 	}
 }
 
-func (v *DataValidator) waitSyncerSynced(loc *binlog.Location, event *replication.BinlogEvent) error {
-	// TODO
-	return nil
+func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
+	syncLoc := v.syncer.checkpoint.FlushedGlobalPoint()
+	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
+	if cmp <= 0 {
+		return nil
+	}
+
+	fired := false
+	v.waitSyncerTimer.Reset(checkInterval)
+	defer func() {
+		if !fired {
+			if !v.waitSyncerTimer.Stop() {
+				<-v.waitSyncerTimer.C
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-v.ctx.Done():
+			return v.ctx.Err()
+		case <-v.waitSyncerTimer.C:
+			fired = true
+			syncLoc = v.syncer.checkpoint.FlushedGlobalPoint()
+			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
+			if cmp <= 0 {
+				return nil
+			} else {
+				v.waitSyncerTimer.Reset(checkInterval)
+				fired = false
+			}
+		}
+	}
 }
 
 func (v *DataValidator) waitSyncerRunning() error {
@@ -357,7 +391,7 @@ func (v *DataValidator) doValidate() {
 
 	tctx := tcontext.NewContext(v.ctx, v.L)
 	// todo: syncer may change replication location(start from timestamp, sharding resync), how validator react?
-	location := v.syncer.checkpoint.GlobalPoint()
+	location := v.syncer.checkpoint.FlushedGlobalPoint()
 	err := v.streamerController.Start(tctx, location)
 	if err != nil {
 		v.errChan <- terror.Annotate(err, "fail to start streamer controller")
@@ -377,39 +411,33 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
-		if !utils.IsFakeRotateEvent(e.Header) {
-			// wait until syncer synced that event
-			err := v.waitSyncerSynced(&currLoc, e)
-			if err != nil {
-				v.errChan <- terror.Annotate(err, "failed to wait syncer")
-				return
-			}
-		}
-
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
 			currLoc.Position.Name = string(ev.NextLogName)
 			currLoc.Position.Pos = uint32(ev.Position)
-		case *replication.QueryEvent:
-			// TODO not processed now
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
 			currLoc.Position.Pos = e.Header.LogPos
-			err2 := currLoc.SetGTID(ev.GSet)
-			if err2 != nil {
-				v.errChan <- terror.Annotate(err2, "failed to set gtid")
+			gtidStr, _ := event.GetGTIDStr(e)
+			if err = currLoc.Update(gtidStr); err != nil {
+				v.errChan <- terror.Annotate(err, "failed to update gtid set")
 				return
 			}
-		case *replication.RowsEvent:
+		default:
 			currLoc.Position.Pos = e.Header.LogPos
+		}
+
+		// wait until syncer synced current event
+		err = v.waitSyncerSynced(currLoc)
+		if err != nil {
+			v.errChan <- terror.Annotate(err, "failed to wait syncer")
+			return
+		}
+
+		switch e.Event.(type) {
+		case *replication.RowsEvent:
 			select {
 			case v.rowsEventChan <- e:
 			case <-v.ctx.Done():
-				return
-			}
-		case *replication.XIDEvent:
-			currLoc.Position.Pos = e.Header.LogPos
-			err2 := currLoc.SetGTID(ev.GSet)
-			if err2 != nil {
-				v.errChan <- terror.Annotate(err2, "failed to set gtid")
 				return
 			}
 		}
