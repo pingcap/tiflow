@@ -198,9 +198,9 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 			zap.String("changefeed", t.changefeedID),
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID))
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 func (t *tableActor) handleDataMsg(ctx context.Context) error {
