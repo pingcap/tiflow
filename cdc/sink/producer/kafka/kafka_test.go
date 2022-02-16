@@ -134,9 +134,15 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		c.Fatalf("unexpected err: %s", err)
 	default:
 	}
+	producer.mu.Lock()
+	c.Assert(producer.mu.inflight, check.Equals, int64(0))
+	producer.mu.Unlock()
 	// check no events to flush
 	err = producer.Flush(ctx)
 	c.Assert(err, check.IsNil)
+	producer.mu.Lock()
+	c.Assert(producer.mu.inflight, check.Equals, int64(0))
+	producer.mu.Unlock()
 
 	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
 		Key:   []byte("test-broadcast"),
