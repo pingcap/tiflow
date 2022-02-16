@@ -31,6 +31,8 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -38,7 +40,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/stretchr/testify/require"
 )
 
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
@@ -108,7 +109,7 @@ func TestPrepareDML(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:   [][]interface{}{{2, 2}},
 				rowCount: 1,
 			},

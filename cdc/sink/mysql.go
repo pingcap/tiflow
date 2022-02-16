@@ -647,6 +647,11 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			postValues = append(postValues, col.Value)
 		}
 
+		// when this RowChangedEvent is generated from redo or unit tests
+		if row.TableInfo == nil {
+			row.TableInfo = recoverTableInfo(row.PreColumns, row.Columns, row.IndexColumns)
+		}
+
 		rowChange := sqlmodel.NewRowChange(row.Table, nil, preValues, postValues, row.TableInfo, nil, nil)
 
 		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
@@ -940,6 +945,84 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
+}
+
+func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]int) *timodel.TableInfo {
+	nonEmptyColumns := preCols
+	if len(nonEmptyColumns) == 0 {
+		nonEmptyColumns = postCols
+	}
+
+	tableInfo := &timodel.TableInfo{}
+	// in fact nowhere will use this field, so we set a debug message
+	tableInfo.Name = timodel.NewCIStr("generated_by_redo")
+
+	for _, column := range nonEmptyColumns {
+		columnInfo := &timodel.ColumnInfo{}
+		if column == nil {
+			// should not happen? please help check it
+			continue
+		}
+		columnInfo.Name = timodel.NewCIStr(column.Name)
+		columnInfo.Tp = column.Type
+
+		flag := column.Flag
+		if flag.IsBinary() {
+			columnInfo.Charset = "binary"
+		}
+		if flag.IsGeneratedColumn() {
+			// will this happen?
+		}
+		// now we will mark all column of an index as PriKeyFlag, however a real
+		// TableInfo from TiDB only mark the first column
+		// This also applies for UniqueKeyFlag, MultipleKeyFlag
+		if flag.IsPrimaryKey() {
+			columnInfo.Flag |= mysql.PriKeyFlag
+			if flag.IsHandleKey() {
+				tableInfo.IsCommonHandle = true
+			}
+		}
+		if flag.IsUniqueKey() {
+			columnInfo.Flag |= mysql.UniqueKeyFlag
+		}
+		if !flag.IsNullable() {
+			columnInfo.Flag |= mysql.NotNullFlag
+		}
+		if flag.IsMultipleKey() {
+			columnInfo.Flag |= mysql.MultipleKeyFlag
+		}
+		if flag.IsUnsigned() {
+			columnInfo.Flag |= mysql.UnsignedFlag
+		}
+
+		tableInfo.Columns = append(tableInfo.Columns, columnInfo)
+	}
+
+	for i, colOffsets := range indexOffsetMatrix {
+		indexInfo := &timodel.IndexInfo{}
+		indexInfo.Name = timodel.NewCIStr(fmt.Sprintf("idx_%d", i))
+
+		firstCol := tableInfo.Columns[colOffsets[0]]
+		if mysql.HasPriKeyFlag(firstCol.Flag) {
+			indexInfo.Primary = true
+		}
+		if mysql.HasUniKeyFlag(firstCol.Flag) {
+			indexInfo.Unique = true
+		}
+
+		for _, colOffset := range colOffsets {
+			indexCol := &timodel.IndexColumn{}
+			indexCol.Offset = colOffset
+			indexInfo.Columns = append(indexInfo.Columns, indexCol)
+		}
+
+		// TODO: revert the "all column set index related flag" to "only the first
+		// column set index related flag"
+
+		tableInfo.Indices = append(tableInfo.Indices, indexInfo)
+	}
+
+	return tableInfo
 }
 
 // GetDBConnImpl is the implement holder to get db connection. Export it for tests

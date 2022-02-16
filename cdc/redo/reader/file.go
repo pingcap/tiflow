@@ -403,10 +403,6 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 
-	if redoLog.Type == model.RedoLogTypeRow {
-		redoLog.RedoRow.RecoverTableInfo()
-	}
-
 	// point last valid offset to the end of redoLog
 	r.lastValidOff += frameSizeBytes + recBytes + padBytes
 	return nil

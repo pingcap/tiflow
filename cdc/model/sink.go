@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -246,85 +245,6 @@ type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
 	PreColumns []*RedoColumn    `msg:"pre-columns"`
 	Columns    []*RedoColumn    `msg:"columns"`
-}
-
-// RecoverTableInfo fill RowChangedEvent.TableInfo by one of non-empty []*RedoColumn.
-func (e *RedoRowChangedEvent) RecoverTableInfo() {
-	nonEmptyColumns := e.PreColumns
-	if len(nonEmptyColumns) == 0 {
-		nonEmptyColumns = e.Columns
-	}
-
-	tableInfo := &model.TableInfo{}
-	// in fact nowhere will use this field, so we set a debug message
-	tableInfo.Name = model.NewCIStr("generated_by_redo")
-
-	for _, column := range nonEmptyColumns {
-		columnInfo := &model.ColumnInfo{}
-		if column == nil {
-			// should not happen? please help check it
-			continue
-		}
-		columnInfo.Name = model.NewCIStr(column.Column.Name)
-		columnInfo.Tp = column.Column.Type
-
-		flag := ColumnFlagType(column.Flag)
-		if flag.IsBinary() {
-			columnInfo.Charset = "binary"
-		}
-		if flag.IsGeneratedColumn() {
-			// will this happen?
-		}
-		// now we will mark all column of an index as PriKeyFlag, however a real
-		// TableInfo from TiDB only mark the first column
-		// This also applies for UniqueKeyFlag, MultipleKeyFlag
-		if flag.IsPrimaryKey() {
-			columnInfo.Flag |= mysql.PriKeyFlag
-			if flag.IsHandleKey() {
-				tableInfo.IsCommonHandle = true
-			}
-		}
-		if flag.IsUniqueKey() {
-			columnInfo.Flag |= mysql.UniqueKeyFlag
-		}
-		if !flag.IsNullable() {
-			columnInfo.Flag |= mysql.NotNullFlag
-		}
-		if flag.IsMultipleKey() {
-			columnInfo.Flag |= mysql.MultipleKeyFlag
-		}
-		if flag.IsUnsigned() {
-			columnInfo.Flag |= mysql.UnsignedFlag
-		}
-
-		tableInfo.Columns = append(tableInfo.Columns, columnInfo)
-	}
-
-	for i, colOffsets := range e.Row.IndexColumns {
-		indexInfo := &model.IndexInfo{}
-		indexInfo.Name = model.NewCIStr(fmt.Sprintf("idx_%d", i))
-
-		firstCol := tableInfo.Columns[colOffsets[0]]
-		if mysql.HasPriKeyFlag(firstCol.Flag) {
-			indexInfo.Primary = true
-		}
-		if mysql.HasUniKeyFlag(firstCol.Flag) {
-			indexInfo.Unique = true
-		}
-
-		for _, colOffset := range colOffsets {
-			indexCol := &model.IndexColumn{}
-			indexCol.Offset = colOffset
-			indexInfo.Columns = append(indexInfo.Columns, indexCol)
-		}
-
-		// TODO: revert the "all column set index related flag" to "only the first
-		// column set index related flag"
-
-		tableInfo.Indices = append(tableInfo.Indices, indexInfo)
-	}
-
-	e.Row.TableInfo = tableInfo
 }
 
 // RowChangedEvent represents a row changed event
