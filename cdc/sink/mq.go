@@ -16,6 +16,7 @@ package sink
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -460,6 +461,13 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
 	opts map[string]string, errCh chan error) (*mqSink, error) {
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
 	producerConfig := kafka.NewConfig()
 	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -470,14 +478,22 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, err
 	}
 
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	if topic == "" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	saramaConfig, err := kafka.NewSaramaConfigImpl(ctx, producerConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
+	if err := kafka.ValidateConfig(topic, producerConfig, saramaConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
+
+	if err := kafka.CreateTopic(topic, producerConfig, saramaConfig); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+	}
+
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, saramaConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

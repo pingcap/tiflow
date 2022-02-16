@@ -27,11 +27,11 @@ const (
 )
 
 var (
-	// brokerMessageMaxBytes specifies the broker's `message.max.bytes`, default to 1048576.
-	brokerMessageMaxBytes = "1048576"
+	// defaultBrokerMessageMaxBytes specifies the broker's `message.max.bytes`, default to 1048576.
+	defaultBrokerMessageMaxBytes = "1048576"
 
-	// topicMaxMessageBytes specifies the topic's `max.message.bytes`, default to 1048576.
-	topicMaxMessageBytes = "1048576"
+	// defaultTopicMaxMessageBytes specifies the topic's `max.message.bytes`, default to 1048576.
+	defaultTopicMaxMessageBytes = "1048576"
 
 	// defaultMinInsyncReplicas specifies the default min insync replicas for broker and default topic.
 	defaultMinInsyncReplicas = "1"
@@ -49,7 +49,7 @@ type ClusterAdminClientMockImpl struct {
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[TopicMaxMessageBytesConfigName] = &brokerMessageMaxBytes
+	configEntries[TopicMaxMessageBytesConfigName] = &defaultTopicMaxMessageBytes
 	configEntries[MinInsyncReplicasConfigName] = &defaultMinInsyncReplicas
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
@@ -59,7 +59,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	brokerConfigs := []sarama.ConfigEntry{
 		{
 			Name:  BrokerMessageMaxBytesConfigName,
-			Value: brokerMessageMaxBytes,
+			Value: defaultBrokerMessageMaxBytes,
 		},
 		{
 			Name:  MinInsyncReplicasConfigName,
@@ -124,16 +124,16 @@ func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-// GetBrokerMessageMaxBytes returns brokerMessageMaxBytes as a number.
+// GetBrokerMessageMaxBytes returns defaultBrokerMessageMaxBytes as a number.
 func (c *ClusterAdminClientMockImpl) GetBrokerMessageMaxBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(brokerMessageMaxBytes)
+	topicMaxMessage, _ := strconv.Atoi(defaultBrokerMessageMaxBytes)
 	return topicMaxMessage
 }
 
 func (c *ClusterAdminClientMockImpl) SetBrokerMessageMaxBytes(a int) {
-	brokerMessageMaxBytes = strconv.Itoa(a)
+	defaultBrokerMessageMaxBytes = strconv.Itoa(a)
 }
 
 func (c *ClusterAdminClientMockImpl) SetTopicMaxMaxMessageBytes(a int) {
-	topicMaxMessageBytes = strconv.Itoa(a)
+	defaultTopicMaxMessageBytes = strconv.Itoa(a)
 }

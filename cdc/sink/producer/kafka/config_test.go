@@ -36,12 +36,12 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	ctx := context.Background()
 	config := NewConfig()
 	config.Version = "invalid"
-	_, err := newSaramaConfigImpl(ctx, config)
+	_, err := NewSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
-	_, err = newSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfigImpl(ctx, config)
 	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
 
 	config.ClientID = "test-kafka-client"
@@ -58,7 +58,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	for _, cc := range compressionCases {
 		config.Compression = cc.algorithm
-		cfg, err := newSaramaConfigImpl(ctx, config)
+		cfg, err := NewSaramaConfigImpl(ctx, config)
 		c.Assert(err, check.IsNil)
 		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
 	}
@@ -66,7 +66,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
 	}
-	_, err = newSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 
 	saslConfig := NewConfig()
@@ -78,7 +78,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
+	cfg, err := NewSaramaConfigImpl(ctx, saslConfig)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.NotNil)
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
@@ -399,26 +399,26 @@ func (s *kafkaSuite) TestInitializeConfigurations(c *check.C) {
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
 
-		for _, a := range combinations {
-			uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
-			sinkURI, err := url.Parse(uri)
-			c.Assert(err, check.IsNil)
+	for _, a := range combinations {
+		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
+		sinkURI, err := url.Parse(uri)
+		c.Assert(err, check.IsNil)
 
-			kafka.DefaultBrokerMessageMaxBytes = a.brokerMessageMaxBytes
-			kafka.DefaultTopicMaxMessageBytes = a.topicMaxMessageBytes
+		adminClient := NewAdminClientImpl([]string{sinkURI.Host})
 
-			opts := make(map[string]string)
-			replicaConfig := config.GetDefaultReplicaConfig()
-			topic, ok := a.uriParams[0].(string)
-			c.Assert(ok, check.IsTrue)
-			producerConfig, saramaConfig, err := InitializeConfigurations(context.Background(), topic, sinkURI, replicaConfig, opts)
-			c.Assert(err, check.IsNil)
-			c.Assert(producerConfig.MaxMessageBytes, check.Equals, saramaConfig.Producer.MaxMessageBytes)
-			c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(saramaConfig.Producer.MaxMessageBytes))
+		kafka.DefaultBrokerMessageMaxBytes = a.brokerMessageMaxBytes
+		kafka.DefaultTopicMaxMessageBytes = a.topicMaxMessageBytes
 
-			c.Assert(strconv.Itoa(saramaConfig.Producer.MaxMessageBytes), check.Equals, a.expectedMaxMessageBytes)
-		}
+		opts := make(map[string]string)
+		replicaConfig := config.GetDefaultReplicaConfig()
+		topic, ok := a.uriParams[0].(string)
+		c.Assert(ok, check.IsTrue)
+		producerConfig, saramaConfig, err := InitializeConfigurations(context.Background(), topic, sinkURI, replicaConfig, opts)
+		c.Assert(err, check.IsNil)
+		c.Assert(producerConfig.MaxMessageBytes, check.Equals, saramaConfig.Producer.MaxMessageBytes)
+		c.Assert(opts["max-message-bytes"], check.Equals, strconv.Itoa(saramaConfig.Producer.MaxMessageBytes))
+
+		c.Assert(strconv.Itoa(saramaConfig.Producer.MaxMessageBytes), check.Equals, a.expectedMaxMessageBytes)
 	}
+}
