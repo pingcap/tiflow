@@ -411,7 +411,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func ValidateConfig(topic string, config *Config, saramaConfig *sarama.Config) error {
+func ValidateConfig(config *Config, saramaConfig *sarama.Config, topic string) error {
 	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return errors.Trace(err)
