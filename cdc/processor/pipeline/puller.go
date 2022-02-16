@@ -97,8 +97,9 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 				pEvent := model.NewPolymorphicEvent(rawKV)
 				if isActorMode {
 					sorter.sorter.AddEntry(ctx, pEvent)
+				} else {
+					ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 				}
-				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
 			}
 		}
 	})
