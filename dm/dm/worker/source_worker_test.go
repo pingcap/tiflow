@@ -88,11 +88,11 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
 
-	// close twice
-	w.Close()
+	// stop twice
+	w.Stop(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	w.Close()
+	w.Stop(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
 	c.Assert(w.closed.Load(), IsTrue)
@@ -197,11 +197,15 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
 	subtaskCfg.Timezone = "UTC"
+<<<<<<< HEAD
 	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, true), IsNil)
+=======
+	c.Assert(s.getSourceWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
+>>>>>>> e7b0aae47 (unit(dm): add Kill func for unit (#4035))
 
 	// check task in paused state
 	c.Assert(utils.WaitSomething(100, 100*time.Millisecond, func() bool {
-		subtaskStatus, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		subtaskStatus, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range subtaskStatus {
 			if st.Name == taskName && st.Stage == pb.Stage_Paused {
 				return true
@@ -212,7 +216,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	//nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
-	rtsc, ok := s.getWorker(true).taskStatusChecker.(*realTaskStatusChecker)
+	rtsc, ok := s.getSourceWorker(true).taskStatusChecker.(*realTaskStatusChecker)
 	c.Assert(ok, IsTrue)
 	defer func() {
 		// close multiple time
@@ -222,7 +226,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 
 	// check task will be auto resumed
 	c.Assert(utils.WaitSomething(10, 100*time.Millisecond, func() bool {
-		sts, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		sts, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range sts {
 			if st.Name == taskName && st.Stage == pb.Stage_Running {
 				return true
@@ -294,7 +298,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 	// start worker
 	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		w.Start()
 	}()
@@ -467,7 +471,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		w.Start()
 	}()
@@ -548,11 +552,136 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(status, HasLen, 1)
 	c.Assert(status[0].Name, Equals, subtaskCfg.Name)
 	c.Assert(status[0].Stage, Equals, pb.Stage_Running)
-	w.Close()
+	w.Stop(true)
 	cancel2()
 	wg.Wait()
 }
 
+<<<<<<< HEAD
+=======
+func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+		startRev     = int64(1)
+	)
+
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:            GetJoinURLs(cfg.Join),
+		DialTimeout:          dialTimeout,
+		DialKeepAliveTime:    keepaliveTime,
+		DialKeepAliveTimeout: keepaliveTimeout,
+	})
+	c.Assert(err, IsNil)
+	sourceCfg := loadSourceConfigWithoutPassword(c)
+	sourceCfg.From = config.GetDBConfigForTest()
+	sourceCfg.EnableRelay = false
+
+	//
+	// step 1: start worker
+	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer w.Stop(true)
+	go func() {
+		w.Start()
+	}()
+	c.Assert(utils.WaitSomething(50, 100*time.Millisecond, func() bool {
+		return !w.closed.Load()
+	}), IsTrue)
+
+	//
+	// step 2: Put a subtask config and subtask stage to this source, then delete it
+	subtaskCfg := config.SubTaskConfig{}
+	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	c.Assert(err, IsNil)
+	subtaskCfg.MydumperPath = mydumperPath
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
+
+	// increase revision
+	_, err = etcdCli.Put(context.Background(), "/dummy-key", "value")
+	c.Assert(err, IsNil)
+	rev, err := ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
+	c.Assert(err, IsNil)
+
+	//
+	// step 2.1: start a subtask manually
+	c.Assert(w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
+
+	//
+	// step 3: trigger etcd compaction and check whether we can receive it through watcher
+	_, err = etcdCli.Compact(ctx, rev)
+	c.Assert(err, IsNil)
+	subTaskStageCh := make(chan ha.Stage, 10)
+	subTaskErrCh := make(chan error, 10)
+	ctxForWatch, cancelFunc := context.WithCancel(ctx)
+	ha.WatchValidatorStage(ctxForWatch, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
+	select {
+	case err = <-subTaskErrCh:
+		c.Assert(err, Equals, etcdErrCompacted)
+	case <-time.After(300 * time.Millisecond):
+		c.Fatal("fail to get etcd error compacted")
+	}
+	cancelFunc()
+
+	//
+	// step 4: watch subtask stage from startRev
+	subTask := w.subTaskHolder.findSubTask(subtaskCfg.Name)
+	getValidator := func() *syncer.DataValidator {
+		subTask.RLock()
+		defer subTask.RUnlock()
+		return subTask.validator
+	}
+	c.Assert(subTask, NotNil)
+	c.Assert(getValidator(), IsNil)
+	var wg sync.WaitGroup
+	ctx1, cancel1 := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.Assert(w.observeValidatorStage(ctx1, startRev), IsNil)
+	}()
+	time.Sleep(time.Second)
+
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
+	unitBakup := subTask.units[len(subTask.units)-1]
+	subTask.units[len(subTask.units)-1] = &syncer.Syncer{} // validator need a Syncer, not a mocked unit
+	validatorStage := ha.NewValidatorStage(pb.Stage_Running, subtaskCfg.SourceID, subtaskCfg.Name)
+	_, err = ha.PutSubTaskCfgStage(etcdCli, []config.SubTaskConfig{subtaskCfg}, nil, []ha.Stage{validatorStage})
+	c.Assert(err, IsNil)
+
+	// validator created
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return getValidator() != nil
+	}), IsTrue)
+
+	subTask.units[len(subTask.units)-1] = unitBakup // restore unit
+	cancel1()
+	wg.Wait()
+
+	// test operate validator
+	err = w.operateValidatorStage(ha.Stage{IsDeleted: true})
+	c.Assert(err, IsNil)
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Task: "not-exist"})
+	c.Assert(err, IsNil)
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Task: subtaskCfg.Name})
+	c.Assert(err, ErrorMatches, ".*failed to get subtask config.*")
+	err = w.operateValidatorStage(ha.Stage{Expect: pb.Stage_Running, Source: subtaskCfg.SourceID, Task: subtaskCfg.Name})
+	c.Assert(err, IsNil)
+}
+
+>>>>>>> e7b0aae47 (unit(dm): add Kill func for unit (#4035))
 func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	var (
 		masterAddr   = tempurl.Alloc()[len("http://"):]
@@ -586,7 +715,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		c.Assert(w.EnableRelay(false), IsNil)
 		w.Start()

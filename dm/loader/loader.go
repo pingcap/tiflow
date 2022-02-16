@@ -804,6 +804,12 @@ func (l *Loader) Close() {
 	l.closed.Store(true)
 }
 
+// Kill kill the loader without graceful.
+func (l *Loader) Kill() {
+	// TODO: implement kill
+	l.Close()
+}
+
 // stopLoad stops loading, now it used by Close and Pause
 // maybe we can refine the workflow more clear.
 func (l *Loader) stopLoad() {

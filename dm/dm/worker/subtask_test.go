@@ -118,6 +118,8 @@ func (m *MockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 func (m *MockUnit) Close() {}
 
+func (m *MockUnit) Kill() {}
+
 func (m MockUnit) Pause() {}
 
 func (m *MockUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) { m.Process(ctx, pr) }
