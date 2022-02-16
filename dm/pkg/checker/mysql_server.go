@@ -74,7 +74,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
 	if utils.IsMariaDB(value) {
-		return NewWarn("Migrating from MariaDB is experimentally supported")
+		return NewWarn("Migrating from MariaDB is experimentally supported. If you must use DM to migrate data from MariaDB, we suggest make your MariaDB >= 10.1.2")
 	}
 	if IsTiDBFromVersion(value) {
 		return NewWarn("Not support migrate from TiDB")
