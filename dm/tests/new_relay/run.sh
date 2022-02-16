@@ -115,11 +115,9 @@ function test_cant_dail_upstream() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
 	# make sure DM-worker doesn't exit
-	sleep 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"injected error" 1
-
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_upstream passed"
 }
 
@@ -158,8 +156,6 @@ function test_cant_dail_downstream() {
 
 	# restart tidb
 	run_tidb_server 4000 $TIDB_PASSWORD
-	sleep 2
-
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_downstream passed"
 }
 
