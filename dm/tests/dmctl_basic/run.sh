@@ -283,6 +283,9 @@ function run() {
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
 
+	echo "check_task_optimistic"
+	check_task_pass $cur/conf/dm-task4.yaml
+
 	echo "check_task_only_warning"
 	check_task_only_warning $cur/conf/only_warning.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

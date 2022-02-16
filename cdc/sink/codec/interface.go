@@ -33,9 +33,6 @@ type EventBatchEncoder interface {
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
 	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
-	// AppendResolvedEvent appends a resolved event into the batch.
-	// This event is used to tell the encoder that no event prior to ts will be sent.
-	AppendResolvedEvent(ts uint64) (EncoderResult, error)
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -47,7 +44,6 @@ type EventBatchEncoder interface {
 	// TODO decouple it out
 	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
-	// Deprecated: Size is deprecated
 	Size() int
 	// Reset reset the kv buffer
 	Reset()

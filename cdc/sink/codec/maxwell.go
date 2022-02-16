@@ -85,11 +85,6 @@ func (d *MaxwellEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage,
 	return nil, nil
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
