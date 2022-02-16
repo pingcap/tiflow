@@ -55,8 +55,8 @@ function fail_acquire_global_lock() {
 		"\"stage\": \"Paused\"" 2 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
-	cleanup_data full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function escape_schema() {
@@ -113,8 +113,8 @@ function escape_schema() {
 	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
 	check_metric $WORKER2_PORT 'dumpling_dump_finished_tables' 3 0 3
 
-	cleanup_data full/mode
 	cleanup_process $*
+	cleanup_data full/mode
 }
 
 function empty_data() {
@@ -138,8 +138,8 @@ function empty_data() {
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "progress=\"100.00 %\""
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "progress=\"100.00 %\""
 
-	cleanup_data full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function run() {
