@@ -26,11 +26,16 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
+const (
+	StartValidationOp = "start"
+	StopValidationOp  = "stop"
+)
+
 func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start [-s source ...] [--mode mode] [--all-task] [task-name]",
 		Short: "start to validate the completeness of the data",
-		RunE:  startStopValidation("start"),
+		RunE:  startStopValidation(StartValidationOp),
 	}
 	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
 	cmd.Flags().String("mode", "full", "specify the mode of validation: full, fast")
@@ -41,13 +46,13 @@ func NewStopValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop [-s source ...] [--all-task] [task-name]",
 		Short: "stop validating the completeness of the data",
-		RunE:  startStopValidation("stop"),
+		RunE:  startStopValidation(StopValidationOp),
 	}
 	cmd.Flags().Bool("all-task", false, "whether to all tasks")
 	return cmd
 }
 
-func startStopValidation(typ string) func(*cobra.Command, []string) error {
+func startStopValidation(op string) func(*cobra.Command, []string) error {
 	formatStartStopValidationError := func(cmd *cobra.Command, errMsg string) error {
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
@@ -85,7 +90,7 @@ func startStopValidation(typ string) func(*cobra.Command, []string) error {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		if typ == "start" {
+		if op == StartValidationOp {
 			// TODO: get `from-time` flag
 			var mode string
 			mode, err = cmd.Flags().GetString("mode")

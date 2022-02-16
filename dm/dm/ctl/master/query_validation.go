@@ -16,6 +16,7 @@ package master
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/pingcap/errors"
 
@@ -83,7 +84,7 @@ func NewQueryValidationStatusCmd() *cobra.Command {
 		Short: "query validation status of a task",
 		RunE:  queryValidationStatus,
 	}
-	cmd.Flags().String("stage", "", "filter validation tasks status by stages: Running/Stopped")
+	cmd.Flags().String("stage", "", "filter validation tasks status by stages: running/stopped")
 	return cmd
 }
 
@@ -104,10 +105,14 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if stage != "" && stage != pb.Stage_Running.String() && stage != pb.Stage_Stopped.String() {
+	if stage != "" && stage != strings.ToLower(pb.Stage_Running.String()) && stage != strings.ToLower(pb.Stage_Stopped.String()) {
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
-		return errors.Errorf("stage should be either `%s` or `%s`", pb.Stage_Running.String(), pb.Stage_Stopped.String())
+		return errors.Errorf(
+			"stage should be either `%s` or `%s`",
+			strings.ToLower(pb.Stage_Running.String()),
+			strings.ToLower(pb.Stage_Stopped.String()),
+		)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

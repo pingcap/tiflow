@@ -2673,9 +2673,9 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.FilterStatus != pb.Stage_Running.String() && req.FilterStatus != pb.Stage_Stopped.String() {
+	if req.FilterStatus != strings.ToLower(pb.Stage_Running.String()) && req.FilterStatus != strings.ToLower(pb.Stage_Stopped.String()) {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", pb.Stage_Running.String(), pb.Stage_Stopped.String())
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
 		return resp, err
 	}
 	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
