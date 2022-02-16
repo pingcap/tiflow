@@ -105,10 +105,7 @@ func (pc *MySQLBinlogFormatChecker) Name() string {
 
 /*****************************************************/
 
-var (
-	mysqlBinlogRowImageRequired   MySQLVersion = [3]uint{5, 6, 2}
-	mariadbBinlogRowImageRequired MySQLVersion = [3]uint{10, 1, 6}
-)
+var mysqlBinlogRowImageRequired MySQLVersion = [3]uint{5, 6, 2}
 
 // MySQLBinlogRowImageChecker checks mysql binlog_row_image.
 type MySQLBinlogRowImageChecker struct {

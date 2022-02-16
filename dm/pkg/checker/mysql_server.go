@@ -150,20 +150,20 @@ func (pc *MySQLServerIDChecker) Name() string {
 	return "mysql_server_id"
 }
 
-// BinlogDbChecker checks mysql/mariadb server ID.
-type BinlogDbChecker struct {
+// BinlogDBChecker checks mysql/mariadb server ID.
+type BinlogDBChecker struct {
 	db      *sql.DB
 	dbinfo  *dbutil.DBConfig
 	schemas map[string]struct{}
 }
 
-// NewMySQLServerIDChecker returns a RealChecker.
-func NewBinlogDbChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}) RealChecker {
-	return &BinlogDbChecker{db: db, dbinfo: dbinfo, schemas: schemas}
+// NewBinlogDBChecker returns a RealChecker.
+func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}) RealChecker {
+	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: schemas}
 }
 
 // Check implements the RealChecker interface.
-func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
+func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
 		Desc:  "check whether dbs need replication is in binlog_do_db/binlog_ignore_db",
@@ -176,24 +176,24 @@ func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	binlogDoDb, binlogIgnoreDb, err := utils.GetBinlogDb(ctx, c.db, flavor)
+	binlogDoDB, binlogIgnoreDB, err := utils.GetBinlogDB(ctx, c.db, flavor)
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
 
-	binlogDoDb = strings.ReplaceAll(binlogDoDb, " ", "")
-	binlogIgnoreDb = strings.ReplaceAll(binlogIgnoreDb, " ", "")
+	binlogDoDB = strings.ReplaceAll(binlogDoDB, " ", "")
+	binlogIgnoreDB = strings.ReplaceAll(binlogIgnoreDB, " ", "")
 
-	binlogDoDbs := strings.Split(binlogDoDb, ",")
-	binlogIgnoreDbs := strings.Split(binlogIgnoreDb, ",")
+	binlogDoDBs := strings.Split(binlogDoDB, ",")
+	binlogIgnoreDBs := strings.Split(binlogIgnoreDB, ",")
 	// MySQL will check –binlog-do-db first, if there are any options,
 	// it will apply this one and ignore –binlog-ignore-db. If the
 	// –binlog-do-db is NOT set, then mysql will check –binlog-ignore-db.
 	// If both of them are empty, it will log changes for all DBs.
-	if len(binlogDoDb) != 0 {
-		for _, doDb := range binlogDoDbs {
-			delete(c.schemas, doDb)
+	if len(binlogDoDB) != 0 {
+		for _, doDB := range binlogDoDBs {
+			delete(c.schemas, doDB)
 		}
 		if len(c.schemas) > 0 {
 			dbs := []string{}
@@ -204,9 +204,9 @@ func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
 			return result
 		}
 	} else {
-		for _, ignoreDb := range binlogIgnoreDbs {
-			if _, ok := c.schemas[ignoreDb]; ok {
-				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db", ignoreDb)
+		for _, ignoreDB := range binlogIgnoreDBs {
+			if _, ok := c.schemas[ignoreDB]; ok {
+				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db", ignoreDB)
 				return result
 			}
 		}
@@ -216,6 +216,6 @@ func (c *BinlogDbChecker) Check(ctx context.Context) *Result {
 }
 
 // Name implements the RealChecker interface.
-func (pc *BinlogDbChecker) Name() string {
+func (c *BinlogDBChecker) Name() string {
 	return "binlog_do_db/binlog_ignore_db check"
 }

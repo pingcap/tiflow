@@ -121,7 +121,7 @@ func (t *testDBSuite) TestGetPosAndGs(c *C) {
 	c.Assert(err, NotNil)
 }
 
-func (t *testDBSuite) TestGetBinlogDb(c *C) {
+func (t *testDBSuite) TestGetBinlogDB(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 
@@ -134,10 +134,10 @@ func (t *testDBSuite) TestGetBinlogDb(c *C) {
 	)
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
-	binlogDoDb, binlogIgnoreDb, err := GetBinlogDb(ctx, db, "mysql")
+	binlogDoDB, binlogIgnoreDB, err := GetBinlogDB(ctx, db, "mysql")
 	c.Assert(err, IsNil)
-	c.Assert(binlogDoDb, Equals, "do_db")
-	c.Assert(binlogIgnoreDb, Equals, "ignore_db")
+	c.Assert(binlogDoDB, Equals, "do_db")
+	c.Assert(binlogIgnoreDB, Equals, "ignore_db")
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
 	// 4 columns for MariaDB
@@ -148,10 +148,10 @@ func (t *testDBSuite) TestGetBinlogDb(c *C) {
 	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
 
-	binlogDoDb, binlogIgnoreDb, err = GetBinlogDb(ctx, db, "mariadb")
+	binlogDoDB, binlogIgnoreDB, err = GetBinlogDB(ctx, db, "mariadb")
 	c.Assert(err, IsNil)
-	c.Assert(binlogDoDb, Equals, "do_db")
-	c.Assert(binlogIgnoreDb, Equals, "ignore_db")
+	c.Assert(binlogDoDB, Equals, "do_db")
+	c.Assert(binlogIgnoreDB, Equals, "ignore_db")
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 

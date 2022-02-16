@@ -168,6 +168,7 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	return serverIDs, nil
 }
 
+// GetPosAndGs get binlog position and gtid.Set.
 func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
 	binlogPos gmysql.Position,
 	gs gtid.Set,
@@ -185,32 +186,36 @@ func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
 	return
 }
 
-func GetBinlogDb(ctx context.Context, db *sql.DB, flavor string) (string, string, error) {
-	_, _, binlogDoDb, binlogIgnoreDb, _, err := GetMasterStatus(ctx, db, flavor)
-	return binlogDoDb, binlogIgnoreDb, err
+// GetBinlogDB get binlog_do_db and binlog_ignore_db.
+func GetBinlogDB(ctx context.Context, db *sql.DB, flavor string) (string, string, error) {
+	// nolint:dogsled
+	_, _, binlogDoDB, binlogIgnoreDB, _, err := GetMasterStatus(ctx, db, flavor)
+	return binlogDoDB, binlogIgnoreDB, err
 }
 
 // GetMasterStatus gets status from master.
 // When the returned error is nil, the gtid.Set must be not nil.
 func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
-	binlogName string,
-	pos uint32,
-	binlogDoDb string,
-	binlogIgnoreDb string,
-	gtidStr string,
-	err error) {
-
+	string, uint32, string, string, string, error) {
+	var (
+		binlogName     string
+		pos            uint32
+		binlogDoDB     string
+		binlogIgnoreDB string
+		gtidStr        string
+		err            error
+	)
 	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
 	if err != nil {
 		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-		return
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	defer rows.Close()
 
 	if !rows.Next() {
 		err = terror.ErrNoMasterStatus.Generate()
-		return
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	// Show an example.
 	/*
@@ -236,17 +241,19 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
 		+--------------------------+
 	*/
 	if flavor == gmysql.MySQLFlavor {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDb, &binlogIgnoreDb, &gtidStr)
+		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB, &gtidStr)
 	} else {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDb, &binlogIgnoreDb)
-		gtidStr, err = GetGlobalVariable(ctx, db, "gtid_binlog_pos")
-		if err != nil {
-			return
-		}
+		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB)
 	}
 	if err != nil {
 		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-		return
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+	}
+	if flavor == gmysql.MariaDBFlavor {
+		gtidStr, err = GetGlobalVariable(ctx, db, "gtid_binlog_pos")
+		if err != nil {
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+		}
 	}
 
 	if rows.Next() {
@@ -254,14 +261,14 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
 	}
 	if rows.Close() != nil {
 		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-		return
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	if rows.Err() != nil {
 		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-		return
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 
-	return
+	return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 }
 
 // GetMariaDBGTID gets MariaDB's `gtid_binlog_pos`
