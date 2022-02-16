@@ -472,7 +472,11 @@
             {
               "alias": "Instance",
               "colorMode": null,
-              "colors": ["#8AB8FF", "#73BF69", "rgba(245, 54, 54, 0.9)"],
+              "colors": [
+                "#8AB8FF",
+                "#73BF69",
+                "rgba(245, 54, 54, 0.9)"
+              ],
               "dateFormat": "YYYY-MM-DD HH:mm:ss",
               "decimals": 2,
               "link": false,
@@ -492,7 +496,10 @@
                 }
               ],
               "sanitize": false,
-              "thresholds": ["0.1", "2"],
+              "thresholds": [
+                "0.1",
+                "2"
+              ],
               "type": "string",
               "unit": "short",
               "valueMaps": [
@@ -3352,7 +3359,11 @@
               "id": "filterFieldsByName",
               "options": {
                 "include": {
-                  "names": ["capture", "changefeed", "Value"]
+                  "names": [
+                    "capture",
+                    "changefeed",
+                    "Value"
+                  ]
                 }
               }
             },
@@ -13470,7 +13481,9 @@
               "value": "172.16.6.111:8300"
             }
           },
-          "seriesOverrides": [{}],
+          "seriesOverrides": [
+            {}
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -14060,7 +14073,9 @@
               "value": "172.16.7.51:8300"
             }
           },
-          "seriesOverrides": [{}],
+          "seriesOverrides": [
+            {}
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -16035,7 +16050,17 @@
       "2h",
       "1d"
     ],
-    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
   },
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
