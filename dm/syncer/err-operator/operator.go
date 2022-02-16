@@ -34,11 +34,10 @@ import (
 // Operator contains an operation for specified binlog pos
 // used by `handle-error`.
 type Operator struct {
-	uuid          string // add a UUID, make it more friendly to be traced in log
-	op            pb.ErrorOp
-	isAllInjected bool                       // is all injected, used by inject
-	events        []*replication.BinlogEvent // startLocation -> events
-	originReq     *pb.HandleWorkerErrorRequest
+	uuid      string // add a UUID, make it more friendly to be traced in log
+	op        pb.ErrorOp
+	events    []*replication.BinlogEvent // ddls -> events
+	originReq *pb.HandleWorkerErrorRequest
 }
 
 // newOperator creates a new operator with a random UUID.
@@ -130,18 +129,6 @@ func (h *Holder) GetBehindCommands(pos string) []*pb.HandleWorkerErrorRequest {
 	return res
 }
 
-func (h *Holder) SetHasAllInjected(startLocation binlog.Location) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	key := startLocation.Position.String()
-	operator, ok := h.operators[key]
-	if !ok {
-		return
-	}
-	operator.isAllInjected = true
-}
-
 func (h *Holder) IsInject(startLocation binlog.Location) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -186,17 +173,13 @@ func (h *Holder) GetEvent(startLocation binlog.Location) (*replication.BinlogEve
 }
 
 // MatchAndApply tries to match operation for event by location and apply it on replace events.
-func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, realEventHeaderTS uint32) (bool, pb.ErrorOp) {
+func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, currentEvent *replication.BinlogEvent) (bool, pb.ErrorOp) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	key := startLocation.Position.String()
 	operator, ok := h.operators[key]
 	if !ok {
-		return false, pb.ErrorOp_InvalidErrorOp
-	}
-
-	if operator.isAllInjected {
 		return false, pb.ErrorOp_InvalidErrorOp
 	}
 
@@ -209,7 +192,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, realE
 		// set LogPos as start position
 		for _, ev := range operator.events {
 			ev.Header.LogPos = startLocation.Position.Pos
-			ev.Header.Timestamp = realEventHeaderTS
+			ev.Header.Timestamp = currentEvent.Header.Timestamp
 			if e, ok := ev.Event.(*replication.QueryEvent); ok {
 				if startLocation.GetGTID() != nil {
 					e.GSet = startLocation.GetGTID().Origin()
@@ -217,14 +200,18 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, realE
 			}
 		}
 
-		// set the last replace event as end position
-		e := operator.events[len(operator.events)-1]
-		e.Header.EventSize = endLocation.Position.Pos - startLocation.Position.Pos
-		e.Header.LogPos = endLocation.Position.Pos
-		if e, ok := e.Event.(*replication.QueryEvent); ok {
-			if endLocation.GetGTID() != nil {
-				e.GSet = endLocation.GetGTID().Origin()
+		if operator.op == pb.ErrorOp_Replace {
+			// set the last replace event as end position
+			e := operator.events[len(operator.events)-1]
+			e.Header.EventSize = endLocation.Position.Pos - startLocation.Position.Pos
+			e.Header.LogPos = endLocation.Position.Pos
+			if e, ok := e.Event.(*replication.QueryEvent); ok {
+				if endLocation.GetGTID() != nil {
+					e.GSet = endLocation.GetGTID().Origin()
+				}
 			}
+		} else if operator.op == pb.ErrorOp_Inject {
+			operator.events = append(operator.events, currentEvent)
 		}
 	}
 

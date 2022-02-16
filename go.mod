@@ -63,6 +63,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
+	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.2.1
@@ -80,6 +81,7 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
+	github.com/xitongsys/parquet-go v1.6.0 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12

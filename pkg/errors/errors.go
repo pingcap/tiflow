@@ -21,11 +21,11 @@ import (
 var (
 	// kv related errors
 	ErrWriteTsConflict         = errors.Normalize("write ts conflict", errors.RFCCodeText("CDC:ErrWriteTsConflict"))
-	ErrChangeFeedNotExists     = errors.Normalize("changefeed not exists, key: %s", errors.RFCCodeText("CDC:ErrChangeFeedNotExists"))
-	ErrChangeFeedAlreadyExists = errors.Normalize("changefeed already exists, key: %s", errors.RFCCodeText("CDC:ErrChangeFeedAlreadyExists"))
-	ErrTaskStatusNotExists     = errors.Normalize("task status not exists, key: %s", errors.RFCCodeText("CDC:ErrTaskStatusNotExists"))
-	ErrTaskPositionNotExists   = errors.Normalize("task position not exists, key: %s", errors.RFCCodeText("CDC:ErrTaskPositionNotExists"))
-	ErrCaptureNotExist         = errors.Normalize("capture not exists, key: %s", errors.RFCCodeText("CDC:ErrCaptureNotExist"))
+	ErrChangeFeedNotExists     = errors.Normalize("changefeed not exists, %s", errors.RFCCodeText("CDC:ErrChangeFeedNotExists"))
+	ErrChangeFeedAlreadyExists = errors.Normalize("changefeed already exists, %s", errors.RFCCodeText("CDC:ErrChangeFeedAlreadyExists"))
+	ErrTaskStatusNotExists     = errors.Normalize("task status not exists, %s", errors.RFCCodeText("CDC:ErrTaskStatusNotExists"))
+	ErrTaskPositionNotExists   = errors.Normalize("task position not exists, %s", errors.RFCCodeText("CDC:ErrTaskPositionNotExists"))
+	ErrCaptureNotExist         = errors.Normalize("capture not exists, %s", errors.RFCCodeText("CDC:ErrCaptureNotExist"))
 	ErrGetAllStoresFailed      = errors.Normalize("get stores from pd failed", errors.RFCCodeText("CDC:ErrGetAllStoresFailed"))
 	ErrMetaListDatabases       = errors.Normalize("meta store list databases", errors.RFCCodeText("CDC:ErrMetaListDatabases"))
 	ErrGRPCDialFailed          = errors.Normalize("grpc dial failed", errors.RFCCodeText("CDC:ErrGRPCDialFailed"))

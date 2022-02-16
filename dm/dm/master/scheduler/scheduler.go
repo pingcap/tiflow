@@ -175,6 +175,17 @@ type Scheduler struct {
 	// - stop-relay
 	relayWorkers map[string]map[string]struct{}
 
+	// expectant validator stages, task name -> source ID -> stage.
+	// add:
+	// - on subtask start with validator mode not none
+	// - start validator manually
+	// - recover from etcd
+	// update
+	// - update stage by user request
+	// delete:
+	// - when subtask is removed by user request
+	expectValidatorStages sync.Map
+
 	// workers in load stage
 	// task -> source -> worker
 	loadTasks map[string]map[string]string
@@ -317,7 +328,7 @@ func (s *Scheduler) CloseAllWorkers() {
 	}
 }
 
-// AddSourceCfg adds the upstream source config to the cluster.
+// AddSourceCfg adds the upstream source config to the cluster, and try to bound source to worker
 // NOTE: please verify the config before call this.
 func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
@@ -327,11 +338,49 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
+	err := s.addSource(cfg)
+	if err != nil {
+		return err
+	}
+
+	// try to bound it to a Free worker.
+	_, err = s.tryBoundForSource(cfg.SourceID)
+	return err
+}
+
+// AddSourceCfgWithWorker adds the upstream source config to the cluster, and try to bound source to specify worker
+// NOTE: please verify the config before call this.
+func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+
+	// check whether worker exists.
+	w, ok := s.workers[workerName]
+	if !ok {
+		return terror.ErrSchedulerWorkerNotExist.Generate(workerName)
+	}
+
+	if w.stage != WorkerFree {
+		return terror.ErrSchedulerWorkerNotFree.Generate(workerName)
+	}
+
+	if err := s.addSource(cfg); err != nil {
+		return err
+	}
+
+	return s.boundSourceToWorker(cfg.SourceID, w)
+}
+
+// addSource adds the upstream source config to the cluster.
+func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 	// 1. check whether exists.
 	if _, ok := s.sourceCfgs[cfg.SourceID]; ok {
 		return terror.ErrSchedulerSourceCfgExist.Generate(cfg.SourceID)
 	}
-
 	// 2. put the config into etcd.
 	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
 	if err != nil {
@@ -341,10 +390,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	s.unbounds[cfg.SourceID] = struct{}{}
-
-	// 4. try to bound it to a Free worker.
-	_, err = s.tryBoundForSource(cfg.SourceID)
-	return err
+	return nil
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
@@ -862,6 +908,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 	// 2. construct `Running` stages when adding.
 	newCfgs := make([]config.SubTaskConfig, 0, len(cfgs)-len(existSources))
 	newStages := make([]ha.Stage, 0, cap(newCfgs))
+	validatorStages := make([]ha.Stage, 0, cap(newCfgs))
 	unbounds := make([]string, 0)
 	for _, cfg := range cfgs {
 		if _, ok := existSourcesM[cfg.SourceID]; ok {
@@ -869,6 +916,9 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 		}
 		newCfgs = append(newCfgs, cfg)
 		newStages = append(newStages, ha.NewSubTaskStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		if cfg.ValidatorCfg.Mode != config.ValidationNone {
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		}
 		if _, ok := s.bounds[cfg.SourceID]; !ok {
 			unbounds = append(unbounds, cfg.SourceID)
 		}
@@ -880,7 +930,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 	}
 
 	// 4. put the configs and stages into etcd.
-	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages)
+	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages, validatorStages)
 	if err != nil {
 		return err
 	}
@@ -893,6 +943,11 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 	}
 	for _, stage := range newStages {
 		v, _ := s.expectSubTaskStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
+		m := v.(map[string]ha.Stage)
+		m[stage.Source] = stage
+	}
+	for _, stage := range validatorStages {
+		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
 		m := v.(map[string]ha.Stage)
 		m[stage.Source] = stage
 	}
@@ -923,11 +978,17 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(task)
 	}
 
+	var validatorStageM map[string]ha.Stage
+	if validatorStageV, ok := s.expectValidatorStages.Load(task); ok {
+		validatorStageM = validatorStageV.(map[string]ha.Stage)
+	}
+
 	var (
 		stagesM          = stagesMapV.(map[string]ha.Stage)
 		cfgsM            = cfgsMapV.(map[string]config.SubTaskConfig)
 		notExistSourcesM = make(map[string]struct{})
 		stages           = make([]ha.Stage, 0, len(sources))
+		validatorStages  = make([]ha.Stage, 0, len(sources))
 		cfgs             = make([]config.SubTaskConfig, 0, len(sources))
 	)
 	for _, source := range sources {
@@ -935,6 +996,9 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 			notExistSourcesM[source] = struct{}{}
 		} else {
 			stages = append(stages, stage)
+		}
+		if stage, ok := validatorStageM[source]; ok {
+			validatorStages = append(validatorStages, stage)
 		}
 		if cfg, ok := cfgsM[source]; ok {
 			cfgs = append(cfgs, cfg)
@@ -947,7 +1011,7 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	}
 
 	// 2. delete the configs and the stages.
-	_, err = ha.DeleteSubTaskCfgStage(s.etcdCli, cfgs, stages)
+	_, err = ha.DeleteSubTaskCfgStage(s.etcdCli, cfgs, stages, validatorStages)
 	if err != nil {
 		return err
 	}
@@ -964,6 +1028,12 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	}
 	if len(stagesM) == 0 {
 		s.expectSubTaskStages.Delete(task)
+	}
+	for _, stage := range validatorStages {
+		delete(validatorStageM, stage.Source)
+	}
+	if len(validatorStageM) == 0 {
+		s.expectValidatorStages.Delete(task)
 	}
 
 	return nil
@@ -983,6 +1053,19 @@ func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTa
 	}
 	clone := cfg
 	return &clone
+}
+
+// GetDownstreamMetaByTask gets downstream db config and meta config by task name.
+func (s *Scheduler) GetDownstreamMetaByTask(task string) (*config.DBConfig, string) {
+	v, ok := s.subTaskCfgs.Load(task)
+	if !ok {
+		return nil, ""
+	}
+	cfgM := v.(map[string]config.SubTaskConfig)
+	for _, cfg := range cfgM {
+		return cfg.To.Clone(), cfg.MetaSchema
+	}
+	return nil, ""
 }
 
 // GetSubTaskCfgsByTask gets subtask configs' map by task name.
@@ -1613,6 +1696,10 @@ func (s *Scheduler) recoverSubTasks() error {
 	if err != nil {
 		return err
 	}
+	validatorStageMM, _, err := ha.GetAllValidatorStage(s.etcdCli)
+	if err != nil {
+		return err
+	}
 
 	// recover in-memory data.
 	for source, cfgM := range cfgMM {
@@ -1625,6 +1712,13 @@ func (s *Scheduler) recoverSubTasks() error {
 	for source, stageM := range stageMM {
 		for task, stage := range stageM {
 			v, _ := s.expectSubTaskStages.LoadOrStore(task, map[string]ha.Stage{})
+			m := v.(map[string]ha.Stage)
+			m[source] = stage
+		}
+	}
+	for source, stageM := range validatorStageMM {
+		for task, stage := range stageM {
+			v, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})
 			m := v.(map[string]ha.Stage)
 			m[source] = stage
 		}

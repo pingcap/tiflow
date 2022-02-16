@@ -82,7 +82,7 @@ const SiderMenu: React.FC<{
         <img src={logo} alt="" className="h-[36px]" />
         {!collapsed && (
           <h1 className="font-extrabold text-lg ml-2 leading-[36px]">
-            Data Sync Platform
+            Data Migration
           </h1>
         )}
       </div>

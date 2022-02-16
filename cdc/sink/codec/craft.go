@@ -62,11 +62,6 @@ func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent
 	return EncoderNoOperation, nil
 }
 
-// AppendResolvedEvent is no-op
-func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
 	return newDDLMQMessage(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
