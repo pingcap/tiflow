@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 // DMLWorker is used to sync dml.
@@ -36,7 +36,7 @@ type DMLWorker struct {
 	chanSize     int
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
-	tctx         *tcontext.Context
+	syncCtx      *tcontext.Context
 	logger       log.Logger
 
 	// for metrics
@@ -46,10 +46,10 @@ type DMLWorker struct {
 
 	// callback func
 	// TODO: refine callback func
-	successFunc  func(int, int, []*job)
-	fatalFunc    func(*job, error)
-	lagFunc      func(*job, int)
-	addCountFunc func(bool, string, opType, int64, *filter.Table)
+	successFunc          func(int, int, []*job)
+	fatalFunc            func(*job, error)
+	lagFunc              func(*job, int)
+	updateJobMetricsFunc func(bool, string, *job)
 
 	// channel
 	inCh    chan *job
@@ -63,22 +63,22 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		chanSize /= 2
 	}
 	dmlWorker := &DMLWorker{
-		batch:        syncer.cfg.Batch,
-		workerCount:  syncer.cfg.WorkerCount,
-		chanSize:     chanSize,
-		multipleRows: syncer.cfg.MultipleRows,
-		task:         syncer.cfg.Name,
-		source:       syncer.cfg.SourceID,
-		worker:       syncer.cfg.WorkerName,
-		logger:       syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
-		successFunc:  syncer.successFunc,
-		fatalFunc:    syncer.fatalFunc,
-		lagFunc:      syncer.updateReplicationJobTS,
-		addCountFunc: syncer.addCount,
-		tctx:         syncer.tctx,
-		toDBConns:    syncer.toDBConns,
-		inCh:         inCh,
-		flushCh:      make(chan *job),
+		batch:                syncer.cfg.Batch,
+		workerCount:          syncer.cfg.WorkerCount,
+		chanSize:             chanSize,
+		multipleRows:         syncer.cfg.MultipleRows,
+		task:                 syncer.cfg.Name,
+		source:               syncer.cfg.SourceID,
+		worker:               syncer.cfg.WorkerName,
+		logger:               syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
+		successFunc:          syncer.successFunc,
+		fatalFunc:            syncer.fatalFunc,
+		lagFunc:              syncer.updateReplicationJobTS,
+		updateJobMetricsFunc: syncer.updateJobMetrics,
+		syncCtx:              syncer.syncCtx, // this ctx can be used to cancel all the workers
+		toDBConns:            syncer.toDBConns,
+		inCh:                 inCh,
+		flushCh:              make(chan *job),
 	}
 
 	go func() {
@@ -112,30 +112,29 @@ func (w *DMLWorker) run() {
 	for i := 0; i < w.workerCount; i++ {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
-
 	for j := range w.inCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.flushWg.Wait()
-			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(true, adminQueueName, j)
 			w.flushCh <- j
 		case asyncFlush:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			w.flushCh <- j
 		case conflict:
-			w.addCountFunc(false, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(false, adminQueueName, j)
 			w.sendJobToAllDmlQueue(j, jobChs, queueBucketMapping)
 			j.flushWg.Wait()
-			w.addCountFunc(true, adminQueueName, j.tp, 1, j.targetTable)
+			w.updateJobMetricsFunc(true, adminQueueName, j)
 		default:
-			queueBucket := int(utils.GenHashKey(j.dml.key)) % w.workerCount
-			w.addCountFunc(false, queueBucketMapping[queueBucket], j.tp, 1, j.targetTable)
+			queueBucket := int(utils.GenHashKey(j.dmlQueueKey)) % w.workerCount
+			w.updateJobMetricsFunc(false, queueBucketMapping[queueBucket], j)
 			startTime := time.Now()
-			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dml.key))
+			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
 			jobChs[queueBucket] <- j
 			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
@@ -201,7 +200,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		args    [][]interface{}
 		db      = w.toDBConns[queueID]
 		err     error
-		dmls    = make([]*DML, 0, len(jobs))
+		dmls    = make([]*sqlmodel.RowChange, 0, len(jobs))
 	)
 
 	defer func() {
@@ -238,16 +237,13 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		}
 	})
 
-	for _, j := range jobs {
-		dmls = append(dmls, j.dml)
-	}
-	queries, args = w.genSQLs(dmls)
+	queries, args = w.genSQLs(jobs)
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
 	})
 	// use background context to execute sqls as much as possible
-	ctx, cancel := w.tctx.WithTimeout(maxDMLExecutionDuration)
+	ctx, cancel := w.syncCtx.WithTimeout(maxDMLExecutionDuration)
 	defer cancel()
 	affect, err = db.ExecuteSQL(ctx, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
@@ -266,17 +262,43 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
-func (w *DMLWorker) genSQLs(dmls []*DML) ([]string, [][]interface{}) {
+func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 	if w.multipleRows {
-		return genDMLsWithSameOp(dmls)
+		return genDMLsWithSameOp(jobs)
 	}
 
-	queries := make([]string, 0, len(dmls))
-	args := make([][]interface{}, 0, len(dmls))
-	for _, dml := range dmls {
-		query, arg := dml.genSQL()
-		queries = append(queries, query...)
-		args = append(args, arg...)
+	queries := make([]string, 0, len(jobs))
+	args := make([][]interface{}, 0, len(jobs))
+	for _, j := range jobs {
+		var query string
+		var arg []interface{}
+		appendQueryAndArg := func() {
+			queries = append(queries, query)
+			args = append(args, arg)
+		}
+
+		switch j.dml.Type() {
+		case sqlmodel.RowChangeInsert:
+			if j.safeMode {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+			} else {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLInsert)
+			}
+
+		case sqlmodel.RowChangeUpdate:
+			if j.safeMode {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+				appendQueryAndArg()
+				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+			} else {
+				query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
+			}
+
+		case sqlmodel.RowChangeDelete:
+			query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+		}
+
+		appendQueryAndArg()
 	}
 	return queries, args
 }

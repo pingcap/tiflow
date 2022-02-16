@@ -18,6 +18,8 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testConfig) TestSubTask(c *C) {
@@ -69,6 +71,14 @@ func (t *testConfig) TestSubTask(c *C) {
 
 	err = cfg.Adjust(true)
 	c.Assert(err, IsNil)
+
+	cfg.ValidatorCfg = ValidatorConfig{Mode: ValidationFast}
+	err = cfg.Adjust(true)
+	c.Assert(err, IsNil)
+
+	cfg.ValidatorCfg = ValidatorConfig{Mode: "invalid-mode"}
+	err = cfg.Adjust(true)
+	c.Assert(terror.ErrConfigValidationMode.Equal(err), IsTrue)
 }
 
 func (t *testConfig) TestSubTaskAdjustFail(c *C) {

@@ -135,7 +135,7 @@ func newMqSink(
 		resolvedNotifier: notifier,
 		resolvedReceiver: resolvedReceiver,
 
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics: NewStatistics(ctx, "MQ"),
 
 		role: role,
 		id:   changefeedID,
@@ -399,15 +399,12 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			continue
 		case e = <-input:
 		}
-		// flush resolvedTs event
 		if e.row == nil {
+			// When receiving resolved ts events, we need to write all events to the producer.
+			// We don't need to flush it immediately, we wait until all partitions have received
+			// this event before we flush it uniformly.
 			if e.resolvedTs != 0 {
-				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				if err := flushToProducer(op); err != nil {
+				if err := flushToProducer(codec.EncoderNoOperation); err != nil {
 					return errors.Trace(err)
 				}
 
