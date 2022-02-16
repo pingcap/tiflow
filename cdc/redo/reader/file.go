@@ -30,13 +30,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/multierr"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -400,6 +401,10 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 			return io.EOF
 		}
 		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
+	}
+
+	if redoLog.Type == model.RedoLogTypeRow {
+		redoLog.RedoRow.RecoverTableInfo()
 	}
 
 	// point last valid offset to the end of redoLog

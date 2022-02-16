@@ -91,6 +91,16 @@ func NewRowChange(
 	downstreamTableInfo *timodel.TableInfo,
 	tiCtx sessionctx.Context,
 ) *RowChange {
+	if sourceTable == nil {
+		log.L().DPanic("sourceTable should not be nil")
+		return nil
+	}
+	if sourceTableInfo == nil {
+		log.L().DPanic("sourceTableInfo should not be nil",
+			zap.Stringer("sourceTable", sourceTable))
+		return nil
+	}
+
 	ret := &RowChange{
 		sourceTable:     sourceTable,
 		preValues:       preValues,
