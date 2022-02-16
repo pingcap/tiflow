@@ -95,11 +95,11 @@ func Test() {
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
-	getOp, err := OpGet("apple3", WithRange("zz"))
+	getOp := OpGet("apple3", WithRange("zz"))
 	_ = getRsp
-	putOp, err := OpPut("apple3", "t3")
+	putOp := OpPut("apple3", "t3")
 	_ = putRsp
-	delOp, err := OpDelete("apple3", WithRange("ti"))
+	delOp := OpDelete("apple3", WithRange("ti"))
 	_ = delRsp
 	_ = err
 	txn := cli.Txn(ctx)

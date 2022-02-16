@@ -36,8 +36,9 @@ func (m *mockKVClient) Txn(ctx context.Context) Txn {
 	return &mockTxn{}
 }
 
-func (m *mockKVClient) Close() {
+func (m *mockKVClient) Close() error {
 	// [TODO]
+	return nil
 }
 
 type mockTxn struct { // [TODO]

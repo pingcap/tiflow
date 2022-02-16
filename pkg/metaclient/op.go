@@ -52,7 +52,7 @@ type Op struct {
 
 var EmptyOp Op = Op{}
 
-// accessors
+// accessors/mutators
 
 // IsTxn returns true if the "Op" type is transaction.
 func (op Op) IsTxn() bool { return op.T == tTxn }
@@ -81,8 +81,14 @@ func (op Op) Txn() []Op { return op.ops }
 // KeyBytes returns the byte slice holding the Op's key.
 func (op Op) KeyBytes() []byte { return op.key }
 
+// WithKeyBytes set the byte slice to the Op's key.
+func (op *Op) WithKeyBytes(key []byte) { op.key = key }
+
 // RangeBytes returns the byte slice holding with the Op's range end, if any.
 func (op Op) RangeBytes() []byte { return op.end }
+
+// WithRangeBytes set the byte slice to  the Op's range end
+func (op *Op) WithRangeBytes(end []byte) { op.end = end }
 
 // ValueBytes returns the byte slice holding the Op's value, if any.
 func (op Op) ValueBytes() []byte { return op.val }
@@ -111,7 +117,8 @@ func IsOptsWithFromKey(opts []OpOption) bool {
 	return op.isOptsWithFromKey
 }
 
-func CheckValidEndValue(op Op) error {
+func (op Op) CheckValidOp() error {
+	// [TODO] forbit WithPrefix() + ""
 	if !(op.IsOptsWithRange() || op.IsOptsWithPrefix() || op.IsOptsWithFromKey()) {
 		return nil
 	}
@@ -125,40 +132,33 @@ func CheckValidEndValue(op Op) error {
 	if op.IsOptsWithFromKey() && !(op.IsOptsWithPrefix() || op.IsOptsWithRange()) {
 		return nil
 	}
-	return cerrors.ErrMetaOptionConflict
+	return cerrors.ErrMetaOptionConflict.GenWithStackByArgs()
 }
 
 // OpGet returns "get" operation based on given key and operation options.
-func OpGet(key string, opts ...OpOption) (Op, error) {
+func OpGet(key string, opts ...OpOption) Op {
 	op := Op{T: tGet, key: []byte(key)}
 	op.ApplyOpts(opts)
-
-	if err := CheckValidEndValue(op); err != nil {
-		return EmptyOp, err
-	}
-
-	return op, nil
+	return op
 }
 
 // OpDelete returns "delete" operation based on given key and operation options.
-func OpDelete(key string, opts ...OpOption) (Op, error) {
+func OpDelete(key string, opts ...OpOption) Op {
 	op := Op{T: tDelete, key: []byte(key)}
 	op.ApplyOpts(opts)
-	if err := CheckValidEndValue(op); err != nil {
-		return EmptyOp, err
-	}
-	return op, nil
+	return op
 }
 
 // OpPut returns "put" operation based on given key-value.
-func OpPut(key, val string) (Op, error) {
+func OpPut(key, val string) Op {
 	op := Op{T: tPut, key: []byte(key), val: []byte(val)}
-	return op, nil
+	// [TODO]add some restriction
+	return op
 }
 
 // OpTxn returns "txn" operation based on given transaction conditions.
-func OpTxn(ops []Op) (Op, error) {
-	return Op{T: tTxn, ops: ops}, nil
+func OpTxn(ops []Op) Op {
+	return Op{T: tTxn, ops: ops}
 }
 
 // GetPrefixRangeEnd gets the range end of the prefix.
