@@ -2673,9 +2673,9 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.FilterStatus != ctlmaster.ValidationStageRunning && req.FilterStatus != ctlmaster.ValidationStageStopped {
+	if req.FilterStatus != pb.Stage_Running.String() && req.FilterStatus != pb.Stage_Stopped.String() {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", ctlmaster.ValidationStageRunning, ctlmaster.ValidationStageStopped)
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", pb.Stage_Running.String(), pb.Stage_Stopped.String())
 		return resp, err
 	}
 	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
@@ -2708,7 +2708,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrType != ctlmaster.ValidationAllErr && req.ErrType != ctlmaster.ValidationIgnoredErr {
+	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr {
 		resp.Result = false
 		resp.Msg = fmt.Sprintf("error flag should be either `%s` or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr)
 		return resp, nil

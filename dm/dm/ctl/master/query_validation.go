@@ -26,15 +26,13 @@ import (
 )
 
 const (
-	ValidationStageRunning = "running"
-	ValidationStageStopped = "stopped"
-	ValidationAllErr       = "all"
-	ValidationIgnoredErr   = "ignored"
+	ValidationAllErr     = "all"
+	ValidationIgnoredErr = "ignored"
 )
 
 func NewQueryValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "show-errors [--error] <task-name>",
+		Use:   "show-errors [--error error-state] <task-name>",
 		Short: "show error of the validation task",
 		RunE:  queryValidationError,
 	}
@@ -44,18 +42,18 @@ func NewQueryValidationErrorCmd() *cobra.Command {
 
 func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	var (
-		errType  string
+		errState string
 		taskName string
 	)
 	if len(cmd.Flags().Args()) != 1 {
 		return errors.New("task name should be specified")
 	}
 	taskName = cmd.Flags().Arg(0)
-	errType, err = cmd.Flags().GetString("error")
+	errState, err = cmd.Flags().GetString("error")
 	if err != nil {
 		return err
 	}
-	if errType != ValidationAllErr && errType != ValidationIgnoredErr {
+	if errState != ValidationAllErr && errState != ValidationIgnoredErr {
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
 		return errors.Errorf("error flag should be either `%s` or `%s`", ValidationAllErr, ValidationIgnoredErr)
@@ -67,7 +65,7 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 		ctx,
 		"GetValidationError",
 		&pb.GetValidationErrorRequest{
-			ErrType:  errType,
+			ErrState: errState,
 			TaskName: taskName,
 		},
 		&resp,
@@ -81,35 +79,35 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 
 func NewQueryValidationStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status <task-name>",
+		Use:   "status [--stage stage] <task-name>",
 		Short: "query validation status of a task",
 		RunE:  queryValidationStatus,
 	}
-	cmd.Flags().String("stage", "running", "filter status")
+	cmd.Flags().String("stage", "", "filter validation tasks status by stages: Running/Stopped")
 	return cmd
 }
 
 func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 	var (
-		status   string
+		stage    string
 		taskName string
 		err      error
 	)
 
-	if len(cmd.Flags().Args()) == 0 {
+	if len(cmd.Flags().Args()) != 1 {
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
 		return errors.New("task name should be specified")
 	}
 	taskName = cmd.Flags().Arg(0)
-	status, err = cmd.Flags().GetString("stage")
-	if status != "" && status != ValidationStageRunning && status != ValidationStageStopped {
-		cmd.SetOut(os.Stdout)
-		common.PrintCmdUsage(cmd)
-		return errors.Errorf("stage should be either `%s` or `%s`", ValidationStageRunning, ValidationStageStopped)
-	}
+	stage, err = cmd.Flags().GetString("stage")
 	if err != nil {
 		return err
+	}
+	if stage != "" && stage != pb.Stage_Running.String() && stage != pb.Stage_Stopped.String() {
+		cmd.SetOut(os.Stdout)
+		common.PrintCmdUsage(cmd)
+		return errors.Errorf("stage should be either `%s` or `%s`", pb.Stage_Running.String(), pb.Stage_Stopped.String())
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -120,7 +118,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 		"GetValidationStatus",
 		&pb.GetValidationStatusRequest{
 			TaskName:     taskName,
-			FilterStatus: status,
+			FilterStatus: stage,
 		},
 		&resp,
 	)

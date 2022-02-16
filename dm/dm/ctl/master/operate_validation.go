@@ -25,16 +25,16 @@ import (
 )
 
 const (
-	ignoreErr  = "ignore"
-	resolveErr = "resolve"
-	clearErr   = "clear"
+	ignoreErrOp  = "ignore"
+	resolveErrOp = "resolve"
+	clearErrOp   = "clear"
 )
 
 func NewIgnoreValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ignore-error <task-name> <error-id|--all>",
 		Short: "ignore validation error",
-		RunE:  operateValidationError(ignoreErr),
+		RunE:  operateValidationError(ignoreErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -44,7 +44,7 @@ func NewResolveValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "make-resolve <task-name> <error-id|--all>",
 		Short: "resolve validation error",
-		RunE:  operateValidationError(resolveErr),
+		RunE:  operateValidationError(resolveErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -54,7 +54,7 @@ func NewClearValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clear <task-name> <error-id|--all>",
 		Short: "clear validation error",
-		RunE:  operateValidationError(clearErr),
+		RunE:  operateValidationError(clearErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd

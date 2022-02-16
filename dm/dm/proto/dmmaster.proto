@@ -524,7 +524,7 @@ message GetValidationStatusResponse {
 }
 
 message GetValidationErrorRequest {
-    string errType = 1;
+    string errState = 1;
     string taskName = 2;
 }
 

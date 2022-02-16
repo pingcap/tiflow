@@ -28,11 +28,11 @@ import (
 
 func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start [-s source ...] [--all-task] [task-name]",
+		Use:   "start [-s source ...] [--mode mode] [--all-task] [task-name]",
 		Short: "start to validate the completeness of the data",
 		RunE:  startStopValidation("start"),
 	}
-	cmd.Flags().Bool("all-task", false, "whether the validator applied to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
 	cmd.Flags().String("mode", "full", "specify the mode of validation: full, fast")
 	return cmd
 }
@@ -40,20 +40,19 @@ func NewStartValidationCmd() *cobra.Command {
 func NewStopValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop [-s source ...] [--all-task] [task-name]",
-		Short: "start to validate the completeness of the data",
+		Short: "stop validating the completeness of the data",
 		RunE:  startStopValidation("stop"),
 	}
-	cmd.Flags().Bool("all-task", false, "whether the validator applied to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether to all tasks")
 	return cmd
 }
 
-func formatStartStopValidationError(cmd *cobra.Command, errMsg string) error {
-	cmd.SetOut(os.Stdout)
-	common.PrintCmdUsage(cmd)
-	return errors.New(errMsg)
-}
-
 func startStopValidation(typ string) func(*cobra.Command, []string) error {
+	formatStartStopValidationError := func(cmd *cobra.Command, errMsg string) error {
+		cmd.SetOut(os.Stdout)
+		common.PrintCmdUsage(cmd)
+		return errors.New(errMsg)
+	}
 	return func(cmd *cobra.Command, _ []string) error {
 		var (
 			sources   []string
