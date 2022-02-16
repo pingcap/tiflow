@@ -247,51 +247,47 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	return err
 }
 
+// handleRawEvent process the raw kv event,send it to sorter
+func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.PolymorphicEvent) {
+	rawKV := event.RawKV
+	if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
+		// Puller resolved ts should not fall back.
+		resolvedTs := rawKV.CRTs
+		oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
+		if oldResolvedTs > resolvedTs {
+			log.Panic("resolved ts regression",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs),
+				zap.Uint64("oldResolvedTs", oldResolvedTs))
+		}
+		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+
+		if resolvedTs > n.barrierTs &&
+			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
+			// Do not send resolved ts events that is larger than
+			// barrier ts.
+			// When DDL puller stall, resolved events that outputted by
+			// sorter may pile up in memory, as they have to wait DDL.
+			//
+			// Disabled if redolog is on, it requires sink reports
+			// resolved ts, conflicts to this change.
+			// TODO: Remove redolog check once redolog decouples for global
+			//       resolved ts.
+			event = model.NewResolvedPolymorphicEvent(0, n.barrierTs)
+		}
+	}
+	n.sorter.AddEntry(ctx, event)
+}
+
 func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		rawKV := msg.PolymorphicEvent.RawKV
-		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
-			// Puller resolved ts should not fall back.
-			resolvedTs := rawKV.CRTs
-			oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
-			if oldResolvedTs > resolvedTs {
-				log.Panic("resolved ts regression",
-					zap.Int64("tableID", n.tableID),
-					zap.Uint64("resolvedTs", resolvedTs),
-					zap.Uint64("oldResolvedTs", oldResolvedTs))
-			}
-			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
-
-			if resolvedTs > n.barrierTs &&
-				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
-				// Do not send resolved ts events that is larger than
-				// barrier ts.
-				// When DDL puller stall, resolved events that outputted by
-				// sorter may pile up in memory, as they have to wait DDL.
-				//
-				// Disabled if redolog is on, it requires sink reports
-				// resolved ts, conflicts to this change.
-				// TODO: Remove redolog check once redolog decouples for global
-				//       resolved ts.
-				msg = pipeline.PolymorphicEventMessage(
-					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
-			}
-		}
-		// todo: remove feature switcher after GA
-		if n.isTableActorMode {
-			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
-		}
-		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		n.handleRawEvent(ctx, msg.PolymorphicEvent)
 		return true, nil
 	case pipeline.MessageTypeBarrier:
 		n.UpdateBarrierTs(msg.BarrierTs)
 		fallthrough
 	default:
-		// todo: remove feature switcher after GA
-		if n.isTableActorMode {
-			return ctx.(*actorNodeContext).TrySendToNextNode(msg), nil
-		}
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)
 		return true, nil
 	}
