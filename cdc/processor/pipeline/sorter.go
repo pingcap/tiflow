@@ -228,7 +228,7 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 						continue
 					}
 					if isTableActorMode {
-						_ = tableActorRouter.Send(0, message.TickMessage())
+						_ = tableActorRouter.Send(tableActorID, message.TickMessage())
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
