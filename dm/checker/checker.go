@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -44,6 +45,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -83,9 +85,7 @@ type Checker struct {
 	errCnt  int64
 	warnCnt int64
 
-	onlineDDL  onlineddl.OnlinePlugin
-	mode       string
-	isSharding bool
+	onlineDDL onlineddl.OnlinePlugin
 }
 
 // NewChecker returns a checker.
@@ -93,8 +93,6 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
-		mode:          cfgs[0].Mode,
-		isSharding:    cfgs[0].IsSharding,
 		errCnt:        errCnt,
 		warnCnt:       warnCnt,
 	}
@@ -129,9 +127,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	checkTablesMap := make(map[string][]*filter.Table)
 	dbs := make(map[string]*sql.DB)
 	columnMapping := make(map[string]*column.Mapping)
-	_, checkingShardID := c.checkingItems[config.ShardAutoIncrementIDChecking]
-	_, checkingShard := c.checkingItems[config.ShardTableSchemaChecking]
-	_, checkSchema := c.checkingItems[config.TableSchemaChecking]
 
 	for _, instance := range c.instances {
 		bw, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
@@ -213,7 +208,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		checkTablesMap[instance.cfg.SourceID] = checkTables
 		dbs[instance.cfg.SourceID] = instance.sourceDB.DB
-		if c.mode != config.ModeIncrement {
+		if instance.cfg.Mode != config.ModeIncrement {
 			// increment mode needn't check dump privilege
 			if _, ok := c.checkingItems[config.DumpPrivilegeChecking]; ok {
 				exportCfg := export.DefaultConfig()
@@ -225,7 +220,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 		}
 
-		if c.mode != config.ModeFull {
+		if instance.cfg.Mode != config.ModeFull {
 			// full mode needn't check follows
 			if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
 				c.checkList = append(c.checkList, checker.NewMySQLServerIDChecker(instance.sourceDB.DB, instance.sourceDBinfo))
@@ -242,25 +237,41 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
 				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
-			if c.onlineDDL != nil {
+			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
 			}
-			c.checkList = append(c.checkList, checker.NewBinlogDbChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas))
+			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewBinlogDbChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas))
+			}
 		}
 	}
 
 	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
-	if checkSchema {
+	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(dbs, checkTablesMap, dumpThreads))
 	}
 
-	if checkingShard && c.isSharding && c.mode != config.ModeIncrement {
-		for name, shardingSet := range sharding {
-			if shardingCounter[name] <= 1 {
-				continue
+	instance := c.instances[0]
+	// Not check the sharding tables’ schema when the mode is increment.
+	// Because the table schema obtained from `show create table` is not the schema at the point of binlog.
+	_, checkingShardID := c.checkingItems[config.ShardAutoIncrementIDChecking]
+	_, checkingShard := c.checkingItems[config.ShardTableSchemaChecking]
+	if checkingShard && instance.cfg.ShardMode != "" && instance.cfg.Mode != config.ModeIncrement {
+		isFresh, err := c.IsFreshTask()
+		if err != nil {
+			return err
+		}
+		if isFresh {
+			for targetTableID, shardingSet := range sharding {
+				if shardingCounter[targetTableID] <= 1 {
+					continue
+				}
+				if instance.cfg.ShardMode == config.ShardPessimistic {
+					c.checkList = append(c.checkList, checker.NewShardingTablesChecker(targetTableID, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
+				} else {
+					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
+				}
 			}
-
-			c.checkList = append(c.checkList, checker.NewShardingTablesChecker(name, dbs, shardingSet, columnMapping, checkingShardID, dumpThreads))
 		}
 	}
 
@@ -363,7 +374,7 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
 		}
 	}
-
+	fmt.Printf("rawresult: %s\n", rawResult)
 	c.result.Lock()
 	c.result.detail = result
 	c.result.Unlock()
@@ -459,7 +470,31 @@ func (c *Checker) Type() pb.UnitType {
 
 // IsFreshTask implements Unit.IsFreshTask.
 func (c *Checker) IsFreshTask() (bool, error) {
-	return true, nil
+	instance := c.instances[0]
+	checkpointSQLs := []string{
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LoaderCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.LightningCheckpoint(instance.cfg.Name))),
+		fmt.Sprintf("SHOW CREATE TABLE %s", dbutil.TableName(instance.cfg.MetaSchema, cputil.SyncerCheckpoint(instance.cfg.Name))),
+	}
+	var existCheckpoint bool
+	for _, sql := range checkpointSQLs {
+		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
+		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
+		if err != nil {
+			if utils.IsMySQLError(err, mysql.ErrNoSuchTable) {
+				continue
+			}
+			return false, err
+		}
+		defer rows.Close()
+		if rows.Err() != nil {
+			return false, rows.Err()
+		}
+		existCheckpoint = true
+		c.tctx.Logger.Info("exist checkpoint, so don't check sharding tables")
+		break
+	}
+	return !existCheckpoint, nil
 }
 
 // Status implements Unit interface.

@@ -21,7 +21,7 @@ import (
 )
 
 // DM definition checking items
-// refer github.com/pingcap/tidb-tools/pkg/check.
+// refer github.com/pingcap/tiflow/dm/pkg/checker.
 const (
 	AllChecking                  = "all"
 	DumpPrivilegeChecking        = "dump_privilege"
@@ -34,6 +34,8 @@ const (
 	TableSchemaChecking          = "table_schema"
 	ShardTableSchemaChecking     = "schema_of_shard_tables"
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
+	OnlineDDLChecking            = "online_ddl"
+	BinlogDBChecking             = "binlog_db"
 )
 
 // AllCheckingItems contains all checking items.
