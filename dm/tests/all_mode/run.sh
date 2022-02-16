@@ -141,8 +141,8 @@ function test_query_timeout() {
 	run_sql_tidb 'SHOW PROCESSLIST;'
 	check_rows_equal 1
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_query_timeout >>>>>>"
@@ -207,8 +207,8 @@ function test_stop_task_before_checkpoint() {
 		"stop-task test" \
 		"\"result\": true" 3
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_stop_task_before_checkpoint >>>>>>"
@@ -267,8 +267,8 @@ function test_fail_job_between_event() {
 		"\"result\": true" 3
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_fail_job_between_event >>>>>>"
@@ -314,8 +314,8 @@ function test_expression_filter() {
 		"query-status test" \
 		"\"result\": true" 3
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 	echo "[$(date)] <<<<<< finish test_expression_filter >>>>>>"
 }
 

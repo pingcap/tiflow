@@ -37,8 +37,12 @@ type DMLWorker struct {
 	chanSize     int
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
+<<<<<<< HEAD
 	tctx         *tcontext.Context
 	wg           sync.WaitGroup // counts conflict/flush jobs in all DML job channels.
+=======
+	syncCtx      *tcontext.Context
+>>>>>>> e7b0aae47 (unit(dm): add Kill func for unit (#4035))
 	logger       log.Logger
 
 	// for metrics
@@ -65,6 +69,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		chanSize /= 2
 	}
 	dmlWorker := &DMLWorker{
+<<<<<<< HEAD
 		batch:        syncer.cfg.Batch,
 		workerCount:  syncer.cfg.WorkerCount,
 		chanSize:     chanSize,
@@ -81,6 +86,24 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		toDBConns:    syncer.toDBConns,
 		inCh:         inCh,
 		flushCh:      make(chan *job),
+=======
+		batch:                syncer.cfg.Batch,
+		workerCount:          syncer.cfg.WorkerCount,
+		chanSize:             chanSize,
+		multipleRows:         syncer.cfg.MultipleRows,
+		task:                 syncer.cfg.Name,
+		source:               syncer.cfg.SourceID,
+		worker:               syncer.cfg.WorkerName,
+		logger:               syncer.tctx.Logger.WithFields(zap.String("component", "dml_worker")),
+		successFunc:          syncer.successFunc,
+		fatalFunc:            syncer.fatalFunc,
+		lagFunc:              syncer.updateReplicationJobTS,
+		updateJobMetricsFunc: syncer.updateJobMetrics,
+		syncCtx:              syncer.syncCtx, // this ctx can be used to cancel all the workers
+		toDBConns:            syncer.toDBConns,
+		inCh:                 inCh,
+		flushCh:              make(chan *job),
+>>>>>>> e7b0aae47 (unit(dm): add Kill func for unit (#4035))
 	}
 
 	go func() {
@@ -114,7 +137,6 @@ func (w *DMLWorker) run() {
 	for i := 0; i < w.workerCount; i++ {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
-
 	for j := range w.inCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		if j.tp == flush || j.tp == conflict {
@@ -230,7 +252,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		time.Sleep(time.Duration(t) * time.Second)
 	})
 	// use background context to execute sqls as much as possible
-	ctx, cancel := w.tctx.WithTimeout(maxDMLExecutionDuration)
+	ctx, cancel := w.syncCtx.WithTimeout(maxDMLExecutionDuration)
 	defer cancel()
 	affect, err = db.ExecuteSQL(ctx, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
