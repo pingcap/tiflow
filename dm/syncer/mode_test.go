@@ -17,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	mode "github.com/pingcap/tiflow/dm/syncer/safe-mode"
@@ -25,6 +27,16 @@ import (
 	"go.etcd.io/etcd/integration"
 	"go.uber.org/zap"
 )
+
+type mockCheckpointForSafeMode struct {
+	CheckPoint
+
+	safeModeExitPoint *binlog.Location
+}
+
+func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
+	return c.safeModeExitPoint
+}
 
 func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
@@ -38,6 +50,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 		cfg: &config.SubTaskConfig{Name: "test", SourceID: "test"},
 	}
 
+	// test enable by task cliArgs
 	duration, err := time.ParseDuration("2s")
 	require.NoError(t, err)
 
@@ -49,4 +62,29 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	time.Sleep(duration) // wait for enableSafeModeInitializationPhase exit
 	require.False(t, s.safeMode.Enable())
 	require.Equal(t, s.cliArgs.SafeModeDuration, "")
+
+	// test enable by config
+	s.safeMode.Reset(s.tctx)
+	s.cliArgs = nil
+	s.cfg.SafeMode = true
+	mockCheckpoint := &mockCheckpointForSafeMode{}
+	s.checkpoint = mockCheckpoint
+	s.enableSafeModeInitializationPhase(s.tctx)
+	require.True(t, s.safeMode.Enable())
+
+	// test enable by SafeModeExitPoint
+	s.safeMode.Reset(s.tctx)
+	s.cfg.SafeMode = false
+	mockCheckpoint.safeModeExitPoint = &binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 123}}
+	s.enableSafeModeInitializationPhase(s.tctx)
+	require.True(t, s.safeMode.Enable())
+
+	// test enable by initPhaseSeconds
+	s.safeMode.Reset(s.tctx)
+	s.cfg.CheckpointFlushInterval = 1
+	s.enableSafeModeInitializationPhase(s.tctx)
+	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
+	require.True(t, s.safeMode.Enable())
+	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase exit
+	require.False(t, s.safeMode.Enable())
 }

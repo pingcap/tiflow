@@ -28,6 +28,7 @@ func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
 	//nolint:errcheck
 	s.safeMode.Add(tctx, 1)
 	duration, _ := time.ParseDuration(s.cliArgs.SafeModeDuration)
+	duration -= time.Duration(s.tsOffset.Load())
 	s.tctx.L().Info("enable safe-mode because of task cli args", zap.Duration("duration", duration))
 	select {
 	case <-tctx.Context().Done():
