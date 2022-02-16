@@ -428,6 +428,16 @@ func (st *SubTask) closeUnits() {
 		u := st.units[i]
 		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
 		u.Close()
+		st.l.Info("closing unit done", zap.Stringer("unit", cu.Type()))
+	}
+}
+
+func (st *SubTask) killCurrentUnit() {
+	if st.CurrUnit() != nil {
+		ut := st.CurrUnit().Type()
+		st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
+		st.CurrUnit().Kill()
+		st.l.Info("kill unit done", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
 	}
 }
 
@@ -530,7 +540,18 @@ func (st *SubTask) Close() {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
+	st.closeUnits() // close all un-closed units
+	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+}
 
+// Kill kill running unit and stop the sub task.
+func (st *SubTask) Kill() {
+	st.l.Info("killing")
+	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
+		st.l.Info("subTask is already closed, no need to close")
+		return
+	}
+	st.killCurrentUnit()
 	st.closeUnits() // close all un-closed units
 
 	cfg := st.getCfg()
