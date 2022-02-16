@@ -16,6 +16,7 @@ package utils
 import (
 	"context"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -25,6 +26,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
@@ -73,12 +75,12 @@ func (t *testDBSuite) TestGetRandomServerID(c *C) {
 	c.Assert(serverID, Not(Equals), 101)
 }
 
-func (t *testDBSuite) TestGetPosAndGs(c *C) {
+func TestGetPosAndGs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// 5 columns for MySQL
 	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
@@ -87,13 +89,13 @@ func (t *testDBSuite) TestGetPosAndGs(c *C) {
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
 	pos, gs, err := GetPosAndGs(ctx, db, "mysql")
-	c.Assert(err, IsNil)
-	c.Assert(pos, Equals, gmysql.Position{
+	require.Nil(t, err)
+	require.Equal(t, pos, gmysql.Position{
 		Name: "mysql-bin.000009",
 		Pos:  11232,
 	})
-	c.Assert(gs.String(), Equals, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699")
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.Equal(t, gs.String(), "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699")
+	require.Nil(t, mock.ExpectationsWereMet())
 
 	// 4 columns for MariaDB
 	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
@@ -104,29 +106,29 @@ func (t *testDBSuite) TestGetPosAndGs(c *C) {
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
 
 	pos, gs, err = GetPosAndGs(ctx, db, "mariadb")
-	c.Assert(err, IsNil)
-	c.Assert(pos, Equals, gmysql.Position{
+	require.Nil(t, err)
+	require.Equal(t, pos, gmysql.Position{
 		Name: "mysql-bin.000009",
 		Pos:  11232,
 	})
-	c.Assert(gs.String(), Equals, "1-2-100")
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.Equal(t, gs.String(), "1-2-100")
+	require.Nil(t, mock.ExpectationsWereMet())
 
 	// some upstream (maybe a polarDB secondary node)
 	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"})
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
 	_, gs, err = GetPosAndGs(ctx, db, "mysql")
-	c.Assert(gs, IsNil)
-	c.Assert(err, NotNil)
+	require.Nil(t, gs)
+	require.NotNil(t, err)
 }
 
-func (t *testDBSuite) TestGetBinlogDB(c *C) {
+func TestGetBinlogDB(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.Nil(t, err)
 
 	// 5 columns for MySQL
 	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
@@ -135,10 +137,10 @@ func (t *testDBSuite) TestGetBinlogDB(c *C) {
 	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 
 	binlogDoDB, binlogIgnoreDB, err := GetBinlogDB(ctx, db, "mysql")
-	c.Assert(err, IsNil)
-	c.Assert(binlogDoDB, Equals, "do_db")
-	c.Assert(binlogIgnoreDB, Equals, "ignore_db")
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.Nil(t, err)
+	require.Equal(t, binlogDoDB, "do_db")
+	require.Equal(t, binlogIgnoreDB, "ignore_db")
+	require.Nil(t, mock.ExpectationsWereMet())
 
 	// 4 columns for MariaDB
 	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
@@ -149,10 +151,10 @@ func (t *testDBSuite) TestGetBinlogDB(c *C) {
 	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
 
 	binlogDoDB, binlogIgnoreDB, err = GetBinlogDB(ctx, db, "mariadb")
-	c.Assert(err, IsNil)
-	c.Assert(binlogDoDB, Equals, "do_db")
-	c.Assert(binlogIgnoreDB, Equals, "ignore_db")
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	require.Nil(t, err)
+	require.Equal(t, binlogDoDB, "do_db")
+	require.Equal(t, binlogIgnoreDB, "ignore_db")
+	require.Nil(t, mock.ExpectationsWereMet())
 }
 
 func (t *testDBSuite) TestGetMariaDBGtidDomainID(c *C) {
