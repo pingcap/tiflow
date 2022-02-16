@@ -89,7 +89,7 @@ var (
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
 	maxDMLExecutionDuration     = 30 * time.Second
 
-	maxPauseOrStopWaitTime = 10 * time.Second
+	defaultMaxPauseOrStopWaitTime = 10 * time.Second
 
 	adminQueueName     = "admin queue"
 	defaultBucketCount = 8
@@ -282,6 +282,20 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
 	return syncer
+}
+
+func (s *Syncer) refreshCliArgs() {
+	if s.cli == nil {
+		// for dummy syncer in ut
+		return
+	}
+	s.Lock()
+	defer s.Unlock()
+	var err error
+	s.cliArgs, err = ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
+	if err != nil {
+		s.tctx.L().Error("failed to get task cli args", zap.Error(err))
+	}
 }
 
 func (s *Syncer) newJobChans() {
@@ -895,11 +909,12 @@ func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 
 // only used in tests.
 var (
-	lastLocation    binlog.Location
-	lastLocationNum int
-	waitJobsDone    bool
-	failExecuteSQL  bool
-	failOnce        atomic.Bool
+	lastLocation              binlog.Location
+	lastLocationNum           int
+	waitJobsDone              bool
+	failExecuteSQL            bool
+	failOnce                  atomic.Bool
+	waitBeforeRunExitDuration time.Duration
 )
 
 // TODO: move to syncer/job.go
@@ -1445,12 +1460,12 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 	defer s.runWg.Done()
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
-		maxPauseOrStopWaitTime = time.Minute * 10
+		defaultMaxPauseOrStopWaitTime = time.Minute * 10
 	})
-
 	select {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")
+		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
@@ -1461,11 +1476,28 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		}
 		s.waitXIDJob.Store(int64(waiting))
 		s.waitTransactionLock.Unlock()
+		s.refreshCliArgs()
+
+		waitDuration := defaultMaxPauseOrStopWaitTime
+		if s.cliArgs != nil && s.cliArgs.StopWaitTimeOutDuration != "" {
+			waitDuration, _ = time.ParseDuration(s.cliArgs.StopWaitTimeOutDuration)
+		}
+		failpoint.Inject("recordWaitBeforeRunExitDuration", func() {
+			needToExitTime = time.Now() // ignore the acquire lock time.
+			waitBeforeRunExitDuration = waitDuration
+		})
+
+		waitDuration -= time.Since(needToExitTime)
+		if waitDuration.Seconds() < 0 {
+			s.tctx.L().Info("wait transaction end timeout, exit now")
+			s.runCancel()
+			return
+		}
+
 		select {
 		case <-s.runCtx.Ctx.Done():
 			s.tctx.L().Info("syncer run exit so runCtx done")
-		case <-time.After(maxPauseOrStopWaitTime):
-			// TODO: maxPauseOrStopWaitTime should also count the time of waiting waitTransactionLock
+		case <-time.After(waitDuration):
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
 		}
@@ -1549,20 +1581,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	// task command line arguments have the highest priority
-	// dm-syncer and other usage may not have a etcdCli, so we check it first
 	skipLoadMeta := false
-	if s.cli != nil {
-		s.cliArgs, err = ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
-		if err != nil {
-			s.tctx.L().Error("failed to get task cli args", zap.Error(err))
+	s.refreshCliArgs()
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+		err = s.setGlobalPointByTime(s.runCtx, s.cliArgs.StartTime)
+		if terror.ErrConfigStartTimeTooLate.Equal(err) {
+			return err
 		}
-		if s.cliArgs != nil && s.cliArgs.StartTime != "" {
-			err = s.setGlobalPointByTime(s.runCtx, s.cliArgs.StartTime)
-			if terror.ErrConfigStartTimeTooLate.Equal(err) {
-				return err
-			}
-			skipLoadMeta = err == nil
-		}
+		skipLoadMeta = err == nil
 	}
 
 	// some initialization that can't be put in Syncer.Init
