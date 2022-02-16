@@ -203,7 +203,7 @@ func (w *SourceWorker) Start() {
 }
 
 // Close stops working and releases resources.
-func (w *SourceWorker) Close() {
+func (w *SourceWorker) Stop(graceful bool) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
 		return
@@ -218,8 +218,12 @@ func (w *SourceWorker) Close() {
 	w.Lock()
 	defer w.Unlock()
 
-	// close all sub tasks
-	w.subTaskHolder.closeAllSubTasks()
+	// close or kill all subtasks
+	if graceful {
+		w.subTaskHolder.closeAllSubTasks()
+	} else {
+		w.subTaskHolder.killAllSubTasks()
+	}
 
 	if w.relayHolder != nil {
 		w.relayHolder.Close()
