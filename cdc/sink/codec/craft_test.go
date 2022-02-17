@@ -196,3 +196,14 @@ func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	config.maxBatchSize = 64
 	s.testBatchCodec(c, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
 }
+
+func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig("craft")
+
+	builder := &craftEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build(context.Background()).(*CraftEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
+}

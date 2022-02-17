@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pingcap/check"
@@ -68,6 +69,22 @@ var testCaseDDL = &model.DDLEvent{
 	},
 	Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 	Type:  mm.ActionCreateTable,
+}
+
+func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig("canal-json")
+
+	builder := &canalEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
+
+	config.enableTiDBExtension = true
+	builder = &canalEventBatchEncoderBuilder{config: config}
+	encoder, ok = builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
 }
 
 func (s *canalFlatSuite) TestNewCanalFlatMessage4aDML(c *check.C) {

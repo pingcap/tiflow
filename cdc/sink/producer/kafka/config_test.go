@@ -398,5 +398,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		c.Assert(baseConfig.MaxMessageBytes, check.Equals, saramaConfig.Producer.MaxMessageBytes)
 		c.Assert(encoderConfig.GetMaxMessageBytes(), check.Equals, saramaConfig.Producer.MaxMessageBytes)
 		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, a.expectedMaxMessageBytes)
+
+		_ = adminClient.Close()
 	}
 }

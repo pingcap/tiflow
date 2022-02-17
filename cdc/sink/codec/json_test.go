@@ -188,6 +188,16 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 	}
 }
 
+func (s *batchSuite) TestBuildJSONEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig("open-protocol")
+	builder := &jsonEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build(context.Background()).(*JSONEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
+}
+
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 
