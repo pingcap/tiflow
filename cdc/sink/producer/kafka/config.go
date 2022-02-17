@@ -97,9 +97,25 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-// CompleteConfigs the kafka producer configuration, replication configuration and opts.
-func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config.ReplicaConfig) error {
-	baseConfig.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+type topicConfig struct {
+	autoCreate        bool
+	name              string
+	partitionNum      int32
+	replicationFactor int16
+}
+
+func (c *Config) DeriveTopicConfig(topicName string) *topicConfig {
+	return &topicConfig{
+		name:              topicName,
+		autoCreate:        c.AutoCreate,
+		partitionNum:      c.PartitionNum,
+		replicationFactor: c.ReplicationFactor,
+	}
+}
+
+// Apply the sinkURI to update Config
+func (c *Config) Apply(sinkURI *url.URL) error {
+	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
@@ -107,9 +123,9 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.PartitionNum = int32(a)
-		if baseConfig.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(baseConfig.PartitionNum)
+		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
 		}
 	}
 
@@ -119,12 +135,12 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.ReplicationFactor = int16(a)
+		c.ReplicationFactor = int16(a)
 	}
 
 	s = params.Get("kafka-version")
 	if s != "" {
-		baseConfig.Version = s
+		c.Version = s
 	}
 
 	s = params.Get("max-message-bytes")
@@ -133,44 +149,44 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.MaxMessageBytes = a
+		c.MaxMessageBytes = a
 	}
 
 	s = params.Get("compression")
 	if s != "" {
-		baseConfig.Compression = s
+		c.Compression = s
 	}
 
-	baseConfig.ClientID = params.Get("kafka-client-id")
+	c.ClientID = params.Get("kafka-client-id")
 
 	s = params.Get("ca")
 	if s != "" {
-		baseConfig.Credential.CAPath = s
+		c.Credential.CAPath = s
 	}
 
 	s = params.Get("cert")
 	if s != "" {
-		baseConfig.Credential.CertPath = s
+		c.Credential.CertPath = s
 	}
 
 	s = params.Get("key")
 	if s != "" {
-		baseConfig.Credential.KeyPath = s
+		c.Credential.KeyPath = s
 	}
 
 	s = params.Get("sasl-user")
 	if s != "" {
-		baseConfig.SaslScram.SaslUser = s
+		c.SaslScram.SaslUser = s
 	}
 
 	s = params.Get("sasl-password")
 	if s != "" {
-		baseConfig.SaslScram.SaslPassword = s
+		c.SaslScram.SaslPassword = s
 	}
 
 	s = params.Get("sasl-mechanism")
 	if s != "" {
-		baseConfig.SaslScram.SaslMechanism = s
+		c.SaslScram.SaslMechanism = s
 	}
 
 	s = params.Get("auto-create-topic")
@@ -179,12 +195,7 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.AutoCreate = autoCreate
-	}
-
-	s = params.Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
+		c.AutoCreate = autoCreate
 	}
 
 	s = params.Get("dial-timeout")
@@ -193,7 +204,7 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.DialTimeout = a
+		c.DialTimeout = a
 	}
 
 	s = params.Get("write-timeout")
@@ -202,7 +213,7 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.WriteTimeout = a
+		c.WriteTimeout = a
 	}
 
 	s = params.Get("read-timeout")
@@ -211,7 +222,7 @@ func CompleteConfigs(sinkURI *url.URL, baseConfig *Config, replicaConfig *config
 		if err != nil {
 			return err
 		}
-		baseConfig.ReadTimeout = a
+		c.ReadTimeout = a
 	}
 
 	return nil

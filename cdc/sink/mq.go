@@ -457,12 +457,12 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 
 	baseConfig := kafka.NewConfig()
-	if err := kafka.CompleteConfigs(sinkURI, baseConfig, replicaConfig); err != nil {
+	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
+
 	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
-	err := replicaConfig.Validate()
-	if err != nil {
+	if err := replicaConfig.Apply(sinkURI).Validate(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -495,7 +495,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	if err := kafka.CreateTopic(topic, baseConfig, saramaConfig); err != nil {
+	topicConfig := baseConfig.DeriveTopicConfig(topic)
+	if err := kafka.CreateTopic(adminClient, topicConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/cznic/mathutil"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -215,8 +214,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicNotExist(c *check.C) {
 
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random1")
 	c.Assert(err, check.IsNil)
-
-	expectedSaramaMaxMessageBytes := mathutil.Min(config.MaxMessageBytes, adminClient.GetBrokerMessageMaxBytes())
+	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
@@ -225,7 +223,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicNotExist(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random2")
 	c.Assert(err, check.IsNil)
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetBrokerMessageMaxBytes())
+	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
@@ -234,7 +232,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicNotExist(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random3")
 	c.Assert(err, check.IsNil)
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetBrokerMessageMaxBytes())
+	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 }
 
@@ -293,7 +291,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
 	c.Assert(err, check.IsNil)
 
-	expectedSaramaMaxMessageBytes := mathutil.Min(config.MaxMessageBytes, adminClient.GetTopicMaxMessageBytes())
+	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
@@ -304,7 +302,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
 	c.Assert(err, check.IsNil)
 
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetTopicMaxMessageBytes())
+	expectedSaramaMaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
@@ -315,7 +313,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
 	c.Assert(err, check.IsNil)
 
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetTopicMaxMessageBytes())
+	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// When the topic exists, but the topic does not have `max.message.bytes`
@@ -337,7 +335,7 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// since `max.message.bytes` cannot found, use broker's `message.max.bytes` instead.
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetBrokerMessageMaxBytes())
+	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
@@ -348,11 +346,13 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 
 	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
 	c.Assert(err, check.IsNil)
-	expectedSaramaMaxMessageBytes = mathutil.Min(config.MaxMessageBytes, adminClient.GetBrokerMessageMaxBytes())
+	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 }
 
 func (s *kafkaSuite) TestCreateTopic(c *check.C) {
+	defer testleak.AfterTest(c)()
+
 	// When topic does not exist and auto-create is not enabled.
 	//config.AutoCreate = false
 	//saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
