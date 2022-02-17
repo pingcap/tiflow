@@ -2672,7 +2672,7 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	// check all table rename column
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t4, t5)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictNone)
+	c.Assert(conflictStage, Equals, ConflictResolved)
 
 	// check one table modify column
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t5, t6)
@@ -2687,7 +2687,7 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	// check all table modify column
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t7, t6)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictNone)
+	c.Assert(conflictStage, Equals, ConflictResolved)
 
 	// check add column not null no default
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
@@ -2700,11 +2700,11 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictNone)
+	c.Assert(conflictStage, Equals, ConflictResolved)
 	// check idempotent.
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictNone)
+	c.Assert(conflictStage, Equals, ConflictResolved)
 
 	// check multiple conflict DDL
 	// tb1 rename column
