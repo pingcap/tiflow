@@ -496,7 +496,6 @@ func (d *CanalEventBatchEncoder) Reset() {
 // SetParams is no-op for now
 func (d *CanalEventBatchEncoder) SetParams(config *Config) {
 	// no op
-	return
 }
 
 // refreshPacketBody() marshals the messages to the packet body

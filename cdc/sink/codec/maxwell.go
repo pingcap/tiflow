@@ -181,7 +181,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 
 // SetParams is no-op for Maxwell for now
 func (d *MaxwellEventBatchEncoder) SetParams(config *Config) {
-	return
+	// no op
 }
 
 // Column represents a column in maxwell

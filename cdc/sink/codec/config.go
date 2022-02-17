@@ -84,7 +84,7 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 }
 
 func (c *Config) WithMaxMessageBytes(bytes int) *Config {
-	c.maxBatchSize = bytes
+	c.maxMessageBytes = bytes
 	return c
 }
 
@@ -102,7 +102,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.maxBatchSize <= 0 {
-		cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
 	}
 
 	return nil
