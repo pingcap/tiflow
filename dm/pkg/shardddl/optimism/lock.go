@@ -223,11 +223,15 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			err = l.AddDroppedColumns(callerSource, callerSchema, callerTable, cols)
 		}
 		// only update table info if no error or ignore conflict or conflict DDL
-		if err != nil && !terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+		if err != nil {
 			var revertInfo schemacmp.Table
-			if ignoreConflict {
+			switch {
+			case ignoreConflict:
+				// forcely set schema for --ignore-conflict
 				revertInfo = schemacmp.Encode(newTIs[len(newTIs)-1])
-			} else {
+			case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
+				return
+			default:
 				revertInfo = schemacmp.Encode(info.TableInfoBefore)
 			}
 			l.tables[callerSource][callerSchema][callerTable] = revertInfo
@@ -799,7 +803,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 			// return ConflictResolved
 			if len(l.conflictTables) > 0 && l.noConflictForFinalTables() {
 				log.L().Info("all conflict resolved for the DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
-				err := l.redirectForConflictTables()
+				err := l.redirectForConflictTables(source, schema, table)
 				if err != nil {
 					log.L().Error("failed to put redirect operation for conflict tables", log.ShortError(err))
 					return false, ConflictDetected
@@ -851,7 +855,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	if l.noConflictForFinalTables() {
 		log.L().Info("all conflict resolved for the DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
-		err := l.redirectForConflictTables()
+		err := l.redirectForConflictTables(source, schema, table)
 		if err != nil {
 			log.L().Error("failed to put redirect operation for conflict tables", log.ShortError(err))
 			return false, ConflictDetected
@@ -1079,9 +1083,6 @@ func (l *Lock) addConflictTable(source, schema, table string, ti schemacmp.Table
 	if _, ok := l.conflictTables[source][schema]; !ok {
 		l.conflictTables[source][schema] = make(map[string]schemacmp.Table)
 	}
-	if _, ok := l.conflictTables[source][schema]; !ok {
-		l.conflictTables[source][schema] = make(map[string]schemacmp.Table)
-	}
 	l.conflictTables[source][schema][table] = ti
 }
 
@@ -1114,10 +1115,14 @@ func (l *Lock) resolveTables() {
 }
 
 // redirectForConflictTables put redirect Ops for all conflict tables.
-func (l *Lock) redirectForConflictTables() error {
+func (l *Lock) redirectForConflictTables(callerSource, callerSchema, callerTable string) error {
 	for source, schemaTables := range l.conflictTables {
 		for schema, tables := range schemaTables {
 			for table := range tables {
+				if source == callerSource && schema == callerSchema && table == callerTable {
+					// no redirect for caller table
+					continue
+				}
 				op := NewOperation(l.ID, l.Task, source, schema, table, nil, ConflictResolved, "", false, nil)
 				rev, succ, err := PutOperation(l.cli, false, op, 0)
 				if err != nil {
