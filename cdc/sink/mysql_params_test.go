@@ -118,9 +118,66 @@ func TestGenerateDSNByParams(t *testing.T) {
 		}
 	}
 
+	testIsolationParams := func() {
+		db, mock, err := sqlmock.New()
+		require.Nil(t, err)
+		defer db.Close() // nolint:errcheck
+		columns := []string{"Variable_name", "Value"}
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		// simulate error
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		require.Nil(t, err)
+		params := defaultParams.Clone()
+		var dsnStr string
+		_, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Error(t, err)
+
+		// simulate no transaction_isolation
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
+		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Nil(t, err)
+		expectedParams := []string{
+			"tx_isolation=%22READ-COMMITTED%22",
+		}
+		for _, param := range expectedParams {
+			require.True(t, strings.Contains(dsnStr, param))
+		}
+
+		// simulate transaction_isolation
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+		)
+		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Nil(t, err)
+		expectedParams = []string{
+			"transaction_isolation=%22READ-COMMITTED%22",
+		}
+		for _, param := range expectedParams {
+			require.True(t, strings.Contains(dsnStr, param))
+		}
+	}
+
 	testDefaultParams()
 	testTimezoneParam()
 	testTimeoutParams()
+	testIsolationParams()
 }
 
 func TestParseSinkURIToParams(t *testing.T) {
