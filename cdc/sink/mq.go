@@ -471,7 +471,17 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, errors.Trace(err)
 	}
 
-	if err := kafka.AdjustConfig(baseConfig, saramaConfig, topic); err != nil {
+	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	defer func() {
+		if err := adminClient.Close(); err != nil {
+			log.Warn("close admin client error", zap.Error(err))
+		}
+	}()
+
+	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 

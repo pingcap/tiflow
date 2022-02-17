@@ -332,6 +332,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, s
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.Any("role", role))
 
+	// this admin mainly used by `metricsMonitor` to fetch broker info.
 	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -413,17 +414,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func AdjustConfig(config *Config, saramaConfig *sarama.Config, topic string) error {
-	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
-
+func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
