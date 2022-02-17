@@ -448,7 +448,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		}
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
-		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
+		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
