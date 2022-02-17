@@ -23,9 +23,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -88,8 +90,7 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 	return args.Get(0).([]*model.CaptureInfo), args.Error(1)
 }
 
-func newRouter(p *mockStatusProvider) *gin.Engine {
-	c := capture.NewCapture4Test(true)
+func newRouter(c *capture.Capture, p *mockStatusProvider) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
@@ -108,7 +109,9 @@ func newStatusProvider() *mockStatusProvider {
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
 
 	statusProvider.On("GetTaskPositions", mock.Anything).
-		Return(map[model.CaptureID]*model.TaskPosition{captureID: {Error: &model.RunningError{Message: "test"}}}, nil)
+		Return(map[model.CaptureID]*model.TaskPosition{
+			captureID: {Error: &model.RunningError{Message: "test"}},
+		}, nil)
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
@@ -139,7 +142,10 @@ func newStatusProvider() *mockStatusProvider {
 
 func TestListChangefeed(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 
 	// test list changefeed succeeded
 	api := testCase{url: "/api/v1/changefeeds", method: "GET"}
@@ -168,7 +174,10 @@ func TestListChangefeed(t *testing.T) {
 
 func TestGetChangefeed(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 
 	// test get changefeed succeeded
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "GET"}
@@ -195,60 +204,139 @@ func TestGetChangefeed(t *testing.T) {
 
 func TestPauseChangefeed(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
+
 	// test pause changefeed succeeded
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminStop, adminJob.Type)
+			close(done)
+		})
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID), method: "POST"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test pause changefeed failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID), method: "POST"}
+	// test pause changefeed failed from owner side
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
+			close(done)
+		})
+	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
 	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "changefeed not exists")
+
+	// test pause changefeed failed
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID),
+		method: "POST",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(api.method, api.url, nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 400, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
 func TestResumeChangefeed(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
+
 	// test resume changefeed succeeded
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminResume, adminJob.Type)
+			close(done)
+		})
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID), method: "POST"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test resume changefeed failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChangefeedID), method: "POST"}
+	// test resume changefeed failed from owner side.
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
+			close(done)
+		})
+	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID), method: "POST"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
 	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "changefeed not exists")
+
+	// test resume changefeed failed
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChangefeedID),
+		method: "POST",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(api.method, api.url, nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 400, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
 func TestRemoveChangefeed(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
+
 	// test remove changefeed succeeded
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminRemove, adminJob.Type)
+			close(done)
+		})
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "DELETE"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test remove changefeed failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID), method: "DELETE"}
+	// test remove changefeed failed from owner size
+	mo.EXPECT().
+		EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
+			close(done)
+		})
+	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "DELETE"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -257,26 +345,76 @@ func TestRemoveChangefeed(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
+
+	// test remove changefeed failed
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID),
+		method: "DELETE",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(api.method, api.url, nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 400, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
-func TestRebalanceTable(t *testing.T) {
+func TestRebalanceTables(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
+
 	// test rebalance table succeeded
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID), method: "POST"}
+	mo.EXPECT().
+		RebalanceTables(gomock.Any(), gomock.Any()).
+		Do(func(cfID model.ChangeFeedID, done chan<- error) {
+			require.EqualValues(t, cfID, changeFeedID)
+			close(done)
+		})
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test rebalance table failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChangefeedID), method: "POST"}
+	// test rebalance table failed from owner side.
+	mo.EXPECT().
+		RebalanceTables(gomock.Any(), gomock.Any()).
+		Do(func(cfID model.ChangeFeedID, done chan<- error) {
+			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(cfID)
+			close(done)
+		})
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
 	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "changefeed not exists")
+
+	// test rebalance table failed
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChangefeedID),
+		method: "POST",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(api.method, api.url, nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 400, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
 }
@@ -284,6 +422,12 @@ func TestRebalanceTable(t *testing.T) {
 func TestMoveTable(t *testing.T) {
 	t.Parallel()
 
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
+
+	// test move table succeeded
 	data := struct {
 		CaptureID string `json:"capture_id"`
 		TableID   int64  `json:"table_id"`
@@ -291,17 +435,50 @@ func TestMoveTable(t *testing.T) {
 	b, err := json.Marshal(&data)
 	require.Nil(t, err)
 	body := bytes.NewReader(b)
-
-	router := newRouter(newStatusProvider())
-	// test move table succeeded
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID), method: "POST"}
+	mo.EXPECT().
+		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(
+			cfID model.ChangeFeedID, toCapture model.CaptureID,
+			tableID model.TableID, done chan<- error,
+		) {
+			require.EqualValues(t, cfID, changeFeedID)
+			require.EqualValues(t, toCapture, data.CaptureID)
+			require.EqualValues(t, tableID, data.TableID)
+			close(done)
+		})
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test move table failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChangefeedID), method: "POST"}
+	// test move table failed from owner side.
+	data = struct {
+		CaptureID string `json:"capture_id"`
+		TableID   int64  `json:"table_id"`
+	}{captureID, 1}
+	b, err = json.Marshal(&data)
+	require.Nil(t, err)
+	body = bytes.NewReader(b)
+	mo.EXPECT().
+		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(
+			cfID model.ChangeFeedID, toCapture model.CaptureID,
+			tableID model.TableID, done chan<- error,
+		) {
+			require.EqualValues(t, cfID, changeFeedID)
+			require.EqualValues(t, toCapture, data.CaptureID)
+			require.EqualValues(t, tableID, data.TableID)
+			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(cfID)
+			close(done)
+		})
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, body)
 	router.ServeHTTP(w, req)
@@ -310,12 +487,30 @@ func TestMoveTable(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
+
+	// test move table failed
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChangefeedID),
+		method: "POST",
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(api.method, api.url, body)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 400, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
 func TestResignOwner(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 	// test resign owner succeeded
+	mo.EXPECT().AsyncStop()
 	api := testCase{url: "/api/v1/owner/resign", method: "POST"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
@@ -325,9 +520,15 @@ func TestResignOwner(t *testing.T) {
 
 func TestGetProcessor(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 	// test get processor succeeded
-	api := testCase{url: fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, captureID), method: "GET"}
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, captureID),
+		method: "GET",
+	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -338,7 +539,10 @@ func TestGetProcessor(t *testing.T) {
 	require.Equal(t, "test", processorDetail.Error.Message)
 
 	// test get processor fail due to capture ID error
-	api = testCase{url: fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, "non-exist-capture"), method: "GET"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, "non-exist-capture"),
+		method: "GET",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest(api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -346,12 +550,15 @@ func TestGetProcessor(t *testing.T) {
 	httpError := &model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(httpError)
 	require.Nil(t, err)
-	require.Contains(t, httpError.Error, "capture not exists, key: non-exist-capture")
+	require.Contains(t, httpError.Error, "capture not exists, non-exist-capture")
 }
 
 func TestListProcessor(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/processors", method: "GET"}
 	w := httptest.NewRecorder()
@@ -366,7 +573,10 @@ func TestListProcessor(t *testing.T) {
 
 func TestListCapture(t *testing.T) {
 	t.Parallel()
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/captures", method: "GET"}
 	w := httptest.NewRecorder()
@@ -382,7 +592,10 @@ func TestListCapture(t *testing.T) {
 func TestServerStatus(t *testing.T) {
 	t.Parallel()
 	// capture is owner
-	ownerRouter := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	ownerRouter := newRouter(cp, newStatusProvider())
 	api := testCase{url: "/api/v1/status", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(api.method, api.url, nil)
@@ -395,7 +608,7 @@ func TestServerStatus(t *testing.T) {
 	require.True(t, resp.IsOwner)
 
 	// capture is not owner
-	c := capture.NewCapture4Test(false)
+	c := capture.NewCapture4Test(nil)
 	r := gin.New()
 	RegisterOpenAPIRoutes(r, NewOpenAPI4Test(c, nil))
 	api = testCase{url: "/api/v1/status", method: "GET"}
@@ -416,7 +629,10 @@ func TestSetLogLevel(t *testing.T) {
 	data := struct {
 		Level string `json:"log_level"`
 	}{"warn"}
-	router := newRouter(newStatusProvider())
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	router := newRouter(cp, newStatusProvider())
 	api := testCase{url: "/api/v1/log", method: "POST"}
 	w := httptest.NewRecorder()
 	b, err := json.Marshal(&data)

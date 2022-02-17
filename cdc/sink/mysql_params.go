@@ -268,8 +268,6 @@ func generateDSNByParams(
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 	dsnCfg.Params["timeout"] = params.dialTimeout
-	// Since we don't need select, just set default isolation level to read-committed
-	dsnCfg.Params["transaction_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
@@ -285,6 +283,18 @@ func generateDSNByParams(
 	}
 	if txnMode != "" {
 		dsnCfg.Params["tidb_txn_mode"] = txnMode
+	}
+
+	// Since we don't need select, just set default isolation level to read-committed
+	// transaction_isolation is mysql newly introduced variable and will vary from MySQL5.7/MySQL8.0/Mariadb
+	isolation, err := checkTiDBVariable(ctx, testDB, "transaction_isolation", defaultTxnIsolationRC)
+	if err != nil {
+		return "", err
+	}
+	if isolation != "" {
+		dsnCfg.Params["transaction_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
+	} else {
+		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 	}
 
 	dsnClone := dsnCfg.Clone()

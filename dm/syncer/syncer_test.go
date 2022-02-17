@@ -41,6 +41,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -102,12 +104,16 @@ type testSyncerSuite struct {
 }
 
 type MockStreamer struct {
-	events []*replication.BinlogEvent
-	idx    uint32
+	events  []*replication.BinlogEvent
+	idx     uint32
+	pending bool
 }
 
 func (m *MockStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
 	if int(m.idx) >= len(m.events) {
+		if m.pending {
+			<-ctx.Done()
+		}
 		return nil, context.Canceled
 	}
 	e := m.events[m.idx]
@@ -121,7 +127,7 @@ type MockStreamProducer struct {
 
 func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
-		return &MockStreamer{mp.events, 0}, nil
+		return &MockStreamer{mp.events, 0, false}, nil
 	}
 	bytesLen := 0
 	idx := uint32(0)
@@ -132,32 +138,11 @@ func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader
 			break
 		}
 	}
-	return &MockStreamer{mp.events, idx}, nil
+	return &MockStreamer{mp.events, idx, false}, nil
 }
 
 func (s *testSyncerSuite) SetUpSuite(c *C) {
-	loaderDir, err := os.MkdirTemp("", "loader")
-	c.Assert(err, IsNil)
-	loaderCfg := config.LoaderConfig{
-		Dir: loaderDir,
-	}
-	s.cfg = &config.SubTaskConfig{
-		From:             config.GetDBConfigForTest(),
-		To:               config.GetDBConfigForTest(),
-		ServerID:         101,
-		MetaSchema:       "test",
-		Name:             "syncer_ut",
-		ShadowTableRules: []string{config.DefaultShadowTableRules},
-		TrashTableRules:  []string{config.DefaultTrashTableRules},
-		Mode:             config.ModeIncrement,
-		Flavor:           "mysql",
-		LoaderConfig:     loaderCfg,
-	}
-	s.cfg.Experimental.AsyncCheckpointFlush = true
-	s.cfg.From.Adjust()
-	s.cfg.To.Adjust()
-
-	s.cfg.UseRelay = false
+	s.cfg = genDefaultSubTaskConfig4Test()
 	s.resetEventsGenerator(c)
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
@@ -236,7 +221,7 @@ func (s *testSyncerSuite) TearDownSuite(c *C) {
 	os.RemoveAll(s.cfg.Dir)
 }
 
-func (s *testSyncerSuite) mockGetServerUnixTS(mock sqlmock.Sqlmock) {
+func mockGetServerUnixTS(mock sqlmock.Sqlmock) {
 	ts := time.Now().Unix()
 	rows := sqlmock.NewRows([]string{"UNIX_TIMESTAMP()"}).AddRow(strconv.FormatInt(ts, 10))
 	mock.ExpectQuery("SELECT UNIX_TIMESTAMP()").WillReturnRows(rows)
@@ -741,14 +726,14 @@ func (s *testSyncerSuite) TestcheckpointID(c *C) {
 
 func (s *testSyncerSuite) TestRun(c *C) {
 	// 1. run syncer with column mapping
-	// 2. execute some sqls which will trigger casuality
+	// 2. execute some sqls which will trigger causality
 	// 3. check the generated jobs
 	// 4. update config, add route rules, and update syncer
-	// 5. execute somes sqls and then check jobs generated
+	// 5. execute some sqls and then check jobs generated
 
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	checkPointDB, checkPointMock, err := sqlmock.New()
@@ -802,7 +787,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
@@ -841,11 +826,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -882,7 +867,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			[]string{"CREATE TABLE IF NOT EXISTS `test_1`.`t_2` (`id` INT PRIMARY KEY,`name` VARCHAR(24))"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838401), "a"}},
 		}, {
@@ -894,16 +879,16 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			[]string{"ALTER TABLE `test_1`.`t_1` ADD INDEX `index1`(`name`)"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402), "b"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(580981944116838401)}},
 		}, {
 			// safe mode is true, will split update to delete + replace
-			update,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(580981944116838402)}, {int64(580981944116838401), "b"}},
 		}, {
@@ -984,11 +969,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	// When crossing safeModeExitPoint, will generate a flush sql
@@ -1000,11 +985,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	expectJobs2 := []*expectJob{
 		{
-			insert,
+			dml,
 			[]string{"INSERT INTO `test_1`.`t_2` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(3), "c"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_2` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(3)}},
 		}, {
@@ -1040,7 +1025,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
-	s.mockGetServerUnixTS(mock)
+	mockGetServerUnixTS(mock)
 
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
@@ -1122,11 +1107,11 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		streamer:         mockStreamer,
 	}
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        make(chan *checkpointFlushTask, 16),
-		cp:           syncer.checkpoint,
-		execError:    &syncer.execError,
-		afterFlushFn: syncer.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              make(chan *checkpointFlushTask, 16),
+		cp:                 syncer.checkpoint,
+		execError:          &syncer.execError,
+		afterFlushFn:       syncer.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
@@ -1161,28 +1146,28 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			[]string{"CREATE TABLE IF NOT EXISTS `test_1`.`t_1` (`id` INT PRIMARY KEY,`name` VARCHAR(24))"},
 			nil,
 		}, {
-			insert,
+			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(1), "a"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1)}},
 		}, {
-			update,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(2)}, {int64(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
-			insert,
+			dml,
 			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
 			[][]interface{}{{int64(1), "a"}},
 		}, {
-			del,
+			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1)}},
 		}, {
-			update,
+			dml,
 			[]string{"UPDATE `test_1`.`t_1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
 			[][]interface{}{{int64(1), "b", int64(2)}},
 		}, {
@@ -1444,16 +1429,46 @@ type expectJob struct {
 	args     [][]interface{}
 }
 
+var defaultDMLType = map[sqlmodel.RowChangeType]sqlmodel.DMLType{
+	sqlmodel.RowChangeInsert: sqlmodel.DMLInsert,
+	sqlmodel.RowChangeUpdate: sqlmodel.DMLUpdate,
+	sqlmodel.RowChangeDelete: sqlmodel.DMLDelete,
+}
+
 func checkJobs(c *C, jobs []*job, expectJobs []*expectJob) {
 	c.Assert(len(jobs), Equals, len(expectJobs), Commentf("jobs = %q", jobs))
 	for i, job := range jobs {
 		c.Assert(job.tp, Equals, expectJobs[i].tp)
+
 		if job.tp == ddl {
 			c.Assert(job.ddls, DeepEquals, expectJobs[i].sqlInJob)
-		} else if job.tp == insert || job.tp == update || job.tp == del {
-			sqls, args := job.dml.genSQL()
-			c.Assert(sqls, DeepEquals, expectJobs[i].sqlInJob)
-			c.Assert(args, DeepEquals, expectJobs[i].args)
+			continue
+		}
+
+		if job.tp == dml {
+			if !job.safeMode {
+				sql, args := job.dml.GenSQL(defaultDMLType[job.dml.Type()])
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+				continue
+			}
+
+			// safemode
+			switch job.dml.Type() {
+			case sqlmodel.RowChangeInsert:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeUpdate:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				sql2, args2 := job.dml.GenSQL(sqlmodel.DMLReplace)
+				c.Assert([]string{sql, sql2}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args, args2}, DeepEquals, expectJobs[i].args)
+			case sqlmodel.RowChangeDelete:
+				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
+				c.Assert([]string{sql}, DeepEquals, expectJobs[i].sqlInJob)
+				c.Assert([][]interface{}{args}, DeepEquals, expectJobs[i].args)
+			}
 		}
 	}
 }
@@ -1463,11 +1478,21 @@ var testJobs struct {
 	jobs []*job
 }
 
+func newDummyJob(tp opType, targetTable *filter.Table, ddls ...string) *job {
+	return &job{
+		tp:          tp,
+		targetTable: targetTable,
+		ddls:        ddls,
+		dml:         &sqlmodel.RowChange{},
+	}
+}
+
 func (s *Syncer) mockFinishJob(jobs []*expectJob) {
 	for _, job := range jobs {
 		switch job.tp {
-		case ddl, insert, update, del, flush:
-			s.addCount(true, "test", job.tp, 1, &filter.Table{})
+		case ddl, dml, flush:
+			dummyJob := newDummyJob(job.tp, &filter.Table{}, job.sqlInJob...)
+			s.updateJobMetrics(true, "test", dummyJob)
 		}
 	}
 }
@@ -1476,8 +1501,8 @@ func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 	log.L().Info("add job to memory", zap.Stringer("job", job))
 
 	switch job.tp {
-	case ddl, insert, update, del, flush:
-		s.addCount(false, "test", job.tp, 1, &filter.Table{})
+	case ddl, dml, flush:
+		s.updateJobMetrics(false, "test", job)
 		testJobs.Lock()
 		testJobs.jobs = append(testJobs.jobs, job)
 		testJobs.Unlock()
@@ -1500,7 +1525,7 @@ func (s *Syncer) addJobToMemory(job *job) (bool, error) {
 			}
 		}
 		s.resetShardingGroup(job.targetTable)
-	case insert, update, del:
+	case dml:
 		for sourceSchema, tbs := range job.sourceTbls {
 			if len(sourceSchema) == 0 {
 				continue
@@ -1527,11 +1552,11 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 	s.checkpoint.(*RemoteCheckPoint).dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{})}
 	// mock syncer.flushCpWorker init
 	s.checkpointFlushWorker = &checkpointFlushWorker{
-		input:        nil,
-		cp:           s.checkpoint,
-		execError:    &s.execError,
-		afterFlushFn: s.afterFlushCheckpoint,
-		addCountFunc: func(bool, string, opType, int64, *filter.Table) {},
+		input:              nil,
+		cp:                 s.checkpoint,
+		execError:          &s.execError,
+		afterFlushFn:       s.afterFlushCheckpoint,
+		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 	c.Assert(s.checkpoint.(*RemoteCheckPoint).prepare(tcontext.Background()), IsNil)
 	// disable flush checkpoint periodically
@@ -1702,4 +1727,85 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	c.Assert(n, Equals, 0)
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
+}
+
+func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
+	loaderDir, err := os.MkdirTemp("", "loader")
+	if err != nil {
+		panic(err) // no happen
+	}
+
+	loaderCfg := config.LoaderConfig{
+		Dir: loaderDir,
+	}
+	cfg := &config.SubTaskConfig{
+		From:             config.GetDBConfigForTest(),
+		To:               config.GetDBConfigForTest(),
+		ServerID:         101,
+		MetaSchema:       "test",
+		Name:             "syncer_ut",
+		ShadowTableRules: []string{config.DefaultShadowTableRules},
+		TrashTableRules:  []string{config.DefaultTrashTableRules},
+		Mode:             config.ModeIncrement,
+		Flavor:           "mysql",
+		LoaderConfig:     loaderCfg,
+		UseRelay:         false,
+	}
+	cfg.Experimental.AsyncCheckpointFlush = true
+	cfg.From.Adjust()
+	cfg.To.Adjust()
+	return cfg
+}
+
+func TestWaitBeforeRunExit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	syncer := NewSyncer(cfg, nil, nil)
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mockGetServerUnixTS(mock)
+
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
+	syncer.reset()
+	require.NoError(t, syncer.genRouter())
+
+	mockStreamerProducer := &MockStreamProducer{}
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	require.NoError(t, err)
+	// let getEvent pending until ctx.Done()
+	mockStreamer.(*MockStreamer).pending = true
+	syncer.streamerController = &StreamerController{
+		streamerProducer: mockStreamerProducer, streamer: mockStreamer, closed: false,
+	}
+
+	wg := &sync.WaitGroup{}
+	errCh := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- syncer.Run(ctx)
+	}()
+	time.Sleep(time.Second) // wait s.Run start
+
+	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
+	cancel() // this will make s.Run exit
+	wg.Wait()
+	require.Nil(t, <-errCh)
+	require.Equal(t, 0, len(errCh))
+	require.NotNil(t, syncer.runCtx)
+	require.NotNil(t, syncer.runCancel)
+
+	// test syncer wait time not more than maxPauseOrStopWaitTime
+	oldMaxPauseOrStopWaitTime := maxPauseOrStopWaitTime
+	maxPauseOrStopWaitTime = time.Second
+	ctx2, cancel := context.WithCancel(context.Background())
+	cancel()
+	runCtx, runCancel := context.WithCancel(context.Background())
+	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.runWg.Add(1)
+	syncer.waitBeforeRunExit(ctx2)
+	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
+	maxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
 }

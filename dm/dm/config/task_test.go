@@ -623,6 +623,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 			Table:           "tbl",
 			DeleteValueExpr: "state = 1",
 		}
+		validatorCfg = ValidatorConfig{Mode: ValidationNone}
 		source1DBCfg = DBConfig{
 			Host:             "127.0.0.1",
 			Port:             3306,
@@ -705,6 +706,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				EnableGTID:              true,
 				SafeMode:                true,
 			},
+			ValidatorCfg:     validatorCfg,
 			CleanDumpFile:    true,
 			EnableANSIQuotes: true,
 		}
@@ -723,6 +725,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 	stCfg2.BAList = &baList2
 	stCfg2.RouteRules = []*router.TableRule{&routeRule4, &routeRule1, &routeRule2}
 	stCfg2.ExprFilter = []*ExpressionFilter{&exprFilter1}
+	stCfg2.ValidatorCfg.Mode = ValidationFast
 
 	cfg := SubTaskConfigsToTaskConfig(stCfg1, stCfg2)
 
@@ -757,6 +760,8 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				SyncerConfigName:   "sync-01",
 				Syncer:             nil,
 				SyncerThread:       0,
+
+				ContinuousValidatorConfigName: "validator-01",
 			},
 			{
 				SourceID:           source2,
@@ -776,6 +781,8 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				Syncer:             nil,
 				SyncerThread:       0,
 				ExpressionFilters:  []string{"expr-filter-01"},
+
+				ContinuousValidatorConfigName: "validator-02",
 			},
 		},
 		OnlineDDL: onlineDDL,
@@ -806,6 +813,12 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		},
 		ExprFilter: map[string]*ExpressionFilter{
 			"expr-filter-01": &exprFilter1,
+		},
+		Validators: map[string]*ValidatorConfig{
+			"validator-01": &validatorCfg,
+			"validator-02": {
+				Mode: ValidationFast,
+			},
 		},
 		CleanDumpFile: stCfg1.CleanDumpFile,
 	}
@@ -1031,7 +1044,7 @@ func (t *testConfig) TestTaskConfigForDowngrade(c *C) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+3) // without flag, collation_compatible and experimental
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+4) // without flag, collation_compatible, experimental, validator
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

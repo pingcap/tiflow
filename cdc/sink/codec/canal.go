@@ -396,12 +396,6 @@ type CanalEventBatchEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// AppendResolvedEvent appends a resolved event to the encoder
-// TODO TXN support
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
