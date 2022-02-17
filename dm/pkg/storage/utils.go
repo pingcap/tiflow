@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -32,7 +32,7 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" {
 		return rawURL, nil
 	}
-	u, err := storage.ParseRawURL(rawURL)
+	u, err := bstorage.ParseRawURL(rawURL)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -65,27 +65,27 @@ func IsS3Path(rawURL string) bool {
 	return false
 }
 
-// CreateExternalStore creates ExternalStore.
-func CreateExternalStore(ctx context.Context, path string) (storage.ExternalStorage, error) {
-	backend, err := storage.ParseBackend(path, nil)
+// CreateStorage creates ExternalStore.
+func CreateStorage(ctx context.Context, path string) (bstorage.ExternalStorage, error) {
+	backend, err := bstorage.ParseBackend(path, nil)
 	if err != nil {
 		return nil, err
 	}
-	return storage.New(ctx, backend, &storage.ExternalStorageOptions{})
+	return bstorage.New(ctx, backend, &bstorage.ExternalStorageOptions{})
 }
 
 // CollectDirFiles gets files in dir.
-func CollectDirFiles(ctx context.Context, dir string, externalStore storage.ExternalStorage) (map[string]struct{}, error) {
+func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalStorage) (map[string]struct{}, error) {
 	var err error
-	if externalStore == nil {
-		externalStore, err = CreateExternalStore(ctx, dir)
+	if storage == nil {
+		storage, err = CreateStorage(ctx, dir)
 		if err != nil {
 			return nil, err
 		}
 	}
 	files := make(map[string]struct{})
 
-	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+	err = storage.WalkDir(ctx, &bstorage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
 		name := path.Base(filePath)
 		files[name] = struct{}{}
 		return nil
@@ -95,44 +95,44 @@ func CollectDirFiles(ctx context.Context, dir string, externalStore storage.Exte
 }
 
 // RemoveAll remove files in dir.
-func RemoveAll(ctx context.Context, dir string, externalStore storage.ExternalStorage) error {
+func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage) error {
 	var err error
-	if externalStore == nil {
-		externalStore, err = CreateExternalStore(ctx, dir)
+	if storage == nil {
+		storage, err = CreateStorage(ctx, dir)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = externalStore.WalkDir(ctx, &storage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
-		return externalStore.DeleteFile(ctx, filePath)
+	err = storage.WalkDir(ctx, &bstorage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+		return storage.DeleteFile(ctx, filePath)
 	})
 	if err == nil {
-		return externalStore.DeleteFile(ctx, "")
+		return storage.DeleteFile(ctx, "")
 	}
 	return err
 }
 
-func ReadFile(ctx context.Context, dir, fileName string, externalStore storage.ExternalStorage) ([]byte, error) {
+func ReadFile(ctx context.Context, dir, fileName string, storage bstorage.ExternalStorage) ([]byte, error) {
 	var err error
-	if externalStore == nil {
-		externalStore, err = CreateExternalStore(ctx, dir)
+	if storage == nil {
+		storage, err = CreateStorage(ctx, dir)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return externalStore.ReadFile(ctx, fileName)
+	return storage.ReadFile(ctx, fileName)
 }
 
-func OpenFile(ctx context.Context, dir, fileName string, externalStore storage.ExternalStorage) (storage.ExternalFileReader, error) {
+func OpenFile(ctx context.Context, dir, fileName string, storage bstorage.ExternalStorage) (bstorage.ExternalFileReader, error) {
 	var err error
-	if externalStore == nil {
-		externalStore, err = CreateExternalStore(ctx, dir)
+	if storage == nil {
+		storage, err = CreateStorage(ctx, dir)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return externalStore.Open(ctx, fileName)
+	return storage.Open(ctx, fileName)
 }
 
 func IsNotExistError(err error) bool {
