@@ -82,8 +82,9 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 	}
 
 	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		encoder.SetParams(nil)
+		config := NewConfig("craft").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
 
 		events := 0
 		for _, row := range cs {
@@ -103,8 +104,9 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 	}
 
 	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		encoder.SetParams(nil)
+		config := NewConfig("craft").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
 
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
@@ -117,8 +119,9 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 	}
 
 	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		encoder.SetParams(nil)
+		config := NewConfig("craft").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
 
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
