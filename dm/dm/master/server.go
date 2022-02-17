@@ -492,10 +492,10 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
-	resp.Msg = msg
+	resp.CheckResult = msg
 
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
@@ -711,10 +711,10 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
-	resp.Msg = msg
+	resp.CheckResult = msg
 	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))

@@ -131,6 +131,7 @@ message StartTaskResponse {
   bool result = 1;
   string msg = 2;
   repeated CommonWorkerResponse sources = 3;
+  string checkResult = 4;
 }
 
 message OperateTaskRequest {
@@ -161,6 +162,7 @@ message UpdateTaskResponse {
   bool result = 1;
   string msg = 2;
   repeated CommonWorkerResponse sources = 3;
+  string checkResult = 4;
 }
 
 
