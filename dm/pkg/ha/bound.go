@@ -274,6 +274,15 @@ func WatchSourceBound(ctx context.Context, cli *clientv3.Client, worker string, 
 			})
 			if !ok {
 				log.L().Info("WatchSourceBound chan closed! observeSourceBound will exit！")
+				select {
+				case errCh <- etcdutil.ErrEtcdWatchChannelClose:
+					// etcd client will return a closed channel if underlying grpc connection is closed
+					// see https://github.com/etcd-io/etcd/blob/20c89df5e5e2d738efb9c276d954d754eb86918b/client/v3/watch.go#L325
+					// and https://github.com/etcd-io/etcd/issues/8980#issuecomment-350070282
+					// we return an error to let outer logic do the whole retry for `observeSourceBound`
+				case <-ctx.Done():
+					return
+				}
 				return
 			}
 			if resp.Canceled {

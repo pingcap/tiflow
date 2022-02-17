@@ -141,15 +141,9 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go func(ctx context.Context) {
 		defer s.wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				// relay don't affects sync, so no need to restart keepalive
-				log.L().Error("observeRelayConfig meet error will retry now", zap.Error(s.observeRelayConfig(ctx, revRelay)))
-			}
-		}
+		// TODO: handle fatal error from observeRelayConfig
+		//nolint:errcheck
+		s.observeRelayConfig(ctx, revRelay)
 	}(s.ctx)
 
 	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
@@ -168,14 +162,11 @@ func (s *Server) Start() error {
 	go func(ctx context.Context) {
 		defer s.wg.Done()
 		for {
-			select {
-			case <-ctx.Done():
+			err1 := s.observeSourceBound(ctx, revBound)
+			if err1 == nil {
 				return
-			default:
-				log.L().Error("observeSourceBound meet error will retry and restart keepalive",
-					zap.Error(s.observeSourceBound(ctx, revBound)))
-				s.restartKeepAlive()
 			}
+			s.restartKeepAlive()
 		}
 	}(s.ctx)
 
@@ -440,7 +431,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 			}
 		} else {
 			if err != nil {
-				log.L().Error("observeSourceBound is failed and will quit now", zap.Error(err))
+				log.L().Error("observeSourceBound is failed and will quit now outer logic will trigger a retry", zap.Error(err))
 			} else {
 				log.L().Info("observeSourceBound will quit now")
 			}
@@ -573,7 +564,7 @@ OUTER:
 			}
 			// TODO: Deal with err
 			log.L().Error("WatchSourceBound received an error", zap.Error(err))
-			if etcdutil.IsRetryableError(err) {
+			if etcdutil.IsRetryableError(err) || errors.Cause(err) == etcdutil.ErrEtcdWatchChannelClose {
 				return err
 			}
 		}
