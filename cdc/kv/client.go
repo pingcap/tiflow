@@ -513,8 +513,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts),
 		zap.String("changefeed", s.client.changefeed))
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -528,14 +526,15 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
-		checkRegionRateLimitTicker := time.NewTicker(defaultCheckRegionRateLimitInterval)
-		defer checkRegionRateLimitTicker.Stop()
+		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-checkRegionRateLimitTicker.C:
+			case <-timer.C:
 				s.handleRateLimit(ctx)
+				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
 				// divideAndSendEventFeedToRegions could be block for some time,
@@ -581,12 +580,13 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
+	g.Go(func() error {
+		return s.regionRouter.Run(ctx)
+	})
+
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
-	err := s.regionRouter.Run(ctx)
-	if err != nil {
-		return err
-	}
+
 	return g.Wait()
 }
 
