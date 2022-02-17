@@ -280,7 +280,11 @@ export enum TaskStage {
 }
 
 // https://github.com/pingcap/tiflow/blob/9261014edd93902d1b0bcb473aec911e80901721/dm/dm/ctl/master/query_status.go#L130
-export const calculateTaskStatus = (subtasks: SubTaskStatus[]) => {
+export const calculateTaskStatus = (subtasks?: SubTaskStatus[]): TaskStage => {
+  if (!subtasks) {
+    return TaskStage.InvalidStage
+  }
+
   // TODO Error status
 
   if (subtasks.some(subtask => subtask.stage === TaskStage.Paused)) {

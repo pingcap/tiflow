@@ -6,6 +6,7 @@ import {
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
 
 import { api } from '~/models/api'
+import { globalSlice } from '~/models/global'
 import { message } from '~/uikit'
 
 const rtkQueryErrorLogger: Middleware = () => next => action => {
@@ -26,6 +27,7 @@ const rtkQueryErrorLogger: Middleware = () => next => action => {
 export const store = configureStore({
   reducer: {
     [api.reducerPath]: api.reducer,
+    globals: globalSlice.reducer,
   },
   middleware: getDefaultMiddleware => {
     const middlewares = getDefaultMiddleware({
@@ -48,4 +50,6 @@ export const useAppDispatch = () => useDispatch<AppDispatch>()
 
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
 
-export const actions = {}
+export const actions = {
+  ...globalSlice.actions,
+}

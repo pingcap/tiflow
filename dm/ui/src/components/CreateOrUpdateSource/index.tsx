@@ -54,6 +54,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="source_name"
               label={t('source name')}
+              tooltip={t('source form name tooltip')}
               rules={[
                 { required: true, message: t('source name is required') },
               ]}
@@ -67,6 +68,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="host"
               label={t('host')}
+              tooltip={t('source form host tooltip')}
               rules={[{ required: true, message: t('host is required') }]}
             >
               <Input placeholder="1.1.1.1" />
@@ -83,6 +85,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="user"
               label={t('user name')}
+              tooltip={t('source form user tooltip')}
               rules={[{ required: true, message: t('user name is required') }]}
             >
               <Input placeholder="root" />
@@ -91,12 +94,18 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="password"
               label={t('password')}
+              tooltip={t('source form password tooltip')}
               rules={[{ required: true, message: t('password is required') }]}
             >
               <Input type="password" />
             </Form.Item>
 
-            <Form.Item name="enable_gtid" label="GTID" valuePropName="checked">
+            <Form.Item
+              name="enable_gtid"
+              label="GTID"
+              valuePropName="checked"
+              tooltip={t('source form gtid tooltip')}
+            >
               <Switch defaultChecked={false} />
             </Form.Item>
           </section>

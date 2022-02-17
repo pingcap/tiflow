@@ -12,7 +12,7 @@ import {
 } from '~/uikit'
 import { FileAddOutlined, CloseOutlined } from '~/uikit/icons'
 import { useDmapiGetSourceListQuery } from '~/models/source'
-import { StepCompnent } from '~/components/CreateTaskConfig/shared'
+import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 
 const formLayout = {
   labelCol: { span: 6 },
@@ -39,18 +39,21 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
               </h3>
               <Form.Item
                 label={t('export concurrency')}
+                tooltip={t('create task export_threads tooltip')}
                 name={['source_config', 'full_migrate_conf', 'export_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="4" />
               </Form.Item>
               <Form.Item
                 label={t('import concurrency')}
+                tooltip={t('create task import_threads tooltip')}
                 name={['source_config', 'full_migrate_conf', 'import_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="4" />
               </Form.Item>
               <Form.Item
                 label={t('data dir')}
+                tooltip={t('create task data_dir tooltip')}
                 name={['source_config', 'full_migrate_conf', 'data_dir']}
               >
                 <Input placeholder="/data" />
@@ -68,12 +71,14 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
               </h3>
               <Form.Item
                 label={t('synchronous concurrency')}
+                tooltip={t('create task repl_threads tooltip')}
                 name={['source_config', 'incr_migrate_conf', 'repl_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="32" />
               </Form.Item>
               <Form.Item
                 label={t('transaction batch')}
+                tooltip={t('create task repl_batch tooltip')}
                 name={['source_config', 'incr_migrate_conf', 'repl_batch']}
               >
                 <InputNumber className="!w-[100%]" placeholder="100" />
@@ -118,7 +123,11 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                     </Select>
                   </Form.Item>
 
-                  <Form.Item {...itemLayout} label={t('binlog')}>
+                  <Form.Item
+                    {...itemLayout}
+                    label={t('binlog')}
+                    tooltip={t('create task binlog_name tooltip')}
+                  >
                     <Input.Group compact>
                       <Form.Item noStyle name={[field.name, 'binlog_name']}>
                         <Input

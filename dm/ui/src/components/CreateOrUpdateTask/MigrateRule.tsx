@@ -9,7 +9,7 @@ import {
   DatabaseOutlined,
   LoadingOutlined,
 } from '~/uikit/icons'
-import { StepCompnent } from '~/components/CreateTaskConfig/shared'
+import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 import {
   useDmapiGetSourceSchemaListQuery,
   useDmapiGetSourceListQuery,
@@ -135,6 +135,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       </Form.Item>
                       <Form.Item
                         label={t('database')}
+                        tooltip={t(
+                          'create task migrate rule source schema tooltip'
+                        )}
                         name={[field.key, 'source', 'schema']}
                         {...itemLayout}
                       >
@@ -162,6 +165,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       </Form.Item>
                       <Form.Item
                         label={t('table')}
+                        tooltip={t(
+                          'create task migrate rule source table tooltip'
+                        )}
                         name={[field.key, 'source', 'table']}
                         {...itemLayout}
                       >
@@ -179,6 +185,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                         label={t('event filter')}
                         {...itemLayout}
                         name={[field.key, 'binlog_filter_rule']}
+                        tooltip={t(
+                          'create task migrate rule binlog_filter_rule tooltip'
+                        )}
                       >
                         <Select
                           mode="multiple"
@@ -210,6 +219,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       </Form.Item>
                       <Form.Item
                         label={t('database')}
+                        tooltip={t(
+                          'create task migrate rule target schema tooltip'
+                        )}
                         name={[field.key, 'target', 'schema']}
                         {...itemLayout}
                       >
@@ -217,6 +229,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       </Form.Item>
                       <Form.Item
                         label={t('table')}
+                        tooltip={t(
+                          'create task migrate rule target table tooltip'
+                        )}
                         name={[field.key, 'target', 'table']}
                         {...itemLayout}
                       >

@@ -9,16 +9,14 @@ import {
   Task,
   TaskFormData,
   TaskMode,
+  useDmapiStartTaskMutation,
 } from '~/models/task'
-import BasicInfo from '~/components/CreateTaskConfig/BasicInfo'
-import SourceInfo from '~/components/CreateTaskConfig/SourceInfo'
-import TargetInfo from '~/components/CreateTaskConfig/TargetInfo'
-import EventFilters from '~/components/CreateTaskConfig/EventFilter'
-import MigrateRule from '~/components/CreateTaskConfig/MigrateRule'
-import {
-  useDmapiCreateTaskConfigMutation,
-  useDmapiGetTaskConfigQuery,
-} from '~/models/taskConfig'
+import BasicInfo from '~/components/CreateOrUpdateTask/BasicInfo'
+import SourceInfo from '~/components/CreateOrUpdateTask/SourceInfo'
+import TargetInfo from '~/components/CreateOrUpdateTask/TargetInfo'
+import EventFilters from '~/components/CreateOrUpdateTask/EventFilter'
+import MigrateRule from '~/components/CreateOrUpdateTask/MigrateRule'
+import CreateTaskEditorMode from '~/components/CreateOrUpdateTask/CreateTaskEditorMode'
 
 const { Step } = Steps
 
@@ -26,7 +24,7 @@ const defaultValue = {
   name: '',
   task_mode: TaskMode.ALL,
   meta_schema: '',
-  enhance_online_schema_change: false,
+  enhance_online_schema_change: true,
   on_duplicate: OnDuplicateBehavior.ERROR,
   target_config: {
     host: '',
@@ -48,19 +46,24 @@ const stepComponents = [
   MigrateRule,
 ]
 
-const CreateTaskConfig: React.FC = () => {
+const CreateTaskConfig: React.FC<{
+  data?: Task | null
+}> = ({ data }) => {
   const [t] = useTranslation()
-  const navigate = useNavigate()
   const loc = useLocation()
-  const shouldFetch = loc.hash.startsWith('#edit')
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(0)
   const [taskData, setTaskData] = useState<TaskFormData>(defaultValue)
-  const [createTaskConfig] = useDmapiCreateTaskConfigMutation()
-  const { data } = useDmapiGetTaskConfigQuery(
-    { taskName: loc.hash.split('-')[1] },
-    { skip: !shouldFetch }
-  )
+  const [startTask] = useDmapiStartTaskMutation()
+  const desciptions = [
+    t('create task basic info desc'),
+    t('create task source info desc'),
+    t('create task target info desc'),
+    t('create task event filters desc'),
+    t('create task migrate rule desc'),
+  ]
+
   const goNextStep = useCallback(() => {
     setCurrentStep(c => c + 1)
   }, [])
@@ -80,7 +83,10 @@ const CreateTaskConfig: React.FC = () => {
       ) {
         delete payload.target_config.security
       }
-      createTaskConfig(payload as Task)
+      startTask({
+        task: payload as Task,
+        remove_meta: true,
+      })
         .unwrap()
         .then(() => {
           message.success({ content: t('saved'), key })
@@ -104,7 +110,7 @@ const CreateTaskConfig: React.FC = () => {
   }
 
   useEffect(() => {
-    if (shouldFetch && data) {
+    if (data) {
       setTaskData(
         merge({}, defaultValue, data, {
           binlog_filter_rule_array: Object.entries(
@@ -112,12 +118,24 @@ const CreateTaskConfig: React.FC = () => {
           ).map(([name, value]) => ({ name, ...value })),
         })
       )
-      setLoading(false)
     }
-  }, [shouldFetch, data])
+    setLoading(false)
+  }, [data])
+
+  if (loc.hash === '#configFile') {
+    return (
+      <Card className="!m-4" loading={loading}>
+        <CreateTaskEditorMode initialValues={taskData} />
+      </Card>
+    )
+  }
 
   return (
-    <Card className="!m-4" loading={shouldFetch && loading}>
+    <Card className="!m-4" loading={loading}>
+      <div className="mb-8 p-4 rounded bg-white border-1 border-gray-300 border-dashed whitespace-pre-line">
+        {desciptions[currentStep]}
+      </div>
+
       <Steps current={currentStep}>
         <Step title={t('basic info')} />
         <Step title={t('source info')} />

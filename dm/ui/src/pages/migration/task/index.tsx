@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { ghcolors } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
@@ -21,6 +22,8 @@ import {
   Collapse,
   Pagination,
   Breadcrumb,
+  Tabs,
+  Radio,
 } from '~/uikit'
 import {
   SearchOutlined,
@@ -32,6 +35,7 @@ import {
   ExclamationCircleOutlined,
   DatabaseOutlined,
   FlagOutlined,
+  PlusSquareOutlined,
 } from '~/uikit/icons'
 import {
   Task,
@@ -41,30 +45,41 @@ import {
   useDmapiResumeTaskMutation,
   useDmapiGetTaskStatusQuery,
   calculateTaskStatus,
+  TaskStage,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
-import StartTaskWithListSelection from '~/components/StartTaskWithListSelection'
+import { actions, useAppDispatch, useAppSelector } from '~/models'
 
 SyntaxHighlighter.registerLanguage('json', json)
 
+enum CreateTaskMethod {
+  ByGuide,
+  ByConfigFile,
+}
+
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
+  const dispatch = useAppDispatch()
   const [visible, setVisible] = useState(false)
-  const [currentTaskName, setCurrentTaskName] = useState('')
+  const [currentTask, setCurrentTask] = useState<Task>()
   const [selectedSources, setSelectedSources] = useState<string[]>([])
-  const [isStartTaskModalVisible, setIsStartTaskModalVisible] = useState(false)
   const [displayedSubtaskOffset, setDisplayedSubtaskOffset] = useState({
     start: 0,
     end: 10,
   })
+  const [isModalVisible, setIsModalVisible] = useState(false)
+  const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
+  const selectedTask = useAppSelector(state => state.globals.preloadedTask)
+
+  const navigate = useNavigate()
 
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
     withStatus: true,
   })
   const { data: currentTaskStatus } = useDmapiGetTaskStatusQuery(
-    { taskName: currentTaskName },
-    { skip: !currentTaskName }
+    { taskName: currentTask?.name ?? '' },
+    { skip: !currentTask }
   )
 
   const [pauseTask] = useDmapiPauseTaskMutation()
@@ -138,11 +153,22 @@ const TaskList: React.FC = () => {
   const { result, setKeyword } = useFuseSearch(dataSource, {
     keys: ['name'],
   })
-
   const columns: TableColumnsType<Task> = [
     {
       title: t('task name'),
-      dataIndex: 'name',
+      render(data) {
+        return (
+          <Button
+            type="link"
+            onClick={() => {
+              setCurrentTask(data)
+              setVisible(true)
+            }}
+          >
+            {data.name}
+          </Button>
+        )
+      },
     },
     {
       title: t('source info'),
@@ -169,21 +195,26 @@ const TaskList: React.FC = () => {
       render(subtasks) {
         return calculateTaskStatus(subtasks)
       },
+      filters: Object.values(TaskStage).map(stage => ({
+        text: stage,
+        value: stage,
+      })),
+      onFilter: (value, record) =>
+        calculateTaskStatus(record.status_list) === value,
     },
     {
       title: t('operations'),
-      dataIndex: 'name',
-      render(name: string) {
+      render(data) {
         return (
           <Space>
             <Button
               type="link"
               onClick={() => {
-                setCurrentTaskName(name)
-                setVisible(true)
+                dispatch(actions.setPreloadedTask(data))
+                setIsModalVisible(true)
               }}
             >
-              {t('view')}
+              {t('edit')}
             </Button>
           </Space>
         )
@@ -191,13 +222,21 @@ const TaskList: React.FC = () => {
     },
   ]
 
+  useEffect(() => {
+    dispatch(actions.setPreloadedTask(null))
+  }, [])
+
   return (
     <div>
-      <div className="px-4 pt-4">
+      <div className="p-4">
         <Breadcrumb>
           <Breadcrumb.Item>{t('migration')}</Breadcrumb.Item>
           <Breadcrumb.Item>{t('task list')}</Breadcrumb.Item>
         </Breadcrumb>
+      </div>
+
+      <div className="mx-4 my-2 p-4 rounded bg-white border-1 border-gray-300 border-dashed whitespace-pre-line">
+        {t('task list desc')}
       </div>
 
       <Row className="p-4" justify="space-between">
@@ -235,14 +274,17 @@ const TaskList: React.FC = () => {
                 {t('pause')} <DownOutlined />
               </Button>
             </Dropdown>
-
-            <Button
-              icon={<PlayCircleOutlined />}
-              onClick={() => setIsStartTaskModalVisible(true)}
-            >
-              {t('start task')}
-            </Button>
           </Space>
+        </Col>
+        <Col span={2}>
+          <Button
+            onClick={() => {
+              setIsModalVisible(true)
+            }}
+            icon={<PlusSquareOutlined />}
+          >
+            {t('add')}
+          </Button>
         </Col>
       </Row>
 
@@ -260,48 +302,59 @@ const TaskList: React.FC = () => {
 
       <Drawer
         title={t('task detail')}
-        placement="left"
+        placement="right"
         size="large"
         visible={visible}
         onClose={() => setVisible(false)}
       >
         {currentTaskStatus ? (
-          <>
-            <Collapse>
-              {currentTaskStatus.data
-                .slice(displayedSubtaskOffset.start, displayedSubtaskOffset.end)
-                .map(item => {
-                  return (
-                    <Collapse.Panel
-                      key={item.name}
-                      header={
-                        <div className="flex-1 flex justify-between">
-                          <span>
-                            <DatabaseOutlined className="mr-2" />
-                            {item.source_name}
-                          </span>
-                          <span>
-                            <FlagOutlined className="mr-2" />
-                            {item.stage}
-                          </span>
-                        </div>
-                      }
-                    >
-                      <SyntaxHighlighter style={ghcolors} language="json">
-                        {JSON.stringify(item, null, 2)}
-                      </SyntaxHighlighter>
-                    </Collapse.Panel>
-                  )
-                })}
-            </Collapse>
-
-            <div className="flex mt-4 justify-end">
-              <Pagination
-                onChange={handlePageChange}
-                total={currentTaskStatus.total}
-              />
-            </div>
-          </>
+          <Tabs defaultActiveKey="1">
+            <Tabs.TabPane tab={t('subtask')} key="1">
+              <>
+                <Collapse>
+                  {currentTaskStatus.data
+                    .slice(
+                      displayedSubtaskOffset.start,
+                      displayedSubtaskOffset.end
+                    )
+                    .map(item => {
+                      return (
+                        <Collapse.Panel
+                          key={item.name}
+                          header={
+                            <div className="flex-1 flex justify-between">
+                              <span>
+                                <DatabaseOutlined className="mr-2" />
+                                {item.source_name}
+                              </span>
+                              <span>
+                                <FlagOutlined className="mr-2" />
+                                {item.stage}
+                              </span>
+                            </div>
+                          }
+                        >
+                          <SyntaxHighlighter style={ghcolors} language="json">
+                            {JSON.stringify(item, null, 2)}
+                          </SyntaxHighlighter>
+                        </Collapse.Panel>
+                      )
+                    })}
+                </Collapse>
+                <div className="flex mt-4 justify-end">
+                  <Pagination
+                    onChange={handlePageChange}
+                    total={currentTaskStatus.total}
+                  />
+                </div>
+              </>
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={t('runtime config')} key="2">
+              <SyntaxHighlighter style={ghcolors} language="json">
+                {JSON.stringify(currentTask, null, 2)}
+              </SyntaxHighlighter>
+            </Tabs.TabPane>
+          </Tabs>
         ) : (
           <div className="flex items-center justify-center">
             <Spin />
@@ -310,16 +363,50 @@ const TaskList: React.FC = () => {
       </Drawer>
 
       <Modal
-        width={720}
-        title={t('start task')}
-        visible={isStartTaskModalVisible}
-        footer={null}
-        destroyOnClose
-        onCancel={() => setIsStartTaskModalVisible(false)}
+        onOk={() => {
+          if (method === CreateTaskMethod.ByGuide) {
+            selectedTask
+              ? navigate('/migration/task/edit')
+              : navigate('/migration/task/create')
+          } else if (method === CreateTaskMethod.ByConfigFile) {
+            selectedTask
+              ? navigate('/migration/task/edit#configFile')
+              : navigate('/migration/task/create#configFile')
+          }
+          setIsModalVisible(false)
+        }}
+        onCancel={() => setIsModalVisible(false)}
+        okText={t('confirm')}
+        cancelText={t('cancel')}
+        visible={isModalVisible}
       >
-        <StartTaskWithListSelection
-          onCancel={() => setIsStartTaskModalVisible(false)}
-        />
+        <div>
+          <Radio.Group
+            onChange={e => {
+              setMethod(e.target.value)
+            }}
+            defaultValue={method}
+          >
+            <Space direction="vertical">
+              <Radio value={CreateTaskMethod.ByGuide}>
+                <div>
+                  <div className="font-bold">{t('open task by guide')}</div>
+                  <div className="text-gray-400">
+                    {t('open task by guide desc')}
+                  </div>
+                </div>
+              </Radio>
+              <Radio value={CreateTaskMethod.ByConfigFile}>
+                <div>
+                  <div className="font-bold">{t('open task by config')}</div>
+                  <div className="text-gray-400">
+                    {t('open task by config desc')}
+                  </div>
+                </div>
+              </Radio>
+            </Space>
+          </Radio.Group>
+        </div>
       </Modal>
     </div>
   )

@@ -163,6 +163,10 @@ const SourceList: React.FC = () => {
         </Breadcrumb>
       </div>
 
+      <div className="mx-4 my-2 p-4 rounded bg-white border-1 border-gray-300 border-dashed whitespace-pre-line">
+        {t('source list desc')}
+      </div>
+
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
