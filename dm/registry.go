@@ -10,13 +10,16 @@ import (
 
 const (
 	WorkerDMDump lib.WorkerType = 100 + iota
+	WorkerDMLoad
 )
 
 func init() {
 	dumpFactory := unitWorkerFactory{constructor: newDumpWorker}
+	loadFactory := unitWorkerFactory{constructor: newLoadWorker}
 
 	r := registry.GlobalWorkerRegistry()
 	r.MustRegisterWorkerType(WorkerDMDump, dumpFactory)
+	r.MustRegisterWorkerType(WorkerDMLoad, loadFactory)
 }
 
 type workerConstructor func(config lib.WorkerConfig) lib.Worker

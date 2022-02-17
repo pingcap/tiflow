@@ -48,7 +48,7 @@ func mockWorkerConfig() []byte {
 		Mode:       config.ModeAll,
 		Flavor:     "mysql",
 		LoaderConfig: config.LoaderConfig{
-			Dir: "/tmp/dftest",
+			Dir: "/tmp/dftest.db_ut",
 		},
 		BAList: &filter.Rules{
 			DoDBs: []string{"test"},
@@ -65,18 +65,19 @@ func mockWorkerConfig() []byte {
 func putMasterMeta(
 	ctx context.Context,
 	t *testing.T,
-	metaclient metadata.MetaKV,
+	metaClient metadata.MetaKV,
 	metaData *lib.MasterMetaKVData,
 ) {
 	masterKey := adapter.MasterInfoKey.Encode(masterID)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
-	_, err = metaclient.Put(ctx, masterKey, string(masterInfoBytes))
+	_, err = metaClient.Put(ctx, masterKey, string(masterInfoBytes))
 	require.NoError(t, err)
 }
 
 func TestDumpWorker(t *testing.T) {
-	// only support manually prepare environment and test
+	// This test requires a MySQL running on port 3306. The "test" database on
+	// the MySQL instance should contain some data to be dumped.
 	t.SkipNow()
 	t.Parallel()
 
