@@ -47,7 +47,9 @@ func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
 		if err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone); err2 != nil {
 			s.tctx.L().Error("failed to clean safe-mode-duration in task cli args", zap.Error(err2))
 		} else {
+			s.Lock()
 			s.cliArgs.SafeModeDuration = ""
+			s.Unlock()
 		}
 	}
 }
@@ -84,9 +86,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 					s.tctx.L().Info("disable safe-mode after task initialization finished")
 				}
 			}()
-
 			initPhaseSeconds := s.cfg.CheckpointFlushInterval * 2
-
 			failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
 				seconds, _ := val.(int)
 				initPhaseSeconds = seconds

@@ -47,24 +47,24 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	s := &Syncer{
 		tctx:     tcontext.Background().WithLogger(l),
 		safeMode: mode.NewSafeMode(), cli: etcdTestCli,
-		cfg: &config.SubTaskConfig{Name: "test", SourceID: "test"},
+		cfg: &config.SubTaskConfig{Name: "test", SourceID: "test",
+			SyncerConfig: config.SyncerConfig{CheckpointFlushInterval: 1}},
 	}
 
 	// test enable by task cliArgs
 	duration, err := time.ParseDuration("2s")
 	require.NoError(t, err)
-
 	s.cliArgs = &config.TaskCliArgs{SafeModeDuration: duration.String()}
 	s.enableSafeModeInitializationPhase(s.tctx)
 	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
-
 	time.Sleep(duration) // wait for enableSafeModeInitializationPhase exit
 	require.False(t, s.safeMode.Enable())
+	s.Lock()
 	require.Equal(t, s.cliArgs.SafeModeDuration, "")
+	s.Unlock()
 
 	// test enable by config
-	s.safeMode.Reset(s.tctx)
 	s.cliArgs = nil
 	s.cfg.SafeMode = true
 	mockCheckpoint := &mockCheckpointForSafeMode{}
@@ -73,15 +73,12 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	require.True(t, s.safeMode.Enable())
 
 	// test enable by SafeModeExitPoint
-	s.safeMode.Reset(s.tctx)
 	s.cfg.SafeMode = false
 	mockCheckpoint.safeModeExitPoint = &binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 123}}
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
 
 	// test enable by initPhaseSeconds
-	s.safeMode.Reset(s.tctx)
-	s.cfg.CheckpointFlushInterval = 1
 	s.enableSafeModeInitializationPhase(s.tctx)
 	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())

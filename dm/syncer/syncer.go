@@ -1273,7 +1273,9 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 		if err2 != nil {
 			s.tctx.L().Error("failed to clean start-time in task cli args", zap.Error(err2))
 		} else {
+			s.Lock()
 			s.cliArgs.StartTime = ""
+			s.Unlock()
 		}
 	}
 	return nil
