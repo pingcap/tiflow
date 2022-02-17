@@ -28,9 +28,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -118,14 +118,14 @@ func getDBAndTableFromFilename(filename string) (string, string, error) {
 func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
 	failpoint.Inject("TestRemoveMetaFile", func() {
-		err := exstorage.RemoveAll(ctx, cfg.LoaderConfig.Dir, nil)
+		err := storage.RemoveAll(ctx, cfg.LoaderConfig.Dir, nil)
 		if err != nil {
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
 	})
 	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.Flavor)
 	if err != nil {
-		if exstorage.IsNotExistError(err) {
+		if storage.IsNotExistError(err) {
 			failpoint.Inject("TestRemoveMetaFile", func() {
 				panic("success check file not exist!!")
 			})
@@ -142,7 +142,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 			return "", "", nil
 		}
 
-		toPrint, err2 := exstorage.ReadFile(ctx, cfg.Dir, metafile, nil)
+		toPrint, err2 := storage.ReadFile(ctx, cfg.Dir, metafile, nil)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}
@@ -158,12 +158,13 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	log.L().Info("clean dump files")
 	if cfg.Mode == config.ModeFull {
 		// in full-mode all files won't be need in the future
-		if err := exstorage.RemoveAll(ctx, cfg.Dir, nil); err != nil {
+		if err := storage.RemoveAll(ctx, cfg.Dir, nil); err != nil {
 			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", cfg.Dir), zap.Error(err))
 		}
 	} else {
-		if exstorage.IsS3Path(cfg.Dir) {
+		if storage.IsS3Path(cfg.Dir) {
 			// s3 no need immediately remove
+			log.L().Info("dump path is s3, and s3 stroage no need immediately remove dump data files.", zap.String("S3 Path", cfg.Dir))
 			return
 		}
 		// leave metadata file and table structure files, only delete data files

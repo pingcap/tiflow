@@ -34,8 +34,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -235,7 +235,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		cfg.Routes = l.cfg.RouteRules
 
 		// TODO lightning checkpoint will support s3 in other pr
-		if exstorage.IsS3Path(l.cfg.LoaderConfig.Dir) {
+		if storage.IsS3Path(l.cfg.LoaderConfig.Dir) {
 			cfg.Checkpoint.Enable = false
 		} else {
 			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile

@@ -29,8 +29,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -399,7 +399,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	// adjust dir
 	if c.Mode == ModeAll || c.Mode == ModeFull {
 		// check
-		isS3 := exstorage.IsS3Path(c.LoaderConfig.Dir)
+		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode != LoadModeSQL {
 			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
 		}
@@ -410,7 +410,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		} else {
 			dirSuffix = c.Name
 		}
-		newDir, err := exstorage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}

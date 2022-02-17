@@ -28,9 +28,9 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/exstorage"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -41,7 +41,7 @@ var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
 func ParseMetaData(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	fd, err := exstorage.OpenFile(ctx, dir, filename, nil)
+	fd, err := storage.OpenFile(ctx, dir, filename, nil)
 	if err != nil {
 		return nil, nil, err
 	}
