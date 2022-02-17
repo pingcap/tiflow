@@ -109,3 +109,7 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+func (c *Config) GetMaxMessageBytes() int {
+	return c.maxMessageBytes
+}
