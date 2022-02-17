@@ -236,42 +236,6 @@ func (s *kafkaSuite) TestAdjustConfigTopicNotExist(c *check.C) {
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 }
 
-func (s *kafkaSuite) TestAdjustConfigMinInsyncReplicas(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
-
-	config := NewConfig()
-	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
-
-	// Report an error if the replication-factor is less than min.insync.replicas
-	// when the topic does not exist.
-	saramaConfig, err := NewSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	adminClient.SetMinInsyncReplicas("2")
-	err = AdjustConfig(adminClient, config, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
-	)
-
-	// Report an error if the replication-factor is less than min.insync.replicas
-	// when the topic does exist.
-	saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
-	c.Assert(err, check.IsNil)
-	adminClient.SetMinInsyncReplicas("2")
-	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
-	)
-}
-
 func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	defer testleak.AfterTest(c)()
 
@@ -350,19 +314,73 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expectedSaramaMaxMessageBytes)
 }
 
+func (s *kafkaSuite) TestAdjustConfigMinInsyncReplicas(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	config := NewConfig()
+	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does not exist.
+	saramaConfig, err := NewSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	err = AdjustConfig(adminClient, config, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
+	)
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does exist.
+	saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+	adminClient.SetMinInsyncReplicas("2")
+	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
+	c.Assert(
+		errors.Cause(err),
+		check.ErrorMatches,
+		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
+	)
+}
+
 func (s *kafkaSuite) TestCreateTopic(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	// When topic does not exist and auto-create is not enabled.
-	//config.AutoCreate = false
-	//saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
-	//c.Assert(err, check.IsNil)
-	//err = AdjustConfig(config, saramaConfig, "non-exist")
-	//c.Assert(
-	//	errors.Cause(err),
-	//	check.ErrorMatches,
-	//	".*auto-create-topic` is false, and topic not found.*",
-	//)
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	// `auto-create-topic` enable, topic exist
+	config := NewConfig()
+	topicConfig := config.DeriveTopicConfig(adminClient.GetDefaultMockTopicName())
+	err := CreateTopic(adminClient, topicConfig)
+	c.Assert(err, check.IsNil)
+
+	// `auto-create-topic` enable, topic not exist
+	topicConfig = config.DeriveTopicConfig("not-exist-topic-1")
+	err = CreateTopic(adminClient, topicConfig)
+	c.Assert(err, check.IsNil)
+
+	topics, err := adminClient.ListTopics()
+	c.Assert(err, check.IsNil)
+	_, ok := topics["not-exist-topic-1"]
+	c.Assert(ok, check.IsTrue)
+
+	// `auto-create-topic` disable, topic not exist
+	config.AutoCreate = false
+	topicConfig = config.DeriveTopicConfig("not-exist-topic-2")
+	err = CreateTopic(adminClient, topicConfig)
+	c.Assert(errors.Cause(err),
+		check.ErrorMatches,
+		".*auto-create-topic` is false, and topic not found.*")
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
