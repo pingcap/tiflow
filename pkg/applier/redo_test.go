@@ -21,11 +21,12 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/phayes/freeport"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/stretchr/testify/require"
 )
 
 // MockReader is a mock redo log reader that implements LogReader interface
@@ -150,7 +151,7 @@ func TestApplyDMLs(t *testing.T) {
 		mock.ExpectCommit()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;").
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").

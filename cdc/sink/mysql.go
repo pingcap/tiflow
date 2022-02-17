@@ -604,7 +604,8 @@ func convert2RowChange(row *model.RowChangedEvent) *sqlmodel.RowChange {
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		if col == nil {
-			// represent what?
+			// will not use this value, just append a dummy value
+			preValues = append(preValues, "omitted value")
 			continue
 		}
 		preValues = append(preValues, col.Value)
@@ -612,6 +613,7 @@ func convert2RowChange(row *model.RowChangedEvent) *sqlmodel.RowChange {
 	postValues := make([]interface{}, 0, len(row.Columns))
 	for _, col := range row.Columns {
 		if col == nil {
+			postValues = append(postValues, "omitted value")
 			continue
 		}
 		postValues = append(postValues, col.Value)
@@ -911,12 +913,14 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 
 	tableInfo := &timodel.TableInfo{}
 	// in fact nowhere will use this field, so we set a debug message
-	tableInfo.Name = timodel.NewCIStr("generated_by_redo")
+	tableInfo.Name = timodel.NewCIStr("generated_by_recoverTableInfo")
 
 	for i, column := range nonEmptyColumns {
 		columnInfo := &timodel.ColumnInfo{}
 		if column == nil {
-			// should not happen? please help check it
+			// will not use this column, just add a dummy columnInfo
+			columnInfo.Name = timodel.NewCIStr("omitted column")
+			tableInfo.Columns = append(tableInfo.Columns, columnInfo)
 			continue
 		}
 		columnInfo.Name = timodel.NewCIStr(column.Name)
@@ -968,11 +972,12 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 		}
 
 		for _, colOffset := range colOffsets {
-			col := tableInfo.Columns[colOffset]
+			offsetAfterSkipped := colOffset
+			col := tableInfo.Columns[offsetAfterSkipped]
 
 			indexCol := &timodel.IndexColumn{}
 			indexCol.Name = col.Name
-			indexCol.Offset = colOffset
+			indexCol.Offset = offsetAfterSkipped
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
 		}
 

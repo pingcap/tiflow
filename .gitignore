@@ -40,6 +40,7 @@ cmd/cdc/cdc
 
 # Files generated when testing
 tiflash-config-preprocessed.toml
+tests/utils/cdc_state_checker/cdc_state_checker
 
 # Files generated when running docker-compose
 deployments/ticdc/docker-compose/data
