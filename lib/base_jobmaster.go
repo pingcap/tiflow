@@ -98,6 +98,10 @@ func (d *defaultBaseJobMaster) OnError(err error) {
 	d.master.OnError(err)
 }
 
+func (d *defaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+	return d.master.RegisterWorker(ctx, workerID)
+}
+
 func (d *defaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost)
 }

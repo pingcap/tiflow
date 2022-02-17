@@ -77,6 +77,9 @@ type BaseMaster interface {
 	GetWorkers() map[WorkerID]WorkerHandle
 	Close(ctx context.Context) error
 	OnError(err error)
+	// RegisterWorker registers worker handler only, the worker is expected to be running
+	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 	GetWorkerStatusExtTypeInfo() interface{}
 }
@@ -459,6 +462,12 @@ func (m *DefaultBaseMaster) generateWorkerID(workerType WorkerType, config Worke
 	return m.uuidGen.NewString()
 }
 
+func (m *DefaultBaseMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(ctx, time.Second*1)
+	defer cancelRegisterHandler()
+	return m.registerHandlerForWorker(registerHandlerCtx, workerID)
+}
+
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
@@ -479,10 +488,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	// register worker haneler before dispatching worker to executor.
 	// Because dispatchTask could fail, we must ensure register handler happens
 	// before unregister handler, in case of zombie handler.
-	registerHandlerCtx, cancelRegisterHandler := context.WithTimeout(context.TODO(), time.Second*1)
-	defer cancelRegisterHandler()
-
-	if err := m.registerHandlerForWorker(registerHandlerCtx, workerID); err != nil {
+	if err := m.RegisterWorker(context.TODO(), workerID); err != nil {
 		return "", errors.Trace(err)
 	}
 

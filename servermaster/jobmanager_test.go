@@ -8,6 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -46,4 +47,46 @@ func TestJobManagerSubmitJob(t *testing.T) {
 			mgr.jobFsm.WaitAckJobCount() == 0 &&
 			mgr.jobFsm.PendingJobCount() == 1
 	}, time.Second*2, time.Millisecond*20)
+}
+
+func TestJobManagerRecover(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// prepare metadata with two job masters
+	metaKVClient := metadata.NewMetaMock()
+	meta := []*lib.MasterMetaKVData{
+		{
+			ID: "master-1",
+			MasterMetaExt: &lib.MasterMetaExt{
+				ID: "master-1",
+				Tp: lib.FakeJobMaster,
+			},
+		},
+		{
+			ID: "master-2",
+			MasterMetaExt: &lib.MasterMetaExt{
+				ID: "master-2",
+				Tp: lib.FakeJobMaster,
+			},
+		},
+	}
+	for _, data := range meta {
+		cli := lib.NewMasterMetadataClient(data.MasterMetaExt.ID, metaKVClient)
+		err := cli.Store(ctx, data)
+		require.Nil(t, err)
+	}
+
+	mockMaster := lib.NewMockMasterImpl("", "job-manager-recover-test")
+	mgr := &JobManagerImplV2{
+		BaseMaster:       mockMaster.DefaultBaseMaster,
+		jobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
+	}
+	err := mgr.OnMasterRecovered(ctx)
+	require.Nil(t, err)
+	require.Equal(t, 2, mgr.jobFsm.WaitAckJobCount())
 }

@@ -44,6 +44,7 @@ type JobManagerImplV2 struct {
 	serverMasterClient    client.MasterClient
 	jobFsm                *JobFsm
 	uuidGen               uuid.Generator
+	masterMetaClient      *lib.MasterMetadataClient
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -123,6 +124,7 @@ func NewJobManagerImplV2(
 		metaKVClient:          metaKVClient,
 		jobFsm:                NewJobFsm(),
 		uuidGen:               uuid.NewGenerator(),
+		masterMetaClient:      lib.NewMasterMetadataClient(id, metaKVClient),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -143,7 +145,6 @@ func NewJobManagerImplV2(
 
 // InitImpl implements lib.MasterImpl.InitImpl
 func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
-	// TODO: recover existing job masters from metastore
 	return nil
 }
 
@@ -158,6 +159,18 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 // OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
 func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
+	jobs, err := jm.masterMetaClient.LoadAllMasters(ctx)
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		jm.jobFsm.JobDispatched(job.MasterMetaExt)
+		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
+			return err
+		}
+		// TODO: support check job that is not active in WaitAck queue and recreate it.
+		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
+	}
 	return nil
 }
 
