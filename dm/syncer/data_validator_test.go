@@ -642,7 +642,7 @@ func (d *testDataValidatorSuite) TestDoValidate(c *C) {
 		validator.Start(pb.Stage_Paused)      // init but will return soon
 		validator.result = pb.ProcessResult{} // clear error
 		validator.workerCnt = 1
-		validator.retryInterval = 100 * time.Second // never retry
+		validator.validateInterval = 100 * time.Second // never retry
 		events1 := testCase.binlogEvs
 		mockStreamerProducer := &MockStreamProducer{d.generateEvents(events1, c)}
 		mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))

@@ -15,23 +15,16 @@ package syncer
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"hash/fnv"
-	"math"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
-	tidbmysql "github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -50,60 +43,18 @@ import (
 
 const (
 	checkInterval        = 5 * time.Second
-	retryInterval        = 5 * time.Second
 	validationInterval   = 10 * time.Second
 	defaultBatchRowCount = 500
-	defaultWorkerCnt     = 5
+	workerChannelSize    = 1000
+	defaultWorkerCnt     = 4
 )
 
 type validateTableInfo struct {
-	Schema     string
-	Name       string
+	Source     *filter.Table
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	ColumnMap  map[string]*model.ColumnInfo
 	Target     *filter.Table // target table after route
-}
-
-type RowDataIterator interface {
-	// Next seeks the next row data, it used when compared rows.
-	Next() (map[string]*dbutil.ColumnData, error)
-	// Close release the resource.
-	Close()
-}
-
-type RowDataIteratorImpl struct {
-	Rows *sql.Rows
-}
-
-func (r *RowDataIteratorImpl) Next() (map[string]*dbutil.ColumnData, error) {
-	for r.Rows.Next() {
-		rowData, err := dbutil.ScanRow(r.Rows)
-		return rowData, err
-	}
-	return nil, nil
-}
-
-func (r *RowDataIteratorImpl) Close() {
-	r.Rows.Close()
-}
-
-type RowChangeIteratorImpl struct {
-	Rows []map[string]*dbutil.ColumnData
-	Idx  int
-}
-
-func (b *RowChangeIteratorImpl) Next() (map[string]*dbutil.ColumnData, error) {
-	if b.Idx >= len(b.Rows) {
-		return nil, nil
-	}
-	row := b.Rows[b.Idx]
-	b.Idx++
-	return row, nil
-}
-
-func (b *RowChangeIteratorImpl) Close() {
-	// skip: nothing to do
 }
 
 type rowChangeType int
@@ -125,6 +76,7 @@ type tableChange struct {
 
 // change of a row
 type rowChange struct {
+	table      *validateTableInfo
 	pk         []string
 	data       []interface{}
 	theType    rowChangeType
@@ -154,28 +106,20 @@ type DataValidator struct {
 
 	L                  log.Logger
 	fromDB             *conn.BaseDB
-	fromDBConn         *dbconn.DBConn
 	toDB               *conn.BaseDB
-	toDBConn           *dbconn.DBConn
+	toDBConns          []*dbconn.DBConn
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
 
-	result        pb.ProcessResult
-	batchRowCnt   int
-	retryInterval time.Duration
-
-	failedRowCnt       atomic.Int64
-	accumulatedChanges map[string]*tableChange
-	pendingRowCnt      atomic.Int64
-	rowsEventChan      chan *replication.BinlogEvent // unbuffered is enough
-	pendingChangeCh    chan map[string]*tableChange
-	changeEventCount   []int
-	validationTimer    *time.Timer
-	tables             map[string]*validateTableInfo
-	workerCnt          int
-	pendingChangeChs   map[int]chan map[string]*tableChange // replace pendingChangeCh
-	failedChangesMap   map[int]map[string]*tableChange      // replace failedChanges
+	result           pb.ProcessResult
+	batchRowCnt      int
+	validateInterval time.Duration
+	workers          []*validateWorker
+	rowsEventChan    chan *replication.BinlogEvent // unbuffered is enough
+	changeEventCount []int
+	tables           map[string]*validateTableInfo
+	workerCnt        int
 
 	// such as table without primary key
 	unsupportedTable map[string]string
@@ -183,33 +127,25 @@ type DataValidator struct {
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
-	c := &DataValidator{
+	v := &DataValidator{
 		cfg:     cfg,
 		syncer:  syncerObj,
 		stage:   pb.Stage_Stopped,
 		errChan: make(chan error, 1),
 	}
-	c.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
+	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
-	c.workerCnt = defaultWorkerCnt
-	c.pendingChangeChs = make(map[int]chan map[string]*tableChange)
-	c.failedChangesMap = make(map[int]map[string]*tableChange)
-	for i := 0; i < c.workerCnt; i++ {
-		c.pendingChangeChs[i] = make(chan map[string]*tableChange)
-		c.failedChangesMap[i] = make(map[string]*tableChange)
-	}
-	c.batchRowCnt = defaultBatchRowCount
-	c.validationTimer = time.NewTimer(validationInterval)
-	c.rowsEventChan = make(chan *replication.BinlogEvent)
-	c.pendingChangeCh = make(chan map[string]*tableChange)
-	c.tables = make(map[string]*validateTableInfo)
-	c.changeEventCount = make([]int, 4)
-	c.accumulatedChanges = make(map[string]*tableChange)
-	c.retryInterval = retryInterval
+	v.workerCnt = defaultWorkerCnt
+	v.batchRowCnt = defaultBatchRowCount
+	v.workers = make([]*validateWorker, v.workerCnt)
+	v.rowsEventChan = make(chan *replication.BinlogEvent)
+	v.tables = make(map[string]*validateTableInfo)
+	v.changeEventCount = make([]int, 4)
+	v.validateInterval = validationInterval
 
-	c.waitSyncerTimer = utils.NewStoppedTimer()
+	v.waitSyncerTimer = utils.NewStoppedTimer()
 
-	return c
+	return v
 }
 
 func (v *DataValidator) initialize() error {
@@ -222,28 +158,21 @@ func (v *DataValidator) initialize() error {
 		if err == nil {
 			return
 		}
-		if v.fromDB != nil {
-			v.fromDB.Close()
-		}
-		if v.toDB != nil {
-			v.toDB.Close()
-		}
+		dbconn.CloseBaseDB(tctx, v.fromDB)
+		dbconn.CloseBaseDB(tctx, v.toDB)
 	}()
 
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	var fromDBConns, toDBConns []*dbconn.DBConn
-	v.fromDB, fromDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 1)
+	v.fromDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
 	if err != nil {
 		return err
 	}
-	v.fromDBConn = fromDBConns[0]
 
-	v.toDB, toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 1)
+	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
 	if err != nil {
 		return err
 	}
-	v.toDBConn = toDBConns[0]
 
 	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
@@ -399,9 +328,7 @@ func (v *DataValidator) doValidate() {
 	}
 
 	v.L.Info("start continuous validation")
-	v.wg.Add(2)
-	go v.rowsEventProcessRoutine()
-	go v.validateTaskDispatchRoutine()
+	v.startValidateWorkers()
 
 	var currLoc binlog.Location
 	for {
@@ -433,11 +360,11 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
-		switch e.Event.(type) {
+		switch ev := e.Event.(type) {
 		case *replication.RowsEvent:
-			select {
-			case v.rowsEventChan <- e:
-			case <-v.ctx.Done():
+			if err = v.processEventRows(e.Header, ev); err != nil {
+				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
+				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
 			}
 		}
@@ -478,70 +405,23 @@ func (v *DataValidator) Stage() pb.Stage {
 	return v.stage
 }
 
-func (v *DataValidator) rowsEventProcessRoutine() {
-	defer v.wg.Done()
-	for {
-		select {
-		case <-v.ctx.Done():
-			v.L.Debug("validator row event process unit done")
-			return
-		case e := <-v.rowsEventChan:
-			if err := v.processEventRows(e.Header, e.Event.(*replication.RowsEvent)); err != nil {
-				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
-				v.errChan <- terror.Annotate(err, "failed to process event")
-				return
-			}
-		case <-v.validationTimer.C:
-			rowCount := v.getRowCount(v.accumulatedChanges)
-			if rowCount > 0 {
-				v.pendingChangeCh <- v.accumulatedChanges
-				v.accumulatedChanges = make(map[string]*tableChange)
-			}
-			v.validationTimer.Reset(validationInterval)
-		}
-	}
-}
-
-func (v *DataValidator) validateTableChangeWorkerRoutine(workerID int) {
-	defer v.wg.Done()
-	for {
-		select {
-		case change := <-v.pendingChangeChs[workerID]:
-			// 1. validate table change
-			// 2. update failed rows
-			// 3. update pending row count
-			// 4. update failed row cnt
-			failed := v.validateTableChange(change)
-			deltaFailed := v.updateFailedChangesByWorker(change, failed, workerID)
-			v.pendingRowCnt.Sub(int64(v.getRowCount(change))) // atomic value
-			v.failedRowCnt.Add(int64(deltaFailed))            // atomic value
-		case <-v.ctx.Done():
-			v.L.Debug("validator worker done", zap.Int("workerID", workerID))
-			return
-		case <-time.After(v.retryInterval):
-			retryChange := v.failedChangesMap[workerID]
-			failed := v.validateTableChange(retryChange)
-			deltaFailed := v.updateFailedChangesByWorker(retryChange, failed, workerID)
-			v.failedRowCnt.Add(int64(deltaFailed))
-		}
-	}
-}
-
-func (v *DataValidator) validateTaskDispatchRoutine() {
-	defer v.wg.Done()
-	// start workers here
+func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
-		go v.validateTableChangeWorkerRoutine(i)
-	}
-	for {
-		select {
-		case change := <-v.pendingChangeCh:
-			v.dispatchRowChange(change) // dispatch change to worker
-		case <-v.ctx.Done():
-			v.L.Debug("validator task dispatch done")
-			return
+		worker := &validateWorker{
+			ctx:               v.ctx,
+			interval:          v.validateInterval,
+			validator:         v,
+			L:                 v.L,
+			conn:              v.toDBConns[i],
+			rowChangeCh:       make(chan *rowChange, workerChannelSize),
+			pendingChangesMap: make(map[string]*tableChange),
 		}
+		v.workers[i] = worker
+		go func() {
+			v.wg.Done()
+			worker.run()
+		}()
 	}
 }
 
@@ -551,33 +431,14 @@ func hashTablePk(s string) uint32 {
 	return h.Sum32()
 }
 
-func (v *DataValidator) dispatchRowChange(change map[string]*tableChange) {
-	dispatchMap := make(map[int]map[string]*tableChange, 0)
-	for tableName := range change {
-		// for every table
-		for _, curRowChange := range change[tableName].rows {
-			// for every row in the table
-			// 1. join primary key by '-'
-			// 2. hash (tableName, primaryKey) to hashVal
-			// 3. dispatch the row change to dispatchMap[hashVal][tableName]
-			pk := strings.Join(curRowChange.pk, "-")
-			hashKey := tableName + "," + pk
-			hashVal := int(hashTablePk(hashKey)) % v.workerCnt
-			if _, ok := dispatchMap[hashVal]; !ok {
-				dispatchMap[hashVal] = make(map[string]*tableChange, 0)
-			}
-			if _, ok := dispatchMap[hashVal][tableName]; !ok {
-				dispatchMap[hashVal][tableName] = &tableChange{
-					table: change[tableName].table,
-					rows:  make(map[string]*rowChange, 0),
-				}
-			}
-			dispatchMap[hashVal][tableName].rows[pk] = curRowChange
-		}
-	}
-	for hashVal := range dispatchMap {
-		v.pendingChangeChs[hashVal] <- dispatchMap[hashVal]
-	}
+func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
+	// for every row in the table
+	// 1. join primary key by '-'
+	// 2. hash (tableName, primaryKey) to hashVal
+	// 3. dispatch the row change to dispatchMap[hashVal][tableName]
+	hashKey := strings.Join([]string{row.table.Source.String(), key}, "-")
+	hashVal := int(hashTablePk(hashKey)) % v.workerCnt
+	v.workers[hashVal].rowChangeCh <- row
 }
 
 func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *replication.RowsEvent) error {
@@ -617,8 +478,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 	}
 
 	table := &validateTableInfo{
-		Schema:     sourceTable.Schema,
-		Name:       sourceTable.Name,
+		Source:     sourceTable,
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
 		ColumnMap:  columnMap,
@@ -627,7 +487,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 
 	for _, cols := range ev.SkippedColumns {
 		if len(cols) > 0 {
-			err := errors.Errorf("unexpected skipped columns for table `%s`.`%s`", table.Schema, table.Name)
+			err := errors.Errorf("unexpected skipped columns for table %s", sourceTable.String())
 			return err
 		}
 	}
@@ -641,35 +501,11 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		pkIndices[i] = table.ColumnMap[col.Name.O].Offset
 	}
 
-	rowCount := v.getRowCount(v.accumulatedChanges)
-	change := v.accumulatedChanges[fullTableName]
-
-	updateRowChange := func(key string, row *rowChange) {
-		if val, ok := change.rows[key]; ok {
-			val.data = row.data
-			val.theType = row.theType
-			val.lastMeetTs = row.lastMeetTs
-			val.retryCnt = row.retryCnt
-		} else {
-			change.rows[key] = row
-			rowCount++
-			v.pendingRowCnt.Inc()
-		}
-	}
-
 	step := 1
 	if changeType == rowUpdated {
 		step = 2
 	}
 	for i := 0; i < len(ev.Rows); i += step {
-		if change == nil {
-			// no change of this table
-			change = &tableChange{
-				table: table,
-				rows:  make(map[string]*rowChange),
-			}
-			v.accumulatedChanges[fullTableName] = change
-		}
 		row := ev.Rows[i]
 		pkValue := make([]string, len(pk.Columns))
 		for _, idx := range pkIndices {
@@ -687,7 +523,8 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 			afterKey := strings.Join(afterPkValue, "-")
 			if afterKey != key {
 				// convert to delete and insert
-				updateRowChange(key, &rowChange{
+				v.dispatchRowChange(key, &rowChange{
+					table:      table,
 					pk:         pkValue,
 					data:       row,
 					theType:    rowDeleted,
@@ -695,32 +532,21 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 				})
 				afterRowChangeType = rowInsert
 			}
-			updateRowChange(afterKey, &rowChange{
+			v.dispatchRowChange(afterKey, &rowChange{
+				table:      table,
 				pk:         afterPkValue,
 				data:       afterRow,
 				theType:    afterRowChangeType,
 				lastMeetTs: int64(header.Timestamp),
 			})
 		} else {
-			updateRowChange(key, &rowChange{
+			v.dispatchRowChange(key, &rowChange{
+				table:      table,
 				pk:         pkValue,
 				data:       row,
 				theType:    changeType,
 				lastMeetTs: int64(header.Timestamp),
 			})
-		}
-
-		if rowCount >= v.batchRowCnt {
-			v.pendingChangeCh <- v.accumulatedChanges
-			v.accumulatedChanges = make(map[string]*tableChange)
-
-			if !v.validationTimer.Stop() {
-				<-v.validationTimer.C
-			}
-			v.validationTimer.Reset(validationInterval)
-
-			rowCount = 0
-			change = nil
 		}
 	}
 	return nil
@@ -745,402 +571,4 @@ func getRowChangeType(t replication.EventType) rowChangeType {
 		// replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
 		return rowDeleted
 	}
-}
-
-func (v *DataValidator) validateTableChange(tableChanges map[string]*tableChange) map[string]*tableChange {
-	failedChanges := make(map[string]*tableChange)
-	for k, val := range tableChanges {
-		var insertUpdateChanges, deleteChanges []*rowChange
-		for _, r := range val.rows {
-			if r.theType == rowDeleted {
-				deleteChanges = append(deleteChanges, r)
-			} else {
-				insertUpdateChanges = append(insertUpdateChanges, r)
-			}
-		}
-		rows := make(map[string]*rowChange, 0)
-		if len(insertUpdateChanges) > 0 {
-			failedRows := v.validateChanges(val.table, insertUpdateChanges, false)
-			for _, pk := range failedRows {
-				key := strings.Join(pk, "-")
-				rows[key] = val.rows[key]
-			}
-		}
-		if len(deleteChanges) > 0 {
-			failedRows := v.validateChanges(val.table, deleteChanges, true)
-			for _, pk := range failedRows {
-				key := strings.Join(pk, "-")
-				rows[key] = val.rows[key]
-			}
-		}
-		if len(rows) > 0 {
-			failedChanges[k] = &tableChange{
-				table: val.table,
-				rows:  rows,
-			}
-		}
-	}
-	return failedChanges
-}
-
-func (v *DataValidator) validateChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) [][]string {
-	pkValues := make([][]string, 0, len(rows))
-	for _, r := range rows {
-		pkValues = append(pkValues, r.pk)
-	}
-	cond := &Cond{Table: table, PkValues: pkValues}
-	var failedRows [][]string
-	var err error
-	if deleteChange {
-		failedRows, err = v.validateDeletedRows(cond)
-	} else {
-		failedRows, err = v.validateInsertAndUpdateRows(rows, cond)
-	}
-	if err != nil {
-		v.L.Warn("fail to validate row changes of table", zap.Error(err))
-		return [][]string{}
-	}
-	return failedRows
-}
-
-// remove previous failed rows related to current batch of rows
-// This function updates the failed rows every time after validating
-func (v *DataValidator) updateFailedChangesByWorker(all, failed map[string]*tableChange, workerID int) int {
-	failedChanges := v.failedChangesMap[workerID]
-	deltaFailed := 0
-	for k, val := range all {
-		// remove from all
-		prevFailed := failedChanges[k]
-		if prevFailed == nil {
-			continue
-		}
-		for _, r := range val.rows {
-			key := strings.Join(r.pk, "-")
-			if _, ok := prevFailed.rows[key]; ok {
-				delete(prevFailed.rows, key)
-				deltaFailed--
-			}
-		}
-	}
-	for k, val := range failed {
-		// add from failed
-		prevFailed := failedChanges[k]
-		if prevFailed == nil {
-			prevFailed = &tableChange{
-				table: val.table,
-				rows:  make(map[string]*rowChange),
-			}
-			failedChanges[k] = prevFailed
-		}
-
-		for _, r := range val.rows {
-			key := strings.Join(r.pk, "-")
-			prevFailed.rows[key] = r
-			deltaFailed++
-		}
-	}
-	return deltaFailed
-}
-
-func (v *DataValidator) validateDeletedRows(cond *Cond) ([][]string, error) {
-	downstreamRowsIterator, err := getRowsFrom(cond, v.toDBConn)
-	if err != nil {
-		return [][]string{}, err
-	}
-	defer downstreamRowsIterator.Close()
-
-	var failedRows [][]string
-	for {
-		data, err := downstreamRowsIterator.Next()
-		if err != nil {
-			return nil, err
-		}
-		if data == nil {
-			break
-		}
-		failedRows = append(failedRows, getPKValues(data, cond))
-	}
-	return failedRows, nil
-}
-
-func (v *DataValidator) validateInsertAndUpdateRows(rows []*rowChange, cond *Cond) ([][]string, error) {
-	var failedRows [][]string
-	var upstreamRowsIterator, downstreamRowsIterator RowDataIterator
-	var err error
-	upstreamRowsIterator, err = getRowChangeIterator(cond.Table, rows)
-	if err != nil {
-		return nil, err
-	}
-	defer upstreamRowsIterator.Close()
-	downstreamRowsIterator, err = getRowsFrom(cond, v.toDBConn)
-	if err != nil {
-		return nil, err
-	}
-	defer downstreamRowsIterator.Close()
-
-	var lastUpstreamData, lastDownstreamData map[string]*dbutil.ColumnData
-
-	tableInfo := cond.Table.Info
-	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
-	for {
-		if lastUpstreamData == nil {
-			lastUpstreamData, err = upstreamRowsIterator.Next()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if lastDownstreamData == nil {
-			lastDownstreamData, err = downstreamRowsIterator.Next()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// may have deleted on upstream and haven't synced to downstream,
-		// we mark this as success as we'll check the delete-event later
-		// or downstream removed the pk and added more data by other clients, skip it.
-		if lastUpstreamData == nil && lastDownstreamData != nil {
-			v.L.Debug("more data on downstream, may come from other client, skip it")
-			break
-		}
-
-		if lastDownstreamData == nil {
-			// target lack some data, should insert the last source datas
-			for lastUpstreamData != nil {
-				failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-
-				lastUpstreamData, err = upstreamRowsIterator.Next()
-				if err != nil {
-					return nil, err
-				}
-			}
-			break
-		}
-
-		eq, cmp, err := v.compareData(lastUpstreamData, lastDownstreamData, orderKeyCols, tableInfo.Columns)
-		if err != nil {
-			return nil, err
-		}
-		if eq {
-			lastDownstreamData = nil
-			lastUpstreamData = nil
-			continue
-		}
-
-		switch cmp {
-		case 1:
-			// may have deleted on upstream and haven't synced to downstream,
-			// we mark this as success as we'll check the delete-event later
-			// or downstream removed the pk and added more data by other clients, skip it.
-			v.L.Debug("more data on downstream, may come from other client, skip it", zap.Reflect("data", lastDownstreamData))
-			lastDownstreamData = nil
-		case -1:
-			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-			lastUpstreamData = nil
-		case 0:
-			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-			lastUpstreamData = nil
-			lastDownstreamData = nil
-		}
-	}
-	return failedRows, nil
-}
-
-func getRowsFrom(cond *Cond, conn *dbconn.DBConn) (RowDataIterator, error) {
-	tctx := tcontext.NewContext(context.Background(), log.L())
-	fullTableName := dbutil.TableName(cond.Table.Schema, cond.Table.Name)
-	orderKeys, _ := dbutil.SelectUniqueOrderKey(cond.Table.Info)
-	columnNames := make([]string, 0, len(cond.Table.Info.Columns))
-	for _, col := range cond.Table.ColumnMap {
-		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
-	}
-	columns := strings.Join(columnNames, ", ")
-	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s ORDER BY %s",
-		columns, fullTableName, cond.GetWhere(), strings.Join(orderKeys, ","))
-	rows, err := conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
-	if err != nil {
-		return nil, err
-	}
-	newRowDataIter := &RowDataIteratorImpl{
-		Rows: rows,
-	}
-	return newRowDataIter, nil
-}
-
-func getRowChangeIterator(table *validateTableInfo, rows []*rowChange) (RowDataIterator, error) {
-	sort.Slice(rows, func(i, j int) bool {
-		left, right := rows[i], rows[j]
-		for idx := range left.pk {
-			if left.pk[idx] != right.pk[idx] {
-				return left.pk[idx] < right.pk[idx]
-			}
-		}
-		return false
-	})
-	it := &RowChangeIteratorImpl{}
-	for _, r := range rows {
-		colMap := make(map[string]*dbutil.ColumnData)
-		for _, c := range table.Info.Columns {
-			var colData []byte
-			if r.data[c.Offset] != nil {
-				colData = []byte(fmt.Sprintf("%v", r.data[c.Offset]))
-			}
-			colMap[c.Name.O] = &dbutil.ColumnData{
-				Data:   colData,
-				IsNull: r.data[c.Offset] == nil,
-			}
-		}
-		it.Rows = append(it.Rows, colMap)
-	}
-	return it, nil
-}
-
-func getPKValues(data map[string]*dbutil.ColumnData, cond *Cond) []string {
-	var pkValues []string
-	for _, pkColumn := range cond.Table.PrimaryKey.Columns {
-		// TODO primary key cannot be null, if we uses unique key should make sure all columns are not null
-		pkValues = append(pkValues, string(data[pkColumn.Name.O].Data))
-	}
-	return pkValues
-}
-
-func (v *DataValidator) compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
-	var (
-		data1, data2 *dbutil.ColumnData
-		str1, str2   string
-		key          string
-		ok           bool
-	)
-
-	equal = true
-
-	defer func() {
-		if equal || err != nil {
-			return
-		}
-
-		if cmp == 0 {
-			v.L.Warn("find different row", zap.String("column", key), zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
-		} else if cmp > 0 {
-			v.L.Warn("target had superfluous data", zap.String("row", rowToString(map2)))
-		} else {
-			v.L.Warn("target lack data", zap.String("row", rowToString(map1)))
-		}
-	}()
-
-	for _, column := range columns {
-		if data1, ok = map1[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("upstream doesn't have key %s", key)
-		}
-		if data2, ok = map2[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("downstream doesn't have key %s", key)
-		}
-		str1 = string(data1.Data)
-		str2 = string(data2.Data)
-		if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
-			if data1.IsNull == data2.IsNull && data1.IsNull {
-				continue
-			}
-
-			num1, err1 := strconv.ParseFloat(str1, 64)
-			num2, err2 := strconv.ParseFloat(str2, 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
-				return
-			}
-			if math.Abs(num1-num2) <= 1e-6 {
-				continue
-			}
-		} else {
-			if (str1 == str2) && (data1.IsNull == data2.IsNull) {
-				continue
-			}
-		}
-
-		equal = false
-		break
-
-	}
-	if equal {
-		return
-	}
-
-	// Not Equal. Compare orderkeycolumns.
-	for _, col := range orderKeyCols {
-		if data1, ok = map1[col.Name.O]; !ok {
-			err = errors.Errorf("upstream doesn't have key %s", col.Name.O)
-			return
-		}
-		if data2, ok = map2[col.Name.O]; !ok {
-			err = errors.Errorf("downstream doesn't have key %s", col.Name.O)
-			return
-		}
-
-		if NeedQuotes(col.FieldType.Tp) {
-			strData1 := string(data1.Data)
-			strData2 := string(data2.Data)
-
-			if len(strData1) == len(strData2) && strData1 == strData2 {
-				continue
-			}
-
-			if strData1 < strData2 {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		} else if data1.IsNull || data2.IsNull {
-			if data1.IsNull && data2.IsNull {
-				continue
-			}
-
-			if data1.IsNull {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		} else {
-			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
-			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", string(data1.Data), string(data2.Data), err1, err2)
-				return
-			}
-
-			if num1 == num2 {
-				continue
-			}
-
-			if num1 < num2 {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		}
-	}
-
-	return
-}
-
-func NeedQuotes(tp byte) bool {
-	return !(dbutil.IsNumberType(tp) || dbutil.IsFloatType(tp))
-}
-
-func rowToString(row map[string]*dbutil.ColumnData) string {
-	var s strings.Builder
-	s.WriteString("{ ")
-	for key, val := range row {
-		if val.IsNull {
-			s.WriteString(fmt.Sprintf("%s: IsNull, ", key))
-		} else {
-			s.WriteString(fmt.Sprintf("%s: %s, ", key, val.Data))
-		}
-	}
-	s.WriteString(" }")
-
-	return s.String()
 }
