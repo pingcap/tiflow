@@ -124,10 +124,10 @@ func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-// GetBrokerMessageMaxBytes returns defaultBrokerMessageMaxBytes as a number.
+// GetBrokerMessageMaxBytes returns broker's `message.max.bytes`
 func (c *ClusterAdminClientMockImpl) GetBrokerMessageMaxBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(defaultBrokerMessageMaxBytes)
-	return topicMaxMessage
+	messageMaxBytes, _ := strconv.Atoi(defaultBrokerMessageMaxBytes)
+	return messageMaxBytes
 }
 
 func (c *ClusterAdminClientMockImpl) SetBrokerMessageMaxBytes(a int) {
@@ -136,4 +136,10 @@ func (c *ClusterAdminClientMockImpl) SetBrokerMessageMaxBytes(a int) {
 
 func (c *ClusterAdminClientMockImpl) SetTopicMaxMaxMessageBytes(a int) {
 	defaultTopicMaxMessageBytes = strconv.Itoa(a)
+}
+
+// GetTopicMaxMessageBytes returns topic's `max.message.bytes`
+func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
+	maxMessageBytes, _ := strconv.Atoi(defaultTopicMaxMessageBytes)
+	return maxMessageBytes
 }

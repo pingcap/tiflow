@@ -471,7 +471,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, errors.Trace(err)
 	}
 
-	if err := kafka.ValidateConfig(baseConfig, saramaConfig, topic); err != nil {
+	if err := kafka.AdjustConfig(baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
