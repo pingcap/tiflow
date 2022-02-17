@@ -634,3 +634,23 @@ func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql
 	}
 	return createStr, nil
 }
+
+// GetMaxConnections gets max_connections for sql.DB which is suitable for session variable max_connections.
+func GetMaxConnections(ctx context.Context, db *sql.DB) (int, error) {
+	c, err := db.Conn(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+	return GetMaxConnectionsForConn(ctx, c)
+}
+
+// GetMaxConnectionsForConn gets max_connections for sql.Conn which is suitable for session variable max_connections.
+func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) {
+	maxConnectionsStr, err := GetSessionVariable(ctx, conn, "max_connections")
+	if err != nil {
+		return 0, err
+	}
+	maxConnections, err := strconv.ParseUint(maxConnectionsStr, 10, 32)
+	return int(maxConnections), err
+}

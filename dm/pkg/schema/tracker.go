@@ -397,13 +397,13 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
-		ti, err := tr.getTableInfoByCreateStmt(tctx, tableID)
+		downstreamTI, err := tr.getTableInfoByCreateStmt(tctx, tableID)
 		if err != nil {
 			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
 			return nil, err
 		}
 
-		dti = GetDownStreamTI(ti, originTi)
+		dti = GetDownStreamTI(downstreamTI, originTi)
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
 	return dti, nil

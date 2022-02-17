@@ -52,6 +52,10 @@ func NewSubTaskStage(expect pb.Stage, source, task string) Stage {
 	return newStage(expect, source, task)
 }
 
+func NewValidatorStage(expect pb.Stage, source, task string) Stage {
+	return newStage(expect, source, task)
+}
+
 // newStage creates a new Stage instance.
 func newStage(expect pb.Stage, source, task string) Stage {
 	return Stage{
@@ -172,6 +176,10 @@ func GetAllRelayStage(cli *clientv3.Client) (map[string]Stage, int64, error) {
 // if task name is "", it will return all subtasks' stage as a map{task-name: stage} for the source.
 // if task name is given, it will return a map{task-name: stage} whose length is 1.
 func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stage, int64, error) {
+	return getStageByKey(cli, common.StageSubTaskKeyAdapter, source, task, 0)
+}
+
+func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task string, revision int64) (map[string]Stage, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
@@ -179,18 +187,23 @@ func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stag
 		stm  = make(map[string]Stage)
 		resp *clientv3.GetResponse
 		err  error
+		opts = make([]clientv3.OpOption, 0)
 	)
+	if revision > 0 {
+		opts = append(opts, clientv3.WithRev(revision))
+	}
 	if task != "" {
-		resp, err = cli.Get(ctx, common.StageSubTaskKeyAdapter.Encode(source, task))
+		resp, err = cli.Get(ctx, key.Encode(source, task), opts...)
 	} else {
-		resp, err = cli.Get(ctx, common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix())
+		opts = append(opts, clientv3.WithPrefix())
+		resp, err = cli.Get(ctx, key.Encode(source), opts...)
 	}
 
 	if err != nil {
 		return stm, 0, err
 	}
 
-	stages, err := subTaskStageFromResp(source, task, resp)
+	stages, err := getStagesFromResp(source, task, resp)
 	if err != nil {
 		return stm, 0, err
 	}
@@ -199,18 +212,26 @@ func GetSubTaskStage(cli *clientv3.Client, source, task string) (map[string]Stag
 	return stm, resp.Header.Revision, nil
 }
 
+func GetValidatorStage(cli *clientv3.Client, source, task string, revision int64) (map[string]Stage, int64, error) {
+	return getStageByKey(cli, common.StageValidatorKeyAdapter, source, task, revision)
+}
+
 // GetAllSubTaskStage gets all subtask stages.
 // k/v: source ID -> task name -> subtask stage.
 func GetAllSubTaskStage(cli *clientv3.Client) (map[string]map[string]Stage, int64, error) {
+	return getAllStagesInner(cli, common.StageSubTaskKeyAdapter)
+}
+
+func getAllStagesInner(cli *clientv3.Client, key common.KeyAdapter) (map[string]map[string]Stage, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Get(ctx, common.StageSubTaskKeyAdapter.Path(), clientv3.WithPrefix())
+	resp, err := cli.Get(ctx, key.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, err
 	}
 
-	stages, err := subTaskStageFromResp("", "", resp)
+	stages, err := getStagesFromResp("", "", resp)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -218,34 +239,48 @@ func GetAllSubTaskStage(cli *clientv3.Client) (map[string]map[string]Stage, int6
 	return stages, resp.Header.Revision, nil
 }
 
+func GetAllValidatorStage(cli *clientv3.Client) (map[string]map[string]Stage, int64, error) {
+	return getAllStagesInner(cli, common.StageValidatorKeyAdapter)
+}
+
 // GetSubTaskStageConfig gets source's subtask stages and configs at the same time
 // source **must not be empty**
-// return map{task name -> subtask stage}, map{task name -> subtask config}, revision, error.
-func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stage, map[string]config.SubTaskConfig, int64, error) {
+// return map{task name -> subtask stage}, map{task name -> validator stage}, map{task name -> subtask config}, revision, error.
+func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stage, map[string]Stage, map[string]config.SubTaskConfig, int64, error) {
 	var (
-		stm = make(map[string]Stage)
-		scm = make(map[string]config.SubTaskConfig)
+		stm               = make(map[string]Stage)
+		validatorStageMap = make(map[string]Stage)
+		scm               = make(map[string]config.SubTaskConfig)
 	)
-	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
+	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+		clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
+		clientv3.OpGet(common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix()),
 		clientv3.OpGet(common.UpstreamSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	stageResp := txnResp.Responses[0].GetResponseRange()
-	stages, err := subTaskStageFromResp(source, "", (*clientv3.GetResponse)(stageResp))
+	stages, err := getStagesFromResp(source, "", (*clientv3.GetResponse)(stageResp))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	stm = stages[source]
 
-	cfgResp := txnResp.Responses[1].GetResponseRange()
+	validatorStageResp := txnResp.Responses[1].GetResponseRange()
+	validatorStages, err := getStagesFromResp(source, "", (*clientv3.GetResponse)(validatorStageResp))
+	if err != nil {
+		return stm, validatorStageMap, scm, 0, err
+	}
+	validatorStageMap = validatorStages[source]
+
+	cfgResp := txnResp.Responses[2].GetResponseRange()
 	cfgs, err := subTaskCfgFromResp(source, "", (*clientv3.GetResponse)(cfgResp))
 	if err != nil {
-		return stm, scm, 0, err
+		return stm, validatorStageMap, scm, 0, err
 	}
 	scm = cfgs[source]
 
-	return stm, scm, rev, err
+	return stm, validatorStageMap, scm, rev, err
 }
 
 // WatchRelayStage watches PUT & DELETE operations for the relay stage.
@@ -266,6 +301,14 @@ func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(revision))
 	watchStage(ctx, ch, subTaskStageFromKey, outCh, errCh)
+}
+
+func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
+	source string, rev int64, outCh chan<- Stage, errCh chan<- error) {
+	wCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
+	watchStage(ctx, ch, validatorStageFromKey, outCh, errCh)
 }
 
 // DeleteSubTaskStage deletes the subtask stage.
@@ -298,7 +341,18 @@ func subTaskStageFromKey(key string) (Stage, error) {
 	return stage, nil
 }
 
-func subTaskStageFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]Stage, error) {
+func validatorStageFromKey(key string) (Stage, error) {
+	var stage Stage
+	ks, err := common.StageValidatorKeyAdapter.Decode(key)
+	if err != nil {
+		return stage, err
+	}
+	stage.Source = ks[0]
+	stage.Task = ks[1]
+	return stage, nil
+}
+
+func getStagesFromResp(source, task string, resp *clientv3.GetResponse) (map[string]map[string]Stage, error) {
 	stages := make(map[string]map[string]Stage)
 	if source != "" {
 		stages[source] = make(map[string]Stage) // avoid stages[source] is nil
