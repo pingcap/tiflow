@@ -170,7 +170,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetParams is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(config *Config) {
+func (a *AvroEventBatchEncoder) SetParams(_ *Config) {
 	// no op
 }
 
@@ -553,6 +553,7 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Co
 // Build an AvroEventBatchEncoder.
 func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
+	encoder.SetParams(b.config)
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
 	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
