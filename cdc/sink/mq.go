@@ -83,7 +83,7 @@ type mqSink struct {
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
@@ -91,12 +91,9 @@ func newMqSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, opts)
+
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	// pre-flight verification of encoder parameters
-	if _, err := encoderBuilder.Build(ctx); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
@@ -266,10 +263,7 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	encoder := k.encoderBuilder.Build(ctx)
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
@@ -293,10 +287,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+
+	encoder := k.encoderBuilder.Build(ctx)
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
@@ -353,10 +345,8 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	encoder := k.encoderBuilder.Build(ctx)
+
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
@@ -460,8 +450,15 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
 	opts map[string]string, errCh chan error) (*mqSink, error) {
-	producerConfig := kafka.NewConfig()
-	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
+	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+	if topic == "" {
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
+	}
+
+	baseConfig := kafka.NewConfig()
+	if err := kafka.CompleteConfigsAndOpts(sinkURI, baseConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
@@ -470,18 +467,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, err
 	}
 
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	if topic == "" {
-		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
-	}
-
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
+	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, baseConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, baseConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
