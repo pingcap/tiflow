@@ -24,14 +24,15 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	var (
-		source        = "mysql-replica-1"
-		worker        = "dm-worker-1"
-		task1         = "task-1"
-		task2         = "task-2"
-		relayStage    = NewRelayStage(pb.Stage_Running, source)
-		subtaskStage1 = NewSubTaskStage(pb.Stage_Running, source, task1)
-		subtaskStage2 = NewSubTaskStage(pb.Stage_Running, source, task2)
-		bound         = NewSourceBound(source, worker)
+		source         = "mysql-replica-1"
+		worker         = "dm-worker-1"
+		task1          = "task-1"
+		task2          = "task-2"
+		relayStage     = NewRelayStage(pb.Stage_Running, source)
+		subtaskStage1  = NewSubTaskStage(pb.Stage_Running, source, task1)
+		subtaskStage2  = NewSubTaskStage(pb.Stage_Running, source, task2)
+		validatorStage = NewSubTaskStage(pb.Stage_Running, source, task2)
+		bound          = NewSourceBound(source, worker)
 
 		emptyStage  Stage
 		subtaskCfg1 config.SubTaskConfig
@@ -95,7 +96,7 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	c.Assert(scm2, HasLen, 0)
 
 	// put subtask config and subtask stage.
-	rev6, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{subtaskCfg1, subtaskCfg2}, []Stage{subtaskStage1, subtaskStage2})
+	rev6, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{subtaskCfg1, subtaskCfg2}, []Stage{subtaskStage1, subtaskStage2}, []Stage{validatorStage})
 	c.Assert(err, IsNil)
 	c.Assert(rev6, Greater, rev5)
 
@@ -114,9 +115,22 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	subtaskStage2.Revision = rev6
 	c.Assert(stsm[task1], DeepEquals, subtaskStage1)
 	c.Assert(stsm[task2], DeepEquals, subtaskStage2)
+	validatorStages, rev7, err := GetValidatorStage(etcdTestCli, source, "", rev6)
+	c.Assert(err, IsNil)
+	c.Assert(rev7, Equals, rev6)
+	c.Assert(validatorStages, HasLen, 1)
+	validatorStage.Revision = rev6
+	c.Assert(validatorStages[task2], DeepEquals, validatorStage)
+	// get with task name
+	validatorStages, rev7, err = GetValidatorStage(etcdTestCli, source, task2, rev6)
+	c.Assert(err, IsNil)
+	c.Assert(rev7, Equals, rev6)
+	c.Assert(validatorStages, HasLen, 1)
+	validatorStage.Revision = rev6
+	c.Assert(validatorStages[task2], DeepEquals, validatorStage)
 
 	// delete them.
-	rev8, err := DeleteSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{subtaskCfg1, subtaskCfg2}, []Stage{subtaskStage1, subtaskStage2})
+	rev8, err := DeleteSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{subtaskCfg1, subtaskCfg2}, []Stage{subtaskStage1, subtaskStage2}, []Stage{validatorStage})
 	c.Assert(err, IsNil)
 	c.Assert(rev8, Greater, rev7)
 
@@ -129,4 +143,8 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev9, Equals, rev8)
 	c.Assert(stsm, HasLen, 0)
+	validatorStages, rev9, err = GetValidatorStage(etcdTestCli, source, "", 0)
+	c.Assert(err, IsNil)
+	c.Assert(rev9, Equals, rev8)
+	c.Assert(validatorStages, HasLen, 0)
 }

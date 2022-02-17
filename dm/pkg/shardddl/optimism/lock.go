@@ -253,7 +253,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 	// join and compare every new table info
 	for idx, ti := range newTIs {
 		postTable := schemacmp.Encode(ti)
-		schemaChanged, conflictStage := l.TrySyncForOneDDL(callerSource, callerSchema, callerTable, prevTable, postTable)
+		schemaChanged, conflictStage := l.trySyncForOneDDL(callerSource, callerSchema, callerTable, prevTable, postTable)
 
 		switch conflictStage {
 		case ConflictDetected:
@@ -716,7 +716,7 @@ func GetColumnName(lockID, ddl string, tp ast.AlterTableType) (string, error) {
 }
 
 // checkAddDropColumn check for ALTER TABLE ADD/DROP COLUMN statement
-// FOR ADD COLUMN, check whether add column with a different field or add a droped column
+// FOR ADD COLUMN, check whether add column with a different field or add a dropped column
 // FOR DROP COLUMN, return the droped column.
 func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prevTable, postTable schemacmp.Table) (string, error) {
 	currTable := l.tables[source][schema][table]
@@ -766,10 +766,10 @@ func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prev
 	return "", nil
 }
 
-// TrySyncForOneDDL try sync for a DDL operation.
+// trySyncForOneDDL try sync for a DDL operation.
 // e.g. `ALTER TABLE ADD COLUMN a, RENAME b TO c, DROP COLUMN d' will call this func three times.
 // return whether joined table is changed and whether there is a conflict.
-func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
+func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
 	// we only support resolve one conflict DDL per table,
 	// so reset conflict table after receive new table info.
 	l.removeConflictTable(source, schema, table)
