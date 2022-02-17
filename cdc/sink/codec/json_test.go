@@ -60,7 +60,7 @@ func sortColumnsArrays(arrays ...[]*model.Column) {
 	}
 }
 
-func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
+func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
@@ -108,13 +108,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		}
 	}
 
+	encoder := encoderBuilder.Build(context.Background())
+	mixedEncoder := encoderBuilder.Build(context.Background())
+	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.rowCases {
-		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
-
-		mixedEncoder := newEncoder()
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
@@ -140,13 +137,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		}
 	}
 
+	encoder = encoderBuilder.Build(context.Background())
+	mixedEncoder = encoderBuilder.Build(context.Background())
+	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.ddlCases {
-		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
-
-		mixedEncoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -168,13 +162,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		checkDDLDecoder(mixedDecoder, cs)
 	}
 
+	encoder = encoderBuilder.Build(context.Background())
+	mixedEncoder = encoderBuilder.Build(context.Background())
+	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.resolvedTsCases {
-		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
-		
-		mixedEncoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -282,10 +273,10 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := NewJSONEventBatchEncoder()
-		return encoder
-	}, NewJSONEventBatchDecoder)
+
+	config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
+	config.maxBatchSize = 64
+	s.testBatchCodec(c, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
 }
 
 var _ = check.Suite(&columnSuite{})

@@ -44,9 +44,11 @@ func NewConfig(protocol string) *Config {
 	return &Config{
 		protocol: protocol,
 
-		maxMessageBytes:     config.DefaultMaxMessageBytes,
-		maxBatchSize:        defaultMaxBatchSize,
+		maxMessageBytes: config.DefaultMaxMessageBytes,
+		maxBatchSize:    defaultMaxBatchSize,
+
 		enableTiDBExtension: false,
+		avroRegistry:        "",
 	}
 }
 

@@ -70,7 +70,7 @@ var testCaseDDL = &model.DDLEvent{
 	Type:  mm.ActionCreateTable,
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
+func (s *canalFlatSuite) TestNewCanalFlatMessage4aDML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)

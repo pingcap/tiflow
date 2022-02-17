@@ -494,7 +494,7 @@ func (d *CanalEventBatchEncoder) Reset() {
 }
 
 // SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(config *Config) {
+func (d *CanalEventBatchEncoder) SetParams(_ *Config) {
 	// no op
 }
 
