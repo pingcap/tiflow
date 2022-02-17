@@ -338,16 +338,23 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 // stop will set this table actor state to stopped and releases all goroutines spawned
 // from this table actor
 func (t *tableActor) stop(err error) {
-	log.Info("table actor begin to stop....")
+	log.Info("table actor begin to stop....",
+		zap.String("changefeed", t.changefeedID),
+		zap.String("tableName", t.tableName))
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadUint32(&t.stopped) == stopped {
+		log.Info("table actor is already stopped",
+			zap.String("changefeed", t.changefeedID),
+			zap.String("tableName", t.tableName))
 		return
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
 	if t.sortNode != nil {
+		// releaseResource will send a message to sorter router
 		t.sortNode.releaseResource(t.stopCtx, t.changefeedID, t.globalVars.CaptureInfo.AdvertiseAddr)
 	}
+	t.cancel()
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
 			log.Warn("close sink failed",
@@ -356,7 +363,6 @@ func (t *tableActor) stop(err error) {
 				zap.Error(err), zap.Error(err))
 		}
 	}
-	t.cancel()
 	log.Info("table actor stopped",
 		zap.String("changefeed", t.changefeedID),
 		zap.String("tableName", t.tableName),
