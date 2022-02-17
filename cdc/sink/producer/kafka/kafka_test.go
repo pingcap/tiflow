@@ -317,19 +317,24 @@ func (s *kafkaSuite) TestAdjustConfigTopicExist(c *check.C) {
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter succeeds.
 	// It is less than the value of broker.
-	//config.MaxMessageBytes = adminClient. - 1
-	//saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
-	//c.Assert(err, check.IsNil)
-	//detail := &sarama.TopicDetail{
-	//	NumPartitions: 3,
-	//	// Does not contain max message bytes information.
-	//	ConfigEntries: make(map[string]*string),
-	//}
-	//err = adminClient.CreateTopic("test-topic", detail, false)
-	//c.Assert(err, check.IsNil)
-	//err = AdjustConfig(config, saramaConfig, "test-topic")
-	//c.Assert(err, check.IsNil)
-	//c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
+
+	// create a topic does not store `max.message.bytes`
+	topicName := "test-topic"
+	detail := &sarama.TopicDetail{
+		NumPartitions: 3,
+		// Does not contain `max.message.bytes`.
+		ConfigEntries: make(map[string]*string),
+	}
+	err = adminClient.CreateTopic(topicName, detail, false)
+	c.Assert(err, check.IsNil)
+
+	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
+	saramaConfig, err = NewSaramaConfigImpl(context.Background(), config)
+	c.Assert(err, check.IsNil)
+
+	err = AdjustConfig(config, saramaConfig, topicName)
+	c.Assert(err, check.IsNil)
+	c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, config.MaxMessageBytes)
 
 	// When the topic exists, but the topic does not store max message bytes info,
 	// the check of parameter fails.
