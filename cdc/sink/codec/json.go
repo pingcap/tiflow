@@ -37,8 +37,6 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxBatchSize sets the default value for max-batch-size
-	DefaultMaxBatchSize int = 16
 )
 
 type column struct {
@@ -607,52 +605,25 @@ func (d *JSONEventBatchEncoder) Reset() {
 }
 
 // SetParams reads relevant parameters for Open Protocol
-func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
-	var err error
-
-	maxMessageBytes, ok := params["max-message-bytes"]
-	if !ok {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
-	}
-
-	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
-	if err != nil {
-		return cerror.ErrSinkInvalidConfig.Wrap(err)
-	}
-	if d.maxMessageBytes <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
-	}
-
-	d.maxBatchSize = DefaultMaxBatchSize
-	if maxBatchSize, ok := params["max-batch-size"]; ok {
-		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
-	}
-	if d.maxBatchSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
-	}
-
-	return nil
+func (d *JSONEventBatchEncoder) SetParams(config *Config) {
+	d.maxMessageBytes = config.maxMessageBytes
+	d.maxBatchSize = config.maxBatchSize
 }
 
 type jsonEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a JSONEventBatchEncoder
-func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := NewJSONEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	encoder.SetParams(b.config)
 
-	return encoder, nil
+	return encoder
 }
 
-func newJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &jsonEventBatchEncoderBuilder{opts: opts}
+func newJSONEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &jsonEventBatchEncoderBuilder{config: config}
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

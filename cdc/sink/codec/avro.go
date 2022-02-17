@@ -170,9 +170,8 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetParams is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(params map[string]string) error {
+func (a *AvroEventBatchEncoder) SetParams(config *Config) {
 	// no op
-	return nil
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
@@ -522,7 +521,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type avroEventBatchEncoderBuilder struct {
-	opts               map[string]string
+	config             *Config
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
 }
@@ -532,40 +531,31 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
-	registryURI, ok := opts["registry"]
-	if !ok {
-		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-	}
-
+func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Config) (EncoderBuilder, error) {
 	ctx := context.Background()
-	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaSuffix)
+	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, keySchemaSuffix)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaSuffix)
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, valueSchemaSuffix)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &avroEventBatchEncoderBuilder{
-		opts:               opts,
+		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
 	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
 	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 
-	return encoder, nil
+	return encoder
 }

@@ -15,16 +15,12 @@ package codec
 
 import (
 	"context"
-	"math"
 	"sort"
-	"strconv"
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -113,9 +109,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	}
 
 	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
+		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 
 		mixedEncoder := newEncoder()
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
@@ -145,11 +141,11 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	}
 
 	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		mixedEncoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
+		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 
+		mixedEncoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
@@ -173,11 +169,11 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	}
 
 	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		mixedEncoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
+		config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
+		config.maxBatchSize = 64
+		encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 
+		mixedEncoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -201,76 +197,8 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	}
 }
 
-func (s *batchSuite) TestParamsEdgeCases(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder().(*JSONEventBatchEncoder)
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "10485760"})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "-1"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxInt32)
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, math.MaxUint32)
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxInt32)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxInt32)
-	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "10485760", "max-batch-size": strconv.Itoa(math.MaxUint32)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, math.MaxUint32)
-	c.Assert(encoder.maxMessageBytes, check.Equals, config.DefaultMaxMessageBytes)
-}
-
-func (s *batchSuite) TestSetParams(c *check.C) {
-	defer testleak.AfterTest(c)
-
-	opts := make(map[string]string)
-	encoderBuilder := newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(encoder, check.IsNil)
-	c.Assert(
-		errors.Cause(err),
-		check.ErrorMatches,
-		".*max-message-bytes not found.*",
-	)
-
-	opts["max-message-bytes"] = "1"
-	encoderBuilder = newJSONEventBatchEncoderBuilder(opts)
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err = encoderBuilder.Build(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder, check.NotNil)
-
-	jsonEncoder, ok := encoder.(*JSONEventBatchEncoder)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(jsonEncoder.GetMaxMessageBytes(), check.Equals, 1)
-}
-
 func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewJSONEventBatchEncoder()
 
 	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
@@ -280,24 +208,23 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	}
 
 	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
-	a := strconv.Itoa(87 + 44)
-	err := encoder.SetParams(map[string]string{"max-message-bytes": a})
-	c.Check(err, check.IsNil)
+	a := 87 + 44
+	config := NewConfig("open-protocol").WithMaxMessageBytes(a)
+	encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 	r, err := encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.IsNil)
 	c.Check(r, check.Equals, EncoderNoOperation)
 
-	a = strconv.Itoa(87 + 43)
-	err = encoder.SetParams(map[string]string{"max-message-bytes": a})
-	c.Assert(err, check.IsNil)
+	// cannot hold a single message
+	config = config.WithMaxMessageBytes(a - 1)
+	encoder = newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 	r, err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.NotNil)
 	c.Check(r, check.Equals, EncoderNoOperation)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
-	c.Check(err, check.IsNil)
-
+	config = config.WithMaxMessageBytes(256)
+	encoder = newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 	for i := 0; i < 10000; i++ {
 		r, err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(r, check.Equals, EncoderNoOperation)
@@ -312,11 +239,10 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoderBuilder := newJSONEventBatchEncoderBuilder(map[string]string{"max-message-bytes": "1048576", "max-batch-size": "64"})
-	c.Assert(encoderBuilder, check.NotNil)
-	encoder, err := encoderBuilder.Build(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder, check.NotNil)
+
+	config := NewConfig("open-protocol").WithMaxMessageBytes(1048576)
+	config.maxBatchSize = 64
+	encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,

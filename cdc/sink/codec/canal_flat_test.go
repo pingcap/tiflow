@@ -70,19 +70,6 @@ var testCaseDDL = &model.DDLEvent{
 	Type:  mm.ActionCreateTable,
 }
 
-func (s *canalFlatSuite) TestSetParams(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
-	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
-
-	params := make(map[string]string)
-	params["enable-tidb-extension"] = "true"
-	err := encoder.SetParams(params)
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
-}
-
 func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
