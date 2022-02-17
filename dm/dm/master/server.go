@@ -2593,7 +2593,7 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
 		resp2       *pb.StartValidationResponse
-		err2, err   error
+		err2        error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2611,10 +2611,14 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
 		return resp, nil
 	}
-	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
-	if err != nil {
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = err.Error()
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2630,7 +2634,7 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
 	var (
 		resp2       *pb.StopValidationResponse
-		err2, err   error
+		err2        error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2643,10 +2647,14 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 		resp.Msg = "either `task-name` or `all-task` should be set"
 		return resp, nil
 	}
-	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
-	if err != nil {
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = err.Error()
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2678,10 +2686,10 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
 		return resp, err
 	}
-	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
-	if err != nil {
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = err.Error()
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2708,15 +2716,15 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr {
+	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("error flag should be either `%s` or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr)
+		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
 		return resp, nil
 	}
-	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
-	if err != nil {
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = err.Error()
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2748,10 +2756,10 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		resp.Msg = "either `all` error flags or `error id` should be set"
 		return resp, nil
 	}
-	subTaskCfgs, err = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
-	if err != nil {
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = err.Error()
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}

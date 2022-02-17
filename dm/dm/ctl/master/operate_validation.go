@@ -24,17 +24,11 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
-const (
-	ignoreErrOp  = "ignore"
-	resolveErrOp = "resolve"
-	clearErrOp   = "clear"
-)
-
 func NewIgnoreValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ignore-error <task-name> <error-id|--all>",
 		Short: "ignore validation error",
-		RunE:  operateValidationError(ignoreErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -44,7 +38,7 @@ func NewResolveValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "make-resolve <task-name> <error-id|--all>",
 		Short: "resolve validation error",
-		RunE:  operateValidationError(resolveErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ResolveValidationErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -54,13 +48,13 @@ func NewClearValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clear <task-name> <error-id|--all>",
 		Short: "clear validation error",
-		RunE:  operateValidationError(clearErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ClearValidationErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
 }
 
-func operateValidationError(typ string) func(*cobra.Command, []string) error {
+func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
 		var (
 			resp     *pb.OperateValidationErrorResponse

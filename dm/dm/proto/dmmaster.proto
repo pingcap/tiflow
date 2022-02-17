@@ -109,9 +109,8 @@ service Master {
 
   rpc OperateRelay(OperateRelayRequest) returns(OperateRelayResponse) {}
 
-   // StartValidation starts validation
   rpc StartValidation(StartValidationRequest) returns(StartValidationResponse) {}
-  // StopValidation stop validation
+
   rpc StopValidation(StopValidationRequest) returns(StopValidationResponse) {}
 
   rpc GetValidationStatus(GetValidationStatusRequest) returns(GetValidationStatusResponse) {}
@@ -547,8 +546,15 @@ message GetValidationErrorResponse {
     repeated ValidationError error = 3;
 }
 
+enum ValidationErrOp {
+  InvalidValidationTaskOp = 0;
+  IgnoreValidationErrOp = 1;
+  ResolveValidationErrOp = 2;
+  ClearValidationErrOp = 3;
+}
+
 message OperateValidationErrorRequest {
-    string op = 1; // ignore/resolve/clear
+    ValidationErrOp op = 1;
     bool isAllError = 2;
     string taskName = 3;
     string errId = 4; // error-id

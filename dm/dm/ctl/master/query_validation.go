@@ -27,8 +27,9 @@ import (
 )
 
 const (
-	ValidationAllErr     = "all"
-	ValidationIgnoredErr = "ignored"
+	ValidationAllErr         = "all"
+	ValidationIgnoredErr     = "ignored"
+	ValidationUnprocessedErr = "unprocessed"
 )
 
 func NewQueryValidationErrorCmd() *cobra.Command {
@@ -37,7 +38,7 @@ func NewQueryValidationErrorCmd() *cobra.Command {
 		Short: "show error of the validation task",
 		RunE:  queryValidationError,
 	}
-	cmd.Flags().String("error", "all", "filtering type of error: all (default) or ignored")
+	cmd.Flags().String("error", ValidationUnprocessedErr, "filtering type of error: all, ignored, or unprocessed")
 	return cmd
 }
 
@@ -54,10 +55,10 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	if err != nil {
 		return err
 	}
-	if errState != ValidationAllErr && errState != ValidationIgnoredErr {
+	if errState != ValidationAllErr && errState != ValidationIgnoredErr && errState != ValidationUnprocessedErr {
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
-		return errors.Errorf("error flag should be either `%s` or `%s`", ValidationAllErr, ValidationIgnoredErr)
+		return errors.Errorf("error flag should be either `%s`, `%s`, or `%s`", ValidationAllErr, ValidationIgnoredErr, ValidationUnprocessedErr)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
