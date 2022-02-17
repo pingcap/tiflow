@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // initOptimisticShardDDL initializes the shard DDL support in the optimistic mode.
@@ -143,6 +144,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		skipOp = true
 	case *ast.DropDatabaseStmt:
 		skipOp = true
+		s.osgk.RemoveSchema(upTable.Schema)
 	case *ast.CreateTableStmt:
 		info.TableInfoBefore = tiAfter // for `CREATE TABLE`, we use tiAfter as tiBefore.
 		rev, err = s.optimist.PutInfoAddTable(info)
@@ -156,6 +158,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 			return err
 		}
 		skipOp = true
+		s.osgk.RemoveGroup(downTable, []string{utils.GenTableID(upTable)})
 	default:
 		rev, err = s.optimist.PutInfo(info)
 		if err != nil {
@@ -179,7 +182,12 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	// TODO: support redirect for DM worker
 	// return error to pass IT now
 	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
-		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, "there will be conflicts if DDLs .* are applied to the downstream. old table info: .*, new table info: .*")
+		first := s.osgk.appendConflictTable(upTable, downTable, qec.lastLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
+		if first {
+			s.optimist.GetRedirectOperation(qec.tctx.Ctx, info, rev+1)
+		}
+		s.tctx.L().Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+		return nil
 	}
 
 	// updated needHandleDDLs to DDLs received from DM-master.
@@ -221,6 +229,38 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
+	s.resolveOptimisticDDL(qec.eventContext, getDDLJobSourceTable(job), job.targetTable, op.ConflictStage)
+
 	s.tctx.L().Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 	return nil
+}
+
+func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table, stage optimism.ConflictStage) {
+	if sourceTable != nil && targetTable != nil {
+		if (stage == optimism.ConflictResolved && s.osgk.tableInConflict(targetTable)) ||
+			s.osgk.inConflictStage(sourceTable, targetTable) {
+			// in the following two situations we should resolve this ddl lock at now
+			// 1. after this worker's ddl, the ddl lock is resolved
+			// 2. other worker has resolved this ddl lock, receives resolve command from master
+			group, redirectLocation := s.osgk.resolveGroup(targetTable)
+			if len(group) > 0 {
+				s.optimist.DoneRedirectOperation(utils.GenTableID(targetTable))
+				for tableID, location := range group {
+					s.saveTablePoint(utils.UnpackTableID(tableID), location)
+				}
+				// TODO: should try flush checkpoint?
+				// s.flushCheckPoints()
+				*ec.shardingReSyncCh <- &ShardingReSync{
+					currLocation:   redirectLocation,
+					latestLocation: ec.currentLocation.Clone(),
+					targetTable:    targetTable,
+					allResolved:    true,
+				}
+			}
+		}
+	} else {
+		s.osgk.tctx.L().Warn("invalid resolveOptimistic deploy without sourceTable/targetTable in optimistic shard mode",
+			zap.Bool("emptySourceTable", sourceTable == nil),
+			zap.Bool("emptyTargetTable", targetTable == nil))
+	}
 }

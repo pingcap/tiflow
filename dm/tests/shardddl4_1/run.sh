@@ -900,11 +900,73 @@ function DM_154 {
 		"clean_table" "optimistic"
 }
 
+function DM_155_CASE {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,3);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change c b int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,4);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change b b varchar(11);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change c b int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,14);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,15);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change b b varchar(11);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(16,16,16);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(17,17);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(18,18);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(19,19,19);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20,20,20);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(21,21);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(22,22,22);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23,23);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change b b varchar(11);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(26,26,26);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column c int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(28,28,28);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30);"
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+}
+
+# Add syncing optimistic conflict sequence DDLs case
+function DM_155 {
+	run_case 155 "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1 collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c int) engine=innodb default charset=latin1 collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, c int) engine=innodb default charset=latin1 collate=latin1_bin;\";" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
-	start=131
-	end=154
+	start=155
+	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
 		sleep 1

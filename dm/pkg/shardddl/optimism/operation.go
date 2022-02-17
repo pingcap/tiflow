@@ -39,7 +39,7 @@ const (
 	// ConflictResolved indicates a conflict DDL be resolved.
 	// in this stage, DM-worker should redirect to the conflict DDL.
 	ConflictResolved ConflictStage = "resolved"
-	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
+	// ConflictSkipWaitRedirect indicates a conflict happens and will be skipped and redirected until all tables has no conflict
 	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
 	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
 )

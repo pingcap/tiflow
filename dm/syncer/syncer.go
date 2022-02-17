@@ -61,6 +61,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -128,9 +129,11 @@ type Syncer struct {
 	cfg     *config.SubTaskConfig
 	syncCfg replication.BinlogSyncerConfig
 
-	sgk       *ShardingGroupKeeper // keeper to keep all sharding (sub) group in this syncer
-	pessimist *shardddl.Pessimist  // shard DDL pessimist
-	optimist  *shardddl.Optimist   // shard DDL optimist
+	sgk  *ShardingGroupKeeper    // keeper to keep all sharding (sub) group in this syncer
+	osgk *OptShardingGroupKeeper // optimistic ddl's keeper to keep all sharding (sub) group in this syncer
+
+	pessimist *shardddl.Pessimist // shard DDL pessimist
+	optimist  *shardddl.Optimist  // shard DDL optimist
 	cli       *clientv3.Client
 
 	binlogType         BinlogType
@@ -267,6 +270,8 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	if cfg.ShardMode == config.ShardPessimistic {
 		// only need to sync DDL in sharding mode
 		syncer.sgk = NewShardingGroupKeeper(syncer.tctx, cfg)
+	} else if cfg.ShardMode == config.ShardOptimistic {
+		syncer.osgk = NewOptShardingGroupKeeper(syncer.tctx, cfg)
 	}
 	syncer.recordedActiveRelayLog = false
 	syncer.workerJobTSArray = make([]*atomic.Int64, cfg.WorkerCount+workerJobTSArrayInitSize)
@@ -1098,9 +1103,9 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 func (s *Syncer) saveGlobalPoint(globalLocation binlog.Location) {
 	if s.cfg.ShardMode == config.ShardPessimistic {
-		// NOTE: for the optimistic mode, because we don't handle conflicts automatically (or no re-direct supported),
-		// so it is not need to adjust global checkpoint now, and after re-direct supported this should be updated.
 		globalLocation = s.sgk.AdjustGlobalLocation(globalLocation)
+	} else if s.cfg.ShardMode == config.ShardOptimistic {
+		globalLocation = s.osgk.AdjustGlobalLocation(globalLocation)
 	}
 	s.checkpoint.SaveGlobalPoint(globalLocation)
 }
@@ -1753,25 +1758,35 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// fetch from sharding resync channel if needed, and redirect global
 		// stream to current binlog position recorded by ShardingReSync
-		if shardingReSync == nil && len(shardingReSyncCh) > 0 {
-			// some sharding groups need to re-syncing
-			shardingReSync = <-shardingReSyncCh
-			savedGlobalLastLocation = lastLocation // save global last location
-			lastLocation = shardingReSync.currLocation
+		if shardingReSync == nil {
+			if len(shardingReSyncCh) > 0 {
+				// some sharding groups need to re-syncing
+				shardingReSync = <-shardingReSyncCh
+				savedGlobalLastLocation = lastLocation // save global last location
+				lastLocation = shardingReSync.currLocation
 
-			currentLocation = shardingReSync.currLocation
-			// if suffix>0, we are replacing error
-			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
-			s.locations.reset(shardingReSync.currLocation)
-			err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
-			if err != nil {
-				return err
+				currentLocation = shardingReSync.currLocation
+				// if suffix>0, we are replacing error
+				s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
+				s.locations.reset(shardingReSync.currLocation)
+				err = s.streamerController.RedirectStreamer(tctx, shardingReSync.currLocation)
+				if err != nil {
+					return err
+				}
+
+				failpoint.Inject("ReSyncExit", func() {
+					tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
+					utils.OsExit(1)
+				})
+			} else if s.cfg.ShardMode == config.ShardOptimistic {
+				op, targetTableID := s.optimist.PendingRedirectOperation()
+				if op != nil {
+					s.resolveOptimisticDDL(&eventContext{
+						shardingReSyncCh: &shardingReSyncCh,
+						currentLocation:  &currentLocation,
+					}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
+				}
 			}
-
-			failpoint.Inject("ReSyncExit", func() {
-				tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
-				utils.OsExit(1)
-			})
 		}
 
 		var e *replication.BinlogEvent
@@ -2230,16 +2245,15 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		return s.recordSkipSQLsLocation(&ec)
 	}
 
-	if s.cfg.ShardMode == config.ShardPessimistic {
-		if s.sgk.InSyncing(sourceTable, targetTable, *ec.currentLocation) {
-			// if in unsync stage and not before active DDL, filter it
-			// if in sharding re-sync stage and not before active DDL (the next DDL to be synced), filter it
-			ec.tctx.L().Debug("replicate sharding DDL, filter Rows event",
-				zap.String("event", "row"),
-				zap.Stringer("source", sourceTable),
-				log.WrapStringerField("location", ec.currentLocation))
-			return nil
-		}
+	if (s.cfg.ShardMode == config.ShardPessimistic && s.sgk.InSyncing(sourceTable, targetTable, *ec.currentLocation)) ||
+		(s.cfg.ShardMode == config.ShardOptimistic && s.osgk.inConflictStage(sourceTable, targetTable)) {
+		// if in unsync stage and not before active DDL, filter it
+		// if in sharding re-sync stage and not before active DDL (the next DDL to be synced), filter it
+		ec.tctx.L().Debug("replicate sharding DDL, filter Rows event",
+			zap.String("event", "row"),
+			zap.Stringer("source", sourceTable),
+			log.WrapStringerField("location", ec.currentLocation))
+		return nil
 	}
 
 	// TODO(csuzhangxc): check performance of `getTable` from schema tracker.
@@ -2511,17 +2525,18 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		if binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
 			qec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			err2 := qec.closeShardingResync()
-			if err2 != nil {
-				return err2
-			}
-		} else {
-			// in re-syncing, we can simply skip all DDLs,
-			// as they have been added to sharding DDL sequence
+			return err2
+		} else if s.cfg.ShardMode != config.ShardOptimistic {
+			// in re-syncing, we can simply skip all DDLs.
+			// for pessimistic shard mode,
+			// all ddls have been added to sharding DDL sequence
 			// only update lastPos when the query is a real DDL
 			*qec.lastLocation = qec.shardingReSync.currLocation
 			qec.tctx.L().Debug("skip event in re-replicating sharding group", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+			return nil
 		}
-		return nil
+		// optimistic shard mode handle situation will be handled through table point after
+		// we split ddls and handle the appliedDDLs
 	}
 
 	qec.tctx.L().Info("ready to split ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
@@ -2622,6 +2637,15 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 				return terror.ErrSyncerUnitDDLOnMultipleTable.Generate(qec.originSQL)
 			}
 		} else if s.cfg.ShardMode == config.ShardOptimistic {
+			if s.osgk.inConflictStage(sourceTable, targetTable) {
+				// if in unsync stage and not before active DDL, filter it
+				// if in sharding re-sync stage and not before active DDL (the next DDL to be synced), filter it
+				ec.tctx.L().Debug("replicate sharding DDL, filter Conflicted table's ddl events",
+					zap.String("event", "query"),
+					zap.Stringer("source", sourceTable),
+					log.WrapStringerField("location", ec.currentLocation))
+				return nil
+			}
 			switch ddlInfo.originStmt.(type) {
 			case *ast.TruncateTableStmt:
 				qec.tctx.L().Info("filter truncate table statement in shard group", zap.String("event", "query"), zap.String("statement", ddlInfo.routedDDL))

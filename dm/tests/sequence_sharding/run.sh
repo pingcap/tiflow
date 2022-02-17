@@ -76,6 +76,8 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status sequence_sharding" \
 		"detect inconsistent DDL sequence" 2
+
+	read -n 1000
 }
 
 cleanup_data sharding_target2
