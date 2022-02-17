@@ -117,6 +117,8 @@ type SubTask struct {
 	etcdClient *clientv3.Client
 
 	workerName string
+
+	validator *syncer.DataValidator
 }
 
 // NewSubTask is subtask initializer
@@ -213,7 +215,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 
 // Run runs the sub task.
 // TODO: check concurrent problems.
-func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
+func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, relay relay.Process) {
 	if st.Stage() == pb.Stage_Finished || st.Stage() == pb.Stage_Running {
 		st.l.Warn("prepare to run a subtask with invalid stage",
 			zap.Stringer("current stage", st.Stage()),
@@ -226,6 +228,8 @@ func (st *SubTask) Run(expectStage pb.Stage, relay relay.Process) {
 		st.fail(err)
 		return
 	}
+
+	st.StartValidator(expectValidatorStage)
 
 	if expectStage == pb.Stage_Running {
 		st.run()
@@ -255,6 +259,42 @@ func (st *SubTask) run() {
 	st.resultWg.Add(1)
 	go st.fetchResultAndUpdateStage(pr)
 	go cu.Process(ctx, pr)
+}
+
+func (st *SubTask) StartValidator(expect pb.Stage) {
+	// when validator mode=none
+	if expect == pb.Stage_InvalidStage {
+		return
+	}
+	st.Lock()
+	defer st.Unlock()
+	if st.cfg.ValidatorCfg.Mode != config.ValidationFast && st.cfg.ValidatorCfg.Mode != config.ValidationFull {
+		return
+	}
+	var syncerObj *syncer.Syncer
+	var ok bool
+	for _, u := range st.units {
+		if syncerObj, ok = u.(*syncer.Syncer); ok {
+			break
+		}
+	}
+	if syncerObj == nil {
+		st.l.Warn("cannot start validator without syncer")
+		return
+	}
+
+	if st.validator == nil {
+		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
+	}
+	st.validator.Start(expect)
+}
+
+func (st *SubTask) StopValidator() {
+	st.Lock()
+	if st.validator != nil {
+		st.validator.Stop()
+	}
+	st.Unlock()
 }
 
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
@@ -342,11 +382,11 @@ func (st *SubTask) fetchResultAndUpdateStage(pr chan pb.ProcessResult) {
 }
 
 // setCurrUnit set current dm unit to ut.
-func (st *SubTask) setCurrUnit(ut unit.Unit) {
+func (st *SubTask) setCurrUnit(cu unit.Unit) {
 	st.Lock()
 	defer st.Unlock()
 	pu := st.currUnit
-	st.currUnit = ut
+	st.currUnit = cu
 	st.prevUnit = pu
 }
 
@@ -388,6 +428,16 @@ func (st *SubTask) closeUnits() {
 		u := st.units[i]
 		st.l.Info("closing unit process", zap.Stringer("unit", cu.Type()))
 		u.Close()
+		st.l.Info("closing unit done", zap.Stringer("unit", cu.Type()))
+	}
+}
+
+func (st *SubTask) killCurrentUnit() {
+	if st.CurrUnit() != nil {
+		ut := st.CurrUnit().Type()
+		st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
+		st.CurrUnit().Kill()
+		st.l.Info("kill unit done", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
 	}
 }
 
@@ -490,9 +540,24 @@ func (st *SubTask) Close() {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
-
 	st.closeUnits() // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+}
+
+// Kill kill running unit and stop the sub task.
+func (st *SubTask) Kill() {
+	st.l.Info("killing")
+	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
+		st.l.Info("subTask is already closed, no need to close")
+		return
+	}
+	st.killCurrentUnit()
+	st.closeUnits() // close all un-closed units
+
+	cfg := st.getCfg()
+	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	st.StopValidator()
 }
 
 // Pause pauses a running sub task or a sub task paused by error.
@@ -515,7 +580,11 @@ func (st *SubTask) Pause() error {
 // TODO: similar to Run, refactor later.
 func (st *SubTask) Resume(relay relay.Process) error {
 	if !st.initialized.Load() {
-		st.Run(pb.Stage_Running, relay)
+		expectValidatorStage, err := getExpectValidatorStage(st.cfg.ValidatorCfg, st.etcdClient, st.cfg.SourceID, st.cfg.Name, 0)
+		if err != nil {
+			return terror.Annotate(err, "fail to get validator stage from etcd")
+		}
+		st.Run(pb.Stage_Running, expectValidatorStage, relay)
 		return nil
 	}
 
@@ -652,8 +721,9 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 
 		loadStatus := pu.Status(nil).(*pb.LoadStatus)
 
-		if st.cfg.EnableGTID {
-			gset1, err = gtid.ParserGTID(st.cfg.Flavor, loadStatus.MetaBinlogGTID)
+		cfg := st.getCfg()
+		if cfg.EnableGTID {
+			gset1, err = gtid.ParserGTID(cfg.Flavor, loadStatus.MetaBinlogGTID)
 			if err != nil {
 				return terror.WithClass(err, terror.ClassDMWorker)
 			}
@@ -667,8 +737,8 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 		for {
 			relayStatus := hub.w.relayHolder.Status(nil)
 
-			if st.cfg.EnableGTID {
-				gset2, err = gtid.ParserGTID(st.cfg.Flavor, relayStatus.RelayBinlogGtid)
+			if cfg.EnableGTID {
+				gset2, err = gtid.ParserGTID(cfg.Flavor, relayStatus.RelayBinlogGtid)
 				if err != nil {
 					return terror.WithClass(err, terror.ClassDMWorker)
 				}
@@ -689,11 +759,11 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 				}
 			}
 
-			st.l.Debug("wait relay to catchup", zap.Bool("enableGTID", st.cfg.EnableGTID), zap.Stringer("load end position", pos1), zap.String("load end gtid", loadStatus.MetaBinlogGTID), zap.Stringer("relay position", pos2), zap.String("relay gtid", relayStatus.RelayBinlogGtid))
+			st.l.Debug("wait relay to catchup", zap.Bool("enableGTID", cfg.EnableGTID), zap.Stringer("load end position", pos1), zap.String("load end gtid", loadStatus.MetaBinlogGTID), zap.Stringer("relay position", pos2), zap.String("relay gtid", relayStatus.RelayBinlogGtid))
 
 			select {
 			case <-ctxWait.Done():
-				if st.cfg.EnableGTID {
+				if cfg.EnableGTID {
 					return terror.ErrWorkerWaitRelayCatchupTimeout.Generate(waitRelayCatchupTimeout, loadStatus.MetaBinlogGTID, relayStatus.RelayBinlogGtid)
 				}
 				return terror.ErrWorkerWaitRelayCatchupTimeout.Generate(waitRelayCatchupTimeout, pos1, pos2)
@@ -731,6 +801,28 @@ func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReq
 		err = st.Resume(relay)
 	}
 	return msg, err
+}
+
+func (st *SubTask) getCfg() *config.SubTaskConfig {
+	st.RLock()
+	defer st.RUnlock()
+	return st.cfg
+}
+
+func (st *SubTask) SetCfg(subTaskConfig config.SubTaskConfig) {
+	st.Lock()
+	st.cfg = &subTaskConfig
+	st.Unlock()
+}
+
+func (st *SubTask) getValidatorStage() pb.Stage {
+	st.RLock()
+	defer st.RUnlock()
+
+	if st.validator != nil {
+		return st.validator.Stage()
+	}
+	return pb.Stage_InvalidStage
 }
 
 func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) {
