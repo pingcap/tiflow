@@ -129,7 +129,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 			failpoint.Inject("TestRemoveMetaFile", func() {
 				panic("success check file not exist!!")
 			})
-			worker, _, err2 := ha.GetLoadTask(cli, cfg.Name, cfg.SourceID)
+			worker, err2 := getLoadTask(cli, cfg.Name, cfg.SourceID)
 			if err2 != nil {
 				log.L().Warn("get load task", log.ShortError(err2))
 			}
@@ -188,7 +188,12 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 }
 
 // putLoadTask is called when start restoring data, to put load worker in etcd.
+// This is no-op when the `cli` argument is nil.
 func putLoadTask(cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) error {
+	// some usage like DM as a library, we don't support this feature
+	if cli == nil {
+		return nil
+	}
 	_, err := ha.PutLoadTask(cli, cfg.Name, cfg.SourceID, workerName)
 	if err != nil {
 		return err
@@ -198,11 +203,26 @@ func putLoadTask(cli *clientv3.Client, cfg *config.SubTaskConfig, workerName str
 }
 
 // delLoadTask is called when finish restoring data, to delete load worker in etcd.
+// This is no-op when the `cli` argument is nil.
 func delLoadTask(cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) error {
+	// some usage like DM as a library, we don't support this feature
+	if cli == nil {
+		return nil
+	}
 	_, _, err := ha.DelLoadTask(cli, cfg.Name, cfg.SourceID)
 	if err != nil {
 		return err
 	}
 	log.L().Info("delete load worker in etcd for full mode", zap.String("task", cfg.Name), zap.String("source", cfg.SourceID), zap.String("worker", workerName))
 	return nil
+}
+
+// getLoadTask gets the worker which in load stage for the source of the subtask.
+// It will return "" and no error when the `cli` argument is nil.
+func getLoadTask(cli *clientv3.Client, task, sourceID string) (string, error) {
+	if cli == nil {
+		return "", nil
+	}
+	name, _, err := ha.GetLoadTask(cli, task, sourceID)
+	return name, err
 }

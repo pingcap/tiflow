@@ -60,8 +60,8 @@ function test_save_checkpoint_failed() {
 	ls $WORK_DIR/worker1/dumped_data.test
 
 	echo "test_save_checkpoint_failed SUCCESS!"
-	cleanup_data load_interrupt
 	cleanup_process $*
+	cleanup_data load_interrupt
 }
 
 function run() {
