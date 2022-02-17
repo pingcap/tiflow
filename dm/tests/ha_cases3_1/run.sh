@@ -164,7 +164,7 @@ function test_watch_source_bound_exit() {
 		"no mysql source is being handled in the worker" 1
 
 	# dm-worker will retry watch source bound again and agin
-	check_log_contain_with_retry 'observeSourceBound meet error will retry and restart keepalive' $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry 'observeSourceBound is failed and will quit now outer logic will trigger a retry' $WORK_DIR/worker1/log/dm-worker.log
 
 	echo "[$(date)] <<<<<< finish test_watch_source_bound_exit >>>>>>"
 }
