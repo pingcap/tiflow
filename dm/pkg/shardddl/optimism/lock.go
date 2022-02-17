@@ -223,11 +223,15 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			err = l.AddDroppedColumns(callerSource, callerSchema, callerTable, cols)
 		}
 		// only update table info if no error or ignore conflict or conflict DDL
-		if err != nil && !terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+		if err != nil {
 			var revertInfo schemacmp.Table
-			if ignoreConflict {
+			switch {
+			case ignoreConflict:
+				// forcely set schema for --ignore-conflict
 				revertInfo = schemacmp.Encode(newTIs[len(newTIs)-1])
-			} else {
+			case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
+				return
+			default:
 				revertInfo = schemacmp.Encode(info.TableInfoBefore)
 			}
 			l.tables[callerSource][callerSchema][callerTable] = revertInfo
