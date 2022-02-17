@@ -48,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
@@ -1545,14 +1546,21 @@ func (s *Server) generateSubTask(
 	task string,
 	cliArgs *config.TaskCliArgs,
 ) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+	var err error
 	cfg := config.NewTaskConfig()
 	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
 	if cliArgs != nil && cliArgs.StartTime != "" {
-		for _, inst := range cfg.MySQLInstances {
-			inst.Meta = &config.Meta{BinLogName: cliArgs.StartTime}
+		err = cfg.RawDecode(task)
+		if err != nil {
+			return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 		}
+		for _, inst := range cfg.MySQLInstances {
+			inst.Meta = &config.Meta{BinLogName: binlog.FakeBinlogName}
+		}
+		err = cfg.Adjust()
+	} else {
+		err = cfg.Decode(task)
 	}
-	err := cfg.Decode(task)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}

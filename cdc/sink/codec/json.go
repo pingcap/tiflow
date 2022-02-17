@@ -400,11 +400,6 @@ func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
 	d.supportMixedBuild = enabled
 }
 
-// AppendResolvedEvent is no-op
-func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	keyMsg := newResolvedMessage(ts)

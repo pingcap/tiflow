@@ -39,6 +39,9 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
 )
 
 const (
@@ -51,6 +54,7 @@ type kafkaSaramaProducer struct {
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
 	clientLock    sync.RWMutex
+	admin         kafka.ClusterAdminClient
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
 	syncProducer  sarama.SyncProducer
@@ -75,6 +79,8 @@ type kafkaSaramaProducer struct {
 
 	role util.Role
 	id   model.ChangeFeedID
+
+	metricsMonitor *saramaMetricsMonitor
 }
 
 type kafkaProducerClosingFlag = int32
@@ -256,6 +262,20 @@ func (k *kafkaSaramaProducer) Close() error {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
+
+	k.metricsMonitor.Cleanup()
+
+	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
+	start = time.Now()
+	if err := k.admin.Close(); err != nil {
+		log.Warn("close kafka cluster admin with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+
 	return nil
 }
 
@@ -266,12 +286,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
+		case <-ticker.C:
+			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
@@ -317,12 +342,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err),
-				zap.String("changefeed", changefeedID), zap.Any("role", role))
-		}
-	}()
 
 	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -349,6 +368,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		return nil, err
 	}
 	k := &kafkaSaramaProducer{
+		admin:         admin,
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
@@ -366,6 +386,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 
 		id:   changefeedID,
 		role: role,
+
+		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

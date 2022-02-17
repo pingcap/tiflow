@@ -129,11 +129,6 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	return EncoderNeedAsyncWrite, nil
 }
 
-// AppendResolvedEvent is no-op for Avro
-func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeCheckpointEvent is no-op for now
 func (a *AvroEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	return nil, nil
@@ -453,7 +448,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		}
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
-		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
+		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:

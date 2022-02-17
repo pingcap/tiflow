@@ -334,6 +334,12 @@ func (l *LightningLoader) Close() {
 	l.closed.Store(true)
 }
 
+// Kill does ungraceful shutdown.
+func (l *LightningLoader) Kill() {
+	// TODO: implement kill
+	l.Close()
+}
+
 // Pause pauses the process, and it can be resumed later
 // should cancel context from external.
 func (l *LightningLoader) Pause() {

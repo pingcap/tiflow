@@ -58,11 +58,117 @@ function lazy_init_tracker() {
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t50' 1
 	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t51'
 
-	cleanup_data start_task
 	cleanup_process
+	cleanup_data start_task
+}
+
+function start_task_by_time() {
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
+
+	run_sql_source1 'DROP DATABASE if exists start_task;'
+	run_sql_source1 'CREATE DATABASE start_task;'
+	run_sql_source1 'CREATE TABLE start_task.t1 (c INT PRIMARY KEY);'
+
+	sleep 2
+	start_time=$(date '+%Y-%m-%d %T') # 2022-01-26 17:32:22
+	sleep 2
+
+	run_sql_source1 'CREATE TABLE start_task.t2 (c INT PRIMARY KEY);'
+	run_sql_source1 'INSERT INTO start_task.t2 VALUES (1), (2);INSERT INTO start_task.t2 VALUES (3), (4);'
+
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s/task-mode: all/task-mode: incremental/g" $WORK_DIR/dm-task.yaml
+
+	# test with relay
+
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '$start_time'" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "show tables in start_task;" "t2"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 1"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	# test without relay and safe mode
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-relay -s $SOURCE_ID1" \
+		"\"result\": true" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"\"relayStatus\": null" 1
+
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"transfer-source $SOURCE_ID1 worker2" \
+		"\"result\": true" 1
+
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '$start_time'" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "show tables in start_task;" "t2"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 1"
+
+	# no duplicate entry error
+	check_log_contain_with_retry "enable safe-mode for safe mode exit point, will exit at" $WORK_DIR/worker2/log/dm-worker.log
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	# test too early
+
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '1995-03-07 01:02:03'" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "show tables in start_task;" "t1"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'start_task';" "count(1): 2"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	# test too late
+
+	run_sql_tidb 'DROP DATABASE if exists start_task;CREATE DATABASE start_task;'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --start-time '2037-12-12 01:02:03'"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 1 \
+		"no binlog location matches it" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	export GO_FAILPOINTS=''
+	cleanup_process
+	cleanup_data start_task
 }
 
 function run() {
+	start_task_by_time
 	lazy_init_tracker
 	failpoints=(
 		# 1152 is ErrAbortingConnection
