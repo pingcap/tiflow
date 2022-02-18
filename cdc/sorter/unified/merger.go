@@ -31,11 +31,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
-// TODO refactor this into a struct Merger.
-func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
+type sorterMerger struct {
+	pendingSet             sync.Map
+	resolvedTsNotifierChan chan struct{}
+	minResolvedTs          uint64
+}
+
+func (m *sorterMerger) runMerger(ctx context.Context, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
@@ -47,10 +51,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
-	lastResolvedTs := make([]uint64, numSorters)
-	minResolvedTs := uint64(0)
 	var workingSet map[*flushTask]struct{}
-	pendingSet := &sync.Map{}
 
 	defer func() {
 		log.Debug("Unified Sorter: merger exiting, cleaning up resources")
@@ -94,7 +95,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			cleanUpTask(task)
 		}
 
-		pendingSet.Range(func(task, _ interface{}) bool {
+		m.pendingSet.Range(func(task, _ interface{}) bool {
 			cleanUpTask(task.(*flushTask))
 			return true
 		})
@@ -138,7 +139,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		// which guarantees that useful new flushTasks are not missed, and (2) by design, once minResolvedTs is updated,
 		// new flushTasks will satisfy `task.tsLowerBound > minResolvedTs`, and such flushTasks are ignored in
 		// the closure.
-		pendingSet.Range(func(iTask, iCache interface{}) bool {
+		m.pendingSet.Range(func(iTask, iCache interface{}) bool {
 			task := iTask.(*flushTask)
 			var cache *model.PolymorphicEvent
 			if iCache != nil {
@@ -191,12 +192,12 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if event.CRTs > minResolvedTs {
-				pendingSet.Store(task, event)
+				m.pendingSet.Store(task, event)
 				// continues the loop
 				return true
 			}
 
-			pendingSet.Store(task, nil)
+			m.pendingSet.Store(task, nil)
 			workingSet[task] = struct{}{}
 
 			heap.Push(sortHeap, &sortItem{
@@ -214,7 +215,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		retire := func(task *flushTask) error {
 			delete(workingSet, task)
-			cached, ok := pendingSet.Load(task)
+			cached, ok := m.pendingSet.Load(task)
 			if !ok {
 				log.Panic("task not found in pendingSet")
 			}
@@ -231,7 +232,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if nextEvent == nil {
-				pendingSet.Delete(task)
+				m.pendingSet.Delete(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -244,7 +245,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					return errors.Trace(err)
 				}
 			} else {
-				pendingSet.Store(task, nextEvent)
+				m.pendingSet.Store(task, nextEvent)
 				if nextEvent.CRTs < minResolvedTs {
 					log.Panic("remaining event CRTs too small",
 						zap.Uint64("next-ts", nextEvent.CRTs),
@@ -334,7 +335,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event == nil {
 				// EOF
 				delete(workingSet, task)
-				pendingSet.Delete(task)
+				m.pendingSet.Delete(task)
 
 				err := task.reader.resetAndClose()
 				if err != nil {
@@ -353,7 +354,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
 				// we have processed all events from this task that need to be processed in this merge
 				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
-					pendingSet.Store(task, event)
+					m.pendingSet.Store(task, event)
 				}
 				err := retire(task)
 				if err != nil {
@@ -404,89 +405,83 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
-	resolvedTsNotifierChan := make(chan struct{}, 1)
-	errg, ctx := errgroup.WithContext(ctx)
+	resolvedTsTicker := time.NewTicker(time.Second * 1)
 
-	errg.Go(func() error {
-		for {
-			var task *flushTask
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case task = <-in:
+	defer resolvedTsTicker.Stop()
+
+	var lastResolvedTs uint64
+	resolvedTsTickFunc := func() error {
+		curResolvedTs := atomic.LoadUint64(&m.minResolvedTs)
+		if curResolvedTs > lastResolvedTs {
+			err := onMinResolvedTsUpdate(curResolvedTs)
+			if err != nil {
+				return errors.Trace(err)
 			}
+		} else if curResolvedTs < lastResolvedTs {
+			log.Panic("resolved-ts regressed in sorter",
+				zap.Uint64("curResolvedTs", curResolvedTs),
+				zap.Uint64("lastResolvedTs", lastResolvedTs))
+		}
+		return nil
+	}
 
-			if task == nil {
-				tableID, tableName := util.TableIDFromCtx(ctx)
-				log.Debug("Merger input channel closed, exiting",
-					zap.Int64("tableID", tableID),
-					zap.String("tableName", tableName))
-				return nil
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-resolvedTsTicker.C:
+			if err := resolvedTsTickFunc(); err != nil {
+				return err
 			}
-
-			if !task.isEmpty {
-				pendingSet.Store(task, nil)
-			} // otherwise it is an empty flush
-
-			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
-				lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
-			}
-
-			minTemp := uint64(math.MaxUint64)
-			for _, ts := range lastResolvedTs {
-				if minTemp > ts {
-					minTemp = ts
-				}
-			}
-
-			if minTemp > minResolvedTs {
-				atomic.StoreUint64(&minResolvedTs, minTemp)
-				select {
-				case resolvedTsNotifierChan <- struct{}{}:
-				default:
-				}
+		case <-m.resolvedTsNotifierChan:
+			if err := resolvedTsTickFunc(); err != nil {
+				return err
 			}
 		}
-	})
+	}
+}
 
-	errg.Go(func() error {
-		resolvedTsTicker := time.NewTicker(time.Second * 1)
+func (m *sorterMerger) runFlushTask(ctx context.Context, numSorters int, in <-chan *flushTask) error {
+	lastResolvedTs := make([]uint64, numSorters)
+	for {
+		var task *flushTask
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case task = <-in:
+		}
 
-		defer resolvedTsTicker.Stop()
-
-		var lastResolvedTs uint64
-		resolvedTsTickFunc := func() error {
-			curResolvedTs := atomic.LoadUint64(&minResolvedTs)
-			if curResolvedTs > lastResolvedTs {
-				err := onMinResolvedTsUpdate(curResolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			} else if curResolvedTs < lastResolvedTs {
-				log.Panic("resolved-ts regressed in sorter",
-					zap.Uint64("curResolvedTs", curResolvedTs),
-					zap.Uint64("lastResolvedTs", lastResolvedTs))
-			}
+		if task == nil {
+			tableID, tableName := util.TableIDFromCtx(ctx)
+			log.Debug("Merger input channel closed, exiting",
+				zap.Int64("tableID", tableID),
+				zap.String("tableName", tableName))
 			return nil
 		}
 
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-resolvedTsTicker.C:
-				if err := resolvedTsTickFunc(); err != nil {
-					return err
-				}
-			case <-resolvedTsNotifierChan:
-				if err := resolvedTsTickFunc(); err != nil {
-					return err
-				}
+		if !task.isEmpty {
+			m.pendingSet.Store(task, nil)
+		} // otherwise it is an empty flush
+
+		if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
+			lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
+		}
+
+		minTemp := uint64(math.MaxUint64)
+		for _, ts := range lastResolvedTs {
+			if minTemp > ts {
+				minTemp = ts
 			}
 		}
-	})
 
-	return errg.Wait()
+		if minTemp > m.minResolvedTs {
+			atomic.StoreUint64(&m.minResolvedTs, minTemp)
+			select {
+			case m.resolvedTsNotifierChan <- struct{}{}:
+			default:
+			}
+		}
+	}
 }
 
 func mergerCleanUp(in <-chan *flushTask) {
