@@ -780,7 +780,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 	// For idempotent DDL
 	// this often happens when an info TrySync twice, e.g. worker restart/resume task
 	if cmp, err := prevTable.Compare(l.tables[source][schema][table]); err != nil || cmp != 0 {
-		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", l.tables[schema][source][table]), zap.Stringer("prev-table", prevTable))
+		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", l.tables[source][schema][table]), zap.Stringer("prev-table", prevTable))
 		l.tables[source][schema][table] = prevTable
 		l.finalTables[source][schema][table] = prevTable
 	}
@@ -838,7 +838,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 	// if more than one conflict tables and this conflict DDL has no conflict with normal tables
 	// e.g. tb1,tb2 put ddl1(rename a to b); tb1 put ddl2(rename c to d); tb2 crash and reput ddl1(rename a to b)
 	// now tb2's ddl1 is a conflict DDL but has no conflict with normal tables
-	if len(l.conflictTables) > 1 && l.noConflictWithNormalTables(source, schema, table, postTable) {
+	if l.multipleConflictTables() && l.noConflictWithNormalTables(source, schema, table, postTable) {
 		l.removeConflictTable(source, schema, table)
 		l.tables[source][schema][table] = postTable
 		return true, ConflictNone
@@ -1132,4 +1132,20 @@ func (l *Lock) redirectForConflictTables(callerSource, callerSchema, callerTable
 		}
 	}
 	return nil
+}
+
+// multipleConflictTables check whether a lock has multiple conflict tables.
+func (l *Lock) multipleConflictTables() bool {
+	cnt := 0
+	for _, schemaTables := range l.conflictTables {
+		for _, tables := range schemaTables {
+			for range tables {
+				cnt++
+				if cnt > 1 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
