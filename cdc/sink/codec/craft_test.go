@@ -34,7 +34,7 @@ var _ = check.Suite(&craftBatchSuite{
 	resolvedTsCases: codecResolvedTSCases,
 })
 
-func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(value []byte) (EventBatchDecoder, error)) {
+func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, newDecoder func(value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
@@ -81,11 +81,8 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder := encoderBuilder.Build(context.Background())
 	for _, cs := range s.rowCases {
-		config := NewConfig("craft").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
-
 		events := 0
 		for _, row := range cs {
 			op, err := encoder.AppendRowChangedEvent(row)
@@ -103,11 +100,8 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder = encoderBuilder.Build(context.Background())
 	for _, cs := range s.ddlCases {
-		config := NewConfig("craft").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
-
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -118,11 +112,8 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder = encoderBuilder.Build(context.Background())
 	for _, cs := range s.resolvedTsCases {
-		config := NewConfig("craft").WithMaxMessageBytes(8192)
-		config.maxBatchSize = 64
-		encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
-
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -201,8 +192,18 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 
 func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := NewCraftEventBatchEncoder()
-		return encoder
-	}, NewCraftEventBatchDecoder)
+	config := NewConfig("craft").WithMaxMessageBytes(8192)
+	config.maxBatchSize = 64
+	s.testBatchCodec(c, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
+}
+
+func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig("craft")
+
+	builder := &craftEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build(context.Background()).(*CraftEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
 }

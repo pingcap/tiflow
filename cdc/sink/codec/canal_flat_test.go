@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pingcap/check"
@@ -70,7 +71,23 @@ var testCaseDDL = &model.DDLEvent{
 	Type:  mm.ActionCreateTable,
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
+func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig("canal-json")
+
+	builder := &canalFlatEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
+
+	config.enableTiDBExtension = true
+	builder = &canalFlatEventBatchEncoderBuilder{config: config}
+	encoder, ok = builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
+}
+
+func (s *canalFlatSuite) TestNewCanalFlatMessage4aDML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)

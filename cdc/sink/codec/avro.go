@@ -170,7 +170,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetParams is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(config *Config) {
+func (a *AvroEventBatchEncoder) SetParams(_ *Config) {
 	// no op
 }
 
@@ -447,7 +447,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		}
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
-		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
+		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
@@ -553,6 +553,7 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Co
 // Build an AvroEventBatchEncoder.
 func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
+	encoder.SetParams(b.config)
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
 	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))

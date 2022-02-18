@@ -44,9 +44,11 @@ func NewConfig(protocol string) *Config {
 	return &Config{
 		protocol: protocol,
 
-		maxMessageBytes:     config.DefaultMaxMessageBytes,
-		maxBatchSize:        defaultMaxBatchSize,
+		maxMessageBytes: config.DefaultMaxMessageBytes,
+		maxBatchSize:    defaultMaxBatchSize,
+
 		enableTiDBExtension: false,
+		avroRegistry:        "",
 	}
 }
 
@@ -106,4 +108,8 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func (c *Config) GetMaxMessageBytes() int {
+	return c.maxMessageBytes
 }
