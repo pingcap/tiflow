@@ -454,7 +454,8 @@ func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
 		obtainedMySQLType := getMySQLType(item.column)
 		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
 
-		obtainedJavaSQLType := getJavaSQLType(item.column, obtainedMySQLType)
+		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
+		c.Assert(err, check.IsNil)
 		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
 	}
 }
