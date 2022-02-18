@@ -471,7 +471,16 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, baseConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
+	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+
+	if err := encoderConfig.Validate(); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	sink, err := newMqSink(ctx, baseConfig.Credential, sProducer, filter, replicaConfig, encoderConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
