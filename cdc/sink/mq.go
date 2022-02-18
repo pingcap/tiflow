@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -107,9 +108,10 @@ func newMqSink(
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
-	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON) && !config.EnableOldValue {
-		log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !config.EnableOldValue {
+		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
+			"Please update changefeed config", protocol.String()))
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol.String())))
 	}
 
 	// pre-flight verification of encoder parameters

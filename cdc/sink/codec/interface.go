@@ -189,6 +189,24 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
+// String converts the Protocol enum type string to string.
+func (p Protocol) String() string {
+	switch p {
+	case ProtocolDefault:
+		return "default"
+	case ProtocolCanal:
+		return "canal"
+	case ProtocolAvro:
+		return "avro"
+	case ProtocolMaxwell:
+		return "maxwell"
+	case ProtocolCanalJSON:
+		return "canal-json"
+	default:
+		panic("unreachable")
+	}
+}
+
 // NewEventBatchEncoder returns a function of creating an EventBatchEncoder by protocol.
 func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 	switch p {
