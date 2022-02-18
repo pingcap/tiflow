@@ -400,7 +400,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if c.Mode == ModeAll || c.Mode == ModeFull {
 		// check
 		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
-		if isS3 && c.ImportMode != LoadModeSQL {
+		if isS3 && c.ImportMode == LoadModeLoader {
 			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
 		}
 		// add suffix
