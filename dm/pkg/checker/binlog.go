@@ -203,7 +203,7 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-	if c.caseSensitive {
+	if !c.caseSensitive {
 		binlogDoDB = strings.ToLower(binlogDoDB)
 		binlogIgnoreDB = strings.ToLower(binlogIgnoreDB)
 	}
@@ -225,13 +225,13 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 			for db := range c.schemas {
 				dbs = append(dbs, db)
 			}
-			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db", strings.Join(dbs, ","))
+			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db[%s]", strings.Join(dbs, ","), binlogDoDB)
 			return result
 		}
 	} else {
 		for _, ignoreDB := range binlogIgnoreDBs {
 			if _, ok := c.schemas[ignoreDB]; ok {
-				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db", ignoreDB)
+				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db[%s]", ignoreDB, binlogIgnoreDB)
 				return result
 			}
 		}
