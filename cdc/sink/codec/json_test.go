@@ -108,10 +108,11 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		}
 	}
 
-	encoder := encoderBuilder.Build(context.Background())
-	mixedEncoder := encoderBuilder.Build(context.Background())
-	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.rowCases {
+		encoder := encoderBuilder.Build(context.Background())
+		mixedEncoder := encoderBuilder.Build(context.Background())
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
@@ -136,11 +137,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 			checkRowDecoder(decoder, cs)
 		}
 	}
-
-	encoder = encoderBuilder.Build(context.Background())
-	mixedEncoder = encoderBuilder.Build(context.Background())
-	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.ddlCases {
+		encoder := encoderBuilder.Build(context.Background())
+		mixedEncoder := encoderBuilder.Build(context.Background())
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -162,10 +162,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		checkDDLDecoder(mixedDecoder, cs)
 	}
 
-	encoder = encoderBuilder.Build(context.Background())
-	mixedEncoder = encoderBuilder.Build(context.Background())
-	mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 	for _, cs := range s.resolvedTsCases {
+		encoder := encoderBuilder.Build(context.Background())
+		mixedEncoder := encoderBuilder.Build(context.Background())
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)

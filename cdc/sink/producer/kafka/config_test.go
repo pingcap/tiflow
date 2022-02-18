@@ -205,61 +205,44 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		topicMaxMessageBytes    string
 		expectedMaxMessageBytes string
 	}{
-		//`max-message-bytes` not set, topic not created, broker `message.max.bytes` is the default.
+		// topic not created,
+		// `max-message-bytes` not set, `message.max.bytes` < `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `message.max.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"not-exist-topic"},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
 		},
-		// `max-message-bytes` not set, topic not created, broker `message.max.bytes` is set larger than the default `max-message-bytes`
+		// topic not created,
+		// `max-message-bytes` not set, `message.max.bytes` = `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{"not-exist-topic"},
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+		// topic not created,
+		// `max-message-bytes` not set, broker `message.max.bytes` > `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"no-params"},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 		},
-		// `max-message-bytes` not set, topic not created, broker `message.max.bytes` is set less than the default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"no-params"},
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-			kafka.DefaultTopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-		},
-		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` is the default
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-		},
-		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` large than the default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.DefaultBrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			strconv.Itoa(config.DefaultMaxMessageBytes),
-		},
-		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` small than the default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.DefaultBrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-		},
+
 		// topic not created
 		// user set `max-message-bytes` < `message.max.bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
 		},
 		// topic not created
@@ -268,7 +251,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
 		},
 		// topic not created
@@ -276,18 +259,18 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
 		},
 		// topic not created
 		// `message.max.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
 		},
 		// topic not created
 		// default `max-message-bytes` < user set `max-message-bytes` < `message.max.bytes`
@@ -295,7 +278,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 		// topic not created
@@ -304,16 +287,46 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
+
+		// topic created,
+		// `max-message-bytes` not set, topic's `max.message.bytes` < `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max.message.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
+		},
+		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` = `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` > `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+
 		// topic created
 		// user set `max-message-bytes` < `max.message.bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
 		},
 		// topic created
@@ -321,7 +334,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
 		},
@@ -330,25 +343,25 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 		},
 		// topic created
 		// `max.message.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
-			kafka.DefaultTopicMaxMessageBytes,
-			kafka.DefaultTopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
 		},
 		// topic created
 		// default `max-message-bytes` < user set `max-message-bytes` < `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
@@ -357,15 +370,15 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
-			kafka.DefaultBrokerMessageMaxBytes,
+			kafka.BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 	}
 
 	for _, a := range combinations {
-		kafka.DefaultBrokerMessageMaxBytes = a.brokerMessageMaxBytes
-		kafka.DefaultTopicMaxMessageBytes = a.topicMaxMessageBytes
+		kafka.BrokerMessageMaxBytes = a.brokerMessageMaxBytes
+		kafka.TopicMaxMessageBytes = a.topicMaxMessageBytes
 
 		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
 		sinkURI, err := url.Parse(uri)
@@ -395,9 +408,12 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		err = encoderConfig.Validate()
 		c.Assert(err, check.IsNil)
 
-		c.Assert(baseConfig.MaxMessageBytes, check.Equals, saramaConfig.Producer.MaxMessageBytes)
-		c.Assert(encoderConfig.GetMaxMessageBytes(), check.Equals, saramaConfig.Producer.MaxMessageBytes)
-		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, a.expectedMaxMessageBytes)
+		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
+		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, encoderConfig.GetMaxMessageBytes())
+
+		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
+		c.Assert(err, check.IsNil)
+		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expected)
 
 		_ = adminClient.Close()
 	}

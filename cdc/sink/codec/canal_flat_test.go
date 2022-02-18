@@ -75,13 +75,13 @@ func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig("canal-json")
 
-	builder := &canalEventBatchEncoderBuilder{config: config}
+	builder := &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
 
 	config.enableTiDBExtension = true
-	builder = &canalEventBatchEncoderBuilder{config: config}
+	builder = &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok = builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
