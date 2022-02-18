@@ -102,7 +102,7 @@ func TestBinlogDB(t *testing.T) {
 			schemas: map[string]struct{}{
 				"do": {},
 			},
-			state: StateSuccess,
+			state: StateFailure,
 		},
 		{
 			caseSensitive: false,
@@ -110,7 +110,7 @@ func TestBinlogDB(t *testing.T) {
 			schemas: map[string]struct{}{
 				"do": {},
 			},
-			state: StateFailure,
+			state: StateSuccess,
 		},
 	}
 

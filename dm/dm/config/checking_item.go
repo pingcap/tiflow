@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-// DM definition checking items
+// DM definition checking items.
 const (
 	AllChecking                  = "all"
 	DumpPrivilegeChecking        = "dump_privilege"
