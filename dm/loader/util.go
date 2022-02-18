@@ -164,7 +164,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	} else {
 		if storage.IsS3Path(cfg.Dir) {
 			// s3 no need immediately remove
-			log.L().Info("dump path is s3, and s3 stroage no need immediately remove dump data files.", zap.String("S3 Path", cfg.Dir))
+			log.L().Info("dump path is s3, and s3 storage does not need to immediately remove dump data files.", zap.String("S3 Path", cfg.Dir))
 			return
 		}
 		// leave metadata file and table structure files, only delete data files
