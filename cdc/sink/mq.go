@@ -467,16 +467,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, err
 	}
 
+	saramaConfig, err := kafka.NewSaramaConfigImpl(ctx, baseConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, baseConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
-
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
