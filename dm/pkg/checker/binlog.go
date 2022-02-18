@@ -181,7 +181,11 @@ type BinlogDBChecker struct {
 
 // NewBinlogDBChecker returns a RealChecker.
 func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}, caseSensitive bool) RealChecker {
-	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: schemas, caseSensitive: caseSensitive}
+	newSchemas := make(map[string]struct{}, len(schemas))
+	for schema := range schemas {
+		newSchemas[schema] = struct{}{}
+	}
+	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: newSchemas, caseSensitive: caseSensitive}
 }
 
 // Check implements the RealChecker interface.
