@@ -27,11 +27,11 @@ func TestBinlogDB(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []struct {
-		flavor   string
-		doDB     string
-		ignoreDB string
-		schemas  map[string]struct{}
-		state    State
+		doDB          string
+		ignoreDB      string
+		schemas       map[string]struct{}
+		state         State
+		caseSensitive bool
 	}{
 		// doDB
 		{
@@ -57,7 +57,7 @@ func TestBinlogDB(t *testing.T) {
 			state: StateFailure,
 		},
 		{
-			doDB: "do, do2",
+			doDB: "do,do2",
 			schemas: map[string]struct{}{
 				"do2": {},
 			},
@@ -81,7 +81,7 @@ func TestBinlogDB(t *testing.T) {
 			state: StateSuccess,
 		},
 		{
-			ignoreDB: "ignore, ignore2",
+			ignoreDB: "ignore,ignore2",
 			schemas: map[string]struct{}{
 				"do":      {},
 				"ignore2": {},
@@ -89,16 +89,33 @@ func TestBinlogDB(t *testing.T) {
 			state: StateFailure,
 		},
 		{
-			ignoreDB: "ignore, ignore2",
+			ignoreDB: "ignore,ignore2",
 			schemas: map[string]struct{}{
 				"ignore3": {},
 			},
 			state: StateSuccess,
 		},
+		// case sensitive
+		{
+			caseSensitive: true,
+			doDB:          "Do",
+			schemas: map[string]struct{}{
+				"do": {},
+			},
+			state: StateSuccess,
+		},
+		{
+			caseSensitive: false,
+			doDB:          "Do",
+			schemas: map[string]struct{}{
+				"do": {},
+			},
+			state: StateFailure,
+		},
 	}
 
 	for _, cs := range cases {
-		binlogDBChecker := NewBinlogDBChecker(db, &dbutil.DBConfig{}, cs.schemas)
+		binlogDBChecker := NewBinlogDBChecker(db, &dbutil.DBConfig{}, cs.schemas, cs.caseSensitive)
 		versionRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "mysql")
 		masterStatusRow := sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
 			AddRow("", 0, cs.doDB, cs.ignoreDB, "")

@@ -173,14 +173,15 @@ func (pc *MySQLBinlogRowImageChecker) Name() string {
 
 // BinlogDBChecker checks if migrated dbs are in binlog_do_db or binlog_ignore_db.
 type BinlogDBChecker struct {
-	db      *sql.DB
-	dbinfo  *dbutil.DBConfig
-	schemas map[string]struct{}
+	db            *sql.DB
+	dbinfo        *dbutil.DBConfig
+	schemas       map[string]struct{}
+	caseSensitive bool
 }
 
 // NewBinlogDBChecker returns a RealChecker.
-func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}) RealChecker {
-	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: schemas}
+func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}, caseSensitive bool) RealChecker {
+	return &BinlogDBChecker{db: db, dbinfo: dbinfo, schemas: schemas, caseSensitive: caseSensitive}
 }
 
 // Check implements the RealChecker interface.
@@ -202,7 +203,10 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
-
+	if c.caseSensitive {
+		binlogDoDB = strings.ToLower(binlogDoDB)
+		binlogIgnoreDB = strings.ToLower(binlogIgnoreDB)
+	}
 	binlogDoDB = strings.ReplaceAll(binlogDoDB, " ", "")
 	binlogIgnoreDB = strings.ReplaceAll(binlogIgnoreDB, " ", "")
 
