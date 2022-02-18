@@ -20,11 +20,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
+	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -44,7 +46,9 @@ func init() {
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
+	orchestrator.InitMetrics(registry)
 	// Sorter metrics
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
+	redowriter.InitMetrics(registry)
 }

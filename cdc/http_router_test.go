@@ -23,9 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPProfRouter(t *testing.T) {
+func TestPProfPath(t *testing.T) {
 	t.Parallel()
-
 	router := newRouter(capture.NewHTTPHandler(nil))
 
 	apis := []*openAPI{

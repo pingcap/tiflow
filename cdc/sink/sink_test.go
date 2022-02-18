@@ -35,7 +35,7 @@ func TestValidateSink(t *testing.T) {
 	sinkURI := "mysql://root:111@127.0.0.1:3306/"
 	err := Validate(ctx, sinkURI, replicateConfig, opts)
 	require.NotNil(t, err)
-	require.Regexp(t, "fail to open MySQL connection.*ErrMySQLConnectionError.*", err)
+	require.Contains(t, err.Error(), "fail to open MySQL connection")
 
 	// test sink uri right
 	sinkURI = "blackhole://"

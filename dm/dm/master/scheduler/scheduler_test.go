@@ -1578,6 +1578,13 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	s.workers[workerName4] = worker4
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
 	s.sourceCfgs[sourceID2] = &config.SourceConfig{}
+	s.subTaskCfgs.Store(task1, map[string]config.SubTaskConfig{
+		sourceID1: {},
+	})
+	s.subTaskCfgs.Store(task2, map[string]config.SubTaskConfig{
+		sourceID1: {},
+		sourceID2: {},
+	})
 
 	worker1.ToFree()
 	c.Assert(s.boundSourceToWorker(sourceID1, worker1), IsNil)
@@ -1650,6 +1657,11 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	}), IsTrue)
 	c.Assert(s.bounds[sourceID2], DeepEquals, worker4)
 	c.Assert(worker2.stage, Equals, WorkerFree)
+
+	// after stop-task, hasLoadTaskByWorkerAndSource is no longer valid
+	c.Assert(s.hasLoadTaskByWorkerAndSource(workerName4, sourceID2), IsTrue)
+	s.subTaskCfgs.Delete(task2)
+	c.Assert(s.hasLoadTaskByWorkerAndSource(workerName4, sourceID2), IsFalse)
 
 	cancel1()
 	wg.Wait()

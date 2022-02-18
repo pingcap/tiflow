@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -121,6 +122,12 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 
 func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 	defer testleak.AfterTest(c)()
+
+	_ = failpoint.Enable("github.com/pingcap/ticdc/pkg/orchestrator/InjectProgressRequestAfterCommit", "10%return(true)")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/orchestrator/InjectProgressRequestAfterCommit")
+	}()
+
 	totalAccountNumber := 25
 	workerNumber := 10
 	var wg sync.WaitGroup
@@ -150,7 +157,7 @@ func (s *etcdWorkerSuite) TestEtcdBank(c *check.C) {
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{c: c, index: i, account: make([]int, totalAccountNumber)})
 				c.Assert(err, check.IsNil)
-				err = worker.Run(ctx, nil, 100*time.Millisecond)
+				err = worker.Run(ctx, nil, 100*time.Millisecond, "127.0.0.1")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}

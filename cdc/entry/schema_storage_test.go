@@ -129,8 +129,8 @@ func TestTable(t *testing.T) {
 				Length: 10,
 			},
 		},
-		Unique:  true,
-		Primary: true,
+		Unique:  false,
+		Primary: false,
 		State:   timodel.StatePublic,
 	}
 	// table info

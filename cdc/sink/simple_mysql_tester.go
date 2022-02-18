@@ -25,12 +25,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/quotes"
-	"go.uber.org/zap"
 )
 
 func init() {
@@ -85,7 +87,7 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	db, err = sql.Open("mysql", dsnStr)
 	if err != nil {
 		return nil, errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
@@ -102,11 +104,6 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 		log.Info("the old value checker is enabled")
 	}
 	return sink, nil
-}
-
-func (s *simpleMySQLSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// do nothing
-	return nil
 }
 
 // EmitRowChangedEvents sends Row Changed Event to Sink
@@ -176,7 +173,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
 	}
 	_, err := s.db.ExecContext(ctx, sql)
-	if err != nil && isIgnorableDDLError(err) {
+	if err != nil && errorutil.IsIgnorableMySQLDDLError(err) {
 		log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 		return nil
 	}
@@ -185,7 +182,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 
 // FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 // TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
 	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))
@@ -215,7 +212,7 @@ func (s *simpleMySQLSink) Close(ctx context.Context) error {
 	return s.db.Close()
 }
 
-func (s *simpleMySQLSink) Barrier(ctx context.Context) error {
+func (s *simpleMySQLSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 

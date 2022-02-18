@@ -44,12 +44,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 func Test(t *testing.T) {
@@ -294,7 +296,18 @@ func newMockServiceSpecificAddr(
 	lis, err := lc.Listen(ctx, "tcp", listenAddr)
 	c.Assert(err, check.IsNil)
 	addr = lis.Addr().String()
-	grpcServer = grpc.NewServer()
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             60 * time.Second,
+		PermitWithoutStream: true,
+	}
+	kasp := keepalive.ServerParameters{
+		MaxConnectionIdle:     60 * time.Second, // If a client is idle for 60 seconds, send a GOAWAY
+		MaxConnectionAge:      60 * time.Second, // If any connection is alive for more than 60 seconds, send a GOAWAY
+		MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5 seconds for pending RPCs to complete before forcibly closing connections
+		Time:                  5 * time.Second,  // Ping the client if it is idle for 5 seconds to ensure the connection is still active
+		Timeout:               1 * time.Second,  // Wait 1 second for the ping ack before assuming the connection is dead
+	}
+	grpcServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
 	wg.Add(1)
 	go func() {
@@ -1682,10 +1695,7 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	var genLock sync.Mutex
 	nextVer := -1
 	call := int32(0)
-	// 20 here not too much, since check version itself has 3 time retry, and
-	// region cache could also call get store API, which will trigger version
-	// generator too.
-	versionGenCallBoundary := int32(20)
+	versionGenCallBoundary := int32(8)
 	gen := func() string {
 		genLock.Lock()
 		defer genLock.Unlock()
@@ -1740,7 +1750,8 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
-	eventCh := make(chan model.RegionFeedEvent, 10)
+	// NOTICE: eventCh may block the main logic of EventFeed
+	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -2119,7 +2130,6 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 		ch1 <- event
 	}
 	clientWg.Wait()
-
 	cancel()
 }
 
@@ -2603,23 +2613,6 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cancel()
 }
 
-func (s *clientSuite) TestSingleRegionInfoClone(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
-	sri := newSingleRegionInfo(
-		tikv.RegionVerID{},
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-		1000, &tikv.RPCContext{})
-	sri2 := sri.partialClone()
-	sri2.ts = 2000
-	sri2.span.End[0] = 'b'
-	c.Assert(sri.ts, check.Equals, uint64(1000))
-	c.Assert(sri.span.String(), check.Equals, "[61, 63)")
-	c.Assert(sri2.ts, check.Equals, uint64(2000))
-	c.Assert(sri2.span.String(), check.Equals, "[61, 62)")
-	c.Assert(sri2.rpcCtx, check.DeepEquals, &tikv.RPCContext{})
-}
-
 // TestResolveLockNoCandidate tests the resolved ts manager can work normally
 // when no region exceeds reslove lock interval, that is what candidate means.
 func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
@@ -2941,6 +2934,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 			server1Stopped <- struct{}{}
 		}()
 		for {
+			// Currently no msg more than 60s will cause a GoAway msg to end the connection
 			_, err := server.Recv()
 			if err != nil {
 				log.Error("mock server error", zap.Error(err))
@@ -2989,6 +2983,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	initialized := mockInitializedEvent(regionID3, currentRequestID())
 	ch1 <- initialized
 
+	// Connection close for timeout
 	<-server1Stopped
 
 	var requestIds sync.Map
@@ -3590,4 +3585,20 @@ func (s *clientSuite) TestHandleRateLimit(c *check.C) {
 	session.handleRateLimit(ctx)
 	c.Assert(session.rateLimitQueue, check.HasLen, 0)
 	c.Assert(cap(session.rateLimitQueue), check.Equals, 128)
+}
+
+func TestRegionErrorInfoLogRateLimitedHint(t *testing.T) {
+	t.Parallel()
+
+	errInfo := newRegionErrorInfo(singleRegionInfo{}, nil)
+	errInfo.logRateLimitDuration = time.Second
+
+	// True on the first rate limited.
+	require.True(t, errInfo.logRateLimitedHint())
+	require.False(t, errInfo.logRateLimitedHint())
+
+	// True if it lasts too long.
+	time.Sleep(2 * errInfo.logRateLimitDuration)
+	require.True(t, errInfo.logRateLimitedHint())
+	require.False(t, errInfo.logRateLimitedHint())
 }

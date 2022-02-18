@@ -81,6 +81,12 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 	}
 }
 
+func NewCapture4Test() *Capture {
+	return &Capture{
+		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
+	}
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -283,7 +289,8 @@ func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Rea
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
+	captureAddr := c.info.AdvertiseAddr
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as

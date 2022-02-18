@@ -181,6 +181,9 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
@@ -301,11 +304,11 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	defer dcancel()
 	minLoc, err1 := getMinLocInAllSubTasks(dctx, subTaskCfgs)
 	if err1 != nil {
-		return err1
+		w.l.Error("meet error when EnableRelay", zap.Error(err1))
 	}
 
 	if minLoc != nil {
-		log.L().Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
+		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
 		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source

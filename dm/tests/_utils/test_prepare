@@ -59,13 +59,18 @@ function join_string() {
 
 # shortcut for start task on one DM-worker
 function dmctl_start_task_standalone() {
+    if [ $# -ge 2 ]; then
+        remove_meta=$2
+    else
+        remove_meta=""
+    fi
     if [ $# -ge 1 ]; then
         task_conf=$1
     else
         task_conf="$cur/conf/dm-task.yaml"
     fi
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-        "start-task $task_conf" \
+        "start-task $task_conf $remove_meta" \
         "\"result\": true" 2 \
         "\"source\": \"$SOURCE_ID1\"" 1
 }
@@ -219,6 +224,27 @@ function run_sql_tidb() {
 function run_sql_tidb_with_retry() {
     rc=0
     for ((k=1; k<11; k++)); do
+        run_sql_tidb "$1"
+        if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+            rc=1
+            break
+        fi
+        echo "run tidb sql failed $k-th time, retry later"
+        sleep 2
+    done
+    if [[ $rc = 0 ]]; then
+        echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$2'"
+        echo "____________________________________"
+        cat "$TEST_DIR/sql_res.$TEST_NAME.txt"
+        echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        exit 1
+    fi
+}
+
+# shortcut for run tidb sql and check result with retry
+function run_sql_tidb_with_retry_times() {
+    rc=0
+    for ((k=1; k<$3; k++)); do
         run_sql_tidb "$1"
         if grep -Fq "$2" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
             rc=1
