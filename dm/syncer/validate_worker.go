@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,47 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
-
-type RowDataIterator interface {
-	// Next seeks the next row data, it used when compared rows.
-	Next() (map[string]*dbutil.ColumnData, error)
-	// Close release the resource.
-	Close()
-}
-
-type RowDataIteratorImpl struct {
-	Rows *sql.Rows
-}
-
-func (r *RowDataIteratorImpl) Next() (map[string]*dbutil.ColumnData, error) {
-	for r.Rows.Next() {
-		rowData, err := dbutil.ScanRow(r.Rows)
-		return rowData, err
-	}
-	return nil, nil
-}
-
-func (r *RowDataIteratorImpl) Close() {
-	r.Rows.Close()
-}
-
-type RowChangeIteratorImpl struct {
-	Rows []map[string]*dbutil.ColumnData
-	Idx  int
-}
-
-func (b *RowChangeIteratorImpl) Next() (map[string]*dbutil.ColumnData, error) {
-	if b.Idx >= len(b.Rows) {
-		return nil, nil
-	}
-	row := b.Rows[b.Idx]
-	b.Idx++
-	return row, nil
-}
-
-func (b *RowChangeIteratorImpl) Close() {
-	// skip: nothing to do
-}
 
 type validateWorker struct {
 	ctx               context.Context
@@ -117,14 +75,13 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 		}
 		vw.pendingChangesMap[fullTableName] = change
 	}
-	key := strings.Join(row.pk, "-")
-	if val, ok := change.rows[key]; ok {
+	if val, ok := change.rows[row.key]; ok {
 		val.data = row.data
 		val.theType = row.theType
 		val.lastMeetTs = row.lastMeetTs
-		val.retryCnt = row.retryCnt
+		val.failedCnt = 0 // clear failed count
 	} else {
-		change.rows[key] = row
+		change.rows[row.key] = row
 		vw.rowCount++
 	}
 }
@@ -142,21 +99,25 @@ func (vw *validateWorker) validateTableChange() error {
 		}
 		rows := make(map[string]*rowChange, 0)
 		if len(insertUpdateChanges) > 0 {
+			// todo: limit number of validated rows
 			failedRows, err := vw.validateRowChanges(val.table, insertUpdateChanges, false)
 			if err != nil {
 				return err
 			}
 			for _, pk := range failedRows {
 				rows[pk] = val.rows[pk]
+				rows[pk].failedCnt++
 			}
 		}
 		if len(deleteChanges) > 0 {
+			// todo: limit number of validated rows
 			failedRows, err := vw.validateRowChanges(val.table, deleteChanges, true)
 			if err != nil {
 				return err
 			}
 			for _, pk := range failedRows {
 				rows[pk] = val.rows[pk]
+				rows[pk].failedCnt++
 			}
 		}
 		if len(rows) > 0 {
@@ -173,9 +134,14 @@ func (vw *validateWorker) validateTableChange() error {
 func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) ([]string, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		pkValues = append(pkValues, r.pk)
+		pkValues = append(pkValues, r.pkValues)
 	}
-	cond := &Cond{Table: table, PkValues: pkValues}
+	colCnt := len(rows[0].data)
+	cond := &Cond{
+		Table:     table,
+		ColumnCnt: colCnt,
+		PkValues:  pkValues,
+	}
 	var failedRows []string
 	var err error
 	if deleteChange {
@@ -191,143 +157,55 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 }
 
 func (vw *validateWorker) validateDeletedRows(cond *Cond) ([]string, error) {
-	downstreamRowsIterator, err := vw.getRowsFrom(cond)
+	targetRows, err := vw.getTargetRows(cond)
 	if err != nil {
 		return []string{}, err
 	}
-	defer downstreamRowsIterator.Close()
 
-	var failedRows []string
-	for {
-		data, err := downstreamRowsIterator.Next()
-		if err != nil {
-			return nil, err
-		}
-		if data == nil {
-			break
-		}
-		failedRows = append(failedRows, getPKValues(data, cond))
+	failedRows := make([]string, 0, len(targetRows))
+	for key := range targetRows {
+		failedRows = append(failedRows, key)
 	}
 	return failedRows, nil
 }
 
 func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *Cond) ([]string, error) {
 	var failedRows []string
-	var upstreamRowsIterator, downstreamRowsIterator RowDataIterator
-	var err error
-	upstreamRowsIterator, err = getRowChangeIterator(cond.Table, rows)
+	sourceRows := getSourceRowsForCompare(rows)
+	targetRows, err := vw.getTargetRows(cond)
 	if err != nil {
 		return nil, err
 	}
-	defer upstreamRowsIterator.Close()
-	downstreamRowsIterator, err = vw.getRowsFrom(cond)
-	if err != nil {
-		return nil, err
-	}
-	defer downstreamRowsIterator.Close()
 
-	var lastUpstreamData, lastDownstreamData map[string]*dbutil.ColumnData
+	if len(targetRows) > len(sourceRows) {
+		// if this happens, downstream should have removed the primary key
+		vw.L.Debug("more data on downstream, may come from other client")
+	}
 
 	tableInfo := cond.Table.Info
-	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
-	for {
-		if lastUpstreamData == nil {
-			lastUpstreamData, err = upstreamRowsIterator.Next()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if lastDownstreamData == nil {
-			lastDownstreamData, err = downstreamRowsIterator.Next()
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// may have deleted on upstream and haven't synced to downstream,
-		// we mark this as success as we'll check the delete-event later
-		// or downstream removed the pk and added more data by other clients, skip it.
-		if lastUpstreamData == nil && lastDownstreamData != nil {
-			vw.L.Debug("more data on downstream, may come from other client, skip it")
-			break
-		}
-
-		if lastDownstreamData == nil {
-			// target lack some data, should insert the last source datas
-			for lastUpstreamData != nil {
-				failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-
-				lastUpstreamData, err = upstreamRowsIterator.Next()
-				if err != nil {
-					return nil, err
-				}
-			}
-			break
-		}
-
-		eq, cmp, err := vw.compareData(lastUpstreamData, lastDownstreamData, orderKeyCols, tableInfo.Columns)
-		if err != nil {
-			return nil, err
-		}
-		if eq {
-			lastDownstreamData = nil
-			lastUpstreamData = nil
+	for key, sourceRow := range sourceRows {
+		targetRow, ok := targetRows[key]
+		if !ok {
+			failedRows = append(failedRows, key)
 			continue
 		}
 
-		switch cmp {
-		case 1:
-			// may have deleted on upstream and haven't synced to downstream,
-			// we mark this as success as we'll check the delete-event later
-			// or downstream removed the pk and added more data by other clients, skip it.
-			vw.L.Debug("more data on downstream, may come from other client, skip it", zap.Reflect("data", lastDownstreamData))
-			lastDownstreamData = nil
-		case -1:
-			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-			lastUpstreamData = nil
-		case 0:
-			failedRows = append(failedRows, getPKValues(lastUpstreamData, cond))
-			lastUpstreamData = nil
-			lastDownstreamData = nil
+		eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
+		if err != nil {
+			return nil, err
+		}
+		if !eq {
+			failedRows = append(failedRows, key)
 		}
 	}
 	return failedRows, nil
 }
 
-func (vw *validateWorker) compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
-	var (
-		data1, data2 *dbutil.ColumnData
-		str1, str2   string
-		key          string
-		ok           bool
-	)
-
-	equal = true
-
-	defer func() {
-		if equal || err != nil {
-			return
-		}
-
-		if cmp == 0 {
-			vw.L.Warn("find different row", zap.String("column", key), zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
-		} else if cmp > 0 {
-			vw.L.Warn("target had superfluous data", zap.String("row", rowToString(map2)))
-		} else {
-			vw.L.Warn("target lack data", zap.String("row", rowToString(map1)))
-		}
-	}()
-
-	for _, column := range columns {
-		if data1, ok = map1[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("upstream doesn't have key %s", key)
-		}
-		if data2, ok = map2[column.Name.O]; !ok {
-			return false, 0, errors.Errorf("downstream doesn't have key %s", key)
-		}
-		str1 = string(data1.Data)
-		str2 = string(data2.Data)
+func (vw *validateWorker) compareData(sourceData, targetData []*dbutil.ColumnData, columns []*model.ColumnInfo) (bool, error) {
+	equal := true
+	for i, column := range columns {
+		data1, data2 := sourceData[i], targetData[i]
+		str1, str2 := string(data1.Data), string(data2.Data)
 		if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
 			if data1.IsNull == data2.IsNull && data1.IsNull {
 				continue
@@ -336,8 +214,7 @@ func (vw *validateWorker) compareData(map1, map2 map[string]*dbutil.ColumnData, 
 			num1, err1 := strconv.ParseFloat(str1, 64)
 			num2, err2 := strconv.ParseFloat(str2, 64)
 			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
-				return
+				return false, errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
 			}
 			if math.Abs(num1-num2) <= 1e-6 {
 				continue
@@ -350,145 +227,92 @@ func (vw *validateWorker) compareData(map1, map2 map[string]*dbutil.ColumnData, 
 
 		equal = false
 		break
-
-	}
-	if equal {
-		return
 	}
 
-	// Not Equal. Compare orderkeycolumns.
-	for _, col := range orderKeyCols {
-		if data1, ok = map1[col.Name.O]; !ok {
-			err = errors.Errorf("upstream doesn't have key %s", col.Name.O)
-			return
-		}
-		if data2, ok = map2[col.Name.O]; !ok {
-			err = errors.Errorf("downstream doesn't have key %s", col.Name.O)
-			return
-		}
-
-		if NeedQuotes(col.FieldType.Tp) {
-			strData1 := string(data1.Data)
-			strData2 := string(data2.Data)
-
-			if len(strData1) == len(strData2) && strData1 == strData2 {
-				continue
-			}
-
-			if strData1 < strData2 {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		} else if data1.IsNull || data2.IsNull {
-			if data1.IsNull && data2.IsNull {
-				continue
-			}
-
-			if data1.IsNull {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		} else {
-			num1, err1 := strconv.ParseFloat(string(data1.Data), 64)
-			num2, err2 := strconv.ParseFloat(string(data2.Data), 64)
-			if err1 != nil || err2 != nil {
-				err = errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", string(data1.Data), string(data2.Data), err1, err2)
-				return
-			}
-
-			if num1 == num2 {
-				continue
-			}
-
-			if num1 < num2 {
-				cmp = -1
-			} else {
-				cmp = 1
-			}
-			break
-		}
-	}
-
-	return
+	return equal, nil
 }
 
-func (vw *validateWorker) getRowsFrom(cond *Cond) (RowDataIterator, error) {
+func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.ColumnData, error) {
 	tctx := tcontext.NewContext(context.Background(), log.L())
 	fullTableName := cond.Table.Target.String()
-	orderKeys, _ := dbutil.SelectUniqueOrderKey(cond.Table.Info)
-	columnNames := make([]string, 0, len(cond.Table.Info.Columns))
-	for _, col := range cond.Table.ColumnMap {
+	pkColumnNames := make([]string, 0, len(cond.Table.pkIndices))
+	for i := range cond.Table.pkIndices {
+		pkColumnNames = append(pkColumnNames, cond.Table.Info.Columns[i].Name.O)
+	}
+	columnNames := make([]string, 0, cond.ColumnCnt)
+	for i := 0; i < cond.ColumnCnt; i++ {
+		col := cond.Table.Info.Columns[i]
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
 	}
 	columns := strings.Join(columnNames, ", ")
 	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s ORDER BY %s",
-		columns, fullTableName, cond.GetWhere(), strings.Join(orderKeys, ","))
+		columns, fullTableName, cond.GetWhere(), strings.Join(pkColumnNames, ","))
 	rows, err := vw.conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
 		return nil, err
 	}
-	newRowDataIter := &RowDataIteratorImpl{
-		Rows: rows,
+	defer rows.Close()
+
+	result := make(map[string][]*dbutil.ColumnData, 0)
+	for rows.Next() {
+		rowData, err := ScanRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		pkVals := make([]string, 0, len(cond.Table.pkIndices))
+		for _, idx := range cond.Table.pkIndices {
+			colVal := fmt.Sprintf("%v", rowData[idx].Data)
+			pkVals = append(pkVals, colVal)
+		}
+		pk := strings.Join(pkVals, "-")
+		result[pk] = rowData
 	}
-	return newRowDataIter, nil
+	return result, nil
+}
+func ScanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	colVals := make([][]byte, len(cols))
+	colValsI := make([]interface{}, len(colVals))
+	for i := range colValsI {
+		colValsI[i] = &colVals[i]
+	}
+
+	err = rows.Scan(colValsI...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := make([]*dbutil.ColumnData, len(cols))
+	for i := range colVals {
+		result[i] = &dbutil.ColumnData{
+			Data:   colVals[i],
+			IsNull: colVals[i] == nil,
+		}
+	}
+
+	return result, nil
 }
 
-func getRowChangeIterator(table *validateTableInfo, rows []*rowChange) (RowDataIterator, error) {
-	sort.Slice(rows, func(i, j int) bool {
-		left, right := rows[i], rows[j]
-		for idx := range left.pk {
-			if left.pk[idx] != right.pk[idx] {
-				return left.pk[idx] < right.pk[idx]
-			}
-		}
-		return false
-	})
-	it := &RowChangeIteratorImpl{}
+func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData {
+	rowMap := make(map[string][]*dbutil.ColumnData, len(rows))
 	for _, r := range rows {
-		colMap := make(map[string]*dbutil.ColumnData)
-		for _, c := range table.Info.Columns {
+		colValues := make([]*dbutil.ColumnData, 0, len(r.data))
+		for i := range r.data {
 			var colData []byte
-			if r.data[c.Offset] != nil {
-				colData = []byte(fmt.Sprintf("%v", r.data[c.Offset]))
+			if r.data[i] != nil {
+				// todo: may not right for some type, such as time related
+				colData = []byte(fmt.Sprintf("%v", r.data[i]))
 			}
-			colMap[c.Name.O] = &dbutil.ColumnData{
+			colValues[i] = &dbutil.ColumnData{
 				Data:   colData,
-				IsNull: r.data[c.Offset] == nil,
+				IsNull: r.data[i] == nil,
 			}
 		}
-		it.Rows = append(it.Rows, colMap)
+		rowMap[r.key] = colValues
 	}
-	return it, nil
-}
-
-func rowToString(row map[string]*dbutil.ColumnData) string {
-	var s strings.Builder
-	s.WriteString("{ ")
-	for key, val := range row {
-		if val.IsNull {
-			s.WriteString(fmt.Sprintf("%s: IsNull, ", key))
-		} else {
-			s.WriteString(fmt.Sprintf("%s: %s, ", key, val.Data))
-		}
-	}
-	s.WriteString(" }")
-
-	return s.String()
-}
-
-func getPKValues(data map[string]*dbutil.ColumnData, cond *Cond) string {
-	var pkValues []string
-	for _, pkColumn := range cond.Table.PrimaryKey.Columns {
-		// TODO primary key cannot be null, if we uses unique key should make sure all columns are not null
-		pkValues = append(pkValues, string(data[pkColumn.Name.O].Data))
-	}
-	return strings.Join(pkValues, "-")
-}
-
-func NeedQuotes(tp byte) bool {
-	return !(dbutil.IsNumberType(tp) || dbutil.IsFloatType(tp))
+	return rowMap
 }

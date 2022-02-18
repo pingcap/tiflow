@@ -171,24 +171,24 @@ func (r *testDataValidatorSuite) TestRowChangeIteratorImpl(c *C) {
 	c.Assert(err, IsNil)
 	rows := []*rowChange{
 		{
-			pk:      []string{"pk", "1"},
-			data:    []interface{}{"pk", "1", "some data"},
-			theType: rowInsert,
+			pkValues: []string{"pk", "1"},
+			data:     []interface{}{"pk", "1", "some data"},
+			theType:  rowInsert,
 		},
 		{
-			pk:      []string{"pk", "2"},
-			data:    []interface{}{"pk", "2", "some data"},
-			theType: rowDeleted,
+			pkValues: []string{"pk", "2"},
+			data:     []interface{}{"pk", "2", "some data"},
+			theType:  rowDeleted,
 		},
 		{
-			pk:      []string{"pkg", "2"},
-			data:    []interface{}{"pkg", "2", "some data"},
-			theType: rowDeleted,
+			pkValues: []string{"pkg", "2"},
+			data:     []interface{}{"pkg", "2", "some data"},
+			theType:  rowDeleted,
 		},
 		{
-			pk:      []string{"pke", "2"},
-			data:    []interface{}{"pke", "2", "some data"},
-			theType: rowUpdated,
+			pkValues: []string{"pke", "2"},
+			data:     []interface{}{"pke", "2", "some data"},
+			theType:  rowUpdated,
 		},
 	}
 	testCases := []map[string]string{
@@ -221,7 +221,7 @@ func (r *testDataValidatorSuite) TestRowChangeIteratorImpl(c *C) {
 		);`
 	tableDiff := getTableDiff(c, db, "test_it", "test1", creatTbl)
 	var iter RowDataIterator
-	iter, err = getRowChangeIterator(tableDiff, rows)
+	iter, err = getSourceRowsForCompare(rows)
 	c.Assert(err, IsNil)
 	for i := 0; i < len(rows); i++ {
 		res, err := iter.Next()

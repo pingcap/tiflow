@@ -53,8 +53,8 @@ type validateTableInfo struct {
 	Source     *filter.Table
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
-	ColumnMap  map[string]*model.ColumnInfo
 	Target     *filter.Table // target table after route
+	pkIndices  []int
 }
 
 type rowChangeType int
@@ -77,11 +77,12 @@ type tableChange struct {
 // change of a row
 type rowChange struct {
 	table      *validateTableInfo
-	pk         []string
+	key        string
+	pkValues   []string
 	data       []interface{}
 	theType    rowChangeType
 	lastMeetTs int64 // the last meet timestamp(in seconds)
-	retryCnt   int   // retry count
+	failedCnt  int   // failed count
 }
 
 // DataValidator
@@ -103,6 +104,7 @@ type DataValidator struct {
 	errChan      chan error
 	ctx          context.Context
 	cancel       context.CancelFunc
+	tctx         *tcontext.Context
 
 	L                  log.Logger
 	fromDB             *conn.BaseDB
@@ -198,6 +200,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.ctx, v.cancel = context.WithCancel(context.Background())
+	v.tctx = tcontext.NewContext(v.ctx, v.L)
 
 	if err := v.initialize(); err != nil {
 		v.fillResult(err, false)
@@ -318,10 +321,9 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	tctx := tcontext.NewContext(v.ctx, v.L)
 	// todo: syncer may change replication location(start from timestamp, sharding resync), how validator react?
 	location := v.syncer.checkpoint.FlushedGlobalPoint()
-	err := v.streamerController.Start(tctx, location)
+	err := v.streamerController.Start(v.tctx, location)
 	if err != nil {
 		v.errChan <- terror.Annotate(err, "fail to start streamer controller")
 		return
@@ -332,7 +334,7 @@ func (v *DataValidator) doValidate() {
 
 	var currLoc binlog.Location
 	for {
-		e, err := v.streamerController.GetEvent(tctx)
+		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
 			v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
 			return
@@ -461,10 +463,11 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		return terror.Annotate(err, "failed to get table info")
 	}
 
-	columnMap := make(map[string]*model.ColumnInfo)
-	for _, col := range tableInfo.Columns {
-		columnMap[col.Name.O] = col
+	if len(tableInfo.Columns) < int(ev.ColumnCount) {
+		v.unsupportedTable[fullTableName] = "binlog has more columns than current table"
+		return nil
 	}
+
 	var primaryIdx *model.IndexInfo
 	for _, idx := range tableInfo.Indices {
 		if idx.Primary {
@@ -481,7 +484,6 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		Source:     sourceTable,
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
-		ColumnMap:  columnMap,
 		Target:     targetTable,
 	}
 
@@ -495,11 +497,16 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 	changeType := getRowChangeType(header.EventType)
 	v.changeEventCount[changeType]++
 
+	columnMap := make(map[string]*model.ColumnInfo)
+	for _, col := range tableInfo.Columns {
+		columnMap[col.Name.O] = col
+	}
 	pk := table.PrimaryKey
 	pkIndices := make([]int, len(pk.Columns))
 	for i, col := range pk.Columns {
-		pkIndices[i] = table.ColumnMap[col.Name.O].Offset
+		pkIndices[i] = columnMap[col.Name.O].Offset
 	}
+	table.pkIndices = pkIndices
 
 	step := 1
 	if changeType == rowUpdated {
@@ -525,7 +532,8 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 				// convert to delete and insert
 				v.dispatchRowChange(key, &rowChange{
 					table:      table,
-					pk:         pkValue,
+					key:        key,
+					pkValues:   pkValue,
 					data:       row,
 					theType:    rowDeleted,
 					lastMeetTs: int64(header.Timestamp),
@@ -534,7 +542,8 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 			}
 			v.dispatchRowChange(afterKey, &rowChange{
 				table:      table,
-				pk:         afterPkValue,
+				key:        afterKey,
+				pkValues:   afterPkValue,
 				data:       afterRow,
 				theType:    afterRowChangeType,
 				lastMeetTs: int64(header.Timestamp),
@@ -542,7 +551,8 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		} else {
 			v.dispatchRowChange(key, &rowChange{
 				table:      table,
-				pk:         pkValue,
+				key:        key,
+				pkValues:   pkValue,
 				data:       row,
 				theType:    changeType,
 				lastMeetTs: int64(header.Timestamp),

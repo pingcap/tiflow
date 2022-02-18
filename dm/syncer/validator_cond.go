@@ -18,8 +18,9 @@ import (
 )
 
 type Cond struct {
-	Table    *validateTableInfo
-	PkValues [][]string
+	Table     *validateTableInfo
+	ColumnCnt int
+	PkValues  [][]string
 }
 
 func (c *Cond) GetArgs() []interface{} {
