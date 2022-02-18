@@ -30,7 +30,7 @@ const (
 type TaskCliArgs struct {
 	StartTime               string `toml:"start-time" json:"start_time"`
 	SafeModeDuration        string `toml:"safe-mode-duration" json:"safe_mode_duration"`
-	StopWaitTimeOutDuration string `toml:"stop-wait-timeout-duration" json:"stop-wait-timeout-duration"`
+	StopWaitTimeOutDuration string `toml:"stop-wait-timeout-duration" json:"stop_wait_timeout_duration"`
 }
 
 // ToJSON returns json marshal result.
@@ -69,7 +69,7 @@ func (t *TaskCliArgs) Verify() error {
 	if t.StopWaitTimeOutDuration != "" {
 		_, err := time.ParseDuration(t.StopWaitTimeOutDuration)
 		if err != nil {
-			return terror.Annotate(err, "error while parse stop-wait-timeout-duration, expected in the format like '1s' or '1h'")
+			return terror.Annotate(err, "error while parse stop_wait_timeout_duration, expected in the format like '1s' or '1h'")
 		}
 	}
 	return nil

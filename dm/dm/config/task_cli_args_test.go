@@ -36,7 +36,7 @@ func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
 	}
 	data := s.ToJSON()
 
-	expected := `{"start_time":"123","safe_mode_duration":"1s","stop-wait-timeout-duration":"1s","future_field":"456"}`
+	expected := `{"start_time":"123","safe_mode_duration":"1s","stop_wait_timeout_duration":"1s","future_field":"456"}`
 	c.Assert(data, Equals, expected)
 
 	afterDowngrade := &TaskCliArgs{}

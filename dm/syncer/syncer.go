@@ -1484,12 +1484,11 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		if s.cliArgs != nil && s.cliArgs.StopWaitTimeOutDuration != "" {
 			waitDuration, _ = time.ParseDuration(s.cliArgs.StopWaitTimeOutDuration)
 		}
+		waitDuration -= time.Since(needToExitTime)
 		failpoint.Inject("recordWaitBeforeRunExitDuration", func() {
 			needToExitTime = time.Now() // ignore the acquire lock time.
 			waitBeforeRunExitDuration = waitDuration
 		})
-
-		waitDuration -= time.Since(needToExitTime)
 		if waitDuration.Seconds() < 0 {
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
