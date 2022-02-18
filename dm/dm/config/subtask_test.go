@@ -262,8 +262,9 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 
 	// use loader and s3
 	cfg.LoaderConfig = LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      "s3://bucket2/prefix",
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket2/prefix",
+		ImportMode: LoadModeLoader,
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir s3://bucket2/prefix is s3 dir, but s3 is not supported.*")

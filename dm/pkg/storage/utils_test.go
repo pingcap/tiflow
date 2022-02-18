@@ -58,7 +58,7 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		require.Equal(t, testIsS3Results[i], isS3)
 	}
 
-	testAjustResults := []struct {
+	testAdjustResults := []struct {
 		hasErr bool
 		res    string
 	}{
@@ -80,17 +80,17 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 
 	for i, testPath := range testPaths {
 		newDir, err := AdjustPath(testPath, "mysql-replica-01")
-		if testAjustResults[i].hasErr {
+		if testAdjustResults[i].hasErr {
 			require.Error(t, err)
-			require.Regexp(t, testAjustResults[i].res, err.Error())
+			require.Regexp(t, testAdjustResults[i].res, err.Error())
 		} else {
 			require.NoError(t, err)
-			require.Equal(t, testAjustResults[i].res, newDir)
+			require.Equal(t, testAdjustResults[i].res, newDir)
 		}
 	}
 
 	// special suffix
-	testAjustResults = []struct {
+	testAdjustResults = []struct {
 		hasErr bool
 		res    string
 	}{
@@ -112,12 +112,12 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 
 	for i, testPath := range testPaths {
 		newDir, err := AdjustPath(testPath, "t-Ë!s`t")
-		if testAjustResults[i].hasErr {
+		if testAdjustResults[i].hasErr {
 			require.Error(t, err)
-			require.Regexp(t, testAjustResults[i].res, err.Error())
+			require.Regexp(t, testAdjustResults[i].res, err.Error())
 		} else {
 			require.NoError(t, err)
-			require.Equal(t, testAjustResults[i].res, newDir)
+			require.Equal(t, testAdjustResults[i].res, newDir)
 		}
 	}
 }

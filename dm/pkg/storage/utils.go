@@ -59,10 +59,7 @@ func IsS3Path(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	if u.Scheme == "s3" {
-		return true
-	}
-	return false
+	return u.Scheme == "s3"
 }
 
 // CreateStorage creates ExternalStore.
@@ -85,7 +82,7 @@ func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalS
 	}
 	files := make(map[string]struct{})
 
-	err = storage.WalkDir(ctx, &bstorage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		name := path.Base(filePath)
 		files[name] = struct{}{}
 		return nil
@@ -104,7 +101,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 		}
 	}
 
-	err = storage.WalkDir(ctx, &bstorage.WalkOption{ListCount: 1}, func(filePath string, size int64) error {
+	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		return storage.DeleteFile(ctx, filePath)
 	})
 	if err == nil {
