@@ -32,7 +32,7 @@ type EventBatchEncoder interface {
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
+	AppendRowChangedEvent(e *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -151,8 +151,7 @@ type EncoderResult uint8
 
 // Enum types of EncoderResult
 const (
-	EncoderNoOperation EncoderResult = iota
-	EncoderNeedAsyncWrite
+	EncoderNeedAsyncWrite EncoderResult = iota
 	EncoderNeedSyncWrite
 )
 
