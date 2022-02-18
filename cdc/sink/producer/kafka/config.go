@@ -228,8 +228,8 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	return nil
 }
 
-// newSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
+// NewSaramaConfig return the default config and set the according version and metrics
+func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)

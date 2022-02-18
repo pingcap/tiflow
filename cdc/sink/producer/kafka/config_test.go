@@ -37,12 +37,12 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	ctx := context.Background()
 	config := NewConfig()
 	config.Version = "invalid"
-	_, err := NewSaramaConfigImpl(ctx, config)
+	_, err := NewSaramaConfig(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
-	_, err = NewSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfig(ctx, config)
 	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
 
 	config.ClientID = "test-kafka-client"
@@ -59,7 +59,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	for _, cc := range compressionCases {
 		config.Compression = cc.algorithm
-		cfg, err := NewSaramaConfigImpl(ctx, config)
+		cfg, err := NewSaramaConfig(ctx, config)
 		c.Assert(err, check.IsNil)
 		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
 	}
@@ -67,7 +67,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
 	}
-	_, err = NewSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfig(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 
 	saslConfig := NewConfig()
@@ -79,7 +79,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := NewSaramaConfigImpl(ctx, saslConfig)
+	cfg, err := NewSaramaConfig(ctx, saslConfig)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.NotNil)
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
@@ -95,7 +95,7 @@ func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
 	c.Assert(cfg.ReadTimeout, check.Equals, 10*time.Second)
 	c.Assert(cfg.WriteTimeout, check.Equals, 10*time.Second)
 
-	saramaConfig, err := newSaramaConfig(context.Background(), cfg)
+	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, cfg.DialTimeout)
 	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, cfg.WriteTimeout)
@@ -113,7 +113,7 @@ func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
 	c.Assert(cfg.ReadTimeout, check.Equals, 1000*time.Millisecond)
 	c.Assert(cfg.WriteTimeout, check.Equals, 2*time.Minute)
 
-	saramaConfig, err = newSaramaConfig(context.Background(), cfg)
+	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, 5*time.Second)
 	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, 1000*time.Millisecond)
@@ -388,7 +388,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		err = baseConfig.Apply(sinkURI)
 		c.Assert(err, check.IsNil)
 
-		saramaConfig, err := NewSaramaConfigImpl(context.Background(), baseConfig)
+		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
 		c.Assert(err, check.IsNil)
 
 		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
