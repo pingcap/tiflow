@@ -171,7 +171,7 @@ func (pc *MySQLBinlogRowImageChecker) Name() string {
 	return "mysql_binlog_row_image"
 }
 
-// BinlogDBChecker checks mysql/mariadb server ID.
+// BinlogDBChecker checks if migrated dbs are in binlog_do_db or binlog_ignore_db.
 type BinlogDBChecker struct {
 	db      *sql.DB
 	dbinfo  *dbutil.DBConfig

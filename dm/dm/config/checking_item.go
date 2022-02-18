@@ -21,7 +21,6 @@ import (
 )
 
 // DM definition checking items
-// refer github.com/pingcap/tiflow/dm/pkg/checker.
 const (
 	AllChecking                  = "all"
 	DumpPrivilegeChecking        = "dump_privilege"
