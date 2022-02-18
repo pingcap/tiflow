@@ -527,7 +527,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, errors.Trace(err)
 	}
-	// todo (3AceShowHand): set by pulsar producer's `max.message.bytes`
+	// todo: set by pulsar producer's `max.message.bytes`
 	// encoderConfig = encoderConfig.WithMaxMessageBytes()
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, errors.Trace(err)
