@@ -209,7 +209,7 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
 			require.Equal(t, "", aws.StringValue(input.Marker))
-			require.Equal(t, int64(1), aws.Int64Value(input.MaxKeys))
+			require.Equal(t, int64(1000), aws.Int64Value(input.MaxKeys))
 			require.Equal(t, "", aws.StringValue(input.Delimiter))
 			return &s3.ListObjectsOutput{
 				IsTruncated: aws.Bool(false),
@@ -262,7 +262,7 @@ func TestRemoveAll(t *testing.T) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
 			require.Equal(t, "", aws.StringValue(input.Marker))
-			require.Equal(t, int64(1), aws.Int64Value(input.MaxKeys))
+			require.Equal(t, int64(1000), aws.Int64Value(input.MaxKeys))
 			require.Equal(t, "", aws.StringValue(input.Delimiter))
 			return &s3.ListObjectsOutput{
 				IsTruncated: aws.Bool(false),
