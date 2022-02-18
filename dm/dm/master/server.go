@@ -575,7 +575,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}

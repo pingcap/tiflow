@@ -188,7 +188,7 @@ func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]
 func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether dbs need replication is in binlog_do_db/binlog_ignore_db",
+		Desc:  "check whether migrated dbs are in binlog_do_db/binlog_ignore_db",
 		State: StateFailure,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
 	}
