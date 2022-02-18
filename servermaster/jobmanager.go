@@ -66,7 +66,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	job := &lib.MasterMetaExt{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
-		ID: jm.uuidGen.NewString(),
+		ID:     jm.uuidGen.NewString(),
+		Config: req.Config,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:

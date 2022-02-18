@@ -224,3 +224,42 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	err = <-master.dispatchedResult
 	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
 }
+
+func TestPrepareWorkerConfig(t *testing.T) {
+	t.Parallel()
+
+	master := &DefaultBaseMaster{
+		uuidGen: uuid.NewMock(),
+	}
+
+	type fakeConfig struct {
+		JobName     string `json:"job-name"`
+		WorkerCount int    `json:"worker-count"`
+	}
+	fakeWorkerCfg := &fakeConfig{"fake-job", 3}
+	fakeCfgBytes := []byte(`{"job-name":"fake-job","worker-count":3}`)
+	fakeWorkerID := "worker-1"
+	master.uuidGen.(*uuid.MockGenerator).Push(fakeWorkerID)
+	testCases := []struct {
+		workerType WorkerType
+		config     WorkerConfig
+		// expected return result
+		rawConfig []byte
+		workerID  string
+	}{
+		{
+			FakeJobMaster, &MasterMetaExt{ID: "master-1", Config: fakeCfgBytes},
+			fakeCfgBytes, "master-1",
+		},
+		{
+			FakeTask, fakeWorkerCfg,
+			fakeCfgBytes, fakeWorkerID,
+		},
+	}
+	for _, tc := range testCases {
+		rawConfig, workerID, err := master.prepareWorkerConfig(tc.workerType, tc.config)
+		require.NoError(t, err)
+		require.Equal(t, tc.rawConfig, rawConfig)
+		require.Equal(t, tc.workerID, workerID)
+	}
+}

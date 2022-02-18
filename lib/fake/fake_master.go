@@ -15,13 +15,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type Config struct{}
+// Config represents the job config of fake master
+type Config struct {
+	JobName     string `json:"job-name"`
+	WorkerCount int    `json:"worker-count"`
+}
 
 var _ lib.BaseJobMaster = (*Master)(nil)
-
-const (
-	fakeWorkerCount = 20
-)
 
 type Master struct {
 	lib.BaseJobMaster
@@ -30,9 +30,10 @@ type Master struct {
 	workerID lib.WorkerID
 
 	workerListMu     sync.Mutex
-	workerList       [fakeWorkerCount]lib.WorkerHandle
+	workerList       []lib.WorkerHandle
 	pendingWorkerSet map[lib.WorkerID]int
 	tick             int64
+	config           *Config
 }
 
 func (m *Master) ID() worker.RunnableID {
@@ -44,7 +45,8 @@ func (m *Master) Workload() model.RescUnit {
 }
 
 func (m *Master) InitImpl(ctx context.Context) error {
-	log.L().Info("FakeMaster: Init")
+	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
+	m.workerList = make([]lib.WorkerHandle, m.config.WorkerCount)
 	return nil
 }
 
@@ -145,9 +147,11 @@ func (m *Master) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
 }
 
-func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, _config lib.WorkerConfig) *Master {
+func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
+	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{
 		pendingWorkerSet: make(map[lib.WorkerID]int),
+		config:           config.(*Config),
 	}
 	deps := ctx.Dependencies
 	base := lib.NewBaseJobMaster(

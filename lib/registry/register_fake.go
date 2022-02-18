@@ -12,7 +12,7 @@ type FakeConfig struct{}
 func RegisterFake(registry Registry) {
 	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
 		return fake.NewFakeMaster(ctx, id, masterID, config)
-	}, &FakeConfig{})
+	}, &fake.Config{})
 	registry.MustRegisterWorkerType(lib.FakeJobMaster, fakeMasterFactory)
 
 	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker, &FakeConfig{})
