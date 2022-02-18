@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // TODO refactor this into a struct Merger.
@@ -46,7 +47,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
 	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
 
-	lastResolvedArrTs := make([]uint64, numSorters)
+	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
 	var workingSet map[*flushTask]struct{}
 	pendingSet := &sync.Map{}
@@ -403,40 +404,18 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
-	resolvedTsTicker := time.NewTicker(time.Second * 1)
-	resolvedTsTickCh := make(chan struct{})
+	resolvedTsNotifierChan := make(chan struct{}, 1)
+	errg, ctx := errgroup.WithContext(ctx)
 
-	defer resolvedTsTicker.Stop()
+	errg.Go(func() error {
+		for {
+			var task *flushTask
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case task = <-in:
+			}
 
-	var lastResolvedTs uint64
-	resolvedTsTickFunc := func() error {
-		curResolvedTs := atomic.LoadUint64(&minResolvedTs)
-		if curResolvedTs > lastResolvedTs {
-			err := onMinResolvedTsUpdate(curResolvedTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else if curResolvedTs < lastResolvedTs {
-			log.Panic("resolved-ts regressed in sorter",
-				zap.Uint64("curResolved-ts", curResolvedTs),
-				zap.Uint64("lastResolved-ts", lastResolvedTs))
-		}
-		return nil
-	}
-	for {
-		var task *flushTask
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-resolvedTsTicker.C:
-			if err := resolvedTsTickFunc(); err != nil {
-				return err
-			}
-		case <-resolvedTsTickCh:
-			if err := resolvedTsTickFunc(); err != nil {
-				return err
-			}
-		case task = <-in:
 			if task == nil {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Merger input channel closed, exiting",
@@ -449,12 +428,12 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				pendingSet.Store(task, nil)
 			} // otherwise it is an empty flush
 
-			if lastResolvedArrTs[task.heapSorterID] < task.maxResolvedTs {
-				lastResolvedArrTs[task.heapSorterID] = task.maxResolvedTs
+			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
+				lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
 			}
 
 			minTemp := uint64(math.MaxUint64)
-			for _, ts := range lastResolvedArrTs {
+			for _, ts := range lastResolvedTs {
 				if minTemp > ts {
 					minTemp = ts
 				}
@@ -463,12 +442,51 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if minTemp > minResolvedTs {
 				atomic.StoreUint64(&minResolvedTs, minTemp)
 				select {
-				case resolvedTsTickCh <- struct{}{}:
+				case resolvedTsNotifierChan <- struct{}{}:
 				default:
 				}
 			}
 		}
-	}
+	})
+
+	errg.Go(func() error {
+		resolvedTsTicker := time.NewTicker(time.Second * 1)
+
+		defer resolvedTsTicker.Stop()
+
+		var lastResolvedTs uint64
+		resolvedTsTickFunc := func() error {
+			curResolvedTs := atomic.LoadUint64(&minResolvedTs)
+			if curResolvedTs > lastResolvedTs {
+				err := onMinResolvedTsUpdate(curResolvedTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else if curResolvedTs < lastResolvedTs {
+				log.Panic("resolved-ts regressed in sorter",
+					zap.Uint64("curResolvedTs", curResolvedTs),
+					zap.Uint64("lastResolvedTs", lastResolvedTs))
+			}
+			return nil
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-resolvedTsTicker.C:
+				if err := resolvedTsTickFunc(); err != nil {
+					return err
+				}
+			case <-resolvedTsNotifierChan:
+				if err := resolvedTsTickFunc(); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	return errg.Wait()
 }
 
 func mergerCleanUp(in <-chan *flushTask) {
