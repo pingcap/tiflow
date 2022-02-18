@@ -98,7 +98,6 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
-
 	}()
 
 	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
