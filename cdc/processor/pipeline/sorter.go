@@ -108,8 +108,8 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.Router()
+			actorID := ctx.GlobalVars().SorterSystem.DBActorID(uint64(n.tableID))
+			router := ctx.GlobalVars().SorterSystem.DBRouter
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter := leveldb.NewSorter(
 				ctx, n.tableID, startTs, router, actorID, compactScheduler,
