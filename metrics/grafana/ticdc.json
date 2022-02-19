@@ -4952,7 +4952,12 @@
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
-          "seriesOverrides": [],
+          "seriesOverrides": [
+            {
+              "alias": "/cache-hit.*/",
+              "yaxis": 2
+            }
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -4963,6 +4968,13 @@
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
               "refId": "A"
+            },
+            {
+              "expr": "sum(ticdc_db_block_cache_access_total{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\", type=\"hit\"}) by (capture) / sum(ticdc_db_block_cache_access_total{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "cache-hit-{{capture}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -4993,11 +5005,11 @@
               "show": true
             },
             {
-              "format": "short",
+              "format": "percentunit",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
               "show": true
             }
           ],
