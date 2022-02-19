@@ -189,10 +189,10 @@ func TestParseCfg(t *testing.T) {
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
-				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -253,9 +253,9 @@ compression = "none"
 target-file-size-base = 10
 compaction-l0-trigger = 11
 compaction-deletion-threshold = 15
+compaction-period = 16
 write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
-cleanup-speed-limit = 14
 
 [debug.messages]
 client-max-batch-interval = "500ms"
@@ -328,10 +328,10 @@ server-worker-pool-size = 16
 				CompactionL0Trigger:         11,
 				WriteL0SlowdownTrigger:      12,
 				WriteL0PauseTrigger:         13,
-				CleanupSpeedLimit:           14,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
 				CompactionDeletionThreshold: 15,
+				CompactionPeriod:            16,
 			},
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
@@ -465,10 +465,10 @@ cert-allowed-cn = ["dd","ee"]
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
-				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -521,10 +521,10 @@ unknown3 = 3
 			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 160000,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
 			IteratorMaxAliveDuration:    10000,
 			IteratorSlowReadDuration:    256,
-			CleanupSpeedLimit:           10000,
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{

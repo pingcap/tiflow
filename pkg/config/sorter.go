@@ -48,8 +48,8 @@ func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.NumWorkerPoolGoroutine < 1 {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
 	}
-	if c.MaxMemoryPressure < 0 || c.MaxMemoryPressure > 100 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	if c.MaxMemoryPressure <= 0 || c.MaxMemoryPressure > 80 {
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage and within (0, 80]")
 	}
 
 	return nil

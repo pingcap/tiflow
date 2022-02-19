@@ -5356,18 +5356,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=~\"sorter|cleaner|compactor\"}[1m])) by (name, instance)",
+              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=~\"sorter.*\"}[1m])) by (name, instance)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{name}}",
               "refId": "A"
-            },
-            {
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=\"sorter\"}[1m])) by (name, id, instance)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{name}}-{{id}}",
-              "refId": "B"
             }
           ],
           "thresholds": [],

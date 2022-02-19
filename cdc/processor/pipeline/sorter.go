@@ -28,8 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
-	"github.com/pingcap/tiflow/pkg/actor"
-	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
@@ -55,9 +53,7 @@ type sorterNode struct {
 	eg     *errgroup.Group
 	cancel context.CancelFunc
 
-	cleanID     actor.ID
-	cleanTask   message.Message
-	cleanRouter *actor.Router
+	cleanup func(context.Context) error
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
@@ -116,9 +112,7 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 			levelSorter := leveldb.NewSorter(
 				ctx, n.tableID, startTs, router, actorID, compactScheduler,
 				config.GetGlobalServerConfig().Debug.DB)
-			n.cleanID = actorID
-			n.cleanTask = levelSorter.CleanupTask()
-			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
+			n.cleanup = levelSorter.CleanupFunc()
 			eventSorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
@@ -299,9 +293,9 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
-	if n.cleanRouter != nil {
+	if n.cleanup != nil {
 		// Clean up data when the table sorter is canceled.
-		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
+		err := n.cleanup(ctx)
 		if err != nil {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
