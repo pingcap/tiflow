@@ -514,7 +514,7 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 	opsElse := []clientv3.Op{
 		clientv3.OpPut(key, data),
 	}
-	resp, err := c.Client.Txn(ctx, cmps, TxnEmptyOpsThen, opsElse)
+	resp, err := c.Client.Txn(ctx, cmps, txnEmptyOpsThen, opsElse)
 	if err != nil {
 		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

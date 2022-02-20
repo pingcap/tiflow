@@ -29,7 +29,7 @@ import (
 
 func TestContext(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
+	ctx := newContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
@@ -43,7 +43,7 @@ func TestContext(t *testing.T) {
 
 func TestTryGetProcessedMessageFromChan(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, nil, nil)
+	ctx := newContext(sdtContext.TODO(), nil, 1, nil, nil)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.Nil(t, ctx.tryGetProcessedMessage())
 	ctx.outputCh <- pipeline.TickMessage()
@@ -67,7 +67,7 @@ func TestThrow(t *testing.T) {
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, sys.Router(), actorID, nil, nil)
+	actorContext := newContext(ctx, sys.Router(), actorID, nil, nil)
 	actorContext.Throw(nil)
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 0, len(ch))
@@ -83,7 +83,7 @@ func TestThrow(t *testing.T) {
 
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
+	ctx := newContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
 	require.False(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
@@ -107,7 +107,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, sys.Router(), actorID, nil, nil)
+	actorContext := newContext(ctx, sys.Router(), actorID, nil, nil)
 	actorContext.setTickMessageThreshold(2)
 	actorContext.SendToNextNode(pipeline.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)

@@ -106,6 +106,7 @@ func (c *PDClock) Stop() {
 
 type clock4Test struct{}
 
+// NewClock4Test return a new clock for test.
 func NewClock4Test() Clock {
 	return &clock4Test{}
 }

@@ -44,7 +44,7 @@ type actorNodeContext struct {
 	noTickMessageCount int32
 }
 
-func NewContext(stdCtx sdtContext.Context,
+func newContext(stdCtx sdtContext.Context,
 	tableActorRouter *actor.Router,
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
