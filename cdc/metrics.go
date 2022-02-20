@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/prometheus/client_golang/prometheus"
+	tikvmetrics "github.com/tikv/client-go/v2/metrics"
 )
 
 var registry = prometheus.NewRegistry()
@@ -61,4 +62,10 @@ func init() {
 	redowriter.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
+	// TiKV client metrics, including metrics about resolved and region cache.
+	originalRegistry := prometheus.DefaultRegisterer
+	prometheus.DefaultRegisterer = registry
+	tikvmetrics.InitMetrics("ticdc", "tikvclient")
+	tikvmetrics.RegisterMetrics()
+	prometheus.DefaultRegisterer = originalRegistry
 }
