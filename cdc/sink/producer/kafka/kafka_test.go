@@ -29,8 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -283,62 +281,6 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 
 	err = topicPreProcess(topic, config, cfg)
 	c.Assert(errors.Cause(err), check.Equals, sarama.ErrOutOfBrokers)
-}
-
-func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := context.Background()
-	config := NewConfig()
-	config.Version = "invalid"
-	_, err := newSaramaConfigImpl(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
-
-	ctx = util.SetOwnerInCtx(ctx)
-	config.Version = "2.6.0"
-	config.ClientID = "^invalid$"
-	_, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
-
-	config.ClientID = "test-kafka-client"
-	compressionCases := []struct {
-		algorithm string
-		expected  sarama.CompressionCodec
-	}{
-		{"none", sarama.CompressionNone},
-		{"gzip", sarama.CompressionGZIP},
-		{"snappy", sarama.CompressionSnappy},
-		{"lz4", sarama.CompressionLZ4},
-		{"zstd", sarama.CompressionZSTD},
-		{"others", sarama.CompressionNone},
-	}
-	for _, cc := range compressionCases {
-		config.Compression = cc.algorithm
-		cfg, err := newSaramaConfigImpl(ctx, config)
-		c.Assert(err, check.IsNil)
-		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
-	}
-
-	config.Credential = &security.Credential{
-		CAPath: "/invalid/ca/path",
-	}
-	_, err = newSaramaConfigImpl(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
-
-	saslConfig := NewConfig()
-	saslConfig.Version = "2.6.0"
-	saslConfig.ClientID = "test-sasl-scram"
-	saslConfig.SaslScram = &security.SaslScram{
-		SaslUser:      "user",
-		SaslPassword:  "password",
-		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
-	}
-
-	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
-	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
-	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
-	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
