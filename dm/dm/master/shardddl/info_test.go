@@ -16,7 +16,7 @@ package shardddl
 import (
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 )
 
 func (t *testPessimist) TestInfoSlice(c *C) {

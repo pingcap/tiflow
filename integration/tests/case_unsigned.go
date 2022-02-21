@@ -14,7 +14,7 @@
 package tests
 
 import (
-	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data

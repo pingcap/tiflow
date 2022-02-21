@@ -16,8 +16,8 @@ package redo
 import (
 	"bytes"
 
-	"github.com/pingcap/ticdc/cdc/model"
 	pmodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // RowToRedo converts row changed event to redo log row

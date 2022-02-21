@@ -19,10 +19,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
 
@@ -100,6 +100,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
+// Every []DataPatch slice in [][]DataPatch slice is the patches of a ChangefeedReactorState
 func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
@@ -209,7 +210,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
-		if err := s.Info.VerifyAndFix(); err != nil {
+		if err := s.Info.VerifyAndComplete(); err != nil {
 			return errors.Trace(err)
 		}
 	}

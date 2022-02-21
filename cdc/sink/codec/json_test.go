@@ -20,9 +20,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -134,6 +134,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		if len(cs) > 0 {
 			res := encoder.Build()
 			c.Assert(res, check.HasLen, 1)
+			c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
 			decoder, err := newDecoder(res[0].Key, res[0].Value)
 			c.Assert(err, check.IsNil)
 			checkRowDecoder(decoder, cs)

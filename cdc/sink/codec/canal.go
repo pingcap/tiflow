@@ -22,12 +22,12 @@ import (
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	canal "github.com/pingcap/ticdc/proto/canal"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	parser_types "github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -378,7 +378,8 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
-	if len(d.messages.Messages) == 0 {
+	rowCount := len(d.messages.Messages)
+	if rowCount == 0 {
 		return nil
 	}
 
@@ -392,6 +393,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
 	return []*MQMessage{ret}

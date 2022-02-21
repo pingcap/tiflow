@@ -24,15 +24,16 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/model"
-	tablepipeline "github.com/pingcap/ticdc/cdc/processor/pipeline"
-	"github.com/pingcap/ticdc/cdc/redo"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -48,6 +49,7 @@ func newProcessor4Test(
 ) *processor {
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
+	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{c: c}

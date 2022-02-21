@@ -17,11 +17,11 @@ import (
 	"flag"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/framework/mysql"
-	"github.com/pingcap/ticdc/integration/tests"
+	"github.com/pingcap/tiflow/integration/framework"
+	"github.com/pingcap/tiflow/integration/framework/avro"
+	"github.com/pingcap/tiflow/integration/framework/canal"
+	"github.com/pingcap/tiflow/integration/framework/mysql"
+	"github.com/pingcap/tiflow/integration/tests"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -97,7 +97,7 @@ func testMySQL() {
 
 func testMySQLWithCheckingOldvValue() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/ticdc/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
+	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/tiflow/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),

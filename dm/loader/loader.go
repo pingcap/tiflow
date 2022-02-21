@@ -28,15 +28,15 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -222,7 +222,7 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 				continue
 			}
 			// update finished offset after checkpoint updated
-			w.loader.finishedDataSize.Store(job.offset)
+			w.loader.finishedDataSize.Add(job.offset - job.lastOffset)
 			if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema]; ok {
 				if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable]; ok {
 					w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable].Store(job.offset)

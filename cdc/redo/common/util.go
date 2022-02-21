@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // InitS3storage init a storage used for s3,

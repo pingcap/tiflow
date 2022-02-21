@@ -24,7 +24,7 @@ function run() {
 	esac
 
 	# this will be triggered every 5s in kv client
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/kv/kvClientForceReconnect=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/kv/kvClientForceReconnect=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 	if [ "$SINK_TYPE" == "kafka" ]; then

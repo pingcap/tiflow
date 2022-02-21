@@ -20,8 +20,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/clientv3util"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 )
 
 // InitSchema represents the initial schema (schema before the lock constructed) of a merged table.

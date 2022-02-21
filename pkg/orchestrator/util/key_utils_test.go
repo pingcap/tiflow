@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }

@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // Context is used to in dm to record some context field like

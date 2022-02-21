@@ -27,17 +27,17 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/purger"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay/purger"
 )
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
@@ -181,6 +181,9 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
@@ -301,11 +304,11 @@ func (w *SourceWorker) EnableRelay() (err error) {
 	defer dcancel()
 	minLoc, err1 := getMinLocInAllSubTasks(dctx, subTaskCfgs)
 	if err1 != nil {
-		return err1
+		w.l.Error("meet error when EnableRelay", zap.Error(err1))
 	}
 
 	if minLoc != nil {
-		log.L().Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
+		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
 		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source

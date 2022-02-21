@@ -25,9 +25,9 @@ import (
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type AvroSchemaRegistrySuite struct{}

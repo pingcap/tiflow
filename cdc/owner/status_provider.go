@@ -16,10 +16,10 @@ package owner
 import (
 	"context"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // StatusProvider provide some func to get meta-information from owner

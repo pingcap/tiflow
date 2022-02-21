@@ -58,7 +58,7 @@ function run() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/AdjustGTIDExit=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/AdjustGTIDExit=return(true)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
@@ -89,8 +89,7 @@ function run() {
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
 	pos1=$(grep "Pos: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
@@ -132,8 +131,7 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	# use sync_diff_inspector to check incremental dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
