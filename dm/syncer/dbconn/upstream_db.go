@@ -52,7 +52,7 @@ func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 
 // GetMasterStatus returns binlog location that extracted from SHOW MASTER STATUS.
 func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, gtid.Set, error) {
-	pos, gtidSet, err := utils.GetMasterStatus(ctx, conn.BaseDB.DB, flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, conn.BaseDB.DB, flavor)
 
 	failpoint.Inject("GetMasterStatusFailed", func(val failpoint.Value) {
 		err = tmysql.NewErr(uint16(val.(int)))
