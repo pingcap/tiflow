@@ -15,12 +15,7 @@ package owner
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
-	"os"
-	"path/filepath"
 	"sync"
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	"sync/atomic"
 	"time"
 

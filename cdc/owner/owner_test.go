@@ -283,13 +283,9 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
-<<<<<<< HEAD
-	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
-=======
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 	state := orchestrator.NewGlobalState()
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -380,8 +376,6 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	case <-ch:
 	}
 }
-<<<<<<< HEAD
-=======
 
 // make sure handleJobs works well even if there is two different
 // version of captures in the cluster
@@ -478,4 +472,3 @@ WorkLoop:
 	c.Assert(infos[cf1], check.NotNil)
 	c.Assert(infos[cf2], check.IsNil)
 }
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
