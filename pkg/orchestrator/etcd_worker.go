@@ -119,9 +119,8 @@ func (worker *EtcdWorker) initMetrics(captureAddr string) {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string, role string) error {
 	defer worker.cleanUp()
-
 	worker.initMetrics(captureAddr)
 
 	err := worker.syncRawState(ctx)
@@ -134,7 +133,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
 		pendingPatches [][]DataPatch
@@ -190,7 +189,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("event-revision", response.Header.GetRevision()),
 					zap.Int64("previous-revision", worker.revision),
-					zap.Any("events", response.Events))
+					zap.Any("events", response.Events),
+					zap.String("role", role))
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
@@ -239,7 +239,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)
 			if costTime > etcdWorkerLogsWarnDuration {
-				log.Warn("EtcdWorker reactor tick took too long", zap.Duration("duration", costTime))
+				log.Warn("EtcdWorker reactor tick took too long",
+					zap.Duration("duration", costTime),
+					zap.String("role", role))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
 			if err != nil {
