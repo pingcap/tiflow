@@ -182,9 +182,18 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	// TODO: support redirect for DM worker
 	// return error to pass IT now
 	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
-		first := s.osgk.appendConflictTable(upTable, downTable, qec.lastLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
+		first := s.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
 		if first {
-			s.optimist.GetRedirectOperation(qec.tctx.Ctx, info, rev+1)
+			s.optimist.GetRedirectOperation(qec.tctx.Ctx, info, op.Revision+1)
+		}
+		err = s.schemaTracker.DropTable(upTable)
+		if err != nil {
+			s.tctx.L().Error("fail to drop table to rollback table in schema tracker", zap.Stringer("table", upTable))
+		} else {
+			err = s.schemaTracker.CreateTableIfNotExists(upTable, tiBefore)
+			if err != nil {
+				s.tctx.L().Error("fail to recreate table to rollback table in schema tracker", zap.Stringer("table", upTable))
+			}
 		}
 		s.tctx.L().Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 		return nil

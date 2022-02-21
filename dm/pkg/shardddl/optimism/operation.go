@@ -62,6 +62,10 @@ type Operation struct {
 	ConflictMsg   string        `json:"conflict-message"` // current conflict message
 	Done          bool          `json:"done"`             // whether the operation has done
 	Cols          []string      `json:"cols"`             // drop columns' name
+
+	// only set it when get from etcd
+	// use for get new redirect revisions
+	Revision int64 `json:"-"`
 }
 
 // NewOperation creates a new Operation instance.
@@ -175,6 +179,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if err2 != nil {
 			return nil, 0, err2
 		}
+		op.Revision = kv.ModRevision
 
 		if _, ok := opm[op.Task]; !ok {
 			opm[op.Task] = make(map[string]map[string]map[string]Operation)
@@ -218,6 +223,7 @@ func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Oper
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
+		op.Revision = kv.ModRevision
 		ops = append(ops, op)
 	}
 	return infos, ops, respTxn.Header.Revision, nil
@@ -270,6 +276,7 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 						return
 					}
 				} else {
+					op.Revision = ev.Kv.ModRevision
 					select {
 					case outCh <- op:
 					case <-ctx.Done():

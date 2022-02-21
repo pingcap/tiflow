@@ -1799,6 +1799,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						shardingReSyncCh: &shardingReSyncCh,
 						currentLocation:  &currentLocation,
 					}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
+					continue
 				}
 			}
 		}

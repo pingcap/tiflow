@@ -781,7 +781,11 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	// For idempotent DDL
 	// this often happens when an info TrySync twice, e.g. worker restart/resume task
+	idempotent := false
 	if cmp, err := prevTable.Compare(l.tables[source][schema][table]); err != nil || cmp != 0 {
+		if cmp, err := postTable.Compare(l.tables[source][schema][table]); err == nil && cmp == 0 {
+			idempotent = true
+		}
 		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", l.tables[source][schema][table]), zap.Stringer("prev-table", prevTable))
 		l.tables[source][schema][table] = prevTable
 		l.finalTables[source][schema][table] = prevTable
@@ -830,6 +834,11 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 	}
 
 	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+
+	if idempotent {
+		log.L().Info("return conflict DDL for idempotent DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		return true, ConflictNone
+	}
 
 	// meet conflict DDL
 	// revert tables and update conflictTables and finalTables

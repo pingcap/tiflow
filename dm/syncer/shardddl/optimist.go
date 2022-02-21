@@ -181,12 +181,13 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 	o.pendingRedirectCancelFunc[targetTableID] = cancel2
 
 	go func() {
-		optimism.WatchOperationPut(ctx2, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev, ch, errCh)
+		go optimism.WatchOperationPut(ctx2, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev, ch, errCh)
 
 		select {
 		case op := <-ch:
 			o.mu.Lock()
 			if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
+				o.pendingRedirectCancelFunc[targetTableID]()
 				o.pendingRedirectOps[targetTableID] = &op
 			}
 			o.mu.Unlock()
