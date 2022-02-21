@@ -211,9 +211,6 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		binlogDoDB = strings.ToLower(binlogDoDB)
 		binlogIgnoreDB = strings.ToLower(binlogIgnoreDB)
 	}
-	binlogDoDB = strings.ReplaceAll(binlogDoDB, " ", "")
-	binlogIgnoreDB = strings.ReplaceAll(binlogIgnoreDB, " ", "")
-
 	binlogDoDBs := strings.Split(binlogDoDB, ",")
 	binlogIgnoreDBs := strings.Split(binlogIgnoreDB, ",")
 	// MySQL will check –binlog-do-db first, if there are any options,
