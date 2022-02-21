@@ -115,12 +115,12 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	for i := 0; i < 100; i++ {
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.SendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		}, int32(0))
 		c.Assert(err, check.IsNil)
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.SendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		}, int32(1))
@@ -177,7 +177,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	wg.Wait()
 
 	// check send messages when context is canceled or producer closed
-	err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+	err = producer.SendMessage(ctx, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
 	}, int32(0))
@@ -404,7 +404,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
-			err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+			err = producer.SendMessage(ctx, &codec.MQMessage{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
 			}, int32(0))

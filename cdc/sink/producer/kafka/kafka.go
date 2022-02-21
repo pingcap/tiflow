@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -78,7 +79,7 @@ type kafkaSaramaProducer struct {
 
 type kafkaProducerClosingFlag = int32
 
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 
