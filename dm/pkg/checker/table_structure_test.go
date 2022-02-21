@@ -216,7 +216,8 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				"d" int(11) NOT NULL,
 				PRIMARY KEY ("c")
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
-			expectState: StateSuccess,
+			expectState: StateWarning,
+			errLen:      2, // 2 auto_increment warning
 		},
 		{
 			createTable1SQL: `CREATE TABLE "test-table-1" (
@@ -228,9 +229,10 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				"d" int(11) NOT NULL,
 				PRIMARY KEY ("c")
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
-			expectState: StateSuccess,
+			expectState: StateWarning,
+			errLen:      1, // 1 auto_increment warning
 		},
-		// must set auto_increment with key
+		// must set auto_increment with key(failure)
 		{
 			createTable1SQL: `CREATE TABLE "test-table-1" (
 				"c" int(11) NOT NULL AUTO_INCREMENT
@@ -240,7 +242,7 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				"d" int(11) NOT NULL
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
 			expectState: StateFailure,
-			errLen:      1,
+			errLen:      2, // 1 auto_increment warning
 		},
 		{
 			createTable1SQL: `CREATE TABLE "test-table-1" (
@@ -252,7 +254,7 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				"d" int(11) NOT NULL
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
 			expectState: StateFailure,
-			errLen:      1,
+			errLen:      2, // 1 auto_increment warning
 		},
 		// different auto_increment
 		{
@@ -266,7 +268,7 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				PRIMARY KEY ("d")
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
 			expectState: StateFailure,
-			errLen:      1,
+			errLen:      3, // 3 auto_increment warning
 		},
 	}
 
