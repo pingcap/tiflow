@@ -235,14 +235,10 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateNormal)
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-<<<<<<< HEAD
-			if info.Error != nil || len(info.ErrorHis) != 0 {
-=======
 			if info == nil {
 				return nil, false, nil
 			}
 			if info.Error != nil {
->>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 				info.Error = nil
 				return info, true, nil
 			}
