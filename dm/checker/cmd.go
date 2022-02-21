@@ -26,7 +26,7 @@ var (
 	// CheckTaskMsgHeader used as the header of the error/warning message when checking config failed.
 	CheckTaskMsgHeader = "fail to check synchronization configuration with type"
 
-	CheckTaskSuccess = "check pass!!!"
+	CheckTaskSuccess = "pre-check is passed. "
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
 	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)

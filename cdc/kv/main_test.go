@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,14 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package worker
+package kv
 
 import (
-	. "github.com/pingcap/check"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
-func (t *testServer) testConidtionHub(c *C, s *Server) {
-	// test condition hub
-	c.Assert(GetConditionHub(), NotNil)
-	c.Assert(GetConditionHub().w, DeepEquals, s.getSourceWorker(true))
+func TestMain(m *testing.M) {
+	opts := []goleak.Option{
+		goleak.IgnoreTopFunction("github.com/pingcap/tiflow/pkg/workerpool.(*worker).run"),
+		goleak.IgnoreTopFunction("sync.runtime_Semacquire"),
+	}
+
+	leakutil.SetUpLeakTest(m, opts...)
 }

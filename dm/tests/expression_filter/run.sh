@@ -53,8 +53,8 @@ function complex_behaviour() {
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $update_num -eq 3 ]
 
-	cleanup_data expr_filter
 	cleanup_process $*
+	cleanup_data expr_filter
 }
 
 function run() {
