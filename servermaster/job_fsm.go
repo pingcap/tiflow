@@ -89,15 +89,15 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	resp.Status = pb.QueryJobResponse_online
 	if ok {
 		resp.Config = job.Config
-		if info, ok := job.GetWorkerInfo(jobID); ok {
-			var err error
-			resp.JobMasterInfo, err = info.ToPB()
-			if err != nil {
-				resp.Err = &pb.Error{
-					Code:    pb.ErrorCode_UnknownError,
-					Message: err.Error(),
-				}
+		jobInfo, err := job.ToPB()
+		// TODO (zixiong) ToPB should handle the tombstone situation gracefully.
+		if err != nil {
+			resp.Err = &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
 			}
+		} else if jobInfo != nil {
+			resp.JobMasterInfo = jobInfo
 		} else if job.IsTombStone() {
 			resp.JobMasterInfo = &pb.WorkerInfo{}
 			resp.JobMasterInfo.IsTombstone = true
@@ -112,6 +112,9 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 					}
 				}
 			}
+		} else {
+			// TODO think about
+			log.L().Panic("Unexpected Job Info")
 		}
 	} else {
 		resp.Err = &pb.Error{

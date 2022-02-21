@@ -146,11 +146,6 @@ type HeartbeatPongMessage struct {
 	Epoch      Epoch               `json:"epoch"`
 }
 
-type StatusUpdateMessage struct {
-	WorkerID WorkerID     `json:"worker-id"`
-	Status   WorkerStatus `json:"status"`
-}
-
 type WorkloadReportMessage struct {
 	WorkerID WorkerID       `json:"worker-id"`
 	Workload model.RescUnit `json:"workload"`

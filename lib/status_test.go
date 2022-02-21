@@ -42,8 +42,9 @@ func TestStatusSender(t *testing.T) {
 	err := masterClient.InitMasterInfoFromMeta(ctx)
 	require.NoError(t, err)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, workerID1, metaClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient, &dummyStatus{})
 	sender := NewStatusSender(
+		workerID1,
 		masterClient,
 		workerMetaClient,
 		msgSender,
@@ -133,20 +134,24 @@ func TestStatusReceiver(t *testing.T) {
 	}()
 
 	metaClient := metadata.NewMetaMock()
-	workerMetaClient := NewWorkerMetadataClient(masterName, workerID1, metaClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient, &dummyStatus{})
 	mockMsgHandlerManager := p2p.NewMockMessageHandlerManager()
 	mockClock := clock.NewMock()
 	mockClock.Set(time.Now())
 
-	err := workerMetaClient.Store(ctx, &WorkerStatus{
-		Code:         WorkerStatusInit,
-		ErrorMessage: "test message",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 4},
-	})
+	err := workerMetaClient.Store(
+		ctx,
+		workerID1,
+		&WorkerStatus{
+			Code:         WorkerStatusInit,
+			ErrorMessage: "test message",
+			ExtBytes:     nil,
+			Ext:          &dummyStatus{Val: 4},
+		},
+	)
 	require.NoError(t, err)
 
-	receiver := NewStatusReceiver(workerMetaClient, mockMsgHandlerManager, 1, pool, mockClock)
+	receiver := NewStatusReceiver(workerID1, workerMetaClient, mockMsgHandlerManager, 1, pool, mockClock)
 
 	err = receiver.Init(ctx)
 	require.NoError(t, err)
@@ -158,7 +163,7 @@ func TestStatusReceiver(t *testing.T) {
 		Ext:          &dummyStatus{Val: 4},
 	}, receiver.Status())
 
-	err = workerMetaClient.Store(ctx, &WorkerStatus{
+	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message1",
 		ExtBytes:     nil,
@@ -168,7 +173,7 @@ func TestStatusReceiver(t *testing.T) {
 
 	err = mockMsgHandlerManager.InvokeHandler(
 		t,
-		StatusUpdateTopic(masterName, workerID1),
+		workerStatusUpdatedTopic(masterName, workerID1),
 		executorNodeID1,
 		&workerStatusUpdatedMessage{Epoch: 1})
 	require.NoError(t, err)
@@ -195,7 +200,7 @@ func TestStatusReceiver(t *testing.T) {
 		Ext:          &dummyStatus{Val: 5},
 	}, status)
 
-	err = workerMetaClient.Store(ctx, &WorkerStatus{
+	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message2",
 		ExtBytes:     nil,

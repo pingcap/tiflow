@@ -207,3 +207,8 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		}
 	}
 }
+
+func (task *cvsTask) GetWorkerStatusExtTypeInfo() interface{} {
+	var dummy int64
+	return &dummy
+}

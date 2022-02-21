@@ -25,6 +25,8 @@ type (
 	}
 )
 
+type dummyStatus struct{}
+
 func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
 		d.init = true
@@ -61,6 +63,10 @@ func (d *dummyWorker) Workload() model.RescUnit {
 
 func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 	return nil
+}
+
+func (d *dummyWorker) GetWorkerStatusExtTypeInfo() interface{} {
+	return &dummyStatus{}
 }
 
 func (d *dummyWorker) CloseImpl(ctx context.Context) error {

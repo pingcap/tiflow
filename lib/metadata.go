@@ -96,27 +96,24 @@ func (c *MasterMetadataClient) GenerateEpoch(ctx context.Context) (Epoch, error)
 
 type WorkerMetadataClient struct {
 	masterID     MasterID
-	workerID     WorkerID
 	metaKVClient metadata.MetaKV
 	extTpi       interface{}
 }
 
 func NewWorkerMetadataClient(
 	masterID MasterID,
-	workerID WorkerID,
 	metaClient metadata.MetaKV,
 	extTpi interface{},
 ) *WorkerMetadataClient {
 	return &WorkerMetadataClient{
 		masterID:     masterID,
-		workerID:     workerID,
 		metaKVClient: metaClient,
 		extTpi:       extTpi,
 	}
 }
 
-func (c *WorkerMetadataClient) Load(ctx context.Context) (*WorkerStatus, error) {
-	rawResp, err := c.metaKVClient.Get(ctx, c.workerMetaKey())
+func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*WorkerStatus, error) {
+	rawResp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -137,7 +134,7 @@ func (c *WorkerMetadataClient) Load(ctx context.Context) (*WorkerStatus, error) 
 	return &workerMeta, nil
 }
 
-func (c *WorkerMetadataClient) Store(ctx context.Context, data *WorkerStatus) error {
+func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *WorkerStatus) error {
 	if err := data.marshalExt(); err != nil {
 		return errors.Trace(err)
 	}
@@ -147,7 +144,7 @@ func (c *WorkerMetadataClient) Store(ctx context.Context, data *WorkerStatus) er
 		return errors.Trace(err)
 	}
 
-	_, err = c.metaKVClient.Put(ctx, c.workerMetaKey(), string(dataBytes))
+	_, err = c.metaKVClient.Put(ctx, c.workerMetaKey(workerID), string(dataBytes))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -159,10 +156,6 @@ func (c *WorkerMetadataClient) MasterID() MasterID {
 	return c.masterID
 }
 
-func (c *WorkerMetadataClient) WorkerID() WorkerID {
-	return c.workerID
-}
-
-func (c *WorkerMetadataClient) workerMetaKey() string {
-	return adapter.WorkerKeyAdapter.Encode(c.masterID, c.workerID)
+func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
+	return adapter.WorkerKeyAdapter.Encode(c.masterID, id)
 }

@@ -130,6 +130,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl("", masterName)
+	master.timeoutConfig.workerTimeoutDuration = time.Second * 1000
 	master.timeoutConfig.masterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
 	prepareMeta(ctx, t, master.metaKVClient)
@@ -173,14 +174,27 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	err = master.messageHandlerManager.InvokeHandler(t, StatusUpdateTopic(masterName, workerID1), masterName, &StatusUpdateMessage{
-		WorkerID: workerID1,
-		Status: WorkerStatus{
-			Code:     WorkerStatusNormal,
-			ExtBytes: []byte(`{"Val":4}`),
-		},
+	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient, &dummyStatus{})
+	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
+		Code: WorkerStatusNormal,
+		Ext:  &dummyStatus{Val: 4},
 	})
 	require.NoError(t, err)
+
+	err = master.messageHandlerManager.InvokeHandler(
+		t,
+		workerStatusUpdatedTopic(masterName, workerID1),
+		masterName,
+		&workerStatusUpdatedMessage{Epoch: master.currentEpoch.Load()})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		err := master.Poll(ctx)
+		require.NoError(t, err)
+		status := master.GetWorkers()[workerID1].Status()
+		return status.Code == WorkerStatusNormal
+	}, 1*time.Second, 10*time.Millisecond)
+
 	status := master.GetWorkers()[workerID1].Status()
 	require.Equal(t, &WorkerStatus{
 		Code: WorkerStatusNormal,

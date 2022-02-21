@@ -27,6 +27,8 @@ const (
 
 // StatusSender is used for a worker to send its status to its master.
 type StatusSender struct {
+	workerID WorkerID
+
 	workerMetaClient *WorkerMetadataClient
 	messageSender    p2p.MessageSender
 	masterClient     *masterClient
@@ -47,12 +49,14 @@ type StatusSender struct {
 // NewStatusSender returns a new StatusSender.
 // NOTE: the pool is owned by the caller.
 func NewStatusSender(
+	workerID WorkerID,
 	masterClient *masterClient,
 	workerMetaClient *WorkerMetadataClient,
 	messageSender p2p.MessageSender,
 	pool workerpool.AsyncPool,
 ) *StatusSender {
 	return &StatusSender{
+		workerID:         workerID,
 		workerMetaClient: workerMetaClient,
 		messageSender:    messageSender,
 		masterClient:     masterClient,
@@ -107,7 +111,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 		}
 
 		status := s.lastUnsentStatus
-		if err := s.workerMetaClient.Store(ctx, status); err != nil {
+		if err := s.workerMetaClient.Store(ctx, s.workerID, status); err != nil {
 			s.onError(err)
 		}
 
@@ -156,6 +160,8 @@ type workerStatusUpdatedMessage struct {
 
 // StatusReceiver is used by a master to receive the latest status update from **a** worker.
 type StatusReceiver struct {
+	workerID WorkerID
+
 	workerMetaClient      *WorkerMetadataClient
 	messageHandlerManager p2p.MessageHandlerManager
 
@@ -178,9 +184,10 @@ type StatusReceiver struct {
 // NewStatusReceiver returns a new StatusReceiver
 // NOTE: the messageHandlerManager is NOT owned by the StatusReceiver,
 // and it only uses it to register a handler. It is not responsible
-// for checking errors and cleaning up.
+// for checking errors.
 // NOTE: the pool is owned and managed by the caller.
 func NewStatusReceiver(
+	workerID WorkerID,
 	workerMetaClient *WorkerMetadataClient,
 	messageHandlerManager p2p.MessageHandlerManager,
 	epoch Epoch,
@@ -188,6 +195,7 @@ func NewStatusReceiver(
 	clock clock.Clock,
 ) *StatusReceiver {
 	return &StatusReceiver{
+		workerID:              workerID,
 		workerMetaClient:      workerMetaClient,
 		messageHandlerManager: messageHandlerManager,
 		epoch:                 epoch,
@@ -200,7 +208,7 @@ func NewStatusReceiver(
 // Init should be called to initialize a StatusReceiver.
 // NOTE: this function can be blocked by IO to the metastore.
 func (r *StatusReceiver) Init(ctx context.Context) error {
-	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerMetaClient.WorkerID())
+	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
 	ok, err := r.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -215,6 +223,7 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 				return nil
 			}
 			r.hasPendingNotification.Store(true)
+			log.L().Info("notification stored")
 			return nil
 		})
 	if err != nil {
@@ -224,7 +233,7 @@ func (r *StatusReceiver) Init(ctx context.Context) error {
 		log.L().Panic("duplicate handlers", zap.String("topic", topic))
 	}
 
-	initStatus, err := r.workerMetaClient.Load(ctx)
+	initStatus, err := r.workerMetaClient.Load(ctx, r.workerID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -248,6 +257,9 @@ func (r *StatusReceiver) Status() WorkerStatus {
 
 // Tick should be called periodically to drive the logic internal to StatusReceiver.
 func (r *StatusReceiver) Tick(ctx context.Context) error {
+	if r.hasPendingNotification.Load() {
+		log.L().Info("has pending notification")
+	}
 	// TODO make the time interval configurable
 	needFetchStatus := r.hasPendingNotification.Swap(false) ||
 		r.clock.Since(r.lastStatusUpdated.Load()) > time.Second*10
@@ -264,9 +276,10 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 	err := r.pool.Go(ctx, func() {
 		defer r.isLoading.Store(false)
 
-		status, err := r.workerMetaClient.Load(ctx)
+		status, err := r.workerMetaClient.Load(ctx, r.workerID)
 		if err != nil {
 			r.onError(err)
+			return
 		}
 
 		r.statusMu.Lock()
@@ -279,6 +292,19 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+func (r *StatusReceiver) Close(ctx context.Context) error {
+	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerID)
+	ok, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Warn("message handler for topic does not exist",
+			zap.String("topic", topic))
+	}
 	return nil
 }
 

@@ -4,6 +4,7 @@ package lib
 // can finish its unit tests.
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -134,5 +135,27 @@ func MockBaseMasterWorkerHeartbeat(
 			Epoch:        master.currentEpoch.Load(),
 		})
 
+	require.NoError(t, err)
+}
+
+func MockBaseMasterWorkerUpdateStatus(
+	ctx context.Context,
+	t *testing.T,
+	master *DefaultBaseMaster,
+	masterID MasterID,
+	workerID WorkerID,
+	executorID p2p.NodeID,
+	status *WorkerStatus,
+	extTpi interface{},
+) {
+	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient, extTpi)
+	err := workerMetaClient.Store(ctx, workerID, status)
+	require.NoError(t, err)
+
+	err = master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
+		t,
+		workerStatusUpdatedTopic(masterID, workerID),
+		executorID,
+		&workerStatusUpdatedMessage{Epoch: master.currentEpoch.Load()})
 	require.NoError(t, err)
 }

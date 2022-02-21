@@ -110,6 +110,10 @@ func (d *defaultBaseJobMaster) GetWorkerStatusExtTypeInfo() interface{} {
 	return d.master.GetWorkerStatusExtTypeInfo()
 }
 
+func (d *defaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
+	return d.worker.UpdateStatus(ctx, status)
+}
+
 func (d *defaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }

@@ -86,15 +86,20 @@ func TestExampleMaster(t *testing.T) {
 		return online
 	}, 2*time.Second, 100*time.Millisecond)
 
-	// will be WorkerStatusInit after one heartbeat
-	err = master.Tick(ctx)
-	require.NoError(t, err)
-	master.worker.mu.Lock()
-	code = master.worker.statusCode
-	master.worker.mu.Unlock()
-	require.Equal(t, lib.WorkerStatusInit, code)
+	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &lib.WorkerStatus{
+		Code: lib.WorkerStatusInit,
+	}, &struct{}{})
 
-	require.Equal(t, 2, master.tickCount)
+	require.Eventually(t, func() bool {
+		err := master.Poll(ctx)
+		require.NoError(t, err)
+
+		master.worker.mu.Lock()
+		code = master.worker.statusCode
+		master.worker.mu.Unlock()
+
+		return code == lib.WorkerStatusInit
+	}, time.Second, time.Millisecond*10)
 
 	err = master.Close(ctx)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -53,6 +54,7 @@ func (e *exampleMaster) Tick(ctx context.Context) error {
 		return nil
 	}
 	e.worker.statusCode = handle.Status().Code
+	log.L().Info("status", zap.Any("status", handle.Status()))
 	return nil
 }
 

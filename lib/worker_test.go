@@ -48,6 +48,9 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+	worker.On("Tick", mock.Anything).Return(nil)
+	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -66,20 +69,21 @@ func TestWorkerInitAndClose(t *testing.T) {
 		return hbMsg.FromWorkerID == workerID1 && hbMsg.Epoch == 1
 	}, "unexpected heartbeat %v", hbMsg)
 
-	var statusMsg *StatusUpdateMessage
+	err = worker.UpdateStatus(ctx, WorkerStatus{Code: WorkerStatusNormal})
+	require.NoError(t, err)
+
+	var statusMsg *workerStatusUpdatedMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName, workerID1))
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
 		if ok {
-			statusMsg = rawMsg.(*StatusUpdateMessage)
+			statusMsg = rawMsg.(*workerStatusUpdatedMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &StatusUpdateMessage{
-		WorkerID: workerID1,
-		Status: WorkerStatus{
-			Code:     WorkerStatusNormal,
-			ExtBytes: []byte("null"),
-		},
+	require.Equal(t, &workerStatusUpdatedMessage{
+		Epoch: 1,
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil)
@@ -111,6 +115,8 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -166,6 +172,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -227,24 +234,50 @@ func TestWorkerStatus(t *testing.T) {
 			Val: 1,
 		},
 	}, nil)
+	worker.On("Tick", mock.Anything).Return(nil)
+	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
+	worker.On("CloseImpl", mock.Anything).Return(nil)
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
-	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration)
-
-	status, ok := worker.messageSender.TryPop(masterNodeName, StatusUpdateTopic(masterName, workerID1))
-	require.True(t, ok)
-	require.Equal(t, &StatusUpdateMessage{
-		WorkerID: workerID1,
-		Status: WorkerStatus{
+	require.Eventually(t, func() bool {
+		err := worker.UpdateStatus(ctx, WorkerStatus{
 			Code: WorkerStatusNormal,
-			Ext: &dummyStatus{
-				Val: 1,
-			},
-			ExtBytes: []byte(`{"Val":1}`),
-		},
+			Ext:  &dummyStatus{Val: 6},
+		})
+		if err == nil {
+			return true
+		}
+		require.Regexp(t, ".*ErrWorkerUpdateStatusTryAgain.*", err.Error())
+		return false
+	}, 1*time.Second, 10*time.Millisecond)
+
+	var status *workerStatusUpdatedMessage
+	require.Eventually(t, func() bool {
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+		rawStatus, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		if ok {
+			status = rawStatus.(*workerStatusUpdatedMessage)
+		}
+		return ok
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, &workerStatusUpdatedMessage{
+		Epoch: 1,
 	}, status)
+
+	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient, &dummyStatus{})
+	actualStatus, err := workerMetaClient.Load(ctx, workerID1)
+	require.NoError(t, err)
+	require.Equal(t, &WorkerStatus{
+		Code: WorkerStatusNormal,
+		Ext:  &dummyStatus{Val: 6},
+	},
+		actualStatus)
+
+	err = worker.Close(ctx)
+	require.NoError(t, err)
 }
 
 func TestWorkerSuicide(t *testing.T) {
@@ -265,6 +298,8 @@ func TestWorkerSuicide(t *testing.T) {
 	worker.On("Status").Return(WorkerStatus{
 		Code: WorkerStatusNormal,
 	}, nil)
+	worker.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
+
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
