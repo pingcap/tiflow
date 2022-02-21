@@ -18,15 +18,20 @@ import (
 	"encoding/json"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var _ = check.Suite(&ddlPullerSuite{})
@@ -218,6 +223,67 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 	// no ddl should be received
 	c.Assert(resolvedTs, check.Equals, uint64(40))
 	c.Assert(ddl, check.IsNil)
+}
+
+func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
+	defer testleak.AfterTest(c)()
+	// For observing the logs
+	zapcore, logs := observer.New(zap.WarnLevel)
+	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
+	_, r, _ := log.InitLogger(conf)
+	logger := zap.New(zapcore)
+	restoreFn := log.ReplaceGlobals(logger, r)
+	defer restoreFn()
+
+	startTs := uint64(10)
+	mockPuller := newMockPuller(c, startTs)
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, err := newDDLPuller(ctx, startTs)
+	c.Assert(err, check.IsNil)
+
+	mockClock := clock.NewMock()
+	p.(*ddlPullerImpl).clock = mockClock
+
+	p.(*ddlPullerImpl).puller = mockPuller
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := p.Run(ctx)
+		if errors.Cause(err) == context.Canceled {
+			err = nil
+		}
+		c.Assert(err, check.IsNil)
+	}()
+	defer wg.Wait()
+	defer p.Close()
+
+	// test initialize state
+	resolvedTs, ddl := p.FrontDDL()
+	c.Assert(resolvedTs, check.Equals, startTs)
+	c.Assert(ddl, check.IsNil)
+	resolvedTs, ddl = p.PopFrontDDL()
+	c.Assert(resolvedTs, check.Equals, startTs)
+	c.Assert(ddl, check.IsNil)
+
+	mockPuller.appendResolvedTs(30)
+	waitResolvedTsGrowing(c, p, 30)
+	c.Assert(logs.Len(), check.Equals, 0)
+
+	mockClock.Add(2 * ownerDDLPullerStuckWarnTimeout)
+	for i := 0; i < 20; i++ {
+		mockClock.Add(time.Second)
+		if logs.Len() > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+		if i == 19 {
+			c.Fatal("warning log not printed")
+		}
+	}
+
+	mockPuller.appendResolvedTs(40)
+	waitResolvedTsGrowing(c, p, 40)
 }
 
 // waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
