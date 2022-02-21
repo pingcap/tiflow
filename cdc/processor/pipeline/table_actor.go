@@ -259,7 +259,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicConfig,
 	)
-	sortActorNodeContext := NewContext(sdtTableContext, t.tableName,
+	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
 	if err := sorterNode.start(sortActorNodeContext, true, t.wg, t.actorID, t.router); err != nil {
@@ -272,7 +272,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	t.sortNode = sorterNode
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
-	pullerActorNodeContext := NewContext(sdtTableContext,
+	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
@@ -285,14 +285,14 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 	t.pullerNode = pullerNode
 
-	var messageFetchFunc AsyncMessageHolderFunc
-	var messageProcessFunc AsyncMessageProcessorFunc
+	var messageFetchFunc asyncMessageHolderFunc
+	var messageProcessFunc asyncMessageProcessorFunc
 
 	var cyclicActorNodeContext *cyclicNodeContext
 	if t.cyclicEnabled {
 		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cyclicActorNodeContext = NewCyclicNodeContext(
-			NewContext(sdtTableContext, t.tableName,
+		cyclicActorNodeContext = newCyclicNodeContext(
+			newContext(sdtTableContext, t.tableName,
 				t.globalVars.TableActorSystem.Router(),
 				t.actorID, t.changefeedVars,
 				t.globalVars, t.reportErr))

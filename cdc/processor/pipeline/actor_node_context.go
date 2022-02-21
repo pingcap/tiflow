@@ -46,7 +46,7 @@ type actorNodeContext struct {
 	throw              func(error)
 }
 
-func NewContext(stdCtx sdtContext.Context,
+func newContext(stdCtx sdtContext.Context,
 	tableName string,
 	tableActorRouter *actor.Router,
 	tableActorID actor.ID,

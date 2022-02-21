@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
+// RowChangeType is the type of row change.
 type RowChangeType int
 
 // these constants represent types of row change.
@@ -330,6 +331,7 @@ func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
 	return GenInsertSQL(tp, r)
 }
 
+// DMLType indicates the type of DML.
 type DMLType int
 
 // these constants represent types of row change.

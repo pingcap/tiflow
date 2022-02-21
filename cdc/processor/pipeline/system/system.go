@@ -48,10 +48,12 @@ func (s *System) Stop() error {
 	return s.tableActorSystem.Stop()
 }
 
+// Router returns the table actor router.
 func (s *System) Router() *actor.Router {
 	return s.tableActorRouter
 }
 
+// System returns the system.
 func (s *System) System() *actor.System {
 	return s.tableActorSystem
 }

@@ -29,7 +29,7 @@ import (
 
 func TestContext(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
@@ -43,7 +43,7 @@ func TestContext(t *testing.T) {
 
 func TestTryGetProcessedMessageFromChan(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, throwDoNothing)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.Nil(t, ctx.tryGetProcessedMessage())
 	ctx.outputCh <- pipeline.TickMessage()
@@ -56,7 +56,7 @@ func TestThrow(t *testing.T) {
 	t.Parallel()
 	a := 0
 	tf := func(err error) { a++ }
-	actorContext := NewContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, tf)
+	actorContext := newContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, tf)
 	actorContext.Throw(nil)
 	require.Equal(t, 1, a)
 	actorContext.Throw(errors.New("error"))
@@ -65,7 +65,7 @@ func TestThrow(t *testing.T) {
 
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
 	require.False(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
@@ -89,7 +89,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, t.Name(), sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{}, throwDoNothing)
+	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{}, throwDoNothing)
 	actorContext.setTickMessageThreshold(2)
 	actorContext.SendToNextNode(pipeline.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)

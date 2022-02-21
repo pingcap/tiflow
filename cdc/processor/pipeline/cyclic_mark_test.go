@@ -193,7 +193,7 @@ func TestCyclicMarkNode(t *testing.T) {
 
 	// table actor
 	for _, tc := range testCases {
-		ctx := NewCyclicNodeContext(NewContext(context.TODO(), "a.test", nil, 1, &cdcContext.ChangefeedVars{
+		ctx := newCyclicNodeContext(newContext(context.TODO(), "a.test", nil, 1, &cdcContext.ChangefeedVars{
 			Info: &model.ChangeFeedInfo{
 				Config: &config.ReplicaConfig{
 					Cyclic: &config.CyclicConfig{
