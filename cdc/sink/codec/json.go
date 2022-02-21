@@ -51,7 +51,7 @@ type column struct {
 	Value       interface{}          `json:"v"`
 }
 
-func NewColumn(value interface{}, tp byte) *column {
+func newColumn(value interface{}, tp byte) *column {
 	return &column{
 		Value: value,
 		Type:  tp,

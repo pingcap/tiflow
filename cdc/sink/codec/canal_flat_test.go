@@ -169,7 +169,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		c.Assert(err, check.IsNil)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := newCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -253,7 +253,7 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		c.Assert(err, check.IsNil)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := newCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -334,7 +334,7 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(rawBytes, check.NotNil)
 
-		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+		decoder := newCanalFlatEventBatchDecoder(rawBytes, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)

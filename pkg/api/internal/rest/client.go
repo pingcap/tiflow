@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
-// Enum types for HTTP methods.
+// HTTPMethod represents HTTP method.
 type HTTPMethod int
 
 // Valid HTTP methods.
