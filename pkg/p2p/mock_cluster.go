@@ -110,6 +110,7 @@ func newMockNode(t *testing.T, id NodeID) *MockNode {
 	return ret
 }
 
+// Close closes the mock node.
 func (n *MockNode) Close() {
 	n.Router.Close()
 	n.Router.Wait()
@@ -117,6 +118,7 @@ func (n *MockNode) Close() {
 	n.wg.Wait()
 }
 
+// NewMockCluster creates a mock cluster.
 func NewMockCluster(t *testing.T, nodeCount int) *MockCluster {
 	ret := &MockCluster{
 		Nodes: make(map[NodeID]*MockNode),
@@ -136,6 +138,7 @@ func NewMockCluster(t *testing.T, nodeCount int) *MockCluster {
 	return ret
 }
 
+// Close closes the mock cluster.
 func (c *MockCluster) Close() {
 	for _, node := range c.Nodes {
 		node.Close()

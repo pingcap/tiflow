@@ -200,7 +200,7 @@ type cyclicNodeContext struct {
 	queue list.List
 }
 
-func NewCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
+func newCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
 	return &cyclicNodeContext{
 		actorNodeContext: ctx,
 	}
