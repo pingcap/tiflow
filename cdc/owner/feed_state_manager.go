@@ -300,6 +300,9 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 	})
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		changed := false
+		if info == nil {
+			return nil, changed, nil
+		}
 		if info.State != feedState {
 			info.State = feedState
 			changed = true
@@ -364,6 +367,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	for _, err := range errs {
 		if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
 				info.Error = err
 				return info, true, nil
 			})
@@ -374,6 +380,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info == nil {
+			return nil, false, nil
+		}
 		for _, err := range errs {
 			info.Error = err
 		}
