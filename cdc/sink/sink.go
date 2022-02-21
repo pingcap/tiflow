@@ -33,8 +33,6 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error
-
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
@@ -67,7 +65,7 @@ func init() {
 	// register blackhole sink
 	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return newBlackHoleSink(ctx, opts), nil
+		return newBlackHoleSink(ctx), nil
 	}
 
 	// register mysql sink

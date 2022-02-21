@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -125,9 +127,10 @@ func TestLogWriterWriteLog(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		mockWriter.On("AdvanceTs", mock.Anything)
 		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			rowWriter:            mockWriter,
+			ddlWriter:            mockWriter,
+			meta:                 &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			metricTotalRowsCount: redoTotalRowsCountGauge.WithLabelValues("", ""),
 		}
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -675,6 +678,31 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
 	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
 	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
+
+	origin := common.InitS3storage
+	defer func() {
+		common.InitS3storage = origin
+	}()
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	// skip pre cleanup
+	mockStorage.EXPECT().FileExists(gomock.Any(), gomock.Any()).Return(false, nil)
+	common.InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+		return mockStorage, nil
+	}
+	cfg3 := &LogWriterConfig{
+		Dir:               dir,
+		ChangeFeedID:      "test-cf112232",
+		CaptureID:         "cp",
+		MaxLogSize:        10,
+		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		FlushIntervalInMs: 5,
+		S3Storage:         true,
+	}
+	l3, err := NewLogWriter(ctx, cfg3)
+	require.Nil(t, err)
+	err = l3.Close()
+	require.Nil(t, err)
 }
 
 func TestWriterRedoGC(t *testing.T) {
@@ -750,6 +778,7 @@ func TestDeleteAllLogs(t *testing.T) {
 		closeErr           error
 		getAllFilesInS3Err error
 		deleteFileErr      error
+		writeFileErr       error
 		wantErr            string
 	}{
 		{
@@ -783,6 +812,12 @@ func TestDeleteAllLogs(t *testing.T) {
 			args:          args{enableS3: true},
 			deleteFileErr: awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil),
 		},
+		{
+			name:         "writerFile err",
+			args:         args{enableS3: true},
+			writeFileErr: errors.New("xx"),
+			wantErr:      ".*xx*.",
+		},
 	}
 
 	for _, tt := range tests {
@@ -803,6 +838,8 @@ func TestDeleteAllLogs(t *testing.T) {
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 
 		mockStorage.EXPECT().DeleteFile(gomock.Any(), gomock.Any()).Return(tt.deleteFileErr).MaxTimes(2)
+		mockStorage.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(tt.writeFileErr).MaxTimes(1)
+
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("Close").Return(tt.closeErr)
 		cfg := &LogWriterConfig{
@@ -829,13 +866,84 @@ func TestDeleteAllLogs(t *testing.T) {
 			require.Regexp(t, tt.wantErr, ret.Error(), tt.name)
 		} else {
 			require.Nil(t, ret, tt.name)
-			require.Equal(t, 0, len(logWriters), tt.name)
+			_, ok := logWriters[writer.cfg.ChangeFeedID]
+			require.False(t, ok, tt.name)
 			if !tt.args.enableS3 {
 				_, err := os.Stat(dir)
 				require.True(t, os.IsNotExist(err), tt.name)
 			}
 		}
 		os.RemoveAll(dir)
+		getAllFilesInS3 = origin
+	}
+}
+
+func TestPreCleanUpS3(t *testing.T) {
+	testCases := []struct {
+		name               string
+		fileExistsErr      error
+		fileExists         bool
+		getAllFilesInS3Err error
+		deleteFileErr      error
+		wantErr            string
+	}{
+		{
+			name:       "happy no marker",
+			fileExists: false,
+		},
+		{
+			name:          "fileExists err",
+			fileExistsErr: errors.New("xx"),
+			wantErr:       ".*xx*.",
+		},
+		{
+			name:               "getAllFilesInS3 err",
+			fileExists:         true,
+			getAllFilesInS3Err: errors.New("xx"),
+			wantErr:            ".*xx*.",
+		},
+		{
+			name:          "deleteFile normal err",
+			fileExists:    true,
+			deleteFileErr: errors.New("xx"),
+			wantErr:       ".*ErrS3StorageAPI*.",
+		},
+		{
+			name:          "deleteFile notExist err",
+			fileExists:    true,
+			deleteFileErr: awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil),
+		},
+	}
+
+	for _, tc := range testCases {
+		origin := getAllFilesInS3
+		getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) {
+			return []string{"1", "11", "delete_test-cf"}, tc.getAllFilesInS3Err
+		}
+		controller := gomock.NewController(t)
+		mockStorage := mockstorage.NewMockExternalStorage(controller)
+
+		mockStorage.EXPECT().FileExists(gomock.Any(), gomock.Any()).Return(tc.fileExists, tc.fileExistsErr)
+		mockStorage.EXPECT().DeleteFile(gomock.Any(), gomock.Any()).Return(tc.deleteFileErr).MaxTimes(3)
+
+		cfg := &LogWriterConfig{
+			Dir:               "dir",
+			ChangeFeedID:      "test-cf",
+			CaptureID:         "cp",
+			MaxLogSize:        10,
+			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			FlushIntervalInMs: 5,
+		}
+		writer := LogWriter{
+			cfg:     cfg,
+			storage: mockStorage,
+		}
+		ret := writer.preCleanUpS3(context.Background())
+		if tc.wantErr != "" {
+			require.Regexp(t, tc.wantErr, ret.Error(), tc.name)
+		} else {
+			require.Nil(t, ret, tc.name)
+		}
 		getAllFilesInS3 = origin
 	}
 }
