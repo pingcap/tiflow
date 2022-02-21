@@ -324,6 +324,7 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+	log.Info("kafka producer closing...")
 	close(k.closeCh)
 }
 
@@ -343,13 +344,19 @@ func (k *kafkaSaramaProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	start := time.Now()
+	err := k.asyncClient.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
+	start = time.Now()
+	err = k.syncClient.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }

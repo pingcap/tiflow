@@ -987,7 +987,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx2, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx2, startRev), IsNil)
 	}()
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
 	time.Sleep(time.Second)
@@ -1009,7 +1009,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx3, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx3, startRev), IsNil)
 	}()
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		bounds := s.BoundSources()
@@ -1618,7 +1618,7 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeLoadTask(ctx1, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeLoadTask(ctx1, startRev), IsNil)
 	}()
 
 	// put task2, source1, worker1
@@ -1709,9 +1709,9 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
 
 	// bootstrap
-	c.Assert(s.recoverSources(etcdTestCli), IsNil)
-	c.Assert(s.recoverRelayConfigs(etcdTestCli), IsNil)
-	_, err = s.recoverWorkersBounds(etcdTestCli)
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
 	c.Assert(err, IsNil)
 
 	// check
@@ -1723,4 +1723,68 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	c.Assert(worker.RelaySourceID(), Equals, sourceID2)
 	_, ok = s.unbounds[sourceID1]
 	c.Assert(ok, IsTrue)
+}
+
+func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		workerName2 = "dm-worker-2"
+		keepAlive   = int64(3)
+	)
+
+	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	workerInfo2 := ha.WorkerInfo{Name: workerName2}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
+
+	// prepare etcd data
+	s.etcdCli = etcdTestCli
+	sourceCfg.EnableRelay = true
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName2)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo2)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName2, keepAlive)
+
+	// bootstrap
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
+	c.Assert(err, IsNil)
+
+	// check when the relay config is conflicting with source config, relay config should be deleted
+	c.Assert(s.relayWorkers[sourceID1], HasLen, 0)
+	result, _, err := ha.GetAllRelayConfig(etcdTestCli)
+	c.Assert(err, IsNil)
+	c.Assert(result, HasLen, 0)
+
+	worker := s.workers[workerName1]
+	c.Assert(worker.Stage(), Equals, WorkerBound)
+	c.Assert(worker.RelaySourceID(), HasLen, 0)
+	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
 }

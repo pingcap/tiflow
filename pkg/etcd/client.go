@@ -43,10 +43,10 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
-	// If no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// If no msg comes from an etcd watchCh for etcdWatchChTimeoutDuration long,
 	// we should cancel the watchCh and request a new watchCh from etcd client
 	etcdWatchChTimeoutDuration = 10 * time.Second
-	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// If no msg comes from an etcd watchCh for etcdRequestProgressDuration long,
 	// we should call RequestProgress of etcd client
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
@@ -176,19 +176,21 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
-	go c.WatchWithChan(ctx, watchCh, key, opts...)
+	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
-		log.Info("WatchWithChan exited")
+		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
-	var lastRevision int64
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
+
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
@@ -220,7 +222,9 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 					break Loop
 				case <-ticker.C:
 					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
-						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck",
+							zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+							zap.String("role", role))
 					}
 				}
 			}
@@ -230,10 +234,13 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
-				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh",
+					zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+					zap.Stack("stack"),
+					zap.String("role", role))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
