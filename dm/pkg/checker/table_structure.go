@@ -27,7 +27,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/errors"
-	column "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
@@ -310,7 +309,6 @@ type ShardingTablesChecker struct {
 	targetTableID                string
 	dbs                          map[string]*sql.DB
 	tableMap                     map[string][]*filter.Table // sourceID => {[table1, table2, ...]}
-	mapping                      map[string]*column.Mapping
 	checkAutoIncrementPrimaryKey bool
 	firstCreateTableStmtNode     *ast.CreateTableStmt
 	firstTable                   *filter.Table
@@ -321,7 +319,7 @@ type ShardingTablesChecker struct {
 }
 
 // NewShardingTablesChecker returns a RealChecker.
-func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, mapping map[string]*column.Mapping, checkAutoIncrementPrimaryKey bool, dumpThreads int) RealChecker {
+func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tableMap map[string][]*filter.Table, checkAutoIncrementPrimaryKey bool, dumpThreads int) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
 	}
@@ -329,7 +327,6 @@ func NewShardingTablesChecker(targetTableID string, dbs map[string]*sql.DB, tabl
 		targetTableID:                targetTableID,
 		dbs:                          dbs,
 		tableMap:                     tableMap,
-		mapping:                      mapping,
 		checkAutoIncrementPrimaryKey: checkAutoIncrementPrimaryKey,
 		dumpThreads:                  dumpThreads,
 	}
