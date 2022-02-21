@@ -114,7 +114,7 @@ func newMqSink(
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics: NewStatistics(ctx, "MQ"),
 	}
 
 	go func() {
