@@ -464,6 +464,7 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
+	ti.State = model.StatePublic
 	return ti, nil
 }
 
