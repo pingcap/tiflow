@@ -72,14 +72,14 @@ type AsyncMessageHolder interface {
 	TryGetDataMessage() *pipeline.Message
 }
 
-type AsyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
+type asyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
 
-func (fn AsyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (fn asyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	return fn(ctx, msg)
 }
 
-type AsyncMessageHolderFunc func() *pipeline.Message
+type asyncMessageHolderFunc func() *pipeline.Message
 
-func (fn AsyncMessageHolderFunc) TryGetDataMessage() *pipeline.Message {
+func (fn asyncMessageHolderFunc) TryGetDataMessage() *pipeline.Message {
 	return fn()
 }
