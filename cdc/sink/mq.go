@@ -72,8 +72,8 @@ func newMqSink(
 	errCh chan error,
 ) (*mqSink, error) {
 	var protocol codec.Protocol
-	protocol.FromString(config.Sink.Protocol)
-	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !config.EnableOldValue {
+	protocol.FromString(replicaConfig.Sink.Protocol)
+	if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !replicaConfig.EnableOldValue {
 		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
 			"Please update changefeed config", protocol.String()))
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol.String())))
@@ -89,7 +89,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewDispatcher(config, partitionNum)
+	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -128,7 +128,7 @@ func newMqSink(
 	}
 
 	go func() {
-		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -139,7 +139,7 @@ func newMqSink(
 			}
 		}
 	}()
-	return k, nil
+	return s, nil
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -250,9 +250,9 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", k.partitionNum),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, k.partitionNum)
 	return errors.Trace(err)
 }
 
