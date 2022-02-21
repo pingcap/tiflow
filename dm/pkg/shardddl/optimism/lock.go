@@ -831,10 +831,12 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 		}
 	}
 
-	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable), log.ShortError(tableErr))
 
 	if idempotent {
 		log.L().Info("return conflict DDL for idempotent DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		l.tables[source][schema][table] = postTable
+		l.finalTables[source][schema][table] = postTable
 		return true, ConflictNone
 	}
 
