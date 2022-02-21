@@ -285,7 +285,7 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState().(*orchestrator.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
