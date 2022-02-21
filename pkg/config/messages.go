@@ -78,6 +78,7 @@ const (
 	serverSendRateLimit = 1024.0
 )
 
+// ValidateAndAdjust validates and adjusts the configs.
 func (c *MessagesConfig) ValidateAndAdjust() error {
 	if c.ClientMaxBatchInterval == 0 {
 		c.ClientMaxBatchInterval = defaultMessageConfig.ClientMaxBatchInterval
@@ -122,6 +123,7 @@ func (c *MessagesConfig) ValidateAndAdjust() error {
 	return nil
 }
 
+// Clone returns a deep copy of the configuration.
 func (c *MessagesConfig) Clone() *MessagesConfig {
 	return &MessagesConfig{
 		ClientMaxBatchInterval:       c.ClientMaxBatchInterval,
@@ -134,6 +136,7 @@ func (c *MessagesConfig) Clone() *MessagesConfig {
 	}
 }
 
+// ToMessageClientConfig converts the MessagesConfig to a MessageClientConfig.
 func (c *MessagesConfig) ToMessageClientConfig() *p2p.MessageClientConfig {
 	return &p2p.MessageClientConfig{
 		SendChannelSize:         clientSendChannelSize,
@@ -145,6 +148,7 @@ func (c *MessagesConfig) ToMessageClientConfig() *p2p.MessageClientConfig {
 	}
 }
 
+// ToMessageServerConfig returns a MessageServerConfig that can be used to create a MessageServer.
 func (c *MessagesConfig) ToMessageServerConfig() *p2p.MessageServerConfig {
 	return &p2p.MessageServerConfig{
 		MaxPendingMessageCountPerTopic:       maxTopicPendingCount,
