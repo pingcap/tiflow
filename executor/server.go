@@ -257,6 +257,8 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.startForTest(ctx)
 	}
 
+	registerMetrics()
+
 	wg, ctx := errgroup.WithContext(ctx)
 
 	s.sch = runtime.NewRuntime(nil)
@@ -339,7 +341,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	})
 
 	wg.Go(func() error {
-		return debugHandler(s.tcpServer.HTTP1Listener())
+		return httpHandler(s.tcpServer.HTTP1Listener())
 	})
 	return nil
 }

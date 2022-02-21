@@ -32,11 +32,14 @@ func TestStartTCPSrv(t *testing.T) {
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
+	registerMetrics()
 	wg, ctx := errgroup.WithContext(context.Background())
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
 
-	testPprof(t, fmt.Sprintf("http://127.0.0.1:%d", port))
+	apiURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	testPprof(t, apiURL)
+	testPrometheusMetrics(t, apiURL)
 	s.Stop()
 }
 
@@ -53,6 +56,20 @@ func testPprof(t *testing.T, addr string) {
 		"/debug/pprof/block",
 		"/debug/pprof/goroutine?debug=1",
 		"/debug/pprof/mutex?debug=1",
+	}
+	for _, uri := range urls {
+		resp, err := http.Get(addr + uri)
+		require.Nil(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		_, err = ioutil.ReadAll(resp.Body)
+		require.Nil(t, err)
+	}
+}
+
+func testPrometheusMetrics(t *testing.T, addr string) {
+	urls := []string{
+		"/metrics",
 	}
 	for _, uri := range urls {
 		resp, err := http.Get(addr + uri)

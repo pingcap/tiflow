@@ -52,18 +52,21 @@ initial-cluster = "%s=http://127.0.0.1:%d"`
 	return masterAddr, cfg, cleanupFn
 }
 
+// Disable parallel run for this case, because prometheus http handler will meet
+// data race if parallel run is enabled
 func TestStartGrpcSrv(t *testing.T) {
-	t.Parallel()
-
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-start-grpc-srv")
 	defer cleanup()
 
 	s := &Server{cfg: cfg}
+	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	testPprof(t, fmt.Sprintf("http://%s", masterAddr))
+	apiURL := fmt.Sprintf("http://%s", masterAddr)
+	testPprof(t, apiURL)
+	testPrometheusMetrics(t, apiURL)
 	s.Stop()
 }
 
@@ -129,6 +132,20 @@ func testPprof(t *testing.T, addr string) {
 	}
 }
 
+func testPrometheusMetrics(t *testing.T, addr string) {
+	urls := []string{
+		"/metrics",
+	}
+	for _, uri := range urls {
+		resp, err := http.Get(addr + uri)
+		require.Nil(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		_, err = ioutil.ReadAll(resp.Body)
+		require.Nil(t, err)
+	}
+}
+
 func TestCheckLeaderAndNeedForward(t *testing.T) {
 	t.Parallel()
 
@@ -176,9 +193,9 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 // - starts an embed etcd with gRPC service, including message service and
 //   server master pb service.
 // - campaigns to be leader and then runs leader service.
+// Disable parallel run for this case, because prometheus http handler will meet
+// data race if parallel run is enabled
 func TestRunLeaderService(t *testing.T) {
-	t.Parallel()
-
 	_, cfg, cleanup := prepareServerEnv(t, "test-run-leader-service")
 	defer cleanup()
 
