@@ -53,7 +53,7 @@ type Config struct {
 	ClientID        string
 	Credential      *security.Credential
 	SaslScram       *security.SaslScram
-	// control whether to create topic
+	// control whether to create topic and verify partition number
 	AutoCreate bool
 }
 
@@ -62,7 +62,7 @@ func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer, we set the default value (1M) identical to kafka broker.
-		MaxMessageBytes:   1 * 1024 * 1024,
+		MaxMessageBytes:   config.DefaultMaxMessageBytes,
 		ReplicationFactor: 1,
 		Compression:       "none",
 		Credential:        &security.Credential{},
@@ -344,13 +344,19 @@ func (k *kafkaSaramaProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	start := time.Now()
+	err := k.asyncClient.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
+	start = time.Now()
+	err = k.syncClient.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
@@ -411,18 +417,18 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	info, created := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if created {
-		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
-		// else the producer will send message that too large to make topic reject, then changefeed would error.
-		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
+
 		if topicMaxMessageBytes < config.MaxMessageBytes {
-			return cerror.ErrKafkaInvalidConfig.GenWithStack(
-				"topic already exist, and topic's max.message.bytes(%d) less than max-message-bytes(%d)."+
-					"Please make sure `max-message-bytes` not greater than topic `max.message.bytes`",
-				topicMaxMessageBytes, config.MaxMessageBytes)
+			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", config.MaxMessageBytes))
+			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -442,20 +448,22 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
-	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
-	// Kafka would create the topic with broker's `message.max.bytes`,
-	// we have to make sure it's not greater than `max-message-bytes`
 	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
 	}
 
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			"broker's message.max.bytes(%d) less than max-message-bytes(%d)"+
-				"Please make sure `max-message-bytes` not greater than broker's `message.max.bytes`",
-			brokerMessageMaxBytes, config.MaxMessageBytes)
+		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", config.MaxMessageBytes))
+		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
 	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
@@ -484,7 +492,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -494,6 +502,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, e
 	if err := topicPreProcess(topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
 	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
 	if err != nil {
