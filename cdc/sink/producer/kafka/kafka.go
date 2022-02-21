@@ -231,9 +231,8 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
-
-	role util.Role
-	id   model.ChangeFeedID
+	role    util.Role
+	id      model.ChangeFeedID
 }
 
 type kafkaProducerClosingFlag = int32
