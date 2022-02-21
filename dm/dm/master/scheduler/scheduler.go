@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -1521,7 +1522,6 @@ func (s *Scheduler) recoverRelayConfigs() error {
 		}
 	}
 
->>>>>>> 09076bc92 (*(dm): recycle resources when initialization of checkpoint in syncer, loader, shard-group-keeper failed (#4414))
 	s.relayWorkers = relayWorkers
 	return nil
 }
