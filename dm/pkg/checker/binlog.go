@@ -225,19 +225,20 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 			delete(c.schemas, doDB)
 		}
 		if len(c.schemas) > 0 {
-			dbs := []string{}
-			for db := range c.schemas {
-				dbs = append(dbs, db)
-			}
+			dbs := utils.SetToSlice(c.schemas)
 			result.Extra = fmt.Sprintf("these dbs [%s] are not in binlog_do_db[%s]", strings.Join(dbs, ","), binlogDoDB)
 			return result
 		}
 	} else {
+		ignoreDBs := []string{}
 		for _, ignoreDB := range binlogIgnoreDBs {
 			if _, ok := c.schemas[ignoreDB]; ok {
-				result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db[%s]", ignoreDB, binlogIgnoreDB)
-				return result
+				ignoreDBs = append(ignoreDBs, ignoreDB)
 			}
+		}
+		if len(ignoreDBs) > 0 {
+			result.Extra = fmt.Sprintf("db [%s] is in binlog_ignore_db[%s]", strings.Join(ignoreDBs, ","), binlogIgnoreDB)
+			return result
 		}
 	}
 	result.State = StateSuccess
