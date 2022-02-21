@@ -201,7 +201,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				metrics.ReportDDLPending(l.Task, metrics.DDLPendingUnSynced, metrics.DDLPendingSynced)
 			}
 		}
-		if len(newDDLs) > 0 {
+		if len(newDDLs) > 0 || (err != nil && terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err)) {
 			// revert the `done` status if need to wait for the new operation to be done.
 			// Now, we wait for the new operation to be done if any DDLs returned.
 			l.tryRevertDone(callerSource, callerSchema, callerTable)
@@ -466,8 +466,8 @@ func (l *Lock) IsResolved() bool {
 func (l *Lock) syncStatus() (map[string]map[string]map[string]bool, int) {
 	ready := make(map[string]map[string]map[string]bool)
 	remain := 0
-	joined, joinedErr := l.joinNormalTables()
-	for source, schemaTables := range l.tables {
+	joined, joinedErr := l.joinFinalTables()
+	for source, schemaTables := range l.finalTables {
 		if _, ok := ready[source]; !ok {
 			ready[source] = make(map[string]map[string]bool)
 		}
