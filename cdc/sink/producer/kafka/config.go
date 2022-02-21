@@ -188,11 +188,6 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		producerConfig.AutoCreate = autoCreate
 	}
 
-	s = params.Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
 	s = params.Get("enable-tidb-extension")
 	if s != "" {
 		_, err := strconv.ParseBool(s)

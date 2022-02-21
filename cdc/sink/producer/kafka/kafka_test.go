@@ -27,13 +27,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-=======
-	"github.com/pingcap/tiflow/pkg/kafka"
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
@@ -354,18 +350,8 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.Version = "invalid"
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
-<<<<<<< HEAD
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
-=======
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-	opts := make(map[string]string)
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
-	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
 	_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
@@ -411,14 +397,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
-=======
-	opts := make(map[string]string)
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 		err := producer.Close()
@@ -483,14 +462,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
-<<<<<<< HEAD
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
-=======
-	opts := make(map[string]string)
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
-	c.Assert(opts, check.HasKey, "max-message-bytes")
->>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

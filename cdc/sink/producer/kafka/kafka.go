@@ -335,9 +335,13 @@ func (k *kafkaSaramaProducer) stop() {
 		return
 	}
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.Any("role", k.role))
 >>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
+=======
+	log.Info("kafka producer closing...")
+>>>>>>> release-5.3
 	close(k.closeCh)
 }
 
@@ -359,11 +363,14 @@ func (k *kafkaSaramaProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	start := time.Now()
+	err := k.asyncClient.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
+<<<<<<< HEAD
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 =======
@@ -404,6 +411,14 @@ func (k *kafkaSaramaProducer) Close() error {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 >>>>>>> 1c1015b01 (sink(cdc): kafka producer use default configuration. (#4359))
+=======
+	start = time.Now()
+	err = k.syncClient.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
+>>>>>>> release-5.3
 	}
 	return nil
 }
