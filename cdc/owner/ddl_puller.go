@@ -192,5 +192,6 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 }
 
 func (h *ddlPullerImpl) Close() {
+	log.Info("Close the ddl puller")
 	h.cancel()
 }
