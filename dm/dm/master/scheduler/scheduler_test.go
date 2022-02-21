@@ -1724,8 +1724,6 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	_, ok = s.unbounds[sourceID1]
 	c.Assert(ok, IsTrue)
 }
-<<<<<<< HEAD
-=======
 
 func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	defer clearTestInfoOperation(c)
@@ -1790,4 +1788,3 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	c.Assert(worker.RelaySourceID(), HasLen, 0)
 	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
 }
->>>>>>> 09076bc92 (*(dm): recycle resources when initialization of checkpoint in syncer, loader, shard-group-keeper failed (#4414))

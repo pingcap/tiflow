@@ -1496,13 +1496,6 @@ func (s *Scheduler) recoverSubTasks() error {
 }
 
 // recoverRelayConfigs recovers history relay configs for each worker from etcd.
-<<<<<<< HEAD
-func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
-	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
-	if err != nil {
-		return err
-	}
-=======
 // This function also removes conflicting relay schedule types, which means if a source has both `enable-relay` and
 // (source, worker) relay config, we remove the latter.
 // should be called after recoverSources.

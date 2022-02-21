@@ -101,9 +101,6 @@ type RemoteCheckPoint struct {
 }
 
 func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) (CheckPoint, error) {
-<<<<<<< HEAD
-	db, dbConns, err := createConns(tctx, cfg, 1)
-=======
 	var err error
 	var db *conn.BaseDB
 	var dbConns []*DBConn
@@ -115,8 +112,7 @@ func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		}
 	}()
 
-	db, dbConns, err = createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
->>>>>>> 09076bc92 (*(dm): recycle resources when initialization of checkpoint in syncer, loader, shard-group-keeper failed (#4414))
+	db, dbConns, err = createConns(tctx, cfg, 1)
 	if err != nil {
 		return nil, err
 	}
