@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go v1.35.3
 	github.com/benbjohnson/clock v1.1.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
-	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/coreos/go-semver v0.3.0
