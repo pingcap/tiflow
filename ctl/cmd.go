@@ -13,16 +13,49 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewRunFake() *cobra.Command {
+func NewQueryJob() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "query-job",
+		Short: "query job info",
+		RunE:  runQueryJob,
+	}
+	cmd.Flags().String("job-id", "", "the targeted job id")
+	return cmd
+}
+
+func runQueryJob(cmd *cobra.Command, _ []string) error {
+	id, err := cmd.Flags().GetString("job-id")
+	if err != nil {
+		log.L().Error("error in parse `--job-id`")
+		return err
+	}
+	if id == "" {
+		log.L().Error("job-id should not be empty")
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	defer cancel()
+	resp, err := cltManager.MasterClient().QueryJob(ctx, &pb.QueryJobRequest{
+		JobId: id,
+	})
+	if err != nil {
+		log.L().Error("failed to submit job", zap.Error(err))
+		os.Exit(1)
+	}
+	log.L().Info("query result", zap.String("resp", resp.String()))
+	return nil
+}
+
+func NewSubmitJob() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit-job",
-		Short: "Run a fake workload to a specific executor",
-		RunE:  runFakeFunc,
+		Short: "submit job to master",
+		RunE:  runSubmitJob,
 	}
-	cmd.Flags().StringP("executor-addr", "", "", "the targeted executor address")
-	cmd.Flags().StringP("executor-id", "", "", "the targeted executor id")
-	cmd.Flags().StringP("job-type", "", "", "job type")
-	cmd.Flags().StringP("job-config", "", "", "config file for the demo job")
+	cmd.Flags().String("executor-addr", "", "the targeted executor address")
+	cmd.Flags().String("executor-id", "", "the targeted executor id")
+	cmd.Flags().String("job-type", "", "job type")
+	cmd.Flags().String("job-config", "", "config file for the demo job")
 	return cmd
 }
 
@@ -44,7 +77,7 @@ func validJobType(job string) (pb.JobType, error) {
 	return pb.JobType(tp), nil
 }
 
-func runFakeFunc(cmd *cobra.Command, _ []string) error {
+func runSubmitJob(cmd *cobra.Command, _ []string) error {
 	tp, err := cmd.Flags().GetString("job-type")
 	if err != nil {
 		fmt.Print("error in parse `--job-type`")

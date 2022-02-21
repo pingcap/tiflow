@@ -120,6 +120,16 @@ func (c *masterServerClient) QueryMetaStore(
 	return resp.(*pb.QueryMetaStoreResponse), nil
 }
 
+func (c *masterServerClient) QueryJob(
+	ctx context.Context, req *pb.QueryJobRequest, opts ...grpc.CallOption,
+) (*pb.QueryJobResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.QueryJobResponse), nil
+}
+
 func (c *masterServerClient) ReportExecutorWorkload(
 	ctx context.Context, req *pb.ExecWorkloadRequest, opts ...grpc.CallOption,
 ) (*pb.ExecWorkloadResponse, error) {

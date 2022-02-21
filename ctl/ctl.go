@@ -29,7 +29,8 @@ func NewRootCmd() *cobra.Command {
 			DisableDefaultCmd: true,
 		},
 	}
-	cmd.AddCommand(NewRunFake())
+	cmd.AddCommand(NewSubmitJob())
+	cmd.AddCommand(NewQueryJob())
 	helpCmd := &cobra.Command{
 		Use:   "help [command]",
 		Short: "Gets help about any commands",

@@ -34,6 +34,7 @@ type MasterClient interface {
 		req *pb.ExecWorkloadRequest,
 	) (resp *pb.ExecWorkloadResponse, err error)
 	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error)
+	QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error)
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error)
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error)
 	QueryMetaStore(
@@ -185,6 +186,11 @@ func (c *MasterClientImpl) RegisterExecutor(ctx context.Context, req *pb.Registe
 }
 
 func (c *MasterClientImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
+	err = c.rpcWrap(ctx, req, &resp)
+	return
+}
+
+func (c *MasterClientImpl) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }

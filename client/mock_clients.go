@@ -74,6 +74,14 @@ func (c *MockServerMasterClient) SubmitJob(ctx context.Context, req *pb.SubmitJo
 	return args.Get(0).(*pb.SubmitJobResponse), args.Error(1)
 }
 
+func (c *MockServerMasterClient) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called(ctx, req)
+	return args.Get(0).(*pb.QueryJobResponse), args.Error(1)
+}
+
 func (c *MockServerMasterClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

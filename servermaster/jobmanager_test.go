@@ -47,6 +47,9 @@ func TestJobManagerSubmitJob(t *testing.T) {
 			mgr.jobFsm.WaitAckJobCount() == 0 &&
 			mgr.jobFsm.PendingJobCount() == 1
 	}, time.Second*2, time.Millisecond*20)
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	require.Nil(t, queryResp.Err)
+	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
 }
 
 func TestJobManagerRecover(t *testing.T) {
@@ -89,4 +92,7 @@ func TestJobManagerRecover(t *testing.T) {
 	err := mgr.OnMasterRecovered(ctx)
 	require.Nil(t, err)
 	require.Equal(t, 2, mgr.jobFsm.WaitAckJobCount())
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: "master-1"})
+	require.Nil(t, queryResp.Err)
+	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }

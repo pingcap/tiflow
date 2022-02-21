@@ -98,6 +98,14 @@ func (s *WorkerStatus) fillExt(tpi interface{}) (err error) {
 	return nil
 }
 
+func (s *WorkerStatus) Marshal() ([]byte, error) {
+	err := s.marshalExt()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return json.Marshal(s)
+}
+
 func (s *WorkerStatus) marshalExt() error {
 	bytes, err := json.Marshal(s.Ext)
 	if err != nil {

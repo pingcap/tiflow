@@ -163,6 +163,23 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
+func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
+	var (
+		resp2 *pb.QueryJobResponse
+		err2  error
+	)
+	shouldRet := s.rpcForwardIfNeeded(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+
+	err := s.apiPreCheck()
+	if err != nil {
+		return &pb.QueryJobResponse{Err: err}, nil
+	}
+	return s.jobManager.QueryJob(ctx, req), nil
+}
+
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	var (
 		resp2 *pb.CancelJobResponse

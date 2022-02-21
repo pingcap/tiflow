@@ -7,6 +7,24 @@ service DataRWService {
     rpc ReadLines(ReadLinesRequest ) returns (stream ReadLinesResponse) {}
     rpc WriteLines(stream WriteLinesRequest) returns (WriteLinesResponse) {}
     rpc ListFiles (ListFilesReq ) returns (ListFilesResponse);
+    rpc IsReady (IsReadyRequest) returns (IsReadyResponse);
+    rpc CheckDir (CheckDirRequest) returns (CheckDirResponse);
+}
+
+message CheckDirRequest {
+    string dir = 1;
+}
+
+message CheckDirResponse {
+    string err_msg = 1;
+    string err_file_name = 2;
+}
+
+message IsReadyRequest {
+}
+
+message IsReadyResponse {
+    bool ready = 1;
 }
 
 message ListFilesReq {

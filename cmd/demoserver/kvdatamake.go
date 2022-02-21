@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/sergi/go-diff/diffmatchpatch"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -176,6 +179,7 @@ type DataRWServer struct {
 	ctx           context.Context
 	mu            sync.Mutex
 	fileWriterMap map[string]*bufio.Writer
+	ready         chan struct{}
 }
 
 func NewDataRWServer(ctx context.Context) *DataRWServer {
@@ -204,6 +208,57 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 		}
 	}
 	return &pb.ListFilesResponse{FileNames: files}, nil
+}
+
+func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
+	select {
+	case <-s.ready:
+		return &pb.IsReadyResponse{Ready: true}, nil
+	default:
+		return &pb.IsReadyResponse{Ready: false}, nil
+	}
+}
+
+func openFileAndReadString(path string) (content []byte, err error) {
+	fp, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close()
+	return ioutil.ReadAll(fp)
+}
+
+func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
+	str1, err := openFileAndReadString(path1)
+	if err != nil {
+		return err
+	}
+	str2, err := openFileAndReadString(path2)
+	if err != nil {
+		return err
+	}
+	dmp := diffmatchpatch.New()
+
+	diffs := dmp.DiffMain(string(str1), string(str2), false)
+	if len(diffs) != 0 {
+		return errors.New(dmp.DiffPrettyText(diffs))
+	}
+	return nil
+}
+
+func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
+	dir := req.Dir
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for path := range s.fileWriterMap {
+		name := filepath.Base(path)
+		destPath := filepath.Join(dir, name)
+		err := s.compareTwoFiles(path, destPath)
+		if err != nil {
+			return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileName: destPath}, nil
+		}
+	}
+	return &pb.CheckDirResponse{}, nil
 }
 
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -66,6 +67,58 @@ func NewJobFsm() *JobFsm {
 		waitAckJobs: make(map[lib.MasterID]*lib.MasterMetaExt),
 		onlineJobs:  make(map[lib.MasterID]*jobHolder),
 	}
+}
+
+func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
+	fsm.jobsMu.Lock()
+	defer fsm.jobsMu.Unlock()
+	resp := &pb.QueryJobResponse{}
+	meta, ok := fsm.pendingJobs[jobID]
+	if ok {
+		resp.Config = meta.Config
+		resp.Status = pb.QueryJobResponse_pending
+		return resp
+	}
+	meta, ok = fsm.waitAckJobs[jobID]
+	if ok {
+		resp.Config = meta.Config
+		resp.Status = pb.QueryJobResponse_dispatched
+		return resp
+	}
+	job, ok := fsm.onlineJobs[jobID]
+	resp.Status = pb.QueryJobResponse_online
+	if ok {
+		resp.Config = job.Config
+		if info, ok := job.GetWorkerInfo(jobID); ok {
+			var err error
+			resp.JobMasterInfo, err = info.ToPB()
+			if err != nil {
+				resp.Err = &pb.Error{
+					Code:    pb.ErrorCode_UnknownError,
+					Message: err.Error(),
+				}
+			}
+		} else if job.IsTombStone() {
+			resp.JobMasterInfo = &pb.WorkerInfo{}
+			resp.JobMasterInfo.IsTombstone = true
+			status := job.Status()
+			if status != nil {
+				var err error
+				resp.JobMasterInfo.Status, err = status.Marshal()
+				if err != nil {
+					resp.Err = &pb.Error{
+						Code:    pb.ErrorCode_UnknownError,
+						Message: err.Error(),
+					}
+				}
+			}
+		}
+	} else {
+		resp.Err = &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}
+	}
+	return resp
 }
 
 func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaExt) {

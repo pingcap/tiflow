@@ -22,6 +22,8 @@ service Master {
         //};
     }
 
+    rpc QueryJob(QueryJobRequest) returns(QueryJobResponse) {}
+
     rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
 
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
@@ -78,6 +80,34 @@ message SubmitJobRequest {
     // User name, token, etc...
     string user = 3;
     // TODO: Resource Limit
+}
+
+message QueryJobRequest {
+    string job_id = 1;
+}
+
+message WorkerInfo {
+    string id = 1;
+    string executor_id = 2;
+    bytes  status = 3;
+    bytes  config = 4;
+    bool  is_tombstone = 5;
+    int64  last_hb_time = 6;
+    int64  workload = 7;
+}
+
+message QueryJobResponse {
+    enum JobStatus {
+        init = 0;
+        pending = 1;
+        online = 2;
+        dispatched = 3;
+        finished = 4;
+    }
+    bytes config = 1;
+    JobStatus status = 2;
+    WorkerInfo job_master_info = 3;
+    Error err = 4;
 }
 
 message CancelJobRequest {
