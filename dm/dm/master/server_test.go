@@ -928,7 +928,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, errCheckSyncConfigReg)
+	c.Assert(resp.CheckResult, check.Matches, errCheckSyncConfigReg)
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
 
