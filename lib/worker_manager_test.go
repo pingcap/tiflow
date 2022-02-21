@@ -121,9 +121,12 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 
 	replyTime := time.Now()
 	manager.clock.(*clock.Mock).Set(replyTime)
-	offlined, onlined := manager.Tick(ctx, msgSender)
-	require.Empty(t, offlined)
-	require.Len(t, onlined, 1)
+
+	require.Eventually(t, func() bool {
+		offlined, onlined := manager.Tick(ctx, msgSender)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
@@ -198,9 +201,14 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 
 	replyTime := time.Now()
 	manager.clock.(*clock.Mock).Set(replyTime)
-	offlined, onlined = manager.Tick(ctx, msgSender)
-	require.Empty(t, offlined)
-	require.Len(t, onlined, 2)
+
+	var totalOnlined int
+	require.Eventually(t, func() bool {
+		offlined, onlined = manager.Tick(ctx, msgSender)
+		totalOnlined += len(onlined)
+		require.Empty(t, offlined)
+		return totalOnlined == 2
+	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := msgSender.TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
