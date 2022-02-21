@@ -33,7 +33,7 @@ func (c *CyclicConfig) IsEnabled() bool {
 	return c != nil && c.Enable
 }
 
-// Marshal returns the json marshal format of a ReplicationConfig
+// Marshal returns the json marshal format of a CyclicConfig
 func (c *CyclicConfig) Marshal() (string, error) {
 	cfg, err := json.Marshal(c)
 	if err != nil {
@@ -42,7 +42,7 @@ func (c *CyclicConfig) Marshal() (string, error) {
 	return string(cfg), nil
 }
 
-// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
+// Unmarshal unmarshals into *CyclicConfig from json marshal byte slice
 func (c *CyclicConfig) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, c)
 }
