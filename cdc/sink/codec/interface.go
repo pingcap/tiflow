@@ -156,6 +156,7 @@ const (
 	EncoderNeedSyncWrite
 )
 
+// EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
 	Build(ctx context.Context) (EventBatchEncoder, error)
 }

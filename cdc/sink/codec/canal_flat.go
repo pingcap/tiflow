@@ -369,6 +369,7 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
+// SetParams sets the encoding parameters for the canal flat protocol.
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	if s, ok := params["enable-tidb-extension"]; ok {
 		a, err := strconv.ParseBool(s)
@@ -387,7 +388,7 @@ type CanalFlatEventBatchDecoder struct {
 	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+func newCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,
@@ -505,7 +506,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
+		col := newColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {
