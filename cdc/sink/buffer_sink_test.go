@@ -31,17 +31,10 @@ func TestTableIsNotFlushed(t *testing.T) {
 
 func TestFlushTable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-<<<<<<< HEAD
-	defer func() {
-		cancel()
-	}()
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
-=======
 	defer cancel()
 	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
 	go b.run(ctx, make(chan error))
 
->>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
 	tbl1 := &model.TableName{TableID: 1}
@@ -81,13 +74,9 @@ func TestFlushTable(t *testing.T) {
 
 func TestFlushFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-<<<<<<< HEAD
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
-=======
-	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
+	b := newBufferSink(ctx, newBlackHoleSink(ctx), make(chan error), 5, make(chan drawbackMsg))
 	go b.run(ctx, make(chan error))
 
->>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
 	require.Nil(t, err)

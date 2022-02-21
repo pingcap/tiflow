@@ -116,64 +116,7 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 		if ddl.Type == timodel.ActionCreateSchema || ddl.Type == timodel.ActionDropSchema {
 			return false
 		}
-<<<<<<< HEAD
 		return true
-=======
-		sinkCyclic = cyclic.NewCyclic(cfg)
-		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
-	}
-	// NOTE: quote the string is necessary to avoid ambiguities.
-	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
-
-	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := GetDBConnImpl(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Info("Start mysql sink")
-
-	db.SetMaxIdleConns(params.workerCount)
-	db.SetMaxOpenConns(params.workerCount)
-
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
-	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
-	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
-	}
-	ctx, cancel := context.WithCancel(ctx)
-
-	sink := &mysqlSink{
-		db:                              db,
-		params:                          params,
-		filter:                          filter,
-		cyclic:                          sinkCyclic,
-		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql"),
-		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
-		metricBucketSizeCounters:        metricBucketSizeCounters,
-		errCh:                           make(chan error, 1),
-		forceReplicate:                  replicaConfig.ForceReplicate,
-		cancel:                          cancel,
-	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
-
-	err = sink.createSinkWorkers(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
->>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	}
 	return false
 }
