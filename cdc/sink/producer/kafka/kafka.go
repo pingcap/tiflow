@@ -569,11 +569,17 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
-	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	syncProducer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -584,8 +590,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, err
 	}
 	k := &kafkaSaramaProducer{
-		asyncProducer: asyncClient,
-		syncProducer:  syncClient,
+		client:        client,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
 		topic:         topic,
 		partitionNum:  config.PartitionNum,
 		partitionOffset: make([]struct {
