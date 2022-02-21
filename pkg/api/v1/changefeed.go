@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 )
 
-// ChangfeedGetter has a method to return a ChangfeedInterface.
+// ChangefeedsGetter has a method to return a ChangefeedInterface.
 type ChangefeedsGetter interface {
 	Changefeeds() ChangefeedInterface
 }
