@@ -70,7 +70,6 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -87,7 +86,6 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		newDDLPuller: newDDLPuller,
 		newSink:      newDDLSink,
 	}
-	c.newScheduler = newScheduler
 	return c
 }
 
@@ -303,7 +301,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-	if err := c.sink.Close(ctx); err != nil {
+	if err := c.sink.close(ctx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
