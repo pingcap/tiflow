@@ -441,14 +441,14 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				return err
 			}
 
-			if has := c.hasAutoIncrementKey(ctStmt); has {
+			if has := hasAutoIncrementKey(ctStmt); has {
 				c.reMu.Lock()
 				if r.State == StateSuccess {
 					r.State = StateWarning
-					r.Errors = append(r.Errors, NewError("sourceID %s table %v of sharding %s have auto-increment key, please make sure them don't conflict in target table!", sourceID, table, c.targetTableID))
 					r.Instruction = "If happen conflict, please handle it by yourself. You can refer to https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices/#handle-conflicts-between-primary-keys-or-unique-indexes-across-multiple-sharded-tables"
 					r.Extra = AutoIncrementKeyChecking
 				}
+				r.Errors = append(r.Errors, NewError("sourceID %s table %v of sharding %s have auto-increment key, please make sure them don't conflict in target table!", sourceID, table, c.targetTableID))
 				c.reMu.Unlock()
 			}
 
@@ -465,7 +465,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 	}
 }
 
-func (c *ShardingTablesChecker) hasAutoIncrementKey(stmt *ast.CreateTableStmt) bool {
+func hasAutoIncrementKey(stmt *ast.CreateTableStmt) bool {
 	for _, col := range stmt.Cols {
 		for _, opt := range col.Options {
 			if opt.Tp == ast.ColumnOptionAutoIncrement {
@@ -662,6 +662,22 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 					continue
 				}
 				return err
+			}
+
+			ctStmt, err := getCreateTableStmt(p, statement)
+			if err != nil {
+				return err
+			}
+
+			if has := hasAutoIncrementKey(ctStmt); has {
+				c.reMu.Lock()
+				if r.State == StateSuccess {
+					r.State = StateWarning
+					r.Instruction = "If happen conflict, please handle it by yourself. You can refer to https://docs.pingcap.com/tidb-data-migration/stable/shard-merge-best-practices/#handle-conflicts-between-primary-keys-or-unique-indexes-across-multiple-sharded-tables"
+					r.Extra = AutoIncrementKeyChecking
+				}
+				r.Errors = append(r.Errors, NewError("sourceID %s table %v of sharding %s have auto-increment key, please make sure them don't conflict in target table!", sourceID, table, c.targetTableID))
+				c.reMu.Unlock()
 			}
 
 			ti, err := dbutil.GetTableInfoBySQL(statement, p)
