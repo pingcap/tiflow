@@ -45,31 +45,32 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	common2 "github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/event"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
-	"github.com/pingcap/ticdc/dm/pkg/schema"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
-	operator "github.com/pingcap/ticdc/dm/syncer/err-operator"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
-	onlineddl "github.com/pingcap/ticdc/dm/syncer/online-ddl-tools"
-	sm "github.com/pingcap/ticdc/dm/syncer/safe-mode"
-	"github.com/pingcap/ticdc/dm/syncer/shardddl"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	common2 "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
+	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var (
@@ -141,10 +142,11 @@ type Syncer struct {
 
 	fromDB *dbconn.UpStreamConn
 
-	toDB      *conn.BaseDB
-	toDBConns []*dbconn.DBConn
-	ddlDB     *conn.BaseDB
-	ddlDBConn *dbconn.DBConn
+	toDB                *conn.BaseDB
+	toDBConns           []*dbconn.DBConn
+	ddlDB               *conn.BaseDB
+	ddlDBConn           *dbconn.DBConn
+	downstreamTrackConn *dbconn.DBConn
 
 	dmlJobCh            chan *job
 	ddlJobCh            chan *job
@@ -320,7 +322,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: s.closeDBs})
 
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.ddlDBConn.BaseConn)
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
@@ -583,6 +585,11 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
 
+	err = s.downstreamTrackConn.ResetConn(tctx)
+	if err != nil {
+		return terror.WithScope(err, terror.ScopeDownstream)
+	}
+
 	err = s.checkpoint.ResetConn(tctx)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
@@ -735,62 +742,51 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
 
-	rows, err := s.ddlDBConn.QuerySQL(tctx, "SHOW CREATE TABLE "+targetTable.String())
+	createSQL, err := utils.GetTableCreateSQL(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var tableName, createSQL string
-		if err = rows.Scan(&tableName, &createSQL); err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
-		}
+	// rename the table back to original.
+	var createNode ast.StmtNode
+	createNode, err = parser2.ParseOneStmt(createSQL, "", "")
+	if err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	createStmt := createNode.(*ast.CreateTableStmt)
+	createStmt.IfNotExists = true
+	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
 
-		// rename the table back to original.
-		var createNode ast.StmtNode
-		createNode, err = parser2.ParseOneStmt(createSQL, "", "")
-		if err != nil {
-			return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		createStmt := createNode.(*ast.CreateTableStmt)
-		createStmt.IfNotExists = true
-		createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-		createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
-
-		// schema tracker sets non-clustered index, so can't handle auto_random.
-		if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
-			for _, col := range createStmt.Cols {
-				for i, opt := range col.Options {
-					if opt.Tp == ast.ColumnOptionAutoRandom {
-						// col.Options is unordered
-						col.Options[i] = col.Options[len(col.Options)-1]
-						col.Options = col.Options[:len(col.Options)-1]
-						break
-					}
+	// schema tracker sets non-clustered index, so can't handle auto_random.
+	if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
+		for _, col := range createStmt.Cols {
+			for i, opt := range col.Options {
+				if opt.Tp == ast.ColumnOptionAutoRandom {
+					// col.Options is unordered
+					col.Options[i] = col.Options[len(col.Options)-1]
+					col.Options = col.Options[:len(col.Options)-1]
+					break
 				}
 			}
 		}
-
-		var newCreateSQLBuilder strings.Builder
-		restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
-		if err = createStmt.Restore(restoreCtx); err != nil {
-			return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		newCreateSQL := newCreateSQLBuilder.String()
-		tctx.L().Debug("reverse-synchronized table schema",
-			zap.Stringer("sourceTable", sourceTable),
-			zap.Stringer("targetTable", targetTable),
-			zap.String("sql", newCreateSQL),
-		)
-		if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
-			return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
 	}
 
-	if err = rows.Err(); err != nil {
-		return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+	var newCreateSQLBuilder strings.Builder
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
+	if err = createStmt.Restore(restoreCtx); err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
+	newCreateSQL := newCreateSQLBuilder.String()
+	tctx.L().Debug("reverse-synchronized table schema",
+		zap.Stringer("sourceTable", sourceTable),
+		zap.Stringer("targetTable", targetTable),
+		zap.String("sql", newCreateSQL),
+	)
+	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
+		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
+	}
+
 	return nil
 }
 
@@ -930,7 +926,11 @@ func (s *Syncer) addJob(job *job) error {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
 		return nil
 	}
-	switch job.tp {
+
+	// avoid job.type data race with compactor.run()
+	// simply copy the opType for performance, though copy a new job in compactor is better
+	tp := job.tp
+	switch tp {
 	case xid:
 		s.waitXIDJob.CAS(int64(waiting), int64(waitComplete))
 		s.saveGlobalPoint(job.location)
@@ -982,7 +982,7 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	}
 
-	switch job.tp {
+	switch tp {
 	case ddl:
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
@@ -1019,7 +1019,7 @@ func (s *Syncer) addJob(job *job) error {
 		}
 	}
 
-	if needFlush || job.tp == ddl {
+	if needFlush || tp == ddl {
 		// interrupted after save checkpoint and before flush checkpoint.
 		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
 			err := handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
@@ -1167,7 +1167,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *dbconn.
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
 				err = s.handleSpecialDDLError(tctx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
@@ -1355,7 +1355,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-		// TODO: loadTableStructureFromDump in future
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
 	} else {
 		cleanDumpFile = false
 	}
@@ -1554,6 +1558,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	inFinerRetry := false
+	// in release branch, we only use eventIndex to test a bug
+	eventIndex := 0
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1595,6 +1602,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				err = errors.New("connect: connection refused")
 			}
 		})
+		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
+			if intVal, ok := val.(int); ok && intVal == eventIndex {
+				err = errors.New("failpoint triggered")
+				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
+					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
+					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
+			}
+		})
 		switch {
 		case err == context.Canceled:
 			tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastLocation))
@@ -1621,11 +1636,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			if s.streamerController.CanRetry(err) {
 				// lastLocation is the last finished GTID
-				err = s.streamerController.ResetReplicationSyncer(tctx, lastLocation)
+				err = s.streamerController.ResetReplicationSyncer(tctx, s.checkpoint.GlobalPoint())
 				if err != nil {
 					return err
 				}
 				log.L().Info("reset replication binlog puller", zap.Any("pos", s.checkpoint.GlobalPoint()))
+				inFinerRetry = true
 				continue
 			}
 
@@ -1710,7 +1726,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						// revert currentLocation to startLocation
 						currentLocation = startLocation
 					} else if op == pb.ErrorOp_Skip {
+						ec := eventContext{
+							tctx:            tctx,
+							header:          e.Header,
+							startLocation:   &startLocation,
+							currentLocation: &currentLocation,
+							lastLocation:    &lastLocation,
+						}
+						var sourceTbls map[string]map[string]struct{}
+						sourceTbls, err = s.trackOriginDDL(ev, ec)
+						if err != nil {
+							tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", ev.Query))
+						}
+
 						s.saveGlobalPoint(currentLocation)
+						for sourceSchema, tableMap := range sourceTbls {
+							if sourceSchema == "" {
+								continue
+							}
+							for sourceTable := range tableMap {
+								s.saveTablePoint(&filter.Table{Schema: sourceSchema, Name: sourceTable}, currentLocation)
+							}
+						}
 						err = s.flushJobs()
 						if err != nil {
 							tctx.L().Warn("failed to flush jobs when handle-error skip", zap.Error(err))
@@ -1764,7 +1801,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			shardingReSync:      shardingReSync,
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
-			safeMode:            s.safeMode.Enable(),
+			safeMode:            s.safeMode.Enable() || inFinerRetry,
 			tryReSync:           tryReSync,
 			startTime:           startTime,
 			shardingReSyncCh:    &shardingReSyncCh,
@@ -1777,12 +1814,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
+			eventIndex++
 			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
 			err2 = s.handleRowsEvent(ev, ec)
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
+			eventIndex = 0
+			if inFinerRetry {
+				inFinerRetry = false
+			}
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
 				shardingReSync.currLocation.Suffix = currentLocation.Suffix
@@ -2029,7 +2071,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 
 		param.safeMode = ec.safeMode
-		dmls, err = s.genAndFilterInsertDMLs(param, exprFilter)
+		dmls, err = s.genAndFilterInsertDMLs(ec.tctx, param, exprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen insert sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2043,7 +2085,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		}
 
 		param.safeMode = ec.safeMode
-		dmls, err = s.genAndFilterUpdateDMLs(param, oldExprFilter, newExprFilter)
+		dmls, err = s.genAndFilterUpdateDMLs(ec.tctx, param, oldExprFilter, newExprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen update sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2056,7 +2098,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 			return err2
 		}
 
-		dmls, err = s.genAndFilterDeleteDMLs(param, exprFilter)
+		dmls, err = s.genAndFilterDeleteDMLs(ec.tctx, param, exprFilter)
 		if err != nil {
 			return terror.Annotatef(err, "gen delete sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
@@ -2142,6 +2184,29 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		appliedDDLs:  make([]string, 0),
 		sourceTbls:   make(map[string]map[string]struct{}),
 	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		// why not `skipSQLByPattern` at beginning, but at defer?
+		// it is in order to track every ddl except for the one that will cause error.
+		// if `skipSQLByPattern` at beginning, some ddl should be tracked may be skipped.
+		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
+		if err2 != nil {
+			err = err2
+			return
+		}
+		if !needSkip {
+			return
+		}
+		// don't return error if filter success
+		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
+		err = s.recordSkipSQLsLocation(&ec)
+	}()
+
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {
 		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
@@ -2149,19 +2214,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
-		// return error if parse fail and filter fail
-		needSkip, err2 := s.skipSQLByPattern(qec.originSQL)
-		if err2 != nil {
-			return err2
-		}
-		if !needSkip {
-			return err
-		}
-		// don't return error if parse fail and filter success
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
-		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
-		return s.recordSkipSQLsLocation(&ec)
+		return err
 	}
 
 	if node, ok := stmt.(ast.DMLNode); ok {
@@ -2635,6 +2688,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldTableExistNum          int  // tableNames[:shouldTableExistNum] should exist
 		shouldRefTableExistNum       int  // tableNames[1:shouldTableExistNum] should exist, since first one is "caller table"
 		tryFetchDownstreamTable      bool // to make sure if not exists will execute correctly
+		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
 	switch node := trackInfo.originStmt.(type) {
@@ -2645,6 +2699,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist = true
 	case *ast.DropDatabaseStmt:
 		shouldExecDDLOnSchemaTracker = true
+		shouldReTrackDownstreamIndex = true
 		if s.cfg.ShardMode == "" {
 			if err := s.checkpoint.DeleteSchemaPoint(ec.tctx, srcTable.Schema); err != nil {
 				return err
@@ -2661,6 +2716,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		tryFetchDownstreamTable = true
 	case *ast.DropTableStmt:
 		shouldExecDDLOnSchemaTracker = true
+		shouldReTrackDownstreamIndex = true
 		if err := s.checkpoint.DeleteTablePoint(ec.tctx, srcTable); err != nil {
 			return err
 		}
@@ -2668,8 +2724,10 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldExecDDLOnSchemaTracker = true
 		shouldSchemaExist = true
 		shouldTableExistNum = 1
+		shouldReTrackDownstreamIndex = true
 	case *ast.AlterTableStmt:
 		shouldSchemaExist = true
+		shouldReTrackDownstreamIndex = true
 		// for DDL that adds FK, since TiDB doesn't fully support it yet, we simply ignore execution of this DDL.
 		switch {
 		case len(node.Specs) == 1 && node.Specs[0].Constraint != nil && node.Specs[0].Constraint.Tp == ast.ConstraintForeignKey:
@@ -2686,6 +2744,10 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		break
 	default:
 		ec.tctx.L().DPanic("unhandled DDL type cannot be tracked", zap.Stringer("type", reflect.TypeOf(trackInfo.originStmt)))
+	}
+
+	if shouldReTrackDownstreamIndex {
+		s.schemaTracker.RemoveDownstreamSchema(s.tctx, targetTables)
 	}
 
 	if shouldSchemaExist {
@@ -2733,6 +2795,70 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	return nil
 }
 
+func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
+	originSQL := strings.TrimSpace(string(ev.Query))
+	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+		return nil, nil
+	}
+	var err error
+	qec := &queryEventContext{
+		eventContext: &ec,
+		ddlSchema:    string(ev.Schema),
+		originSQL:    utils.TrimCtrlChars(originSQL),
+		splitDDLs:    make([]string, 0),
+		appliedDDLs:  make([]string, 0),
+		sourceTbls:   make(map[string]map[string]struct{}),
+	}
+	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
+	if err != nil {
+		log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
+	}
+	stmt, err := parseOneStmt(qec)
+	if err != nil {
+		// originSQL can't be parsed => can't be tracked by schema tracker
+		// we can use operate-schema to set a compatible schema after this
+		return nil, err
+	}
+
+	if _, ok := stmt.(ast.DDLNode); !ok {
+		return nil, nil
+	}
+
+	// TiDB can't handle multi schema change DDL, so we split it here.
+	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	if err != nil {
+		return nil, err
+	}
+
+	affectedTbls := make(map[string]map[string]struct{})
+	for _, sql := range qec.splitDDLs {
+		ddlInfo, err := s.genDDLInfo(qec.p, qec.ddlSchema, sql)
+		if err != nil {
+			return nil, err
+		}
+		sourceTable := ddlInfo.sourceTables[0]
+		switch ddlInfo.originStmt.(type) {
+		case *ast.DropDatabaseStmt:
+			delete(affectedTbls, sourceTable.Schema)
+		case *ast.DropTableStmt:
+			if affectedTable, ok := affectedTbls[sourceTable.Schema]; ok {
+				delete(affectedTable, sourceTable.Name)
+			}
+		default:
+			if _, ok := affectedTbls[sourceTable.Schema]; !ok {
+				affectedTbls[sourceTable.Schema] = make(map[string]struct{})
+			}
+			affectedTbls[sourceTable.Schema][sourceTable.Name] = struct{}{}
+		}
+		err = s.trackDDL(qec.ddlSchema, ddlInfo, qec.eventContext)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return affectedTbls, nil
+}
+
 func (s *Syncer) genRouter() error {
 	s.tableRouter, _ = router.NewTableRouter(s.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range s.cfg.RouteRules {
@@ -2744,7 +2870,6 @@ func (s *Syncer) genRouter() error {
 	return nil
 }
 
-//nolint:unused
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
 
@@ -2870,13 +2995,14 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
 		return err
 	}
 	s.ddlDBConn = ddlDBConns[0]
+	s.downstreamTrackConn = ddlDBConns[1]
 	printServerVersion(s.tctx, s.fromDB.BaseDB, "upstream")
 	printServerVersion(s.tctx, s.toDB, "downstream")
 

@@ -17,8 +17,8 @@ import (
 	"context"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 // Use clientSuite for some special reasons, the embed etcd uses zap as the only candidate

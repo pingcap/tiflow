@@ -21,9 +21,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -446,7 +446,7 @@ func (n *forward) Destroy(ctx NodeContext) error {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkPipeline)$' github.com/pingcap/ticdc/pkg/pipeline
+// go test -benchmem -run='^$' -bench '^(BenchmarkPipeline)$' github.com/pingcap/tiflow/pkg/pipeline
 func BenchmarkPipeline(b *testing.B) {
 	ctx := context.NewContext(stdCtx.Background(), &context.GlobalVars{})
 	runnersSize, outputChannelSize := 2, 64

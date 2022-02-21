@@ -36,7 +36,7 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 
 	# make fake rotate event and rewrite binlog filename to mysql-bin.000001
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/MakeFakeRotateEvent=return("mysql-bin.000001")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/MakeFakeRotateEvent=return("mysql-bin.000001")'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 

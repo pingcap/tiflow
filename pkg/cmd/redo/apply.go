@@ -14,8 +14,8 @@
 package redo
 
 import (
-	"github.com/pingcap/ticdc/pkg/applier"
-	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/applier"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/spf13/cobra"
 )
 

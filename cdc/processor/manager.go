@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
 )
 
@@ -120,7 +120,9 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		err := processor.Close()
 		if err != nil {
-			log.Warn("failed to close processor", zap.Error(err))
+			log.Warn("failed to close processor",
+				zap.String("changefeed", changefeedID),
+				zap.Error(err))
 		}
 		delete(m.processors, changefeedID)
 	}

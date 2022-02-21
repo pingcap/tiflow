@@ -25,17 +25,17 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/upgrade"
-	"github.com/pingcap/ticdc/dm/pkg/v1dbschema"
-	"github.com/pingcap/ticdc/dm/pkg/v1workermeta"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/upgrade"
+	"github.com/pingcap/tiflow/dm/pkg/v1dbschema"
+	"github.com/pingcap/tiflow/dm/pkg/v1workermeta"
 )
 
 var (

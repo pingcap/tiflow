@@ -21,9 +21,9 @@ import (
 	"go.etcd.io/etcd/clientv3/clientv3util"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Info represents the shard DDL information.

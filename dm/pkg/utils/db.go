@@ -34,9 +34,9 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -619,4 +619,16 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 		}
 	}
 	return strings.Join(sqlModeStr, ",")
+}
+
+// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
+func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
+	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
+	var table, createStr string
+	row := conn.QueryRowContext(ctx, querySQL)
+	err = row.Scan(&table, &createStr)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	return createStr, nil
 }

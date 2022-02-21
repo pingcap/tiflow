@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/pingcap/ticdc/dm/pkg/printinit"
+	_ "github.com/pingcap/tiflow/dm/pkg/printinit"
 )
 
 func TestRunMain(_ *testing.T) {

@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,7 +129,7 @@ func TestThrowPanic(t *testing.T) {
 	t.Parallel()
 	defer func() {
 		panicMsg := recover()
-		require.Equal(t, panicMsg, "an error has escaped, please report a bug{error 26 0  mock error}")
+		require.Equal(t, panicMsg, "an error has escaped, please report a bug")
 	}()
 	stdCtx := context.Background()
 	ctx := NewContext(stdCtx, &GlobalVars{})

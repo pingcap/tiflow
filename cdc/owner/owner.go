@@ -25,14 +25,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 type ownerJobType int
@@ -45,6 +46,10 @@ const (
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
 )
+
+// versionInconsistentLogRate represents the rate of log output when there are
+// captures with versions different from that of the owner
+const versionInconsistentLogRate = 1
 
 type ownerJob struct {
 	tp           ownerJobType
@@ -77,10 +82,14 @@ type Owner struct {
 
 	ownerJobQueueMu sync.Mutex
 	ownerJobQueue   []*ownerJob
-
+	// logLimiter controls cluster version check log output rate
+	logLimiter   *rate.Limiter
 	lastTickTime time.Time
-
-	closed int32
+	closed       int32
+	// bootstrapped specifies whether the owner has been initialized.
+	// This will only be done when the owner starts the first Tick.
+	// NOTICE: Do not use it in a method other than tick unexpectedly, as it is not a thread-safe value.
+	bootstrapped bool
 
 	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
@@ -92,16 +101,19 @@ func NewOwner(pdClient pd.Client) *Owner {
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
+		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
 }
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func() DDLSink,
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
+	// Most tests do not need to test bootstrap.
+	o.bootstrapped = true
 	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
@@ -114,16 +126,27 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
 	failpoint.Inject("sleep-in-owner-tick", nil)
-	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*orchestrator.GlobalReactorState)
-	o.captures = state.Captures
-	o.updateMetrics(state)
-	if !o.clusterVersionConsistent(state.Captures) {
-		// sleep one second to avoid printing too much log
-		time.Sleep(1 * time.Second)
+	// At the first Tick, we need to do a bootstrap operation.
+	// Fix incompatible or incorrect meta information.
+	if !o.bootstrapped {
+		o.Bootstrap(state)
+		o.bootstrapped = true
 		return state, nil
 	}
 
+	o.captures = state.Captures
+	o.updateMetrics(state)
+
+	// handleJobs() should be called before clusterVersionConsistent(), because
+	// when there are different versions of cdc nodes in the cluster,
+	// the admin job may not be processed all the time. And http api relies on
+	// admin job, which will cause all http api unavailable.
+	o.handleJobs()
+
+	if !o.clusterVersionConsistent(state.Captures) {
+		return state, nil
+	}
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -133,7 +156,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return nil, errors.Trace(err)
 	}
 
-	o.handleJobs()
+	ctx := stdCtx.(cdcContext.Context)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -247,6 +270,24 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 	}
 }
 
+// Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
+func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
+	log.Info("Start bootstrapping", zap.Any("state", state))
+	fixChangefeedInfos(state)
+}
+
+// fixChangefeedInfos attempts to fix incompatible or incorrect meta information in changefeed state.
+func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
+	for _, changefeedState := range state.Changefeeds {
+		if changefeedState != nil {
+			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				info.FixIncompatible()
+				return info, true, nil
+			})
+		}
+	}
+}
+
 func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
@@ -275,7 +316,9 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	myVersion := version.ReleaseVersion
 	for _, capture := range captures {
 		if myVersion != capture.Version {
-			log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("my-version", myVersion))
+			if o.logLimiter.Allow() {
+				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("owner-version", myVersion))
+			}
 			return false
 		}
 	}

@@ -15,7 +15,7 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/defaultKeepAliveTTL=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/defaultKeepAliveTTL=return(1)"
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -76,8 +76,7 @@ function run() {
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	dmctl_stop_task $TASK_NAME
 
@@ -155,7 +154,7 @@ function run() {
 	sed -i "s/binlog-gtid-placeholder-2/$gtid2/g" $WORK_DIR/dm-task.yaml
 
 	# test graceful display error
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/GetEventError=return'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/GetEventError=return'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -171,7 +170,7 @@ function run() {
 	check_port_offline $WORKER2_PORT 20
 
 	# only mock pull binlog failed once
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/ticdc/dm/syncer/GetEventError=1*return"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/tiflow/dm/syncer/GetEventError=1*return"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -212,7 +211,7 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -266,8 +265,7 @@ function run() {
 		"resume-task test" \
 		"\"result\": true" 3
 
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# test rotate binlog, after rotate and ddl, master binlog should be equal to sync binlog
 	run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1

@@ -34,7 +34,7 @@ import (
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/br/pkg/mock"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 var _ = Suite(&testPortalSuite{})

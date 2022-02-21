@@ -21,16 +21,16 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 )
@@ -62,6 +62,7 @@ func newMockCDCKVClient(
 	pd pd.Client,
 	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
+	changefeed string,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -124,7 +125,7 @@ func (s *pullerSuite) newPullerForTest(
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
 	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-	plr := NewPuller(ctx, pdCli, grpcPool, store, checkpointTs, spans, enableOldValue)
+	plr := NewPuller(ctx, pdCli, grpcPool, store, "", checkpointTs, spans, enableOldValue)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

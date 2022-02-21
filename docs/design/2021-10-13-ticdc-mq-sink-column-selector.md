@@ -1,7 +1,7 @@
 # TiCDC Design Documents
 
 - Author(s): [hi-rustin](https://github.com/hi-rustin)
-- Tracking Issue: https://github.com/pingcap/ticdc/issues/3082
+- Tracking Issue: https://github.com/pingcap/tiflow/issues/3082
 
 ## Table of Contents
 

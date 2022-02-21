@@ -24,14 +24,15 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -194,27 +195,27 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 	s.reset()           // reset previous status.
 
 	// recover previous status from etcd.
-	err = s.recoverSources(etcdCli)
+	err = s.recoverSources()
 	if err != nil {
 		return err
 	}
-	err = s.recoverSubTasks(etcdCli)
+	err = s.recoverSubTasks()
 	if err != nil {
 		return err
 	}
-	err = s.recoverRelayConfigs(etcdCli)
+	err = s.recoverRelayConfigs()
 	if err != nil {
 		return err
 	}
 
 	var loadTaskRev int64
-	loadTaskRev, err = s.recoverLoadTasks(etcdCli, false)
+	loadTaskRev, err = s.recoverLoadTasks(false)
 	if err != nil {
 		return err
 	}
 
 	var rev int64
-	rev, err = s.recoverWorkersBounds(etcdCli)
+	rev, err = s.recoverWorkersBounds()
 	if err != nil {
 		return err
 	}
@@ -240,7 +241,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		// starting to observe status of DM-worker instances.
 		// TODO: handle fatal error from observeWorkerEvent
 		//nolint:errcheck
-		s.observeWorkerEvent(ctx, etcdCli, rev1)
+		s.observeWorkerEvent(ctx, rev1)
 	}(rev)
 
 	s.wg.Add(1)
@@ -249,7 +250,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		// starting to observe load task.
 		// TODO: handle fatal error from observeLoadTask
 		//nolint:errcheck
-		s.observeLoadTask(ctx, etcdCli, rev1)
+		s.observeLoadTask(ctx, rev1)
 	}(loadTaskRev)
 
 	s.started = true // started now
@@ -1440,14 +1441,14 @@ func (s *Scheduler) Started() bool {
 }
 
 // recoverSourceCfgs recovers history source configs and expectant relay stages from etcd.
-func (s *Scheduler) recoverSources(cli *clientv3.Client) error {
+func (s *Scheduler) recoverSources() error {
 	// get all source configs.
-	cfgM, _, err := ha.GetSourceCfg(cli, "", 0)
+	cfgM, _, err := ha.GetSourceCfg(s.etcdCli, "", 0)
 	if err != nil {
 		return err
 	}
 	// get all relay stages.
-	stageM, _, err := ha.GetAllRelayStage(cli)
+	stageM, _, err := ha.GetAllRelayStage(s.etcdCli)
 	if err != nil {
 		return err
 	}
@@ -1464,14 +1465,14 @@ func (s *Scheduler) recoverSources(cli *clientv3.Client) error {
 }
 
 // recoverSubTasks recovers history subtask configs and expectant subtask stages from etcd.
-func (s *Scheduler) recoverSubTasks(cli *clientv3.Client) error {
+func (s *Scheduler) recoverSubTasks() error {
 	// get all subtask configs.
-	cfgMM, _, err := ha.GetAllSubTaskCfg(cli)
+	cfgMM, _, err := ha.GetAllSubTaskCfg(s.etcdCli)
 	if err != nil {
 		return err
 	}
 	// get all subtask stages.
-	stageMM, _, err := ha.GetAllSubTaskStage(cli)
+	stageMM, _, err := ha.GetAllSubTaskStage(s.etcdCli)
 	if err != nil {
 		return err
 	}
@@ -1496,22 +1497,42 @@ func (s *Scheduler) recoverSubTasks(cli *clientv3.Client) error {
 }
 
 // recoverRelayConfigs recovers history relay configs for each worker from etcd.
-func (s *Scheduler) recoverRelayConfigs(cli *clientv3.Client) error {
-	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
+// This function also removes conflicting relay schedule types, which means if a source has both `enable-relay` and
+// (source, worker) relay config, we remove the latter.
+// should be called after recoverSources.
+func (s *Scheduler) recoverRelayConfigs() error {
+	relayWorkers, _, err := ha.GetAllRelayConfig(s.etcdCli)
 	if err != nil {
 		return err
 	}
+
+	for source, workers := range relayWorkers {
+		sourceCfg, ok := s.sourceCfgs[source]
+		if !ok {
+			s.logger.Warn("found a not existing source by relay config", zap.String("source", source))
+			continue
+		}
+		if sourceCfg.EnableRelay {
+			// current etcd max-txn-op is 2048
+			_, err2 := ha.DeleteRelayConfig(s.etcdCli, utils.SetToSlice(workers)...)
+			if err2 != nil {
+				return err2
+			}
+			delete(relayWorkers, source)
+		}
+	}
+
 	s.relayWorkers = relayWorkers
 	return nil
 }
 
 // recoverLoadTasks recovers history load workers from etcd.
-func (s *Scheduler) recoverLoadTasks(cli *clientv3.Client, needLock bool) (int64, error) {
+func (s *Scheduler) recoverLoadTasks(needLock bool) (int64, error) {
 	if needLock {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 	}
-	loadTasks, rev, err := ha.GetAllLoadTask(cli)
+	loadTasks, rev, err := ha.GetAllLoadTask(s.etcdCli)
 	if err != nil {
 		return 0, err
 	}
@@ -1522,11 +1543,11 @@ func (s *Scheduler) recoverLoadTasks(cli *clientv3.Client, needLock bool) (int64
 
 // recoverWorkersBounds recovers history DM-worker info and status from etcd.
 // and it also recovers the bound/unbound relationship.
-func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
+func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 	// 1. get all history base info.
 	// it should no new DM-worker registered between this call and the below `GetKeepAliveWorkers`,
 	// because no DM-master leader are handling DM-worker register requests.
-	wim, _, err := ha.GetAllWorkerInfo(cli)
+	wim, _, err := ha.GetAllWorkerInfo(s.etcdCli)
 	if err != nil {
 		return 0, err
 	}
@@ -1534,18 +1555,18 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 	// 2. get all history bound relationships.
 	// it should no new bound relationship added between this call and the below `GetKeepAliveWorkers`,
 	// because no DM-master leader are doing the scheduler.
-	sbm, _, err := ha.GetSourceBound(cli, "")
+	sbm, _, err := ha.GetSourceBound(s.etcdCli, "")
 	if err != nil {
 		return 0, err
 	}
-	lastSourceBoundM, _, err := ha.GetLastSourceBounds(cli)
+	lastSourceBoundM, _, err := ha.GetLastSourceBounds(s.etcdCli)
 	if err != nil {
 		return 0, err
 	}
 	s.lastBound = lastSourceBoundM
 
 	// 3. get all history offline status.
-	kam, rev, err := ha.GetKeepAliveWorkers(cli)
+	kam, rev, err := ha.GetKeepAliveWorkers(s.etcdCli)
 	if err != nil {
 		return 0, err
 	}
@@ -1609,7 +1630,7 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 		for name := range sbm {
 			invalidSourceBounds = append(invalidSourceBounds, name)
 		}
-		_, err = ha.DeleteSourceBound(cli, invalidSourceBounds...)
+		_, err = ha.DeleteSourceBound(s.etcdCli, invalidSourceBounds...)
 		if err != nil {
 			return 0, err
 		}
@@ -1617,7 +1638,7 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 
 	// 6. put trigger source bounds info to etcd to order dm-workers to start source
 	if len(boundsToTrigger) > 0 {
-		_, err = ha.PutSourceBound(cli, boundsToTrigger...)
+		_, err = ha.PutSourceBound(s.etcdCli, boundsToTrigger...)
 		if err != nil {
 			return 0, err
 		}
@@ -1633,12 +1654,12 @@ func (s *Scheduler) recoverWorkersBounds(cli *clientv3.Client) (int64, error) {
 	return rev, nil
 }
 
-func (s *Scheduler) resetWorkerEv(cli *clientv3.Client) (int64, error) {
+func (s *Scheduler) resetWorkerEv() (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	rwm := s.workers
-	kam, rev, err := ha.GetKeepAliveWorkers(cli)
+	kam, rev, err := ha.GetKeepAliveWorkers(s.etcdCli)
 	if err != nil {
 		return 0, err
 	}
@@ -1698,7 +1719,7 @@ func (s *Scheduler) handleWorkerEv(ctx context.Context, evCh <-chan ha.WorkerEve
 }
 
 // nolint:dupl
-func (s *Scheduler) observeWorkerEvent(ctx context.Context, etcdCli *clientv3.Client, rev int64) error {
+func (s *Scheduler) observeWorkerEvent(ctx context.Context, rev int64) error {
 	var wg sync.WaitGroup
 	for {
 		workerEvCh := make(chan ha.WorkerEvent, 10)
@@ -1712,7 +1733,7 @@ func (s *Scheduler) observeWorkerEvent(ctx context.Context, etcdCli *clientv3.Cl
 				close(workerErrCh)
 				wg.Done()
 			}()
-			ha.WatchWorkerEvent(ctx1, etcdCli, rev+1, workerEvCh, workerErrCh)
+			ha.WatchWorkerEvent(ctx1, s.etcdCli, rev+1, workerEvCh, workerErrCh)
 		}()
 		err := s.handleWorkerEv(ctx1, workerEvCh, workerErrCh)
 		cancel1()
@@ -1726,7 +1747,7 @@ func (s *Scheduler) observeWorkerEvent(ctx context.Context, etcdCli *clientv3.Cl
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					rev, err = s.resetWorkerEv(etcdCli)
+					rev, err = s.resetWorkerEv()
 					if err != nil {
 						log.L().Error("resetWorkerEv is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
@@ -1780,6 +1801,16 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 
 	// 3. change the stage (from Offline) to Free or Relay.
 	lastRelaySource := w.RelaySourceID()
+	if lastRelaySource == "" {
+		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
+		// of course nothing, so we find the relay source from a better place
+		for source, workerM := range s.relayWorkers {
+			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
+				lastRelaySource = source
+				break
+			}
+		}
+	}
 	w.ToFree()
 	// TODO: rename ToFree to Online and move below logic inside it
 	if lastRelaySource != "" {
@@ -2151,7 +2182,7 @@ func (s *Scheduler) SetWorkerClientForTest(name string, mockCli workerrpc.Client
 }
 
 // nolint:dupl
-func (s *Scheduler) observeLoadTask(ctx context.Context, etcdCli *clientv3.Client, rev int64) error {
+func (s *Scheduler) observeLoadTask(ctx context.Context, rev int64) error {
 	var wg sync.WaitGroup
 	for {
 		loadTaskCh := make(chan ha.LoadTask, 10)
@@ -2165,7 +2196,7 @@ func (s *Scheduler) observeLoadTask(ctx context.Context, etcdCli *clientv3.Clien
 				close(loadTaskErrCh)
 				wg.Done()
 			}()
-			ha.WatchLoadTask(ctx1, etcdCli, rev+1, loadTaskCh, loadTaskErrCh)
+			ha.WatchLoadTask(ctx1, s.etcdCli, rev+1, loadTaskCh, loadTaskErrCh)
 		}()
 		err := s.handleLoadTask(ctx1, loadTaskCh, loadTaskErrCh)
 		cancel1()
@@ -2179,7 +2210,7 @@ func (s *Scheduler) observeLoadTask(ctx context.Context, etcdCli *clientv3.Clien
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					rev, err = s.recoverLoadTasks(etcdCli, true)
+					rev, err = s.recoverLoadTasks(true)
 					if err != nil {
 						log.L().Error("resetLoadTask is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
@@ -2259,14 +2290,54 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 	return "", ""
 }
 
-// hasLoadTaskByWorkerAndSource check whether there is a load subtask for the worker and source.
+// hasLoadTaskByWorkerAndSource check whether there is an existing load subtask for the worker and source.
 func (s *Scheduler) hasLoadTaskByWorkerAndSource(worker, source string) bool {
-	for _, sourceWorkerMap := range s.loadTasks {
-		if workerName, ok := sourceWorkerMap[source]; ok && workerName == worker {
+	for taskName, sourceWorkerMap := range s.loadTasks {
+		// don't consider removed subtask
+		subtasksV, ok := s.subTaskCfgs.Load(taskName)
+		if !ok {
+			continue
+		}
+		subtasks := subtasksV.(map[string]config.SubTaskConfig)
+		if _, ok2 := subtasks[source]; !ok2 {
+			continue
+		}
+
+		if workerName, ok2 := sourceWorkerMap[source]; ok2 && workerName == worker {
 			return true
 		}
 	}
 	return false
+}
+
+// TryResolveLoadTask checks if there are sources whose load task has local files and not bound to the worker which is
+// accessible to the local files. If so, trigger a transfer source.
+func (s *Scheduler) TryResolveLoadTask(sources []string) {
+	for _, source := range sources {
+		s.mu.Lock()
+		worker, ok := s.bounds[source]
+		if !ok {
+			s.mu.Unlock()
+			continue
+		}
+		if err := s.tryResolveLoadTask(worker.baseInfo.Name, source); err != nil {
+			s.logger.Error("tryResolveLoadTask failed", zap.Error(err))
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (s *Scheduler) tryResolveLoadTask(originWorker, originSource string) error {
+	if s.hasLoadTaskByWorkerAndSource(originWorker, originSource) {
+		return nil
+	}
+
+	worker, source := s.getNextLoadTaskTransfer(originWorker, originSource)
+	if worker == "" && source == "" {
+		return nil
+	}
+
+	return s.transferWorkerAndSource(originWorker, originSource, worker, source)
 }
 
 func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
@@ -2286,16 +2357,7 @@ func (s *Scheduler) handleLoadTaskDel(loadTask ha.LoadTask) error {
 		delete(s.loadTasks, loadTask.Task)
 	}
 
-	if s.hasLoadTaskByWorkerAndSource(originWorker, loadTask.Source) {
-		return nil
-	}
-
-	worker, source := s.getNextLoadTaskTransfer(originWorker, loadTask.Source)
-	if worker == "" && source == "" {
-		return nil
-	}
-
-	return s.transferWorkerAndSource(originWorker, loadTask.Source, worker, source)
+	return s.tryResolveLoadTask(originWorker, loadTask.Source)
 }
 
 func (s *Scheduler) handleLoadTaskPut(loadTask ha.LoadTask) {

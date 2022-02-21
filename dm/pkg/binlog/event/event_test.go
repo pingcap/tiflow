@@ -27,7 +27,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 var _ = Suite(&testEventSuite{})

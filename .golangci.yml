@@ -3,6 +3,7 @@ linters:
     - unconvert
     - unparam
     - revive
+    - depguard
 
 linters-settings:
   revive:
@@ -28,3 +29,14 @@ linters-settings:
       - name: superfluous-else
       - name: modifies-parameter
       - name: unreachable-code
+
+  depguard:
+    list-type: blacklist
+    include-go-root: false
+    packages:
+      - log
+      - github.com/juju/errors
+    packages-with-error-message:
+      # specify an error message to output when a blacklisted package is used
+      - log: "logging is allowed only by pingcap/log"
+      - github.com/juju/errors: "error handling is allowed only by pingcap/errors"
