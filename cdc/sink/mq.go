@@ -252,7 +252,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
 		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", k.partitionNum),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, k.partitionNum)
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
