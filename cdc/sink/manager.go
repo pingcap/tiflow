@@ -89,7 +89,18 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	if m.backendSink != nil {
-		return m.backendSink.Close(ctx)
+		log.Info("sinkManager try close bufSink",
+			zap.String("changefeed", m.changefeedID))
+		start := time.Now()
+		if err := m.backendSink.Close(ctx); err != nil {
+			log.Info("close bufSink failed",
+				zap.String("changefeed", m.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return err
+		}
+		log.Info("close bufSink success",
+			zap.String("changefeed", m.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
