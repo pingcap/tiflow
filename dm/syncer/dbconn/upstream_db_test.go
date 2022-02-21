@@ -79,7 +79,7 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 		s.syncer.Close()
 	}
 
-	pos, _, err := utils.GetMasterStatus(context.Background(), s.db, "mysql")
+	pos, _, err := utils.GetPosAndGs(context.Background(), s.db, "mysql")
 	c.Assert(err, IsNil)
 
 	s.syncer = replication.NewBinlogSyncer(cfg)
