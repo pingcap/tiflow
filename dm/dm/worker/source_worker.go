@@ -262,7 +262,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetMasterStatus(ctx, w.sourceDB.DB, w.cfg.Flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, w.cfg.Flavor)
 	if err != nil {
 		return err
 	}
