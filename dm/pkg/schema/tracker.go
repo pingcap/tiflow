@@ -46,8 +46,6 @@ import (
 const (
 	// TiDBClusteredIndex is the variable name for clustered index.
 	TiDBClusteredIndex = "tidb_enable_clustered_index"
-	// downstream mock table id, consists of serial numbers of letters.
-	mockTableID = 121402101900011104
 )
 
 var (
