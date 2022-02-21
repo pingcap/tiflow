@@ -86,6 +86,10 @@ type Owner struct {
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
 	closed       int32
+	// bootstrapped specifies whether the owner has been initialized.
+	// This will only be done when the owner starts the first Tick.
+	// NOTICE: Do not use it in a method other than tick unexpectedly, as it is not a thread-safe value.
+	bootstrapped bool
 
 	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
@@ -104,10 +108,12 @@ func NewOwner(pdClient pd.Client) *Owner {
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
-	newSink func(ctx cdcContext.Context) (AsyncSink, error),
+	newSink func() DDLSink,
 	pdClient pd.Client,
 ) *Owner {
 	o := NewOwner(pdClient)
+	// Most tests do not need to test bootstrap.
+	o.bootstrapped = true
 	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
@@ -120,8 +126,15 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		failpoint.Return(nil, errors.New("owner run with injected error"))
 	})
 	failpoint.Inject("sleep-in-owner-tick", nil)
-	ctx := stdCtx.(cdcContext.Context)
 	state := rawState.(*orchestrator.GlobalReactorState)
+	// At the first Tick, we need to do a bootstrap operation.
+	// Fix incompatible or incorrect meta information.
+	if !o.bootstrapped {
+		o.Bootstrap(state)
+		o.bootstrapped = true
+		return state, nil
+	}
+
 	o.captures = state.Captures
 	o.updateMetrics(state)
 
@@ -143,6 +156,7 @@ func (o *Owner) Tick(stdCtx context.Context, rawState orchestrator.ReactorState)
 		return nil, errors.Trace(err)
 	}
 
+	ctx := stdCtx.(cdcContext.Context)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			o.cleanUpChangefeed(changefeedState)
@@ -253,6 +267,24 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
 			return nil, workload != nil, nil
 		})
+	}
+}
+
+// Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
+func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
+	log.Info("Start bootstrapping", zap.Any("state", state))
+	fixChangefeedInfos(state)
+}
+
+// fixChangefeedInfos attempts to fix incompatible or incorrect meta information in changefeed state.
+func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
+	for _, changefeedState := range state.Changefeeds {
+		if changefeedState != nil {
+			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				info.FixIncompatible()
+				return info, true, nil
+			})
+		}
 	}
 }
 

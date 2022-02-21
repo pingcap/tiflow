@@ -30,7 +30,7 @@ func SendMessageToNode4Test(ctx context.Context, node Node, msgs []Message, outp
 	return Message{}, nil
 }
 
-// MockNodeContext4Test creates a node context with a message and a output channel for tests.
+// MockNodeContext4Test creates a node context with a message and an output channel for tests.
 func MockNodeContext4Test(ctx context.Context, msg Message, outputCh chan Message) NodeContext {
 	return NewNodeContext(ctx, msg, outputCh)
 }
