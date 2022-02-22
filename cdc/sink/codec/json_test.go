@@ -120,11 +120,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		mixedEncoder := newEncoder()
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 
-			op, err := mixedEncoder.AppendRowChangedEvent(row)
-			c.Assert(op, check.Equals, EncoderNoOperation)
+			err = mixedEncoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed decode
@@ -283,24 +282,21 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	a := strconv.Itoa(87 + 44)
 	err := encoder.SetParams(map[string]string{"max-message-bytes": a})
 	c.Check(err, check.IsNil)
-	r, err := encoder.AppendRowChangedEvent(testEvent)
+	err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.IsNil)
-	c.Check(r, check.Equals, EncoderNoOperation)
 
 	a = strconv.Itoa(87 + 43)
 	err = encoder.SetParams(map[string]string{"max-message-bytes": a})
 	c.Assert(err, check.IsNil)
-	r, err = encoder.AppendRowChangedEvent(testEvent)
+	err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.NotNil)
-	c.Check(r, check.Equals, EncoderNoOperation)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	err = encoder.SetParams(map[string]string{"max-message-bytes": "256"})
 	c.Check(err, check.IsNil)
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
@@ -325,8 +321,7 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
