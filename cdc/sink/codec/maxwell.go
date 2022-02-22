@@ -85,11 +85,6 @@ func (d *MaxwellEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage,
 	return nil, nil
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
@@ -176,15 +171,15 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	d.valueBuf.Write(value)
 	d.batchSize++
-	return EncoderNeedAsyncWrite, nil
+	return nil
 }
 
 // SetParams is no-op for Maxwell for now

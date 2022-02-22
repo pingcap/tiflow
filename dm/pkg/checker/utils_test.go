@@ -70,8 +70,3 @@ func (t *testCheckSuite) TestToVersion(c *tc.C) {
 		c.Assert(err != nil, tc.Equals, cs.hasError)
 	}
 }
-
-func (t *testCheckSuite) TestIsMariaDB(c *tc.C) {
-	c.Assert(IsMariaDB("5.5.50-MariaDB-1~wheezy"), tc.IsTrue)
-	c.Assert(IsMariaDB("5.7.19-17-log"), tc.IsFalse)
-}

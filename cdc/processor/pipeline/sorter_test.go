@@ -148,3 +148,12 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	resolvedTs4 = pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
 	require.EqualValues(t, resolvedTs4.PolymorphicEvent, <-s.Output())
 }
+
+func TestSorterUpdateBarrierTs(t *testing.T) {
+	t.Parallel()
+	s := &sorterNode{barrierTs: 1}
+	s.updateBarrierTs(model.Ts(2))
+	require.Equal(t, model.Ts(2), s.barrierTs)
+	s.updateBarrierTs(model.Ts(1))
+	require.Equal(t, model.Ts(2), s.barrierTs)
+}

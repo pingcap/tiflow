@@ -142,8 +142,8 @@ function test_query_timeout() {
 	run_sql_tidb 'SHOW PROCESSLIST;'
 	check_rows_equal 1
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_query_timeout >>>>>>"
@@ -210,8 +210,8 @@ function test_stop_task_before_checkpoint() {
 		"stop-task test" \
 		"\"result\": true" 3
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_stop_task_before_checkpoint >>>>>>"
@@ -270,8 +270,8 @@ function test_fail_job_between_event() {
 		"\"result\": true" 3
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 
 	export GO_FAILPOINTS=''
 	echo "[$(date)] <<<<<< finish test_fail_job_between_event >>>>>>"
@@ -317,9 +317,64 @@ function test_expression_filter() {
 		"query-status test" \
 		"\"result\": true" 3
 
-	cleanup_data all_mode
 	cleanup_process
+	cleanup_data all_mode
 	echo "[$(date)] <<<<<< finish test_expression_filter >>>>>>"
+}
+
+function test_regexpr_router() {
+	echo "[$(date)] <<<<<< start test_regexpr_router >>>>>>"
+	cleanup_process
+	cleanup_data all_mode
+	cleanup_data test2animal
+	cleanup_data test4s_2022
+	cleanup_data_upstream test2animal
+	cleanup_data_upstream test4s_2022
+	run_sql_file $cur/data/db1.regexpr.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.regexpr.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_tidb 'drop database if exists dtest2;'
+	run_sql_tidb 'create database dtest2;'
+	run_sql_tidb 'drop database if exists dtest4;'
+	run_sql_tidb 'create database dtest4;'
+	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int);'
+	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int);'
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+	cp $cur/conf/regexpr-task.yaml $WORK_DIR/regexpr-task.yaml
+	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/regexpr-task.yaml
+
+	# error config
+	# there should be a error message like "Incorrect argument type to variable 'tidb_retry_limit'"
+	# but different TiDB version output different message. so we only roughly match here
+	sed -i 's/tidb_retry_limit: "10"/tidb_retry_limit: "fjs"/g' $WORK_DIR/regexpr-task.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/regexpr-task.yaml --remove-meta" \
+		"tidb_retry_limit" 1
+
+	sed -i 's/tidb_retry_limit: "fjs"/tidb_retry_limit: "10"/g' $WORK_DIR/regexpr-task.yaml
+	dmctl_start_task "$WORK_DIR/regexpr-task.yaml" "--remove-meta"
+
+	check_sync_diff $WORK_DIR $cur/conf/regexpr_diff_config.toml
+
+	cleanup_process
+	cleanup_data test2animal
+	cleanup_data test4s_2022
+	cleanup_data_upstream test2animal
+	cleanup_data_upstream test4s_2022
+	echo "[$(date)] <<<<<< finish test_regexpr_router >>>>>>"
 }
 
 function run() {
@@ -331,6 +386,7 @@ function run() {
 	test_session_config
 	test_query_timeout
 	test_stop_task_before_checkpoint
+	test_regexpr_router
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"

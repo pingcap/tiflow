@@ -99,19 +99,19 @@ func TestRetry(t *testing.T) {
 	require.False(t, rsp.Succeeded)
 
 	// case 1: errors.ErrReachMaxTry
-	_, err = retrycli.Txn(ctx, TxnEmptyCmps, nil, nil)
+	_, err = retrycli.Txn(ctx, txnEmptyCmps, nil, nil)
 	require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err)
 
 	// case 2: errors.ErrReachMaxTry
-	_, err = retrycli.Txn(ctx, nil, TxnEmptyOpsThen, nil)
+	_, err = retrycli.Txn(ctx, nil, txnEmptyOpsThen, nil)
 	require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err)
 
 	// case 3: context.DeadlineExceeded
-	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, nil)
+	_, err = retrycli.Txn(ctx, txnEmptyCmps, txnEmptyOpsThen, nil)
 	require.Equal(t, context.DeadlineExceeded, err)
 
 	// other case: mock error
-	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, TxnEmptyOpsElse)
+	_, err = retrycli.Txn(ctx, txnEmptyCmps, txnEmptyOpsThen, TxnEmptyOpsElse)
 	require.Containsf(t, errors.Cause(err).Error(), "mock error", "err:%v", err.Error())
 
 	maxTries = originValue
