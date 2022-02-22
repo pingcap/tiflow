@@ -146,7 +146,7 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer cancel()
 
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -203,7 +203,7 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up

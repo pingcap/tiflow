@@ -132,7 +132,9 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		err := processor.Close()
 		if err != nil {
-			log.Warn("failed to close processor", zap.Error(err))
+			log.Warn("failed to close processor",
+				zap.String("changefeed", changefeedID),
+				zap.Error(err))
 		}
 		delete(m.processors, changefeedID)
 	}
