@@ -15,10 +15,8 @@ package system
 
 import (
 	"context"
-	"fmt"
-	"sync"
+	"sync/atomic"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/actor"
 )
 
@@ -27,17 +25,13 @@ type System struct {
 	tableActorSystem *actor.System
 	tableActorRouter *actor.Router
 
-	// actorIDMap store all allocated ID for changefeed-table  -> ID pair
-	actorIDMap          map[string]uint64
-	actorIDGeneratorLck sync.Mutex
-	lastID              uint64
+	lastID uint64
 }
 
 // NewSystem returns a system.
 func NewSystem() *System {
 	return &System{
-		actorIDMap: map[string]uint64{},
-		lastID:     1,
+		lastID: 1,
 	}
 }
 
@@ -65,16 +59,6 @@ func (s *System) System() *actor.System {
 }
 
 // ActorID returns an ActorID correspond with tableID.
-func (s *System) ActorID(changefeedID string, tableID model.TableID) actor.ID {
-	s.actorIDGeneratorLck.Lock()
-	defer s.actorIDGeneratorLck.Unlock()
-
-	key := fmt.Sprintf("%s-%d", changefeedID, tableID)
-	id, ok := s.actorIDMap[key]
-	if !ok {
-		s.lastID++
-		id = s.lastID
-		s.actorIDMap[key] = id
-	}
-	return actor.ID(id)
+func (s *System) ActorID() actor.ID {
+	return actor.ID(atomic.AddUint64(&s.lastID, 1))
 }
