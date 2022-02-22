@@ -2,7 +2,12 @@ package metaclient
 
 import (
 	"context"
+	"testing"
 	"time"
+
+	"github.com/golang/mock/gomock"
+	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
 )
 
 // Backend KV store data:
@@ -14,18 +19,19 @@ import (
 //|		dm		|		DDL		|		0		|		18		|
 
 // nolint:deadcode, ineffassign
-func Test() {
-	endpoint := "http://127.0.0.1:3769"
-	cli := NewMockKVClient(endpoint)
+func Test(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	cli := mock.NewMockKVClient(ctrl)
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	// nolint:typecheck
 	var (
-		putRsp *PutResponse
-		getRsp *GetResponse
-		delRsp *DeleteResponse
-		txnRsp *TxnResponse
+		putRsp *metaclient.PutResponse
+		getRsp *metaclient.GetResponse
+		delRsp *metaclient.DeleteResponse
+		txnRsp *metaclient.TxnResponse
 		err    error
 	)
 
@@ -40,7 +46,7 @@ func Test() {
 	// expect err == nil
 	// expect len(getRsp.Kvs) == 1
 	kv := getRsp.Kvs[0]
-	var _ *KeyValue = kv
+	var _ *metaclient.KeyValue = kv
 	// expect kv.Key == []byte("TiDB")
 	// expect kv.Value == []byte("DistDB")
 
@@ -53,38 +59,38 @@ func Test() {
 	//
 	//	Options: Key Range/From Key/Key Prefix attributes
 	//
-	// Key Range, forbit Put using WithRange
+	// Key Range, forbit Put using metaclient.WithRange
 	// current data:
 	//		apple  red
 	//		orange orange
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "ap", WithRange("zz"))
+	getRsp, err = cli.Get(ctx, "ap", metaclient.WithRange("zz"))
 	// expect len(getRsp.Kvs) == 4(apple. orange, ticdc, dm)
-	getRsp, err = cli.Get(ctx, "ap", WithRange("apple2"))
+	getRsp, err = cli.Get(ctx, "ap", metaclient.WithRange("apple2"))
 	// expect len(getRsp.Kvs) == 1(apple)
-	delRsp, err = cli.Delete(ctx, "dzst", WithRange("panda"))
+	delRsp, err = cli.Delete(ctx, "dzst", metaclient.WithRange("panda"))
 	// delete key orange
 
-	// From Key, forbit Put using WithFromKey
+	// From Key, forbit Put using metaclient.WithFromKey
 	// current data:
 	//		apple  red
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "data", WithFromKey())
+	getRsp, err = cli.Get(ctx, "data", metaclient.WithFromKey())
 	// expect len(getRsp.Kvs) == 2(ticdc, dm)
-	delRsp, err = cli.Delete(ctx, "tian", WithFromKey())
+	delRsp, err = cli.Delete(ctx, "tian", metaclient.WithFromKey())
 	// delete key ticdc
 
-	// Key Prefix, forbit Put using WithPrefix
+	// Key Prefix, forbit Put using metaclient.WithPrefix
 	// current data:
 	//		apple  red
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "apple", WithPrefix())
+	getRsp, err = cli.Get(ctx, "apple", metaclient.WithPrefix())
 	// expect len(getRsp.Kvs) == 2(apple, apple2)
-	delRsp, err = cli.Delete(ctx, "apple", WithPrefix())
+	delRsp, err = cli.Delete(ctx, "apple", metaclient.WithPrefix())
 	// delete key apple, apple2
 
 	//
@@ -95,11 +101,11 @@ func Test() {
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
-	getOp := OpGet("apple3", WithRange("zz"))
+	getOp := metaclient.OpGet("apple3", metaclient.WithRange("zz"))
 	_ = getRsp
-	putOp := OpPut("apple3", "t3")
+	putOp := metaclient.OpPut("apple3", "t3")
 	_ = putRsp
-	delOp := OpDelete("apple3", WithRange("ti"))
+	delOp := metaclient.OpDelete("apple3", metaclient.WithRange("ti"))
 	_ = delRsp
 	_ = err
 	txn := cli.Txn(ctx)
