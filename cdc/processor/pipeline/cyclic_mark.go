@@ -43,7 +43,7 @@ type cyclicMarkNode struct {
 	isTableActorMode bool
 }
 
-func newCyclicMarkNode(markTableID model.TableID) pipeline.Node {
+func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
 	return &cyclicMarkNode{
 		markTableID:            markTableID,
 		unknownReplicaIDEvents: make(map[model.Ts][]*model.PolymorphicEvent),
