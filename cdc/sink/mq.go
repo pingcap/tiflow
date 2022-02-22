@@ -299,8 +299,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			messages := encoder.Build()
-			thisBatchSize := len(messages)
-			if thisBatchSize == 0 {
+			thisBatchSize := 0
+			if len(messages) == 0 {
 				return 0, nil
 			}
 
@@ -309,6 +309,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
+				thisBatchSize += msg.GetRowsCount()
 			}
 
 			if op == codec.EncoderNeedSyncWrite {
@@ -411,8 +412,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if topic == "" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
-
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

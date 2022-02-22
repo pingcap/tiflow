@@ -165,7 +165,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 	})
 }
 
-func (s *configSuite) TestVerifyAndFix(c *check.C) {
+func (s *configSuite) TestVerifyAndComplete(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
@@ -178,7 +178,7 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 		},
 	}
 
-	err := info.VerifyAndFix()
+	err := info.VerifyAndComplete()
 	c.Assert(err, check.IsNil)
 	c.Assert(info.Engine, check.Equals, SortUnified)
 
@@ -188,6 +188,152 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+}
+
+func (s *configSuite) TestFixIncompatible(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	// Test to fix incompatible states.
+	testCases := []struct {
+		info          *ChangeFeedInfo
+		expectedState FeedState
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "4.0.14",
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateNormal,
+				Error:          nil,
+				CreatorVersion: "5.0.5",
+			},
+			expectedState: StateStopped,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		c.Assert(tc.info.State, check.Equals, tc.expectedState)
+	}
+}
+
+func (s *configSuite) TestFixState(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	testCases := []struct {
+		info          *ChangeFeedInfo
+		expectedState FeedState
+	}{
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateNormal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateNormal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedState: StateFailed,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrGCTTLExceeded.RFCCode()),
+				},
+			},
+			expectedState: StateFailed,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminNone,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrKafkaNewSaramaProducer.RFCCode()),
+				},
+			},
+			expectedState: StateError,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminResume,
+				State:        StateNormal,
+				Error: &RunningError{
+					Code: string(cerror.ErrKafkaNewSaramaProducer.RFCCode()),
+				},
+			},
+			expectedState: StateError,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminStop,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateStopped,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminFinish,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateFinished,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminRemove,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateRemoved,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType: AdminRemove,
+				State:        StateNormal,
+				Error:        nil,
+			},
+			expectedState: StateRemoved,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.fixState()
+		c.Assert(tc.info.State, check.Equals, tc.expectedState)
+	}
 }
 
 func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {

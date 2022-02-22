@@ -38,3 +38,20 @@ func (s *captureSuite) TestMarshalUnmarshal(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(decodedInfo, check.DeepEquals, info)
 }
+
+func (s *captureSuite) TestListVersionsFromCaptureInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	infos := []*CaptureInfo{
+		{
+			ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7891",
+			AdvertiseAddr: "127.0.0.1:8300",
+			Version:       "dev",
+		},
+		{
+			ID:            "9ff52aca-aea6-4022-8ec4-fbee3f2c7891",
+			AdvertiseAddr: "127.0.0.1:8300",
+			Version:       "",
+		},
+	}
+	c.Assert(ListVersionsFromCaptureInfos(infos), check.DeepEquals, []string{"dev", ""})
+}
