@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -218,7 +217,7 @@ type kafkaSaramaProducer struct {
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
 	clientLock    sync.RWMutex
-	admin         kafka.ClusterAdminClient
+	admin         sarama.ClusterAdmin
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
 	syncProducer  sarama.SyncProducer

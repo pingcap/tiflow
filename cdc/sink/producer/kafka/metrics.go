@@ -16,8 +16,8 @@ package kafka
 import (
 	"strconv"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -177,7 +177,7 @@ type saramaMetricsMonitor struct {
 	changefeedID string
 
 	registry metrics.Registry
-	admin    kafka.ClusterAdminClient
+	admin    sarama.ClusterAdmin
 }
 
 // CollectMetrics collect all monitored metrics
@@ -266,7 +266,7 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 	return nil
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
+func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin sarama.ClusterAdmin) *saramaMetricsMonitor {
 	return &saramaMetricsMonitor{
 		captureAddr:  captureAddr,
 		changefeedID: changefeedID,
