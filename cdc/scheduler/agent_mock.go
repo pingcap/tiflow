@@ -24,45 +24,53 @@ import (
 	"go.uber.org/zap"
 )
 
+// MockProcessorMessenger is a mock of ProcessorMessenger.
 type MockProcessorMessenger struct {
 	mock.Mock
 }
 
+// FinishTableOperation marks this function as being called.
 func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
 	args := m.Called(ctx, tableID)
 	return args.Bool(0), args.Error(1)
 }
 
+// SyncTaskStatuses marks this function as being called.
 func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, running, adding, removing []model.TableID) (bool, error) {
 	args := m.Called(ctx, running, adding, removing)
 	return args.Bool(0), args.Error(1)
 }
 
+// SendCheckpoint marks this function as being called.
 func (m *MockProcessorMessenger) SendCheckpoint(ctx cdcContext.Context, checkpointTs model.Ts, resolvedTs model.Ts) (bool, error) {
 	args := m.Called(ctx, checkpointTs, resolvedTs)
 	return args.Bool(0), args.Error(1)
 }
 
+// Barrier marks this function as being called.
 func (m *MockProcessorMessenger) Barrier(ctx cdcContext.Context) (done bool) {
 	args := m.Called(ctx)
 	return args.Bool(0)
 }
 
+// OnOwnerChanged marks this function as being called.
 func (m *MockProcessorMessenger) OnOwnerChanged(ctx cdcContext.Context, newOwnerCaptureID model.CaptureID) {
 	m.Called(ctx, newOwnerCaptureID)
 }
 
+// Close marks this function as being called.
 func (m *MockProcessorMessenger) Close() error {
 	args := m.Called()
 	return args.Error(0)
 }
 
-type MockCheckpointSender struct {
+type mockCheckpointSender struct {
 	lastSentCheckpointTs model.Ts
 	lastSentResolvedTs   model.Ts
 }
 
-func (s *MockCheckpointSender) SendCheckpoint(_ cdcContext.Context, provider checkpointProviderFunc) error {
+// SendCheckpoint sends a checkpoint.
+func (s *mockCheckpointSender) SendCheckpoint(_ cdcContext.Context, provider checkpointProviderFunc) error {
 	checkpointTs, resolvedTs, ok := provider()
 	if !ok {
 		return nil
@@ -72,10 +80,12 @@ func (s *MockCheckpointSender) SendCheckpoint(_ cdcContext.Context, provider che
 	return nil
 }
 
-func (s *MockCheckpointSender) LastSentCheckpointTs() model.Ts {
+// LastSentCheckpointTs returns the last sent checkpoint ts.
+func (s *mockCheckpointSender) LastSentCheckpointTs() model.Ts {
 	return s.lastSentCheckpointTs
 }
 
+// MockTableExecutor is a mock implementation of TableExecutor.
 type MockTableExecutor struct {
 	mock.Mock
 
@@ -84,6 +94,7 @@ type MockTableExecutor struct {
 	Adding, Running, Removing map[model.TableID]struct{}
 }
 
+// NewMockTableExecutor creates a new mock table executor.
 func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 	return &MockTableExecutor{
 		t:        t,
@@ -93,6 +104,7 @@ func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 	}
 }
 
+// AddTable adds a table to the executor.
 func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
 	log.Info("AddTable", zap.Int64("tableID", tableID))
 	require.NotContains(e.t, e.Adding, tableID)
@@ -106,6 +118,7 @@ func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.Table
 	return args.Bool(0), args.Error(1)
 }
 
+// RemoveTable removes a table from the executor.
 func (e *MockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
 	log.Info("RemoveTable", zap.Int64("tableID", tableID))
 	args := e.Called(ctx, tableID)
@@ -116,16 +129,19 @@ func (e *MockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.Ta
 	return args.Bool(0), args.Error(1)
 }
 
+// IsAddTableFinished determines if the table has been added.
 func (e *MockTableExecutor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
 	_, ok := e.Running[tableID]
 	return ok
 }
 
+// IsRemoveTableFinished determines if the table has been removed.
 func (e *MockTableExecutor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
 	_, ok := e.Removing[tableID]
 	return !ok
 }
 
+// GetAllCurrentTables returns all tables that are currently being adding, running, or removing.
 func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
 	var ret []model.TableID
 	for tableID := range e.Adding {
@@ -141,6 +157,7 @@ func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
 	return ret
 }
 
+// GetCheckpoint returns the last checkpoint.
 func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	args := e.Called()
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)

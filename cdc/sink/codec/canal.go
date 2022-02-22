@@ -417,17 +417,17 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+		return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface

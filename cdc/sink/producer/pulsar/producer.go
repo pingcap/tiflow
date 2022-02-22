@@ -85,7 +85,7 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 	return properties
 }
 
-// SendMessage send key-value msg to target partition.
+// AsyncSendMessage send key-value msg to target partition.
 func (p *Producer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    message.Value,
