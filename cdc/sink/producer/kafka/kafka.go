@@ -482,8 +482,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	defer func() {
 		if err := admin.Close(); err != nil {
 			log.Warn("close kafka cluster admin failed", zap.Error(err))
-			log.Warn("close kafka cluster admin failed", zap.Error(err),
-				zap.String("changefeed", changefeedID), zap.Any("role", role))
 		}
 	}()
 
