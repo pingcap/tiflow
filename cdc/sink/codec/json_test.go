@@ -117,6 +117,11 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
 		c.Assert(err, check.IsNil)
 
+		for _, row := range cs {
+			err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+		}
+
 		if len(cs) > 0 {
 			res := encoder.Build()
 			c.Assert(res, check.HasLen, 1)
