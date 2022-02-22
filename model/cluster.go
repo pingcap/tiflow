@@ -49,8 +49,23 @@ const (
 	Running
 	Disconnected
 	Tombstone
-	Busy
 )
+
+var ExecutorStatusNameMapping = map[ExecutorStatus]string{
+	Initing:      "initializing",
+	Running:      "running",
+	Disconnected: "disconnected",
+	Tombstone:    "tombstone",
+}
+
+// String implements fmt.Stringer
+func (s ExecutorStatus) String() string {
+	val, ok := ExecutorStatusNameMapping[s]
+	if !ok {
+		return "unknown"
+	}
+	return val
+}
 
 func (e *NodeInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)

@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -39,6 +42,7 @@ func TestStartTCPSrv(t *testing.T) {
 
 	apiURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	testPprof(t, apiURL)
+
 	testPrometheusMetrics(t, apiURL)
 	s.Stop()
 }
@@ -79,4 +83,41 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 		_, err = ioutil.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
+}
+
+func TestCollectMetric(t *testing.T) {
+	wg, ctx := errgroup.WithContext(context.Background())
+	cfg := NewConfig()
+	port, err := freeport.GetFreePort()
+	require.Nil(t, err)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cfg.WorkerAddr = addr
+	s := NewServer(cfg, nil)
+	s.workerRtm = worker.NewRuntime(ctx, defaultRuntimeCapacity)
+
+	s.grpcSrv = grpc.NewServer()
+	registerMetrics()
+	err = s.startTCPService(ctx, wg)
+	require.Nil(t, err)
+
+	wg.Go(func() error {
+		return s.collectMetricLoop(ctx, time.Millisecond*10)
+	})
+	apiURL := fmt.Sprintf("http://%s", addr)
+	testCustomedPrometheusMetrics(t, apiURL)
+	s.Stop()
+	wg.Wait()
+}
+
+func testCustomedPrometheusMetrics(t *testing.T, addr string) {
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(addr + "/metrics")
+		require.Nil(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		require.Nil(t, err)
+		metric := string(body)
+		return strings.Contains(metric, "dataflow_executor_task_num")
+	}, time.Second, time.Millisecond*20)
 }

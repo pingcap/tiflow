@@ -6,11 +6,15 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -66,6 +70,7 @@ func TestStartGrpcSrv(t *testing.T) {
 
 	apiURL := fmt.Sprintf("http://%s", masterAddr)
 	testPprof(t, apiURL)
+
 	testPrometheusMetrics(t, apiURL)
 	s.Stop()
 }
@@ -133,17 +138,12 @@ func testPprof(t *testing.T, addr string) {
 }
 
 func testPrometheusMetrics(t *testing.T, addr string) {
-	urls := []string{
-		"/metrics",
-	}
-	for _, uri := range urls {
-		resp, err := http.Get(addr + uri)
-		require.Nil(t, err)
-		defer resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
-		require.Nil(t, err)
-	}
+	resp, err := http.Get(addr + "/metrics")
+	require.Nil(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err = ioutil.ReadAll(resp.Body)
+	require.Nil(t, err)
 }
 
 func TestCheckLeaderAndNeedForward(t *testing.T) {
@@ -227,4 +227,114 @@ func TestRunLeaderService(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+type mockJobManager struct {
+	lib.BaseMaster
+	jobMu sync.RWMutex
+	jobs  map[pb.QueryJobResponse_JobStatus]int
+}
+
+func (m *mockJobManager) JobCount(status pb.QueryJobResponse_JobStatus) int {
+	m.jobMu.RLock()
+	defer m.jobMu.RUnlock()
+	return m.jobs[status]
+}
+
+func (m *mockJobManager) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
+	panic("not implemented")
+}
+
+type mockExecutorManager struct {
+	executorMu sync.RWMutex
+	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) RegisterExec(info *model.NodeInfo) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) Start(ctx context.Context) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
+	m.executorMu.RLock()
+	defer m.executorMu.RUnlock()
+	return m.count[status]
+}
+
+func TestCollectMetric(t *testing.T) {
+	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
+	defer cleanup()
+
+	s := &Server{cfg: cfg}
+	registerMetrics()
+	ctx, cancel := context.WithCancel(context.Background())
+	err := s.startGrpcSrv(ctx)
+	require.Nil(t, err)
+
+	jobManager := &mockJobManager{
+		jobs: map[pb.QueryJobResponse_JobStatus]int{
+			pb.QueryJobResponse_online: 3,
+		},
+	}
+	executorManager := &mockExecutorManager{
+		count: map[model.ExecutorStatus]int{
+			model.Initing: 1,
+			model.Running: 2,
+		},
+	}
+	s.jobManager = jobManager
+	s.executorManager = executorManager
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.collectMetricLoop(ctx, time.Millisecond*10)
+	}()
+	apiURL := fmt.Sprintf("http://%s", masterAddr)
+	testCustomedPrometheusMetrics(t, apiURL)
+	s.Stop()
+	cancel()
+	wg.Wait()
+}
+
+func testCustomedPrometheusMetrics(t *testing.T, addr string) {
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(addr + "/metrics")
+		require.Nil(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		require.Nil(t, err)
+		metric := string(body)
+		return strings.Contains(metric, "dataflow_server_master_job_num") &&
+			strings.Contains(metric, "dataflow_server_master_executor_num")
+	}, time.Second, time.Millisecond*20)
 }

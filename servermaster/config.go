@@ -39,6 +39,7 @@ const (
 	defaultMemberLoopInterval = 10 * time.Second
 	defaultCampaignTimeout    = 5 * time.Second
 	defaultDiscoverTicker     = 3 * time.Second
+	defaultMetricInterval     = 15 * time.Second
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew

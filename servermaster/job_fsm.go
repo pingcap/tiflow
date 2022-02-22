@@ -56,9 +56,7 @@ type JobFsm struct {
 
 // JobStats defines a statistics interface for JobFsm
 type JobStats interface {
-	PendingJobCount() int
-	WaitAckJobCount() int
-	OnlineJobCount() int
+	JobCount(pb.QueryJobResponse_JobStatus) int
 }
 
 func NewJobFsm() *JobFsm {
@@ -190,20 +188,18 @@ func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	return nil
 }
 
-func (fsm *JobFsm) PendingJobCount() int {
+func (fsm *JobFsm) JobCount(status pb.QueryJobResponse_JobStatus) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
-	return len(fsm.pendingJobs)
-}
-
-func (fsm *JobFsm) WaitAckJobCount() int {
-	fsm.jobsMu.RLock()
-	defer fsm.jobsMu.RUnlock()
-	return len(fsm.waitAckJobs)
-}
-
-func (fsm *JobFsm) OnlineJobCount() int {
-	fsm.jobsMu.RLock()
-	defer fsm.jobsMu.RUnlock()
-	return len(fsm.onlineJobs)
+	switch status {
+	case pb.QueryJobResponse_pending:
+		return len(fsm.pendingJobs)
+	case pb.QueryJobResponse_dispatched:
+		return len(fsm.waitAckJobs)
+	case pb.QueryJobResponse_online:
+		return len(fsm.onlineJobs)
+	default:
+		// TODO: support other job status count
+		return 0
+	}
 }

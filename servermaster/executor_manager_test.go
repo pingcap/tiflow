@@ -28,8 +28,9 @@ func TestExecutorManager(t *testing.T) {
 	info, err := mgr.AllocateNewExec(registerReq)
 	require.Nil(t, err)
 
+	require.Equal(t, 1, mgr.ExecutorCount(model.Initing))
+	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
 	mgr.mu.Lock()
-	require.Equal(t, 1, len(mgr.executors))
 	require.Contains(t, mgr.executors, info.ID)
 	mgr.mu.Unlock()
 
@@ -67,9 +68,7 @@ func TestExecutorManager(t *testing.T) {
 	mgr.Start(ctx)
 
 	require.Eventually(t, func() bool {
-		mgr.mu.Lock()
-		defer mgr.mu.Unlock()
-		return len(mgr.executors) == 0
+		return mgr.ExecutorCount(model.Running) == 0
 	}, time.Second*2, time.Millisecond*50)
 
 	// test late heartbeat request after executor is offline

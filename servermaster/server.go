@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -393,6 +394,10 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.discoveryKeeper.Keepalive(ctx)
 	})
 
+	wg.Go(func() error {
+		return s.collectMetricLoop(ctx, defaultMetricInterval)
+	})
+
 	return wg.Wait()
 }
 
@@ -681,6 +686,37 @@ func (s *Server) memberLoop(ctx context.Context) error {
 		case <-ticker.C:
 			if err := s.updateServerMasterMembers(ctx); err != nil {
 				log.L().Warn("update server master members failed", zap.Error(err))
+			}
+		}
+	}
+}
+
+func (s *Server) collectMetricLoop(ctx context.Context, tickInterval time.Duration) error {
+	metricJobNum := make(map[pb.QueryJobResponse_JobStatus]prometheus.Gauge)
+	for status, name := range pb.QueryJobResponse_JobStatus_name {
+		metric := serverJobNumGauge.WithLabelValues(name)
+		metricJobNum[pb.QueryJobResponse_JobStatus(status)] = metric
+	}
+
+	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
+	for status, name := range model.ExecutorStatusNameMapping {
+		metric := serverExecutorNumGauge.WithLabelValues(name)
+		metricExecutorNum[status] = metric
+	}
+
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			for status := range pb.QueryJobResponse_JobStatus_name {
+				pbStatus := pb.QueryJobResponse_JobStatus(status)
+				metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
+			}
+			for status := range model.ExecutorStatusNameMapping {
+				metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 			}
 		}
 	}

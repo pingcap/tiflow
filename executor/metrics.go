@@ -8,5 +8,7 @@ func registerMetrics() {
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 
+	initServerMetrics(registry)
+
 	prometheus.DefaultGatherer = registry
 }

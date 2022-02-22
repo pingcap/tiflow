@@ -257,3 +257,8 @@ func (r *Runtime) Workload() model.RescUnit {
 	})
 	return ret
 }
+
+// TaskCount returns running task currently
+func (r *Runtime) TaskCount() int64 {
+	return r.taskNum.Load()
+}

@@ -35,6 +35,7 @@ var (
 	defaultKeepAliveInterval = "500ms"
 	defaultRPCTimeout        = "3s"
 	defaultDiscoverTicker    = 3 * time.Second
+	defaultMetricInterval    = 15 * time.Second
 )
 
 // NewConfig creates a new base config for worker.
