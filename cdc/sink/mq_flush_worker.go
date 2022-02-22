@@ -121,8 +121,6 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 				return err
 			}
 		}
-		// TODO: reset not working for other protocols.
-		w.encoder.Reset()
 	}
 
 	return nil
