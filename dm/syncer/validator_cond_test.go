@@ -17,28 +17,26 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"testing"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	. "github.com/pingcap/check"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/stretchr/testify/require"
 )
 
-type testCondSuite struct{}
-
-var _ = Suite(&testCondSuite{})
-
-func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *validateTableInfo {
+func getTableDiff(t *testing.T, schemaName, tableName, creatSQL string) *validateTableInfo {
 	var (
 		err       error
 		parser2   *parser.Parser
 		tableInfo *model.TableInfo
 	)
 	parser2 = parser.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	tableInfo, err = dbutil.GetTableInfoBySQL(creatSQL, parser2)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	columnMap := make(map[string]*model.ColumnInfo)
 	for _, col := range tableInfo.Columns {
 		columnMap[col.Name.O] = col
@@ -50,29 +48,30 @@ func getTableDiff(c *C, db *sql.DB, schemaName, tableName, creatSQL string) *val
 		}
 	}
 	tableDiff := &validateTableInfo{
-		Schema:     schemaName,
-		Name:       tableName,
+		Source: &filter.Table{
+			Schema: schemaName,
+			Name:   tableName,
+		},
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
-		ColumnMap:  columnMap,
 	}
 	return tableDiff
 }
 
-func formatCond(c *C, db *sql.DB, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
-	tblDiff := getTableDiff(c, db, schemaName, tblName, creatSQL)
+func formatCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
+	tblDiff := getTableDiff(t, schemaName, tblName, creatSQL)
 	return &Cond{
 		Table:    tblDiff,
 		PkValues: pkvs,
 	}
 }
 
-func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
+func TestCondSelectMultiKey(t *testing.T) {
 	var (
 		res *sql.Rows
 	)
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	defer db.Close()
 	creatTbl := "create table if not exists `test_cond`.`test1`(" +
 		"a int," +
@@ -87,7 +86,7 @@ func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
 		key1, key2 := strconv.Itoa(i+1), strconv.Itoa(i+2)
 		pkValues = append(pkValues, []string{key1, key2})
 	}
-	cond := formatCond(c, db, "test_cond", "test1", creatTbl, pkValues)
+	cond := formatCond(t, "test_cond", "test1", creatTbl, pkValues)
 	// format query string
 	rowsQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s;", "`test_cond`.`test1`", cond.GetWhere())
 	mock.ExpectQuery(
@@ -95,20 +94,20 @@ func (s *testCondSuite) TestCondSelectMultiKey(c *C) {
 	).WithArgs(
 		"1", "2", "2", "3", "3", "4",
 	).WillReturnRows(mock.NewRows([]string{"COUNT(*)"}).AddRow("3"))
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	res, err = db.Query(rowsQuery, cond.GetArgs()...)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	var cnt int
 	if res.Next() {
 		err = res.Scan(&cnt)
 	}
-	c.Assert(err, IsNil)
-	c.Assert(cnt, Equals, 3)
+	require.NoError(t, err)
+	require.Equal(t, 3, cnt)
 }
 
-func (s *testCondSuite) TestCondGetWhereArgs(c *C) {
+func TestCondGetWhereArgs(t *testing.T) {
 	db, _, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	defer db.Close()
 	type testCase struct {
 		creatTbl   string
@@ -156,12 +155,12 @@ func (s *testCondSuite) TestCondGetWhereArgs(c *C) {
 		},
 	}
 	for i := 0; i < len(cases); i++ {
-		cond := formatCond(c, db, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
-		c.Assert(cond.GetWhere(), Equals, cases[i].where)
+		cond := formatCond(t, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
+		require.Equal(t, cases[i].where, cond.GetWhere())
 		rawArgs := cond.GetArgs()
 		for j := 0; j < 3; j++ {
 			curData := fmt.Sprintf("%v", rawArgs[j])
-			c.Assert(curData, Equals, cases[i].args[j])
+			require.Equal(t, cases[i].args[j], curData)
 		}
 	}
 }
