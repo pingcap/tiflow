@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -269,6 +270,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 	}
 	return result, nil
 }
+
 func ScanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
 	cols, err := rows.Columns()
 	if err != nil {
@@ -304,8 +306,7 @@ func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData 
 		for i := range r.data {
 			var colData []byte
 			if r.data[i] != nil {
-				// todo: may not right for some type, such as time related
-				colData = []byte(fmt.Sprintf("%v", r.data[i]))
+				colData = genColData(r.data[i])
 			}
 			colValues[i] = &dbutil.ColumnData{
 				Data:   colData,
@@ -315,4 +316,17 @@ func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData 
 		rowMap[r.key] = colValues
 	}
 	return rowMap
+}
+
+func genColData(v interface{}) []byte {
+	switch dv := v.(type) {
+	case []byte:
+		return dv
+	case string:
+		return []byte(dv)
+	case decimal.Decimal:
+		return []byte(dv.String())
+	}
+	s := fmt.Sprintf("%v", v)
+	return []byte(s)
 }
