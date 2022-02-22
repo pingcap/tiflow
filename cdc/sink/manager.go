@@ -89,7 +89,18 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 func (m *Manager) Close(ctx context.Context) error {
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	if m.backendSink != nil {
-		return m.backendSink.Close(ctx)
+		log.Info("sinkManager try close bufSink",
+			zap.String("changefeed", m.changefeedID))
+		start := time.Now()
+		if err := m.backendSink.Close(ctx); err != nil {
+			log.Info("close bufSink failed",
+				zap.String("changefeed", m.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return err
+		}
+		log.Info("close bufSink success",
+			zap.String("changefeed", m.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
@@ -162,6 +173,7 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
 }
 
+// UpdateChangeFeedCheckpointTs updates changefeed and backend sink checkpoint ts.
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.backendSink != nil {
@@ -233,10 +245,6 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	}
 	logAbnormalCheckpoint(ckpt)
 	return ckpt, err
-}
-
-func (t *tableSink) getEmittedTs() uint64 {
-	return atomic.LoadUint64(&t.emittedTs)
 }
 
 func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
