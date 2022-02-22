@@ -227,16 +227,6 @@ func (k *kafkaSaramaProducer) Close() error {
 	} else {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
-	start = time.Now()
-	err = k.syncProducer.Close()
-	if err != nil {
-		log.Error("close sync client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.Any("role", k.role))
-	} else {
-		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.Any("role", k.role))
-	}
 	return nil
 }
 
