@@ -20,9 +20,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
