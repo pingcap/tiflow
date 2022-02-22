@@ -15,7 +15,7 @@ package sorter
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 type msgPackGenSerde struct{}

@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/stretchr/testify/require"
 )
 

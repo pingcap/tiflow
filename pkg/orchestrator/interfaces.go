@@ -16,7 +16,7 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )
 
 // Reactor is a stateful transform of states.

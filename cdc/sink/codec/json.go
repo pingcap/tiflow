@@ -26,17 +26,14 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/ticdc/cdc/model"
 )
 
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxMessageBytes sets the default value for max-message-bytes
-	DefaultMaxMessageBytes int = 1 * 1024 * 1024 // 1M
 	// DefaultMaxBatchSize sets the default value for max-batch-size
 	DefaultMaxBatchSize int = 16
 )
@@ -317,13 +314,13 @@ type JSONEventBatchEncoder struct {
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
-	maxKafkaMessageSize int
-	maxBatchSize        int
+	maxMessageBytes int
+	maxBatchSize    int
 }
 
-// GetMaxKafkaMessageSize is only for unit testing.
-func (d *JSONEventBatchEncoder) GetMaxKafkaMessageSize() int {
-	return d.maxKafkaMessageSize
+// GetMaxMessageBytes is only for unit testing.
+func (d *JSONEventBatchEncoder) GetMaxMessageBytes() int {
+	return d.maxMessageBytes
 }
 
 // GetMaxBatchSize is only for unit testing.
@@ -402,15 +399,15 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		// for single message that longer than max-message-size, do not send it.
 		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxKafkaMessageSize {
+		if length > d.maxMessageBytes {
 			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxKafkaMessageSize), zap.Int("length", length), zap.Any("table", e.Table))
+				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
 			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -427,11 +424,12 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Ts = e.CommitTs
 		message.Schema = &e.Table.Schema
 		message.Table = &e.Table.Table
+		message.IncRowsCount()
 
-		if message.Length() > d.maxKafkaMessageSize {
+		if message.Length() > d.maxMessageBytes {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
 		}
 		d.curBatchSize++
 	}
@@ -549,17 +547,19 @@ func (d *JSONEventBatchEncoder) Reset() {
 // SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
-	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
-		if err != nil {
-			return cerror.ErrKafkaInvalidConfig.Wrap(err)
-		}
-	} else {
-		d.maxKafkaMessageSize = DefaultMaxMessageBytes
+
+	maxMessageBytes, ok := params["max-message-bytes"]
+	if !ok {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
 	}
 
-	if d.maxKafkaMessageSize <= 0 {
-		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxKafkaMessageSize))
+	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
+	if err != nil {
+		return cerror.ErrKafkaInvalidConfig.Wrap(err)
+	}
+
+	if d.maxMessageBytes <= 0 {
+		return cerror.ErrKafkaInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {

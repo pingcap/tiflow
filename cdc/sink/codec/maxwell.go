@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/errors"
 	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/pd/pkg/tsoutil"
 )
 
@@ -278,6 +278,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 	}
 
 	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(d.batchSize)
 	d.Reset()
 	return []*MQMessage{ret}
 }

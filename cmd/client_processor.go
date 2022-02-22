@@ -15,7 +15,7 @@ package cmd
 
 import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 )
 

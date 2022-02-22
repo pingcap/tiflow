@@ -17,14 +17,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/pkg/security"
 
 	"github.com/pingcap/log"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
@@ -92,7 +92,7 @@ func newCDCMonitor(ctx context.Context, pd string, credential *security.Credenti
 
 func (m *cdcMonitor) run(ctx context.Context) error {
 	log.Debug("start running cdcMonitor")
-	err := m.etcdWorker.Run(ctx, nil, 200*time.Millisecond, "127.0.0.1")
+	err := m.etcdWorker.Run(ctx, nil, 200*time.Millisecond, "127.0.0.1", "")
 	log.Error("etcdWorker exited: test-case-failed", zap.Error(err))
 	log.Info("CDC state", zap.Reflect("state", m.reactor.state))
 	return err

@@ -16,7 +16,7 @@ package model
 import (
 	"strings"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // HolderString returns a string of place holders separated by comma

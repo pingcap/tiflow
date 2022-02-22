@@ -18,7 +18,7 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // FileLock represents a file lock created by `flock`.

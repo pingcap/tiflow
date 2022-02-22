@@ -7,7 +7,7 @@ catchError {
                 deleteDir()
                 unstash 'ticdc'
 
-                dir("go/src/github.com/pingcap/ticdc") {
+                dir("go/src/github.com/pingcap/tiflow") {
                     sh """
                         GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make
                     """
