@@ -22,12 +22,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/sink"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -57,9 +54,5 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
-<<<<<<< HEAD
-=======
-	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }

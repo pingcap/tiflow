@@ -124,13 +124,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-<<<<<<< HEAD
-  "id": null,
-  "iteration": 1640447119260,
-=======
   "id": 33,
   "iteration": 1644481309661,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
   "links": [],
   "panels": [
     {
@@ -6187,9 +6182,6 @@
           "yBucketBound": "upper",
           "yBucketNumber": null,
           "yBucketSize": null
-<<<<<<< HEAD
-        },
-=======
         }
       ],
       "title": "DB",
@@ -6205,7 +6197,6 @@
       },
       "id": 13,
       "panels": [
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
         {
           "aliasColors": {},
           "bars": false,
@@ -7618,8 +7609,6 @@
             },
             {
               "exemplar": true,
-<<<<<<< HEAD
-=======
               "expr": "abs(sum(ticdc_kvclient_cached_region{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"} / deriv(ticdc_kvclient_cached_region{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", capture=~\"$capture\"}[1m])) by (capture, changefeed, store))",
               "format": "time_series",
               "interval": "",
@@ -8681,7 +8670,6 @@
             },
             {
               "exemplar": true,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
               "expr": "histogram_quantile(0.99, sum(rate(ticdc_etcd_worker_etcd_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le,capture))",
               "format": "time_series",
               "hide": false,
@@ -8689,8 +8677,6 @@
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-p99",
               "refId": "B"
-<<<<<<< HEAD
-=======
             }
           ],
           "thresholds": [],
@@ -9568,7 +9554,6 @@
               "legendFormat": "old-value-cap-{{instance}}",
               "refId": "G",
               "step": 10
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
             }
           ],
           "thresholds": [],
@@ -11205,9 +11190,6 @@
             "align": false,
             "alignLevel": null
           }
-<<<<<<< HEAD
-        },
-=======
         }
       ],
       "title": "TiKV",
@@ -11223,7 +11205,6 @@
       },
       "id": 294,
       "panels": [
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
         {
           "aliasColors": {},
           "bars": false,
@@ -11969,11 +11950,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-<<<<<<< HEAD
-        "y": 7
-=======
         "y": 9
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       },
       "id": 155,
       "panels": [
@@ -12556,11 +12533,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-<<<<<<< HEAD
-        "y": 8
-=======
         "y": 10
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       },
       "id": 411,
       "panels": [
@@ -13520,172 +13493,12 @@
       "type": "row"
     },
     {
-<<<<<<< HEAD
       "collapsed": true,
       "datasource": null,
-=======
-      "collapsed": false,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-<<<<<<< HEAD
-        "y": 261
-      },
-      "id": 187,
-      "panels": [],
-      "title": "Redo",
-      "type": "row"
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateSpectral",
-        "exponent": 0.5,
-        "min": 0,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "${DS_TEST-CLUSTER}",
-      "description": "The latency distributions of fsync called by redo writer",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 262
-      },
-      "heatmap": {},
-      "hideZeroBuckets": true,
-      "highlightCards": true,
-      "id": 172,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "6.1.6",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "max(rate(ticdc_redo_fsync_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le)",
-          "format": "heatmap",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{le}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Redo fsync duration",
-      "tooltip": {
-        "show": true,
-        "showHistogram": true
-      },
-      "tooltipDecimals": 1,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 1,
-        "format": "s",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "upper",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "cards": {
-        "cardPadding": 0,
-        "cardRound": 0
-      },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateSpectral",
-        "exponent": 0.5,
-        "min": 0,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "${DS_TEST-CLUSTER}",
-      "description": "The latency distributions of flushall called by redo writer",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 262
-      },
-      "heatmap": {},
-      "hideZeroBuckets": true,
-      "highlightCards": true,
-      "id": 180,
-      "legend": {
-        "show": true
-      },
-      "pluginVersion": "6.1.6",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "max(rate(ticdc_redo_flushall_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (le)",
-          "format": "heatmap",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{le}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Redo flushall duration",
-      "tooltip": {
-        "show": true,
-        "showHistogram": true
-      },
-      "tooltipDecimals": 1,
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": 1,
-        "format": "s",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "upper",
-      "yBucketNumber": null,
-      "yBucketSize": null
-=======
         "y": 12
       },
       "id": 402,
@@ -13898,7 +13711,6 @@
         "align": false,
         "alignLevel": null
       }
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
     },
     {
       "aliasColors": {},
@@ -13906,23 +13718,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_TEST-CLUSTER}",
-<<<<<<< HEAD
-      "description": "The total count of rows that are processed by redo writer",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 270
-      },
-      "hiddenSeries": false,
-      "id": 170,
-=======
       "description": "The number of records sent per request for all topics",
       "fill": 1,
       "fillGradient": 0,
@@ -13934,17 +13729,12 @@
       },
       "hiddenSeries": false,
       "id": 409,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "legend": {
         "alignAsTable": true,
         "avg": true,
         "current": true,
         "max": true,
-<<<<<<< HEAD
-        "min": false,
-=======
         "min": true,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
         "rightSide": true,
         "show": true,
         "total": false,
@@ -13952,14 +13742,6 @@
       },
       "lines": true,
       "linewidth": 1,
-<<<<<<< HEAD
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "6.1.6",
-=======
       "links": [],
       "nullPointMode": "null",
       "options": {
@@ -13967,7 +13749,6 @@
       },
       "paceLength": 10,
       "percentage": false,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -13977,21 +13758,6 @@
       "steppedLine": false,
       "targets": [
         {
-<<<<<<< HEAD
-          "exemplar": true,
-          "expr": "sum(rate(ticdc_redo_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
-          "interval": "",
-          "legendFormat": "{{capture}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum (rate(ticdc_redo_total_rows_count{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "total",
-=======
           "expr": "max(ticdc_sink_kafka_producer_records_per_request{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
           "format": "time_series",
           "interval": "",
@@ -14005,7 +13771,6 @@
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{changefeed}}-{{capture}}",
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
           "refId": "B"
         }
       ],
@@ -14013,11 +13778,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-<<<<<<< HEAD
-      "title": "Redo Write rows/s ",
-=======
       "title": "records per request",
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -14033,18 +13794,6 @@
       },
       "yaxes": [
         {
-<<<<<<< HEAD
-          "$$hashKey": "object:640",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:641",
-=======
           "format": "none",
           "label": null,
           "logBase": 1,
@@ -14053,7 +13802,6 @@
           "show": true
         },
         {
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
           "format": "short",
           "label": null,
           "logBase": 1,
@@ -14073,40 +13821,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_TEST-CLUSTER}",
-<<<<<<< HEAD
-      "description": "Total number of bytes redo log written",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 270
-      },
-      "hiddenSeries": false,
-      "id": 173,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "6.1.6",
-=======
       "description": "the compression ratio times 100 of record batches for all topics",
       "fill": 1,
       "fillGradient": 0,
@@ -14138,7 +13852,6 @@
       },
       "paceLength": 10,
       "percentage": false,
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -14148,14 +13861,6 @@
       "steppedLine": false,
       "targets": [
         {
-<<<<<<< HEAD
-          "exemplar": true,
-          "expr": "sum(rate(ticdc_redo_write_bytes_total{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture)",
-          "interval": "",
-          "legendFormat": "{{capture}}",
-          "queryType": "randomWalk",
-          "refId": "A"
-=======
           "expr": "max(ticdc_sink_kafka_producer_compression_ratio{tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
           "format": "time_series",
           "interval": "",
@@ -14170,18 +13875,13 @@
           "intervalFactor": 1,
           "legendFormat": "{{changefeed}}-{{capture}}",
           "refId": "B"
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-<<<<<<< HEAD
-      "title": "Redo Write bytes/s ",
-=======
       "title": "compression ratio",
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -14197,18 +13897,6 @@
       },
       "yaxes": [
         {
-<<<<<<< HEAD
-          "$$hashKey": "object:587",
-          "format": "bytes",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:588",
-=======
           "format": "percent",
           "label": null,
           "logBase": 1,
@@ -14217,17 +13905,12 @@
           "show": true
         },
         {
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
           "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
           "min": null,
-<<<<<<< HEAD
-          "show": true
-=======
           "show": false
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
         }
       ],
       "yaxis": {
