@@ -158,8 +158,10 @@ EOF
 	# Smoke test unsafe commands
 	echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
 	run_cdc_cli unsafe reset --no-confirm
-	run_cdc_cli unsafe resolve-lock --region=2
-	run_cdc_cli unsafe resolve-lock --region=2 --ts=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+	REGION_ID=$(pd-ctl -u=$pd_addr region | jq '.regions[0].id')
+	TS=$(cdc cli tso query --pd=$pd_addr)
+	run_cdc_cli unsafe resolve-lock --region=$REGION_ID
+	run_cdc_cli unsafe resolve-lock --region=$REGION_ID --ts=$TS
 
 	# Smoke test change log level
 	curl -X POST -d '"warn"' http://127.0.0.1:8300/api/v1/log
