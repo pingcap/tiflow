@@ -117,22 +117,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
 		c.Assert(err, check.IsNil)
 
-		mixedEncoder := newEncoder()
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
-		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
-
-			err = mixedEncoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
-		}
-		// test mixed decode
-		mixed := mixedEncoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
-		mixedDecoder, err := newDecoder(mixed, nil)
-		c.Assert(err, check.IsNil)
-		checkRowDecoder(mixedDecoder, cs)
-		// test normal decode
 		if len(cs) > 0 {
 			res := encoder.Build()
 			c.Assert(res, check.HasLen, 1)
@@ -145,11 +129,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
-		mixedEncoder := newEncoder()
 		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
 		c.Assert(err, check.IsNil)
 
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -158,17 +140,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 			checkDDLDecoder(decoder, cs[i:i+1])
 
-			msg, err = mixedEncoder.EncodeDDLEvent(ddl)
-			c.Assert(msg, check.IsNil)
-			c.Assert(err, check.IsNil)
 		}
-
-		// test mixed encode
-		mixed := mixedEncoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
-		mixedDecoder, err := newDecoder(mixed, nil)
-		c.Assert(err, check.IsNil)
-		checkDDLDecoder(mixedDecoder, cs)
 	}
 
 	for _, cs := range s.resolvedTsCases {
@@ -177,7 +149,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
 		c.Assert(err, check.IsNil)
 
-		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -190,13 +161,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(msg, check.IsNil)
 			c.Assert(err, check.IsNil)
 		}
-
-		// test mixed encode
-		mixed := mixedEncoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
-		mixedDecoder, err := newDecoder(mixed, nil)
-		c.Assert(err, check.IsNil)
-		checkTSDecoder(mixedDecoder, cs)
 	}
 }
 

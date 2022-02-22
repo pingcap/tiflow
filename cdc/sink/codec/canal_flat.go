@@ -354,19 +354,9 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// MixedBuild is not used here
-func (c *CanalFlatEventBatchEncoder) MixedBuild(_ bool) []byte {
-	panic("MixedBuild not supported by CanalFlatEventBatchEncoder")
-}
-
 // Size implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
-}
-
-// Reset is only supported by JSONEventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) Reset() {
-	panic("not supported")
 }
 
 // SetParams sets the encoding parameters for the canal flat protocol.
