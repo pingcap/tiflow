@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package topic
 
 import (
 	"regexp"
@@ -31,42 +31,49 @@ var (
 	tableRE = regexp.MustCompile(`\{table\}`)
 )
 
+// The max length of kafka topic name is 249.
+// See https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L35
 const kafkaTopicNameMaxLength = 249
 
-// Parse convert schema/table name to kafka topic name by using a topic expression.
-// A valid kafka topic name matches [a-zA-Z0-9\._\-]{1,249},
-// and the topic expression only accepts two types of expressions:
+// The topic expression only accepts two types of expressions:
 // 	1. [prefix]{schema}[suffix], the prefix/suffix is optional and matches [A-Za-z0-9\._\-]*
 //  2. {schema}_{table}
-//
-// When doing conversion, the special characters other than [A-Za-z0-9\._\-] in schema/table
-// will be substituted for underscore '_'
-func Substitute(topicExpr, schema, table string) (string, error) {
+type Expression string
+
+// Validate verifies if a kafka topic name matches [a-zA-Z0-9\._\-]{1,249}
+func (e Expression) Validate() error {
 	// validate the topic expression
-	if ok := topicNameRE.MatchString(topicExpr); !ok {
-		return "", errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
+	if ok := topicNameRE.MatchString(string(e)); !ok {
+		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
 	}
 
+	return nil
+}
+
+// Substitute converts schema/table name in a topic expression to kafka topic name.
+// When doing conversion, the special characters other than [A-Za-z0-9\._\-] in schema/table
+// will be substituted for underscore '_'
+func (e Expression) Substitute(schema, table string) string {
 	// the upper case letters in schema/table will be converted to lower case,
 	// and some of the special characters will be replaced with '_'
 	replacedSchema := kafkaForbidRE.ReplaceAllString(strings.ToLower(schema), "_")
 	replacedTable := kafkaForbidRE.ReplaceAllString(strings.ToLower(table), "_")
 
+	topicExpr := string(e)
 	// doing the real conversion things
 	topicName := schemaRE.ReplaceAllString(topicExpr, replacedSchema)
 	topicName = tableRE.ReplaceAllString(topicName, replacedTable)
 
-	// The max length of kafka topic name is 249, so truncate topicName if necessary.
-	// 	  See https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L35
-	// And topicName '.' and '..' are also invalid, so replace them with '_'.
+	// topicName will be truncated if it exceed the limit.
+	// And topicName '.' and '..' are also invalid, replace them with '_'.
 	//    See https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L46
 	if len(topicName) > kafkaTopicNameMaxLength {
-		return topicName[:kafkaTopicNameMaxLength], nil
+		return topicName[:kafkaTopicNameMaxLength]
 	} else if topicName == "." {
-		return "_", nil
+		return "_"
 	} else if topicName == ".." {
-		return "__", nil
+		return "__"
 	} else {
-		return topicName, nil
+		return topicName
 	}
 }

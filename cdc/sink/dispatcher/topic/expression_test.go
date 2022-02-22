@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package topic
 
 import (
 	"fmt"
@@ -185,12 +185,14 @@ func TestSubstituteTopicExpression(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		topicName, err := Substitute(tc.expression, tc.schema, tc.table)
-		require.Equal(t, topicName, tc.expected, fmt.Sprintf("case:%s", tc.name))
+		topicExpr := Expression(tc.expression)
+		err := topicExpr.Validate()
 		if tc.wantErr != "" {
 			require.Contains(t, err.Error(), tc.wantErr, fmt.Sprintf("case:%s", tc.name))
 		} else {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tc.name))
+			topicName := topicExpr.Substitute(tc.schema, tc.table)
+			require.Equal(t, topicName, tc.expected, fmt.Sprintf("case:%s", tc.name))
 		}
 	}
 }
@@ -219,11 +221,13 @@ func BenchmarkSubstitute(b *testing.B) {
 		table:      "world!@#$%^&*()_+.{}世界",
 	}}
 
-	for _, cs := range cases {
-		b.Run(cs.name, func(b *testing.B) {
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, err := Substitute(cs.expression, cs.schema, cs.table)
+				topicExpr := Expression(tc.expression)
+				err := topicExpr.Validate()
 				require.Nil(b, err)
+				_ = topicExpr.Substitute(tc.schema, tc.table)
 			}
 		})
 	}
