@@ -15,6 +15,7 @@ package unified
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -55,4 +56,36 @@ func TestNoSpace(t *testing.T) {
 
 	require.Regexp(t, err, ".*review the settings.*no space.*")
 	require.True(t, cerrors.ErrUnifiedSorterIOError.Equal(err))
+}
+
+func TestWrittenCount(t *testing.T) {
+	f, err := ioutil.TempFile("", "writer-test")
+	require.Nil(t, err)
+	defer os.Remove(f.Name())
+
+	fb := &fileBackEnd{
+		fileName: f.Name(),
+		serde:    &encoding.MsgPackGenSerde{},
+	}
+	w, err := fb.writer()
+	require.Nil(t, err)
+	err = w.writeNext(model.NewPolymorphicEvent(generateMockRawKV(0)))
+	require.Nil(t, err)
+	require.Equal(t, 1, w.writtenCount())
+}
+
+func TestDataSize(t *testing.T) {
+	f, err := ioutil.TempFile("", "writer-test")
+	require.Nil(t, err)
+	defer os.Remove(f.Name())
+
+	fb := &fileBackEnd{
+		fileName: f.Name(),
+		serde:    &encoding.MsgPackGenSerde{},
+	}
+	w, err := fb.writer()
+	require.Nil(t, err)
+	err = w.writeNext(model.NewPolymorphicEvent(generateMockRawKV(0)))
+	require.Nil(t, err)
+	require.Equal(t, uint64(71), w.dataSize())
 }
