@@ -40,7 +40,7 @@ const kafkaTopicNameMaxLength = 249
 //  2. {schema}_{table}
 type Expression string
 
-// Validate verifies if a kafka topic name matches [a-zA-Z0-9\._\-]{1,249}
+// Validate verifies if a kafka topic name matches [a-zA-Z0-9\._\-]
 func (e Expression) Validate() error {
 	// validate the topic expression
 	if ok := topicNameRE.MatchString(string(e)); !ok {
