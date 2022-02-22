@@ -1,7 +1,0 @@
-master-addr = "127.0.0.1:10260"
-advertise-addr = "127.0.0.1:10260"
-[etcd]
-name = "server-master-3"
-data-dir = "/tmp/df/master3"
-peer-urls = "http://127.0.0.1:8393"
-join="127.0.0.1:8391,127.0.0.1:8392"

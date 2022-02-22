@@ -33,11 +33,12 @@ const (
 	PORT        = "0.0.0.0:1234"
 )
 
+var ready = make(chan struct{})
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	var err error
 
-	err = log.InitLogger(&log.Config{
+	err := log.InitLogger(&log.Config{
 		Level: "info",
 	})
 	if err != nil {
@@ -59,24 +60,27 @@ func main() {
 			cancel()
 		}
 	}()
+	Run(ctx, os.Args)
+	log.L().Info("server exits normally")
+}
 
-	args := os.Args
+func Run(ctx context.Context, args []string) {
 	if len(args) >= 2 {
 		folder := args[1]
 		recorderNum := RECORDERNUM
 		if len(args) > 2 {
+			var err error
 			recorderNum, err = strconv.Atoi(args[2])
 			if err != nil {
-				fmt.Printf("the third parameter should be an interger")
+				log.L().Fatal("the third parameter should be an interger")
 			}
 		}
 		go generateData(folder, recorderNum)
 	} else {
-		fmt.Printf("the args should be : dir [100000]")
+		log.L().Fatal("the args should be : dir [100000]")
 	}
 
 	StartDataService(ctx)
-	log.L().Info("server exits normally")
 }
 
 type ErrorInfo struct {
@@ -91,10 +95,10 @@ func generateData(folderName string, recorders int) int {
 	fmt.Println("Start to generate the data ...")
 	_dir, err := ioutil.ReadDir(folderName)
 	if err != nil {
-		fmt.Printf("the folder %s doesn't exist ", folderName)
+		log.L().Warn("the folder doesn't exist ", zap.String("folder", folderName))
 		err = os.Mkdir(folderName, os.ModePerm)
 		if err != nil {
-			fmt.Printf("create the folder failed %v", folderName)
+			log.L().Error("create the folder failed", zap.String("folder", folderName))
 			return 0
 		}
 
@@ -145,7 +149,8 @@ func generateData(folderName string, recorders int) int {
 	for _, writer := range fileWriterMap {
 		writer.Flush()
 	}
-	fmt.Printf("%v files have been created \n", fileNum)
+	log.L().Info("files have been created", zap.Any("filnumber", fileNum))
+	close(ready)
 	return fileNum
 }
 
@@ -179,7 +184,6 @@ type DataRWServer struct {
 	ctx           context.Context
 	mu            sync.Mutex
 	fileWriterMap map[string]*bufio.Writer
-	ready         chan struct{}
 }
 
 func NewDataRWServer(ctx context.Context) *DataRWServer {
@@ -192,7 +196,6 @@ func NewDataRWServer(ctx context.Context) *DataRWServer {
 }
 
 func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
-	// fmt.Printf("receive the list file call %s", folder.String())
 	fd := folder.FolderName
 	_dir, err := ioutil.ReadDir(fd)
 	log.L().Info("receive the list file call ",
@@ -212,7 +215,7 @@ func (*DataRWServer) ListFiles(ctx context.Context, folder *pb.ListFilesReq) (*p
 
 func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
 	select {
-	case <-s.ready:
+	case <-ready:
 		return &pb.IsReadyResponse{Ready: true}, nil
 	default:
 		return &pb.IsReadyResponse{Ready: false}, nil
@@ -268,7 +271,6 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	if err != nil {
 		log.L().Error("make sure the file exist ",
 			zap.String("fileName ", fileName))
-		fmt.Printf("open file %v failed  \n", fileName)
 		return err
 	}
 	defer file.Close()
@@ -281,9 +283,8 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		default:
 			reply, err := reader.ReadString('\n')
 			if err == io.EOF {
-				fmt.Printf("reach the end of the file ")
+				log.L().Info("reach the end of the file")
 				err = stream.Send(&pb.ReadLinesResponse{Linestr: "", IsEof: true})
-				log.L().Info("reach the end of the file ")
 				return err
 			}
 			if i < int(req.LineNo) {
@@ -312,7 +313,6 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 		default:
 			res, err := stream.Recv()
 			if err == nil {
-				//	fmt.Printf("write data %v ", res.FileName+res.GetKey())
 				fileName := res.FileName
 				if strings.TrimSpace(fileName) == "" {
 					continue
