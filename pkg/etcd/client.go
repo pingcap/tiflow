@@ -21,10 +21,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 )
@@ -43,14 +44,23 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
-	// If no msg comes from a etcd watchCh for etcdWatchChTimeoutDuration long,
+	// If no msg comes from an etcd watchCh for etcdWatchChTimeoutDuration long,
 	// we should cancel the watchCh and request a new watchCh from etcd client
 	etcdWatchChTimeoutDuration = 10 * time.Second
-	// If no msg comes from a etcd watchCh for etcdRequestProgressDuration long,
+	// If no msg comes from an etcd watchCh for etcdRequestProgressDuration long,
 	// we should call RequestProgress of etcd client
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
+	// etcdTxnTimeoutDuration represents the timeout duration for committing a
+	// transaction to Etcd
+	etcdTxnTimeoutDuration = 30 * time.Second
+)
+
+var (
+	TxnEmptyCmps    = []clientv3.Cmp{}
+	TxnEmptyOpsThen = []clientv3.Op{}
+	TxnEmptyOpsElse = []clientv3.Op{}
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -114,19 +124,24 @@ func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption)
 
 // Delete delegates request to clientv3.KV.Delete
 func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
-	if metric, ok := c.metrics[EtcdTxn]; ok {
+	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
-	// We don't retry on delete operatoin. It's dangerous.
+	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(ctx, key, opts...)
 }
 
-// Txn delegates request to clientv3.KV.Txn
-func (c *Client) Txn(ctx context.Context) clientv3.Txn {
-	if metric, ok := c.metrics[EtcdTxn]; ok {
-		metric.Inc()
-	}
-	return c.cli.Txn(ctx)
+// Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
+// such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
+func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	defer cancel()
+	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
+		var inErr error
+		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		return inErr
+	})
+	return
 }
 
 // Grant delegates request to clientv3.Lease.Grant
@@ -144,11 +159,17 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 		if !cerrors.IsRetryableError(err) {
 			return false
 		}
-		if rpcName == EtcdRevoke {
-			if etcdErr, ok := err.(rpctypes.EtcdError); ok && etcdErr.Code() == codes.NotFound {
-				// it means the etcd lease is already expired or revoked
+
+		switch rpcName {
+		case EtcdRevoke:
+			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// It means the etcd lease is already expired or revoked
 				return false
 			}
+		case EtcdTxn:
+			return errorutil.IsRetryableEtcdError(err)
+		default:
+			// For other types of operation, we retry directly without handling errors
 		}
 
 		return true
@@ -176,21 +197,26 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
-	go c.WatchWithChan(ctx, watchCh, key, opts...)
+	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
-		log.Info("WatchWithChan exited")
+		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
-	var lastRevision int64
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
+
 	watchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	defer func() {
+		// Using closures to handle changes to the cancel function
+		cancel()
+	}()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
@@ -200,7 +226,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	for {
 		select {
 		case <-ctx.Done():
-			cancel()
 			return
 		case response := <-watchCh:
 			lastReceivedResponseTime = c.clock.Now()
@@ -214,13 +239,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			for {
 				select {
 				case <-ctx.Done():
-					cancel()
 					return
 				case outCh <- response: // it may block here
 					break Loop
 				case <-ticker.C:
 					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
-						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck",
+							zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+							zap.String("role", role))
 					}
 				}
 			}
@@ -230,10 +256,15 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
-				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh",
+					zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+					zap.Stack("stack"),
+					zap.String("role", role))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+				// to avoid possible context leak warning from govet
+				_ = cancel
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}

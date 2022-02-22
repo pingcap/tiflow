@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -61,6 +62,11 @@ type Config struct {
 	SaslScram       *security.SaslScram
 	// control whether to create topic and verify partition number
 	AutoCreate bool
+
+	// Timeout for sarama `config.Net` configurations, default to `10s`
+	DialTimeout  time.Duration
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
 }
 
 // NewConfig returns a default Kafka configuration
@@ -74,6 +80,9 @@ func NewConfig() *Config {
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
+		DialTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadTimeout:       10 * time.Second,
 	}
 }
 
@@ -173,17 +182,45 @@ func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfi
 		c.AutoCreate = autoCreate
 	}
 
+	s = params.Get("dial-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		c.DialTimeout = a
+	}
+
+	s = params.Get("write-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		c.WriteTimeout = a
+	}
+
+	s = params.Get("read-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		c.ReadTimeout = a
+	}
+
 	return nil
 }
 
 type kafkaSaramaProducer struct {
-	// clientLock is used to protect concurrent access of asyncClient and syncClient.
+	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock  sync.RWMutex
-	asyncClient sarama.AsyncProducer
-	syncClient  sarama.SyncProducer
-	// producersReleased records whether asyncClient and syncClient have been closed properly
+	clientLock    sync.RWMutex
+	client        sarama.Client
+	asyncProducer sarama.AsyncProducer
+	syncProducer  sarama.SyncProducer
+	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
 	topic             string
 	partitionNum      int32
@@ -235,14 +272,14 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
-		log.Info("failpoint error injected")
+		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
 
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Panic("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
 
 	select {
@@ -250,7 +287,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	case k.asyncClient.Input() <- msg:
+	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
 }
@@ -273,7 +310,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncClient.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(msgs)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -335,11 +372,13 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
+	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	close(k.closeCh)
 }
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
+	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	k.stop()
 
 	k.clientLock.Lock()
@@ -351,16 +390,39 @@ func (k *kafkaSaramaProducer) Close() error {
 		return nil
 	}
 	k.producersReleased = true
-	// In fact close sarama sync client doesn't return any error.
-	// But close async client returns error if error channel is not empty, we
-	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
+	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+	// that buffered messages flushed.
+	// Consider the situation that the broker does not respond, If the client is not
+	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+	// To prevent the scenario mentioned above, close client first.
+	start := time.Now()
+	if err := k.client.Close(); err != nil {
+		log.Error("close sarama client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
+
+	start = time.Now()
+	err := k.asyncProducer.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)), zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+	start = time.Now()
+	err = k.syncProducer.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
 	k.metricsMonitor.Cleanup()
@@ -370,6 +432,8 @@ func (k *kafkaSaramaProducer) Close() error {
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
+		log.Info("stop the kafka producer",
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
 
@@ -384,16 +448,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case <-ticker.C:
 			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err))
+			log.Warn("receive from failpoint chan", zap.Error(err),
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
-		case msg := <-k.asyncClient.Successes():
+		case msg := <-k.asyncProducer.Successes():
 			if msg == nil || msg.Metadata == nil {
 				continue
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
-		case err := <-k.asyncClient.Errors():
+		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
 			// which will cause the pkg/error library to malfunction.
@@ -437,7 +502,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {
-			log.Warn("topic's `max.message.bytes` less than the user set `max-message-bytes`,"+
+			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
@@ -472,7 +537,7 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
-		log.Warn("broker's `message.max.bytes` less than the user set `max-message-bytes`,"+
+		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
@@ -506,7 +571,11 @@ var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
-	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
+	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
+		zap.String("changefeed", changefeedID), zap.Any("role", role))
+
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
@@ -516,10 +585,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
-
-	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
@@ -579,10 +644,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	return k, nil
 }
 
-func init() {
-	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
-}
-
 var (
 	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
@@ -601,7 +662,6 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-// NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
@@ -623,33 +683,45 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders
-	// in this broker is broken, Kafka will election a new partition leader and
-	// replication logs, this process will last from a few seconds to a few minutes.
-	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute.
-	config.Metadata.Retry.Max = 120
-	config.Metadata.Retry.Backoff = 500 * time.Millisecond
-	// If it is not set, this means a metadata request against an unreachable
-	// cluster (all brokers are unreachable or unresponsive) can take up to
-	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
-	// Metadata.Retry.Backoff * Metadata.Retry.Max`
-	// to fail.
-	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/tiflow/issues/3352.
+
+	// Producer fetch metadata from brokers frequently, if metadata cannot be
+	// refreshed easily, this would indicate the network condition between the
+	// capture server and kafka broker is not good.
+	// In the scenario that cannot get response from Kafka server, this default
+	// setting can help to get response more quickly.
+	config.Metadata.Retry.Max = 1
+	config.Metadata.Retry.Backoff = 100 * time.Millisecond
+	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
 	config.Metadata.Timeout = 1 * time.Minute
+
+	// Admin.Retry take effect on `ClusterAdmin` related operations,
+	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
+	config.Admin.Retry.Max = 5
+	config.Admin.Retry.Backoff = 100 * time.Millisecond
+	config.Admin.Timeout = 1 * time.Minute
+
+	// Producer.Retry take effect when the producer try to send message to kafka
+	// brokers. If kafka cluster is healthy, just the default value should be enough.
+	// For kafka cluster with a bad network condition, producer should not try to
+	// waster too much time on sending a message, get response no matter success
+	// or fail as soon as possible is preferred.
+	config.Producer.Retry.Max = 3
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
+
+	// make sure sarama producer flush messages as soon as possible.
+	config.Producer.Flush.Bytes = 0
+	config.Producer.Flush.Messages = 0
+	config.Producer.Flush.Frequency = time.Duration(0)
+
+	config.Net.DialTimeout = c.DialTimeout
+	config.Net.WriteTimeout = c.WriteTimeout
+	config.Net.ReadTimeout = c.ReadTimeout
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-
-	// Time out in five minutes(600 * 500ms).
-	config.Producer.Retry.Max = 600
-	config.Producer.Retry.Backoff = 500 * time.Millisecond
-
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -665,11 +737,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
-
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 20 * time.Second
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true
