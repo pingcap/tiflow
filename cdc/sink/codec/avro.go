@@ -146,16 +146,6 @@ func (a *AvroEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	return old
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Mixed Build only use for JsonEncoder")
-}
-
-// Reset implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) Reset() {
-	panic("Reset only used for JsonEncoder")
-}
-
 // Size is the current size of resultBuf
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.resultBuf == nil {
