@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -51,4 +52,5 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	redowriter.InitMetrics(registry)
+	kafka.InitMetrics(registry)
 }

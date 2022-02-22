@@ -67,8 +67,41 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 	}
 }
 
+func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	cfg := NewConfig()
+	c.Assert(cfg.DialTimeout, check.Equals, 10*time.Second)
+	c.Assert(cfg.ReadTimeout, check.Equals, 10*time.Second)
+	c.Assert(cfg.WriteTimeout, check.Equals, 10*time.Second)
+
+	saramaConfig, err := newSaramaConfig(context.Background(), cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, cfg.DialTimeout)
+	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, cfg.WriteTimeout)
+	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, cfg.ReadTimeout)
+
+	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
+		"&write-timeout=2m"
+	sinkURI, err := url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	opts := make(map[string]string)
+	err = cfg.Initialize(sinkURI, config.GetDefaultReplicaConfig(), opts)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cfg.DialTimeout, check.Equals, 5*time.Second)
+	c.Assert(cfg.ReadTimeout, check.Equals, 1000*time.Millisecond)
+	c.Assert(cfg.WriteTimeout, check.Equals, 2*time.Minute)
+
+	saramaConfig, err = newSaramaConfig(context.Background(), cfg)
+	c.Assert(err, check.IsNil)
+	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, 5*time.Second)
+	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, 1000*time.Millisecond)
+	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, 2*time.Minute)
+}
+
 func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
-	defer testleak.AfterTest(c)
+	defer testleak.AfterTest(c)()
 	cfg := NewConfig()
 
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
@@ -117,7 +150,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	prodSuccess := new(sarama.ProduceResponse)
@@ -152,6 +185,7 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
 	}()
 	opts := make(map[string]string)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
@@ -350,6 +384,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	config.BrokerEndpoints = []string{"127.0.0.1:1111"}
 	topic := "topic"
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
@@ -368,7 +403,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
@@ -396,6 +431,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	}()
 
 	errCh := make(chan error, 1)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate")
@@ -446,7 +482,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
@@ -461,6 +497,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/kafka/SkipTopicAutoCreate", "return(true)"), check.IsNil)
 
 	errCh := make(chan error, 1)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, map[string]string{}, errCh)
 	defer func() {
 		err := producer.Close()
