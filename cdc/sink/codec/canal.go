@@ -134,34 +134,34 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 	return h
 }
 
-func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
+func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType, err error) {
 	javaType := mySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
 		if strings.Contains(mysqlType, "text") {
-			return JavaSQLTypeCLOB
+			return JavaSQLTypeCLOB, nil
 		}
-		return JavaSQLTypeBLOB
+		return JavaSQLTypeBLOB, nil
 	}
 
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !c.Flag.IsUnsigned() {
-		return javaType
+		return javaType, nil
 	}
 
 	// for year, to `int64`, others to `uint64`.
 	// no need to promote type for `year` and `bit`
 	if c.Type == mysql.TypeYear || c.Type == mysql.TypeBit {
-		return javaType
+		return javaType, nil
 	}
 
 	if c.Type == mysql.TypeFloat || c.Type == mysql.TypeDouble || c.Type == mysql.TypeNewDecimal {
-		return javaType
+		return javaType, nil
 	}
 
-	// for **unsigned** integral types, should have type in `uint64`. see reference:
-	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
+	// for **unsigned** integral types, type would be `uint64` or `string`. see reference:
+	// https://github.com/pingcap/tiflow/blob/1e3dd155049417e3fd7bf9b0a0c7b08723b33791/cdc/entry/mounter.go#L501
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
 	if c.Value == nil {
 		return javaType, nil
@@ -206,7 +206,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		}
 	}
 
-	return javaType
+	return javaType, nil
 }
 
 // In the official canal-json implementation, value were extracted from binlog buffer.
@@ -290,7 +290,10 @@ func getMySQLType(c *model.Column) string {
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	mysqlType := getMySQLType(c)
-	javaType := getJavaSQLType(c, mysqlType)
+	javaType, err := getJavaSQLType(c, mysqlType)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
 
 	value, err := b.formatValue(c.Value, javaType)
 	if err != nil {
