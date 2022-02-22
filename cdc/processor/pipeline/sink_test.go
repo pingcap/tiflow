@@ -134,6 +134,7 @@ func TestStatus(t *testing.T) {
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, model.Ts(20), node.BarrierTs())
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{}}), nil)))
@@ -160,6 +161,7 @@ func TestStatus(t *testing.T) {
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, model.Ts(20), node.BarrierTs())
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
