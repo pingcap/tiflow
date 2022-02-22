@@ -139,6 +139,7 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
 }
 
+// UpdateChangeFeedCheckpointTs updates changefeed level checkpointTs.
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.bufSink != nil {
