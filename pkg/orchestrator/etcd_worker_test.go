@@ -31,7 +31,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -267,7 +269,7 @@ func (s *etcdWorkerSuite) TestEtcdSum(c *check.C) {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1"))
+			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", ""))
 		})
 	}
 
@@ -352,7 +354,7 @@ func (s *etcdWorkerSuite) TestLinearizability(c *check.C) {
 	c.Assert(err, check.IsNil)
 	errg := &errgroup.Group{}
 	errg.Go(func() error {
-		return reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
+		return reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	})
 
 	time.Sleep(500 * time.Millisecond)
@@ -437,7 +439,8 @@ func (s *etcdWorkerSuite) TestFinished(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -506,7 +509,8 @@ func (s *etcdWorkerSuite) TestCover(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -585,7 +589,8 @@ func (s *etcdWorkerSuite) TestEmptyTxn(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -652,7 +657,8 @@ func (s *etcdWorkerSuite) TestEmptyOrNil(c *check.C) {
 		state: make(map[string]string),
 	})
 	c.Assert(err, check.IsNil)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1")
+
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	c.Assert(err, check.IsNil)
@@ -733,7 +739,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := worker1.Run(ctx, nil, time.Millisecond*100, "127.0.0.1")
+		err := worker1.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
 		c.Assert(err, check.IsNil)
 	}()
 
@@ -748,7 +754,7 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 
-	err = worker2.Run(ctx, nil, time.Millisecond*100, "127.0.0.1")
+	err = worker2.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
 	c.Assert(err, check.IsNil)
 
 	modifyReactor.waitOnCh <- struct{}{}
@@ -761,4 +767,11 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 
 	_ = cli1.Unwrap().Close()
 	_ = cli2.Unwrap().Close()
+}
+
+func TestRetryableError(t *testing.T) {
+	require.True(t, isRetryableError(cerrors.ErrEtcdTryAgain))
+	require.True(t, isRetryableError(cerrors.ErrReachMaxTry.Wrap(rpctypes.ErrTimeoutDueToLeaderFail)))
+	require.True(t, isRetryableError(errors.Trace(context.DeadlineExceeded)))
+	require.False(t, isRetryableError(context.Canceled))
 }
