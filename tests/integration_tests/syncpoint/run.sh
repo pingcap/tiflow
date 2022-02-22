@@ -99,7 +99,8 @@ function checkPrimaryTsNotInDDL() {
 		start_ts=${tsos[((2 * $i - 2))]}
 		commit_ts=${tsos[((2 * $i - 1))]}
 		if [[ ($primary_ts > $start_ts) && ($primary_ts < $commit_ts) ]]; then
-			return "$start_ts $commit_ts"
+			echo "$start_ts $commit_ts"
+            return
 		fi
 	done
 }
