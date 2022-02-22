@@ -174,7 +174,7 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType, err 
 		}
 		number = a
 	default:
-		return javaType, errors.Errorf("unexpected type for unsigned value: %+v", reflect.TypeOf(v))
+		return javaType, errors.Errorf("unexpected type for unsigned value: %+v, column: %+v", reflect.TypeOf(v), c)
 	}
 
 	// Some special cases handled in canal
