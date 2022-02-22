@@ -51,7 +51,7 @@ type column struct {
 	Value       interface{}          `json:"v"`
 }
 
-func NewColumn(value interface{}, tp byte) *column {
+func newColumn(value interface{}, tp byte) *column {
 	return &column{
 		Value: value,
 		Type:  tp,
@@ -435,15 +435,15 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -464,7 +464,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		if length > d.maxMessageBytes {
 			log.Warn("Single message too large",
 				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
-			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
+			return cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 		}
 
 		if len(d.messageBuf) == 0 ||
@@ -495,7 +495,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		}
 		d.curBatchSize++
 	}
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
