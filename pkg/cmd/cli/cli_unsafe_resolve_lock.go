@@ -63,7 +63,7 @@ func (o *unsafeResolveLockOptions) complete(f factory.Factory) error {
 }
 
 // run runs the `cli unsafe show-metadata` command.
-func (o *unsafeResolveLockOptions) run(cmd *cobra.Command) error {
+func (o *unsafeResolveLockOptions) run(_ *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
 	conf := &log.Config{Level: "info", File: log.FileLogConfig{}}
