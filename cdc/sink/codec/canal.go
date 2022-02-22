@@ -473,11 +473,6 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	return []*MQMessage{ret}
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Mixed Build only use for JsonEncoder")
-}
-
 // Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
 	// TODO: avoid marshaling the messages every time for calculating the size of the packet
@@ -486,11 +481,6 @@ func (d *CanalEventBatchEncoder) Size() int {
 		panic(err)
 	}
 	return proto.Size(d.packet)
-}
-
-// Reset implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Reset() {
-	panic("Reset only used for JsonEncoder")
 }
 
 // SetParams is no-op for now
