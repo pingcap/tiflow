@@ -263,6 +263,8 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
+	k.metricsMonitor.Cleanup()
+
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
 		log.Warn("close kafka cluster admin with error", zap.Error(err),
@@ -273,7 +275,6 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
 	return nil
 }
 
