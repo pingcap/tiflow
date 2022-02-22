@@ -197,6 +197,7 @@ func TestSubstituteTopicExpression(t *testing.T) {
 	}
 }
 
+// cmd: go test -run='^$' -bench '^(BenchmarkSubstitute)$' github.com/pingcap/tiflow/cdc/sink/dispatcher/topic
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/cdc/sink/dispatcher
