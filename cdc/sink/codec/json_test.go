@@ -145,7 +145,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
-		mixedEncoder := newEncoder()
 		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
 		c.Assert(err, check.IsNil)
 
@@ -156,10 +155,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			decoder, err := newDecoder(msg.Key, msg.Value)
 			c.Assert(err, check.IsNil)
 			checkTSDecoder(decoder, cs[i:i+1])
-
-			msg, err = mixedEncoder.EncodeCheckpointEvent(ts)
-			c.Assert(msg, check.IsNil)
-			c.Assert(err, check.IsNil)
 		}
 	}
 }
