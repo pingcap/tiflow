@@ -65,7 +65,15 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case msg := <-w.msgChan:
-		events = append(events, msg)
+		// When the resolved ts is received,
+		// we need to write the previous data to the producer as soon as possible.
+		if msg.resolvedTs != 0 {
+			return events, nil
+		}
+
+		if msg.row != nil {
+			events = append(events, msg)
+		}
 	}
 
 	tick := time.NewTicker(flushInterval)
@@ -75,8 +83,6 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case msg := <-w.msgChan:
-			// When the resolved ts is received,
-			// we need to write the previous data to the producer as soon as possible.
 			if msg.resolvedTs != 0 {
 				return events, nil
 			}
