@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -516,10 +517,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
-
-	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
