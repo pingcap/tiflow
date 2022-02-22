@@ -413,9 +413,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	var protocol codec.Protocol
-	protocol.FromString(replicaConfig.Sink.Protocol)
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, protocol, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
