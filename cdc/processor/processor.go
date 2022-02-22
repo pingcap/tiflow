@@ -113,6 +113,29 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
+var processorIgnorableError = []*errors.Error{
+	cerror.ErrAdminStopProcessor,
+	cerror.ErrReactorFinished,
+	cerror.ErrRedoWriterStopped,
+}
+
+// isProcessorIgnorableError returns true if the error means the processor exits
+// normally, caused by changefeed pause, remove, etc.
+func isProcessorIgnorableError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Cause(err) == context.Canceled {
+		return true
+	}
+	for _, e := range processorIgnorableError {
+		if e.Equal(err) {
+			return true
+		}
+	}
+	return false
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
@@ -127,8 +150,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
-	cause := errors.Cause(err)
-	if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -331,8 +353,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
-	cause := errors.Cause(err)
-	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
 			cdcContext.ZapFieldCapture(ctx),
 			cdcContext.ZapFieldChangefeed(ctx),
@@ -530,7 +551,7 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		if errors.Cause(err) != context.Canceled {
+		if !isProcessorIgnorableError(err) {
 			log.Error("processor receives redundant error", zap.Error(err))
 		}
 	}
