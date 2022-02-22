@@ -111,11 +111,11 @@ function checkValidSyncPointTs() {
     first_ddl_ts=$2
     echo "syncpoint primary_ts: $primary_ts, first_ddl_ts: $first_ddl_ts"
     if [[ ($primary_ts < $first_ddl_ts) ]]; then
-        return 0
+        echo 0
+        return
     fi
-    return 1
+    echo 1
 }
-
 
 function checkDiff() {
 	primaryArr=($(grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
@@ -124,9 +124,10 @@ function checkDiff() {
     firstDDLTs=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history |grep -B 3 "CREATE table testSync" |grep "real_start_ts"| grep -oE "[0-9]*"))
 	num=${#primaryArr[*]}
 	for ((i = 0; i < $num; i++)); do
-        if [[ 1 != $(checkValidSyncPointTs ${primaryArr[$i]} $firstDDLTs) ]]
-            echo "invalid syncpoint primary_ts: ${primaryArr[$i]}, first_ddl_ts: $firstDDLTs"
+        if [[ 1 != $(checkValidSyncPointTs ${primaryArr[$i]} $firstDDLTs) ]]; then
+            echo "skip invalid syncpoint primary_ts: ${primaryArr[$i]}, first_ddl_ts: $firstDDLTs"
             continue
+        fi
 
 		check_in_ddl=$(checkPrimaryTsNotInDDL ${primaryArr[$i]} $tsos)
 		if [[ ! -z $check_in_ddl ]]; then
