@@ -9623,18 +9623,10 @@
           "pointradius": 1,
           "points": false,
           "renderer": "flot",
-          "repeat": null,
-          "repeatDirection": "h",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
+          "seriesOverrides": [
+            {
+              "alias": "/.*len/",
+              "yaxis": 2
             }
           ],
           "spaceLength": 10,
