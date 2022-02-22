@@ -16,43 +16,36 @@ package unified
 import (
 	"io"
 	"os"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type fileBackendSuite struct{}
-
-var _ = check.SerialSuites(&fileBackendSuite{})
-
-func (s *fileBackendSuite) TestWrapIOError(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestWrapIOError(t *testing.T) {
 	fullFile, err := os.OpenFile("/dev/full", os.O_RDWR, 0)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer fullFile.Close() //nolint:errcheck
+
 	_, err = fullFile.WriteString("test")
 	wrapped := wrapIOError(err)
 	// tests that the error message gives the user some informative description
-	c.Assert(wrapped, check.ErrorMatches, ".*review the settings.*no space.*")
+	require.Regexp(t, wrapped, ".*review the settings.*no space.*")
 
 	eof := wrapIOError(io.EOF)
 	// tests that the function does not change io.EOF
-	c.Assert(eof, check.Equals, io.EOF)
+	require.Equal(t, io.EOF, eof)
 }
 
-func (s *fileBackendSuite) TestNoSpace(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestNoSpace(t *testing.T) {
 	fb := &fileBackEnd{
 		fileName: "/dev/full",
 		serde:    &encoding.MsgPackGenSerde{},
 	}
 	w, err := fb.writer()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = w.writeNext(model.NewPolymorphicEvent(generateMockRawKV(0)))
 	if err == nil {
@@ -60,6 +53,6 @@ func (s *fileBackendSuite) TestNoSpace(c *check.C) {
 		err = w.flushAndClose()
 	}
 
-	c.Assert(err, check.ErrorMatches, ".*review the settings.*no space.*")
-	c.Assert(cerrors.ErrUnifiedSorterIOError.Equal(err), check.IsTrue)
+	require.Regexp(t, err, ".*review the settings.*no space.*")
+	require.True(t, cerrors.ErrUnifiedSorterIOError.Equal(err))
 }
