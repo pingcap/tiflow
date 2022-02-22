@@ -33,7 +33,7 @@ func TestWrapIOError(t *testing.T) {
 	_, err = fullFile.WriteString("test")
 	wrapped := wrapIOError(err)
 	// tests that the error message gives the user some informative description
-	require.Regexp(t, wrapped, ".*no space.*")
+	require.Regexp(t, wrapped, "no space")
 
 	eof := wrapIOError(io.EOF)
 	// tests that the function does not change io.EOF
@@ -54,7 +54,7 @@ func TestNoSpace(t *testing.T) {
 		err = w.flushAndClose()
 	}
 
-	require.Regexp(t, err, ".*no space.*")
+	require.Regexp(t, err, "no space")
 	require.True(t, cerrors.ErrUnifiedSorterIOError.Equal(err))
 }
 
