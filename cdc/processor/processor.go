@@ -71,12 +71,14 @@ type processor struct {
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
-	metricResolvedTsGauge       prometheus.Gauge
-	metricResolvedTsLagGauge    prometheus.Gauge
-	metricCheckpointTsGauge     prometheus.Gauge
-	metricCheckpointTsLagGauge  prometheus.Gauge
-	metricSyncTableNumGauge     prometheus.Gauge
-	metricProcessorErrorCounter prometheus.Counter
+	metricResolvedTsGauge           prometheus.Gauge
+	metricResolvedTsLagGauge        prometheus.Gauge
+	metricMinResolvedTableIDGuage   prometheus.Gauge
+	metricCheckpointTsGauge         prometheus.Gauge
+	metricCheckpointTsLagGauge      prometheus.Gauge
+	metricMinCheckpointTableIDGuage prometheus.Gauge
+	metricSyncTableNumGauge         prometheus.Gauge
+	metricProcessorErrorCounter     prometheus.Counter
 }
 
 // newProcessor creates a new processor
@@ -90,12 +92,14 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:  ctx.GlobalVars().CaptureInfo,
 		cancel:       func() {},
 
-		metricResolvedTsGauge:       resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricResolvedTsLagGauge:    resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsGauge:     checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricCheckpointTsLagGauge:  checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricSyncTableNumGauge:     syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
-		metricProcessorErrorCounter: processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricMinResolvedTableIDGuage:   resolvedTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsGauge:         checkpointTsGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricCheckpointTsLagGauge:      checkpointTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID, advertiseAddr),
+		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID, advertiseAddr),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -291,10 +295,19 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
+
+	start := time.Now()
 	s, err := sink.NewSink(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
+		log.Info("processor new sink failed",
+			zap.String("changefeed", p.changefeed.ID),
+			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
+	log.Info("processor try new sink success",
+		zap.Duration("duration", time.Since(start)))
+
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
@@ -569,6 +582,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition(currentTs int64) {
 	minResolvedTs := uint64(math.MaxUint64)
+	minResolvedTableID := int64(0)
 	if p.schemaStorage != nil {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
@@ -576,24 +590,29 @@ func (p *processor) handlePosition(currentTs int64) {
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
+			minResolvedTableID, _ = table.ID()
 		}
 	}
 
 	minCheckpointTs := minResolvedTs
+	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
+			minCheckpointTableID, _ = table.ID()
 		}
 	}
 
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
 	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
 	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
+	p.metricMinResolvedTableIDGuage.Set(float64(minResolvedTableID))
 
 	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
 	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
+	p.metricMinCheckpointTableIDGuage.Set(float64(minCheckpointTableID))
 
 	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
 	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
@@ -769,6 +788,7 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) Close() error {
+	log.Info("processor closing ...", zap.String("changefeed", p.changefeedID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -789,7 +809,18 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		return p.sinkManager.Close(ctx)
+		log.Info("processor try to close the sinkManager",
+			zap.String("changefeed", p.changefeedID))
+		start := time.Now()
+		if err := p.sinkManager.Close(ctx); err != nil {
+			log.Info("processor close sinkManager failed",
+				zap.String("changefeed", p.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		log.Info("processor close sinkManager success",
+			zap.String("changefeed", p.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }

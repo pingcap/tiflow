@@ -265,12 +265,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-// Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// No longer need it for now
-	return nil
-}
-
 func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
@@ -419,9 +413,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	var protocol codec.Protocol
-	protocol.FromString(replicaConfig.Sink.Protocol)
-	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, protocol, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
