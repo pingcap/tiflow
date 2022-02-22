@@ -332,7 +332,7 @@ func (v *DataValidator) doValidate() {
 	v.L.Info("start continuous validation")
 	v.startValidateWorkers()
 
-	var currLoc binlog.Location
+	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
 	for {
 		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
@@ -411,6 +411,7 @@ func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
 		worker := &validateWorker{
+			cfg:               v.cfg.ValidatorCfg,
 			ctx:               v.ctx,
 			interval:          v.validateInterval,
 			validator:         v,

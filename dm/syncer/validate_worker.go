@@ -29,6 +29,7 @@ import (
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -36,6 +37,7 @@ import (
 )
 
 type validateWorker struct {
+	cfg               config.ValidatorConfig
 	ctx               context.Context
 	interval          time.Duration
 	validator         *DataValidator
@@ -262,8 +264,8 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 		}
 		pkVals := make([]string, 0, len(cond.Table.pkIndices))
 		for _, idx := range cond.Table.pkIndices {
-			colVal := fmt.Sprintf("%v", rowData[idx].Data)
-			pkVals = append(pkVals, colVal)
+			colVal := genColData(rowData[idx].Data)
+			pkVals = append(pkVals, string(colVal))
 		}
 		pk := strings.Join(pkVals, "-")
 		result[pk] = rowData
@@ -302,7 +304,7 @@ func ScanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
 func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData {
 	rowMap := make(map[string][]*dbutil.ColumnData, len(rows))
 	for _, r := range rows {
-		colValues := make([]*dbutil.ColumnData, 0, len(r.data))
+		colValues := make([]*dbutil.ColumnData, len(r.data))
 		for i := range r.data {
 			var colData []byte
 			if r.data[i] != nil {
