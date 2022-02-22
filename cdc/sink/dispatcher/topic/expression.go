@@ -35,12 +35,13 @@ var (
 // See https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/internals/Topic.java#L35
 const kafkaTopicNameMaxLength = 249
 
-// The topic expression only accepts two types of expressions:
-// 	1. [prefix]{schema}[suffix], the prefix/suffix is optional and matches [A-Za-z0-9\._\-]*
-//  2. {schema}_{table}
+// Expression represent a kafka topic expression.
+// Only two types of expression are allowed:
+//   1. [prefix]{schema}[suffix], the prefix/suffix is optional and matches [A-Za-z0-9\._\-]*
+//   2. {schema}_{table}
 type Expression string
 
-// Validate verifies if a kafka topic name matches [a-zA-Z0-9\._\-]
+// Validate checks whether a kafka topic name is valid or not.
 func (e Expression) Validate() error {
 	// validate the topic expression
 	if ok := topicNameRE.MatchString(string(e)); !ok {
@@ -52,7 +53,7 @@ func (e Expression) Validate() error {
 
 // Substitute converts schema/table name in a topic expression to kafka topic name.
 // When doing conversion, the special characters other than [A-Za-z0-9\._\-] in schema/table
-// will be substituted for underscore '_'
+// will be substituted for underscore '_'.
 func (e Expression) Substitute(schema, table string) string {
 	// the upper case letters in schema/table will be converted to lower case,
 	// and some of the special characters will be replaced with '_'
