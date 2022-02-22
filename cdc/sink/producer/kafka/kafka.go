@@ -213,16 +213,20 @@ func (k *kafkaSaramaProducer) Close() error {
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
-	err1 := k.syncClient.Close()
-	err2 := k.asyncClient.Close()
-	if err1 != nil {
-		log.Error("close sync client with error", zap.Error(err1))
+	start := time.Now()
+	err := k.asyncClient.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
 	}
-<<<<<<< HEAD
-	if err2 != nil {
-		log.Error("close async client with error", zap.Error(err2))
+	start = time.Now()
+	err = k.syncClient.Close()
+	if err != nil {
+		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
 	}
-=======
 	start = time.Now()
 	err = k.syncProducer.Close()
 	if err != nil {
@@ -233,21 +237,6 @@ func (k *kafkaSaramaProducer) Close() error {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
-
-	k.metricsMonitor.Cleanup()
-
-	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
-	start = time.Now()
-	if err := k.admin.Close(); err != nil {
-		log.Warn("close kafka cluster admin with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.Any("role", k.role))
-	} else {
-		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
-			zap.String("changefeed", k.id), zap.Any("role", k.role))
-	}
-
->>>>>>> 1c3bf688f (cdc/sink: decouple opt out of statistics (#4606))
 	return nil
 }
 
