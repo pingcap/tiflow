@@ -58,6 +58,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 	return pre, post
 }
 
+// IsIdentityUpdated returns true when the row is updated by the same values.
 func (r *RowChange) IsIdentityUpdated() bool {
 	if r.tp != RowChangeUpdate {
 		return false

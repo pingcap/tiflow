@@ -66,6 +66,8 @@ function run() {
 	# check delete data
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1=1;" "count(1): 1"
 	check_log_contain_with_retry '\[DeleteWhereColumnsCheck\] \[Columns="\[c3\]"\]' $WORK_DIR/worker2/log/dm-worker.log
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.varchar20000 where c=1;" "count(1): 1"
 }
 
 cleanup_data downstream_diff_index
