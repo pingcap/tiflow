@@ -20,8 +20,8 @@ This is mainly achieved by adding a new command `dmctl task create`, which creat
 ## Goals
 
 - Organize and optimize the state machine of tasks for better management
-- Unified style of commands in dmctl, optimized dmctl interaction experience
-- Adding/modifying OpenAPI, enhance eco-tools
+- Unify style of commands in dmctl and optimize dmctl interaction experience
+- Add/modify OpenAPI, enhance eco-tools
 
 ## Design and Examples
 
