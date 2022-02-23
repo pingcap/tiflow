@@ -64,12 +64,7 @@ type changefeed struct {
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
-<<<<<<< HEAD
-	newSink      func(ctx cdcContext.Context) (AsyncSink, error)
-=======
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 }
 
 func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
@@ -86,11 +81,6 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		newDDLPuller: newDDLPuller,
 		newSink:      newDDLSink,
 	}
-<<<<<<< HEAD
-	c.newSink = newAsyncSink
-=======
-	c.newScheduler = newScheduler
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	return c
 }
 
@@ -256,21 +246,10 @@ LOOP:
 
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
-<<<<<<< HEAD
-	c.sink, err = c.newSink(cancelCtx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = c.sink.Initialize(cancelCtx, c.schema.SinkTableInfos())
-	if err != nil {
-		return errors.Trace(err)
-	}
-=======
 
 	c.sink = c.newSink()
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
 	if err != nil {
@@ -302,11 +281,7 @@ func (c *changefeed) releaseResources() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
-<<<<<<< HEAD
-	if err := c.sink.Close(ctx); err != nil {
-=======
-	if err := c.sink.close(canceledCtx); err != nil {
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
+	if err := c.sink.close(ctx); err != nil {
 		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
