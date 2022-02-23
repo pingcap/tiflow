@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"testing"
@@ -147,8 +147,8 @@ func TestIndexValueDispatcher(t *testing.T) {
 			},
 		}, exceptPartition: 2},
 	}
-	p := newIndexValueDispatcher(16)
+	p := NewIndexValueDispatcher(16)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
+		require.Equal(t, tc.exceptPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }

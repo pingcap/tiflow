@@ -11,26 +11,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/hash"
 )
 
-type indexValueDispatcher struct {
+type IndexValueDispatcher struct {
 	partitionNum int32
 	hasher       *hash.PositionInertia
 }
 
-func newIndexValueDispatcher(partitionNum int32) *indexValueDispatcher {
-	return &indexValueDispatcher{
+func NewIndexValueDispatcher(partitionNum int32) *IndexValueDispatcher {
+	return &IndexValueDispatcher{
 		partitionNum: partitionNum,
 		hasher:       hash.NewPositionInertia(),
 	}
 }
 
-func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
 	// FIXME(leoppro): if the row events includes both pre-cols and cols

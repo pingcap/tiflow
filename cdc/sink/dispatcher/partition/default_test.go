@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"testing"
@@ -193,9 +193,9 @@ func TestDefaultDispatcher(t *testing.T) {
 			IndexColumns: [][]int{{0}, {1}},
 		}, exceptPartition: 3},
 	}
-	p := newDefaultDispatcher(16, false)
+	p := NewDefaultDispatcher(16, false)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
+		require.Equal(t, tc.exceptPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }
 
@@ -221,6 +221,6 @@ func TestDefaultDispatcherWithOldValue(t *testing.T) {
 		IndexColumns: [][]int{{0}, {1}},
 	}
 
-	p := newDefaultDispatcher(16, true)
-	require.Equal(t, int32(3), p.Dispatch(row))
+	p := NewDefaultDispatcher(16, true)
+	require.Equal(t, int32(3), p.DispatchRowChangedEvent(row))
 }

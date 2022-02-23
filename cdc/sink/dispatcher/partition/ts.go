@@ -11,28 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
-import (
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/hash"
-)
+import "github.com/pingcap/tiflow/cdc/model"
 
-type tableDispatcher struct {
+type TsDispatcher struct {
 	partitionNum int32
-	hasher       *hash.PositionInertia
 }
 
-func newTableDispatcher(partitionNum int32) *tableDispatcher {
-	return &tableDispatcher{
+func NewTsDispatcher(partitionNum int32) *TsDispatcher {
+	return &TsDispatcher{
 		partitionNum: partitionNum,
-		hasher:       hash.NewPositionInertia(),
 	}
 }
 
-func (t *tableDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	t.hasher.Reset()
-	// distribute partition by table
-	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	return int32(t.hasher.Sum32() % uint32(t.partitionNum))
+func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
+	return int32(row.CommitTs % uint64(t.partitionNum))
 }

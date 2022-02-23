@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,20 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+)
 
-type tsDispatcher struct {
-	partitionNum int32
-}
-
-func newTsDispatcher(partitionNum int32) *tsDispatcher {
-	return &tsDispatcher{
-		partitionNum: partitionNum,
-	}
-}
-
-func (t *tsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return int32(row.CommitTs % uint64(t.partitionNum))
+// PartitionDispatcher is an abstraction for dispatching rows into different partitions
+type Dispatcher interface {
+	// Dispatch returns an index of partitions according to RowChangedEvent
+	DispatchRowChangedEvent(row *model.RowChangedEvent) int32
 }

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"testing"
@@ -77,8 +77,8 @@ func TestTableDispatcher(t *testing.T) {
 			CommitTs: 3,
 		}, exceptPartition: 3},
 	}
-	p := newTableDispatcher(16)
+	p := NewTableDispatcher(16)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
+		require.Equal(t, tc.exceptPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }

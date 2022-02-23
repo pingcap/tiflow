@@ -274,7 +274,7 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config.Admin.Retry.Backoff = 100 * time.Millisecond
 	config.Admin.Timeout = 1 * time.Minute
 
-	// Producer.Retry take effect when the producer try to send message to kafka
+	// Producer.Retry take effect when the producer try to send message to kafkaSaramaProducer
 	// brokers. If kafka cluster is healthy, just the default value should be enough.
 	// For kafka cluster with a bad network condition, producer should not try to
 	// waster too much time on sending a message, get response no matter success

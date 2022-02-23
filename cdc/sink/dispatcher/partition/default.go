@@ -11,34 +11,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-type defaultDispatcher struct {
+type DefaultDispatcher struct {
 	partitionNum   int32
-	tbd            *tableDispatcher
-	ivd            *indexValueDispatcher
+	tbd            *TableDispatcher
+	ivd            *IndexValueDispatcher
 	enableOldValue bool
 }
 
-func newDefaultDispatcher(partitionNum int32, enableOldValue bool) *defaultDispatcher {
-	return &defaultDispatcher{
+func NewDefaultDispatcher(partitionNum int32, enableOldValue bool) *DefaultDispatcher {
+	return &DefaultDispatcher{
 		partitionNum:   partitionNum,
-		tbd:            newTableDispatcher(partitionNum),
-		ivd:            newIndexValueDispatcher(partitionNum),
+		tbd:            NewTableDispatcher(partitionNum),
+		ivd:            NewIndexValueDispatcher(partitionNum),
 		enableOldValue: enableOldValue,
 	}
 }
 
-func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	if d.enableOldValue {
-		return d.tbd.Dispatch(row)
+		return d.tbd.DispatchRowChangedEvent(row)
 	}
 	if len(row.IndexColumns) != 1 {
-		return d.tbd.Dispatch(row)
+		return d.tbd.DispatchRowChangedEvent(row)
 	}
-	return d.ivd.Dispatch(row)
+	return d.ivd.DispatchRowChangedEvent(row)
 }
