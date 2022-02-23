@@ -110,7 +110,6 @@ function checkPrimaryTsNotInDDL() {
 function checkValidSyncPointTs() {
 	primary_ts=$1
 	first_ddl_ts=$2
-	echo "syncpoint primary_ts: $primary_ts, first_ddl_ts: $first_ddl_ts"
 	if [[ ($primary_ts < $first_ddl_ts) ]]; then
 		echo 0
 		return
