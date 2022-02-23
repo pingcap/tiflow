@@ -49,7 +49,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: 1000,
 		Storage:           "",
 	},
-	Actor: &ActorConfig{
+	TableActor: &TableActorConfig{
 		EventBatchSize: 32,
 	},
 }
@@ -68,7 +68,7 @@ type replicaConfig struct {
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Scheduler        *SchedulerConfig  `toml:"scheduler" json:"scheduler"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
-	Actor            *ActorConfig      `toml:"actor" json:"actor"`
+	TableActor       *TableActorConfig `toml:"table-actor" json:"table-actor"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

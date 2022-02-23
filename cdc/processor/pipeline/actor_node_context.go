@@ -56,8 +56,8 @@ func newContext(stdCtx sdtContext.Context,
 	batchSize := defaultEventBatchSize
 	if changefeedVars != nil && changefeedVars.Info != nil &&
 		changefeedVars.Info.Config != nil &&
-		changefeedVars.Info.Config.Actor != nil {
-		batchSize = changefeedVars.Info.Config.Actor.EventBatchSize
+		changefeedVars.Info.Config.TableActor != nil {
+		batchSize = changefeedVars.Info.Config.TableActor.EventBatchSize
 	}
 	return &actorNodeContext{
 		Context:          stdCtx,

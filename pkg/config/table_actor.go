@@ -13,8 +13,8 @@
 
 package config
 
-// ActorConfig represents config used for table actor
-type ActorConfig struct {
+// TableActorConfig represents config used for table actor
+type TableActorConfig struct {
 	// EventBatchSize represents the batch size of events that table actor processed per Poll
 	EventBatchSize uint32 `toml:"event-batch-size" json:"event-batch-size"`
 }

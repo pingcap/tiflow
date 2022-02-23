@@ -66,7 +66,7 @@ const (
     "flush-interval": 1000,
     "storage": ""
   },
-  "actor": {
+  "table-actor": {
     "event-batch-size": 32
   }
 }`
@@ -189,7 +189,7 @@ const (
     "flush-interval": 1000,
     "storage": ""
   },
-  "actor": {
+  "table-actor": {
     "event-batch-size": 3
   }
 }`
@@ -240,7 +240,7 @@ const (
     "flush-interval": 1000,
     "storage": ""
   },
-  "actor": {
+  "table-actor": {
     "event-batch-size": 3
   }
 }`
