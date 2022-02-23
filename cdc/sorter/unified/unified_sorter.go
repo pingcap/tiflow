@@ -170,16 +170,12 @@ func (s *Sorter) Run(ctx context.Context) error {
 		}
 	})
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(numConcurrentHeaps)
 	errg.Go(func() error {
 		return printError(merger.runMerger(subctx, heapSorterCollectCh, s.outputCh, ioCancelFunc))
 	})
 	errg.Go(func() error {
-		return printError(merger.runFlushTask(subctx, numConcurrentHeaps, heapSorterCollectCh))
+		return printError(merger.runFlushTask(subctx, heapSorterCollectCh))
 	})
 
 	errg.Go(func() error {

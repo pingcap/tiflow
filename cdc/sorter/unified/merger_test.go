@@ -15,7 +15,6 @@ package unified
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -105,16 +104,12 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	totalCount := 0
@@ -184,16 +179,12 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	totalCount := 0
@@ -273,16 +264,12 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	totalCount := 0
@@ -361,16 +348,12 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -424,16 +407,12 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 	inChan := make(chan *flushTask, 1024)
 	outChan := make(chan *model.PolymorphicEvent, 1024)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	builder := newMockFlushTaskBuilder()
@@ -495,16 +474,12 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	inChan <- task1
 	close(task1.finished)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	wg.Go(func() error {
@@ -543,16 +518,12 @@ func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 	// make a small channel to test blocking
 	outChan := make(chan *model.PolymorphicEvent, 1)
 
-	merger := &sorterMerger{
-		resolvedTsNotifierChan: make(chan struct{}, 1),
-		pendingSet:             sync.Map{},
-		minResolvedTs:          uint64(0),
-	}
+	merger := newMerger(1)
 	wg.Go(func() error {
 		return merger.runMerger(ctx, inChan, outChan, func() {})
 	})
 	wg.Go(func() error {
-		return merger.runFlushTask(ctx, 1, inChan)
+		return merger.runFlushTask(ctx, inChan)
 	})
 
 	totalCount := 0

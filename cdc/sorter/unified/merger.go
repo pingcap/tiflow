@@ -37,6 +37,16 @@ type sorterMerger struct {
 	pendingSet             sync.Map
 	resolvedTsNotifierChan chan struct{}
 	minResolvedTs          uint64
+	numSorters             int
+}
+
+func newMerger(numSorters int) *sorterMerger {
+	return &sorterMerger{
+		pendingSet:             sync.Map{},
+		resolvedTsNotifierChan: make(chan struct{}, 1),
+		minResolvedTs:          0,
+		numSorters:             numSorters,
+	}
 }
 
 func (m *sorterMerger) runMerger(ctx context.Context, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
@@ -441,8 +451,8 @@ func (m *sorterMerger) runMerger(ctx context.Context, in <-chan *flushTask, out 
 	}
 }
 
-func (m *sorterMerger) runFlushTask(ctx context.Context, numSorters int, in <-chan *flushTask) error {
-	lastResolvedTs := make([]uint64, numSorters)
+func (m *sorterMerger) runFlushTask(ctx context.Context, in <-chan *flushTask) error {
+	lastResolvedTs := make([]uint64, m.numSorters)
 	for {
 		var task *flushTask
 		select {
