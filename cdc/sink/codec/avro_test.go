@@ -237,6 +237,6 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	_, err := s.encoder.EncodeDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)
 
-	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
+	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
 	c.Check(err, check.IsNil)
 }

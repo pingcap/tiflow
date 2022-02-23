@@ -159,9 +159,8 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
 
-		result, err := encoder.AppendRowChangedEvent(testCaseInsert)
+		err := encoder.AppendRowChangedEvent(testCaseInsert)
 		c.Assert(err, check.IsNil)
-		c.Assert(result, check.Equals, EncoderNoOperation)
 
 		mqMessages := encoder.Build()
 		c.Assert(len(mqMessages), check.Equals, 1)
@@ -294,9 +293,8 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		result, err := encoder.AppendRowChangedEvent(&updateCase)
+		err := encoder.AppendRowChangedEvent(&updateCase)
 		c.Assert(err, check.IsNil)
-		c.Assert(result, check.Equals, EncoderNoOperation)
 
 		if i%100 == 0 {
 			msgs := encoder.Build()
