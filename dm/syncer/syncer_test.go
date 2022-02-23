@@ -1811,7 +1811,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	defaultMaxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
 
 	// test use cliArgs
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordWaitBeforeRunExitDuration", "return()"))
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime", "return()"))
 	syncer.cliArgs = &config.TaskCliArgs{StopWaitTimeOutDuration: "2s"}
 	ctx3, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1821,5 +1821,5 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	syncer.waitBeforeRunExit(ctx3)
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
 	require.Equal(t, 2*time.Second, waitBeforeRunExitDuration)
-	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordWaitBeforeRunExitDuration"))
+	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
 }

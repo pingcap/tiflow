@@ -1484,9 +1484,12 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		if s.cliArgs != nil && s.cliArgs.StopWaitTimeOutDuration != "" {
 			waitDuration, _ = time.ParseDuration(s.cliArgs.StopWaitTimeOutDuration)
 		}
-		waitDuration -= time.Since(needToExitTime)
-		failpoint.Inject("recordWaitBeforeRunExitDuration", func() {
-			needToExitTime = time.Now() // ignore the acquire lock time.
+		prepareForWaitTime := time.Since(needToExitTime)
+		failpoint.Inject("recordAndIgnorePrepareTime", func() {
+			prepareForWaitTime = time.Duration(0)
+		})
+		waitDuration -= prepareForWaitTime
+		failpoint.Inject("recordAndIgnorePrepareTime", func() {
 			waitBeforeRunExitDuration = waitDuration
 		})
 		if waitDuration.Seconds() < 0 {
