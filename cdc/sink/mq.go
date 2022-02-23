@@ -360,7 +360,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
-	flushToProducer := func(op codec.EncoderResult) error {
+	flushToProducer := func() error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			messages := encoder.Build()
 			thisBatchSize := 0
@@ -375,13 +375,6 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				}
 				thisBatchSize += msg.GetRowsCount()
 			}
-
-			if op == codec.EncoderNeedSyncWrite {
-				err := k.mqProducer.Flush(ctx)
-				if err != nil {
-					return 0, err
-				}
-			}
 			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return thisBatchSize, nil
@@ -393,7 +386,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+			if err := flushToProducer(); err != nil {
 				return errors.Trace(err)
 			}
 			continue
@@ -404,7 +397,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			// We don't need to flush it immediately, we wait until all partitions have received
 			// this event before we flush it uniformly.
 			if e.resolvedTs != 0 {
-				if err := flushToProducer(codec.EncoderNoOperation); err != nil {
+				if err := flushToProducer(); err != nil {
 					return errors.Trace(err)
 				}
 
@@ -413,17 +406,13 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 			continue
 		}
-		op, err := encoder.AppendRowChangedEvent(e.row)
+		err := encoder.AppendRowChangedEvent(e.row)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		if encoder.Size() >= batchSizeLimit {
-			op = codec.EncoderNeedAsyncWrite
-		}
-
-		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
-			if err := flushToProducer(op); err != nil {
+			if err := flushToProducer(); err != nil {
 				return errors.Trace(err)
 			}
 		}
