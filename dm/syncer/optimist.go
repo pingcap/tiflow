@@ -246,7 +246,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 
 func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table, stage optimism.ConflictStage) {
 	if sourceTable != nil && targetTable != nil {
-		if (stage == optimism.ConflictResolved && s.osgk.tableInConflict(targetTable)) ||
+		if (stage == optimism.ConflictNone && s.osgk.tableInConflict(targetTable)) ||
 			s.osgk.inConflictStage(sourceTable, targetTable) {
 			// in the following two situations we should resolve this ddl lock at now
 			// 1. after this worker's ddl, the ddl lock is resolved

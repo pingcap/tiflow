@@ -950,6 +950,8 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30,30);"
 
+	sleep 20
+
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
