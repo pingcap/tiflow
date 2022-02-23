@@ -59,7 +59,7 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 		// TODO: make a st.reset
 		st.ctx, st.cancel = context.WithCancel(context.Background())
 		st.cfg.UseRelay = relay != nil
-		st.Run(stage, relay)
+		st.Run(stage, st.getValidatorStage(), relay)
 	}
 }
 
@@ -69,6 +69,16 @@ func (h *subTaskHolder) closeAllSubTasks() {
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
 		st.Close()
+	}
+	h.subTasks = make(map[string]*SubTask)
+}
+
+// killAllSubTasks kill and stop all subtask instances.
+func (h *subTaskHolder) killAllSubTasks() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, st := range h.subTasks {
+		st.Kill()
 	}
 	h.subTasks = make(map[string]*SubTask)
 }

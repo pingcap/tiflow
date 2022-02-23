@@ -52,10 +52,10 @@ type tableType int
 const (
 	// normalTables represents upstream table info record in checkpoint.
 	normalTables tableType = iota
-	// conflictTables represents upstream table info after execute conflict DDL.
+	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables
-	// finalTables combine normalTables and conflcitTables,
-	// which represents all upstream table infos after execute all conflict DDLs.
+	// finalTables combines normalTables and conflcitTables,
+	// which represents all upstream table infos after executing all conflict DDLs.
 	finalTables
 )
 
@@ -73,7 +73,7 @@ type Lock struct {
 	DownTable  string // downstream table name
 
 	// first prevTable when a lock created
-	// only use when fetchTableInfo return an error
+	// only use when fetchTableInfo return an error.
 	initTable schemacmp.Table
 	// per-table's table info,
 	// upstream source ID -> upstream schema name -> upstream table name -> table info.
@@ -201,7 +201,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				metrics.ReportDDLPending(l.Task, metrics.DDLPendingUnSynced, metrics.DDLPendingSynced)
 			}
 		}
-		if len(newDDLs) > 0 {
+		if len(newDDLs) > 0 || (err != nil && terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err)) {
 			// revert the `done` status if need to wait for the new operation to be done.
 			// Now, we wait for the new operation to be done if any DDLs returned.
 			l.tryRevertDone(callerSource, callerSchema, callerTable)
@@ -222,12 +222,16 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 		if err == nil && len(cols) > 0 {
 			err = l.AddDroppedColumns(callerSource, callerSchema, callerTable, cols)
 		}
-		// only update table info if no error or ignore conflict
+		// only update table info if no error or ignore conflict or conflict DDL
 		if err != nil {
 			var revertInfo schemacmp.Table
-			if ignoreConflict {
+			switch {
+			case ignoreConflict:
+				// forcely set schema for --ignore-conflict
 				revertInfo = schemacmp.Encode(newTIs[len(newTIs)-1])
-			} else {
+			case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
+				return
+			default:
 				revertInfo = schemacmp.Encode(info.TableInfoBefore)
 			}
 			l.tables[callerSource][callerSchema][callerTable] = revertInfo
@@ -253,7 +257,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 	// join and compare every new table info
 	for idx, ti := range newTIs {
 		postTable := schemacmp.Encode(ti)
-		schemaChanged, conflictStage := l.TrySyncForOneDDL(callerSource, callerSchema, callerTable, prevTable, postTable)
+		schemaChanged, conflictStage := l.trySyncForOneDDL(callerSource, callerSchema, callerTable, prevTable, postTable)
 
 		switch conflictStage {
 		case ConflictDetected:
@@ -266,8 +270,6 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			}
 		case ConflictSkipWaitRedirect:
 			return newDDLs, cols, terror.ErrShardDDLOptimismNeedSkipAndRedirect.Generate(l.ID, ddls[idx])
-		case ConflictResolved:
-			log.L().Info("all conflict DDL resolved", zap.String("DDL", ddls[idx]))
 		}
 
 		if schemaChanged {
@@ -477,8 +479,8 @@ func (l *Lock) IsResolved() bool {
 func (l *Lock) syncStatus() (map[string]map[string]map[string]bool, int) {
 	ready := make(map[string]map[string]map[string]bool)
 	remain := 0
-	joined, joinedErr := l.joinNormalTables()
-	for source, schemaTables := range l.tables {
+	joined, joinedErr := l.joinFinalTables()
+	for source, schemaTables := range l.finalTables {
 		if _, ok := ready[source]; !ok {
 			ready[source] = make(map[string]map[string]bool)
 		}
@@ -737,7 +739,7 @@ func GetColumnName(lockID, ddl string, tp ast.AlterTableType) (string, error) {
 }
 
 // checkAddDropColumn check for ALTER TABLE ADD/DROP COLUMN statement
-// FOR ADD COLUMN, check whether add column with a different field or add a droped column
+// FOR ADD COLUMN, check whether add column with a different field or add a dropped column
 // FOR DROP COLUMN, return the droped column.
 func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prevTable, postTable schemacmp.Table) (string, error) {
 	currTable := l.tables[source][schema][table]
@@ -787,10 +789,10 @@ func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prev
 	return "", nil
 }
 
-// TrySyncForOneDDL try sync for a DDL operation.
+// trySyncForOneDDL try sync for a DDL operation.
 // e.g. `ALTER TABLE ADD COLUMN a, RENAME b TO c, DROP COLUMN d' will call this func three times.
 // return whether joined table is changed and whether there is a conflict.
-func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
+func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTable schemacmp.Table) (schemaChanged bool, conflictStage ConflictStage) {
 	// we only support resolve one conflict DDL per table,
 	// so reset conflict table after receive new table info.
 	l.removeConflictTable(source, schema, table)
@@ -798,8 +800,12 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	// For idempotent DDL
 	// this often happens when an info TrySync twice, e.g. worker restart/resume task
+	idempotent := false
 	if cmp, err := prevTable.Compare(l.tables[source][schema][table]); err != nil || cmp != 0 {
-		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", l.tables[schema][source][table]), zap.Stringer("prev-table", prevTable))
+		if cmp, err := postTable.Compare(l.tables[source][schema][table]); err == nil && cmp == 0 {
+			idempotent = true
+		}
+		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", l.tables[source][schema][table]), zap.Stringer("prev-table", prevTable))
 		l.tables[source][schema][table] = prevTable
 		l.finalTables[source][schema][table] = prevTable
 	}
@@ -817,16 +823,16 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 		// normal DDL can be sync if no error
 		if newErr == nil {
 			// if a normal DDL let all final tables become no conflict
-			// return ConflictResolved
+			// return ConflictNone
 			if len(l.conflictTables) > 0 && l.noConflictForFinalTables() {
 				log.L().Info("all conflict resolved for the DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
-				err := l.redirectForConflictTables()
+				err := l.redirectForConflictTables(source, schema, table)
 				if err != nil {
 					log.L().Error("failed to put redirect operation for conflict tables", log.ShortError(err))
 					return false, ConflictDetected
 				}
 				l.resolveTables()
-				return true, ConflictResolved
+				return true, ConflictNone
 			}
 
 			if oldErr != nil {
@@ -846,7 +852,14 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 		}
 	}
 
-	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	log.L().Debug("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable), log.ShortError(tableErr))
+
+	if idempotent {
+		log.L().Info("return conflict DDL for idempotent DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		l.tables[source][schema][table] = postTable
+		l.finalTables[source][schema][table] = postTable
+		return true, ConflictNone
+	}
 
 	// meet conflict DDL
 	// revert tables and update conflictTables and finalTables
@@ -857,7 +870,7 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 	// if more than one conflict tables and this conflict DDL has no conflict with normal tables
 	// e.g. tb1,tb2 put ddl1(rename a to b); tb1 put ddl2(rename c to d); tb2 crash and reput ddl1(rename a to b)
 	// now tb2's ddl1 is a conflict DDL but has no conflict with normal tables
-	if len(l.conflictTables) > 1 && l.noConflictWithNormalTables(source, schema, table, postTable) {
+	if l.multipleConflictTables() && l.noConflictWithNormalTables(source, schema, table, postTable) {
 		l.removeConflictTable(source, schema, table)
 		l.tables[source][schema][table] = postTable
 		return true, ConflictNone
@@ -872,13 +885,13 @@ func (l *Lock) TrySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	if l.noConflictForFinalTables() {
 		log.L().Info("all conflict resolved for the DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
-		err := l.redirectForConflictTables()
+		err := l.redirectForConflictTables(source, schema, table)
 		if err != nil {
 			log.L().Error("failed to put redirect operation for conflict tables", log.ShortError(err))
 			return false, ConflictDetected
 		}
 		l.resolveTables()
-		return true, ConflictResolved
+		return true, ConflictNone
 	}
 	log.L().Debug("conflict hasn't been resolved", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, ConflictSkipWaitRedirect
@@ -1100,9 +1113,6 @@ func (l *Lock) addConflictTable(source, schema, table string, ti schemacmp.Table
 	if _, ok := l.conflictTables[source][schema]; !ok {
 		l.conflictTables[source][schema] = make(map[string]schemacmp.Table)
 	}
-	if _, ok := l.conflictTables[source][schema]; !ok {
-		l.conflictTables[source][schema] = make(map[string]schemacmp.Table)
-	}
 	l.conflictTables[source][schema][table] = ti
 }
 
@@ -1135,10 +1145,14 @@ func (l *Lock) resolveTables() {
 }
 
 // redirectForConflictTables put redirect Ops for all conflict tables.
-func (l *Lock) redirectForConflictTables() error {
+func (l *Lock) redirectForConflictTables(callerSource, callerSchema, callerTable string) error {
 	for source, schemaTables := range l.conflictTables {
 		for schema, tables := range schemaTables {
 			for table := range tables {
+				if source == callerSource && schema == callerSchema && table == callerTable {
+					// no redirect for caller table
+					continue
+				}
 				op := NewOperation(l.ID, l.Task, source, schema, table, nil, ConflictResolved, "", false, nil)
 				rev, succ, err := PutOperation(l.cli, false, op, 0)
 				if err != nil {
@@ -1150,4 +1164,20 @@ func (l *Lock) redirectForConflictTables() error {
 		}
 	}
 	return nil
+}
+
+// multipleConflictTables check whether a lock has multiple conflict tables.
+func (l *Lock) multipleConflictTables() bool {
+	cnt := 0
+	for _, schemaTables := range l.conflictTables {
+		for _, tables := range schemaTables {
+			for range tables {
+				cnt++
+				if cnt > 1 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

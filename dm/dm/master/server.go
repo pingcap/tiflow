@@ -15,7 +15,9 @@ package master
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -46,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
@@ -121,6 +124,8 @@ type Server struct {
 	closed atomic.Bool
 
 	openapiHandles *gin.Engine // injected in `InitOpenAPIHandles`
+
+	clusterID atomic.Uint64
 }
 
 // NewServer creates a new Server.
@@ -211,7 +216,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// create an etcd client used in the whole server instance.
 	// NOTE: we only use the local member's address now, but we can use all endpoints of the cluster if needed.
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, tls.TLSConfig())
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tls.TLSConfig())
 	if err != nil {
 		return
 	}
@@ -405,6 +410,45 @@ func subtaskCfgPointersToInstances(stCfgPointers ...*config.SubTaskConfig) []con
 	return stCfgs
 }
 
+func (s *Server) initClusterID(ctx context.Context) error {
+	log.L().Info("init cluster id begin")
+	ctx1, cancel := context.WithTimeout(ctx, etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	resp, err := s.etcdClient.Get(ctx1, dmcommon.ClusterIDKey)
+	if err != nil {
+		return err
+	}
+
+	// New cluster, generate a cluster id and backfill it to etcd
+	if len(resp.Kvs) == 0 {
+		ts := uint64(time.Now().Unix())
+		clusterID := (ts << 32) + uint64(rand.Uint32())
+		clusterIDBytes := make([]byte, 8)
+		binary.BigEndian.PutUint64(clusterIDBytes, clusterID)
+		_, err = s.etcdClient.Put(ctx1, dmcommon.ClusterIDKey, string(clusterIDBytes))
+		if err != nil {
+			return err
+		}
+		s.clusterID.Store(clusterID)
+		log.L().Info("generate and init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+		return nil
+	}
+
+	if len(resp.Kvs[0].Value) != 8 {
+		return terror.ErrMasterInvalidClusterID.Generate(resp.Kvs[0].Value)
+	}
+
+	s.clusterID.Store(binary.BigEndian.Uint64(resp.Kvs[0].Value))
+	log.L().Info("init cluster id success", zap.Uint64("cluster_id", s.clusterID.Load()))
+	return nil
+}
+
+// ClusterID return correct cluster id when as leader.
+func (s *Server) ClusterID() uint64 {
+	return s.clusterID.Load()
+}
+
 // StartTask implements MasterServer.StartTask.
 func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.StartTaskResponse, error) {
 	var (
@@ -447,10 +491,10 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
-	resp.Msg = msg
+	resp.CheckResult = msg
 
 	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
@@ -531,7 +575,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -666,10 +710,10 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
+		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
 	}
-	resp.Msg = msg
+	resp.CheckResult = msg
 	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
@@ -1364,7 +1408,12 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 			err      error
 		)
 		for _, cfg := range cfgs {
-			err = s.scheduler.AddSourceCfg(cfg)
+			// add source with worker when specify a worker name
+			if req.WorkerName != "" {
+				err = s.scheduler.AddSourceCfgWithWorker(cfg, req.WorkerName)
+			} else {
+				err = s.scheduler.AddSourceCfg(cfg)
+			}
 			// return first error and try to revert, so user could copy-paste same start command after error
 			if err != nil {
 				resp.Msg = err.Error()
@@ -1497,14 +1546,21 @@ func (s *Server) generateSubTask(
 	task string,
 	cliArgs *config.TaskCliArgs,
 ) (*config.TaskConfig, []*config.SubTaskConfig, error) {
+	var err error
 	cfg := config.NewTaskConfig()
 	// bypass the meta check by set any value. If start-time is specified, DM-worker will not use meta field.
 	if cliArgs != nil && cliArgs.StartTime != "" {
-		for _, inst := range cfg.MySQLInstances {
-			inst.Meta = &config.Meta{BinLogName: cliArgs.StartTime}
+		err = cfg.RawDecode(task)
+		if err != nil {
+			return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 		}
+		for _, inst := range cfg.MySQLInstances {
+			inst.Meta = &config.Meta{BinLogName: binlog.FakeBinlogName}
+		}
+		err = cfg.Adjust()
+	} else {
+		err = cfg.Decode(task)
 	}
-	err := cfg.Decode(task)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}

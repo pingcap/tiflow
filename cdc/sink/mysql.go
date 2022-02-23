@@ -185,7 +185,7 @@ func newMySQLSink(
 		filter:                          filter,
 		cyclic:                          sinkCyclic,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql", opts),
+		statistics:                      NewStatistics(ctx, "mysql"),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
@@ -678,8 +678,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				}
 			} else {
 				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-				sqls = append(sqls, query)
-				values = append(values, args)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

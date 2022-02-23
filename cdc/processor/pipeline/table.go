@@ -65,7 +65,7 @@ type tablePipelineImpl struct {
 
 	tableID     int64
 	markTableID int64
-	tableName   string // quoted schema and table, used in metircs only
+	tableName   string // quoted schema and table, used in metrics only
 
 	sorterNode *sorterNode
 	sinkNode   *sinkNode
@@ -108,7 +108,7 @@ func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 	}
 }
 
-// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
+// AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
 func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
 		Tp: pipeline.CommandTypeStop,
@@ -135,7 +135,7 @@ func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
 	return workload
 }
 
-// Status returns the status of this table pipeline
+// Status returns the status of this table pipeline, sinkNode maintains the table status
 func (t *tablePipelineImpl) Status() TableStatus {
 	return t.sinkNode.Status()
 }

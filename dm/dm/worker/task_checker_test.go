@@ -107,10 +107,11 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	rtsc.w = w
 
 	st := &SubTask{
-		cfg:   &config.SubTaskConfig{Name: taskName},
+		cfg:   &config.SubTaskConfig{SourceID: "source", Name: taskName},
 		stage: pb.Stage_Running,
 		l:     log.With(zap.String("subtask", taskName)),
 	}
+	c.Assert(st.cfg.Adjust(false), check.IsNil)
 	rtsc.w.subTaskHolder.recordSubTask(st)
 	rtsc.check()
 	bf, ok := rtsc.bc.backoffs[taskName]
@@ -241,7 +242,7 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 
 	// test backoff strategies of different tasks do not affect each other
 	st1 = &SubTask{
-		cfg:   &config.SubTaskConfig{Name: task1},
+		cfg:   &config.SubTaskConfig{SourceID: "source", Name: task1},
 		stage: pb.Stage_Paused,
 		result: &pb.ProcessResult{
 			IsCanceled: false,
@@ -249,9 +250,10 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 		},
 		l: log.With(zap.String("subtask", task1)),
 	}
+	c.Assert(st1.cfg.Adjust(false), check.IsNil)
 	rtsc.w.subTaskHolder.recordSubTask(st1)
 	st2 = &SubTask{
-		cfg:   &config.SubTaskConfig{Name: task2},
+		cfg:   &config.SubTaskConfig{SourceID: "source", Name: task2},
 		stage: pb.Stage_Paused,
 		result: &pb.ProcessResult{
 			IsCanceled: false,
@@ -259,6 +261,7 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 		},
 		l: log.With(zap.String("subtask", task2)),
 	}
+	c.Assert(st2.cfg.Adjust(false), check.IsNil)
 	rtsc.w.subTaskHolder.recordSubTask(st2)
 
 	task1LatestResumeTime = rtsc.bc.latestResumeTime[task1]

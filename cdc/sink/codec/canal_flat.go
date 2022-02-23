@@ -35,9 +35,8 @@ const tidbWaterMarkType = "TIDB_WATERMARK"
 
 // CanalFlatEventBatchEncoder encodes Canal flat messages in JSON format
 type CanalFlatEventBatchEncoder struct {
-	builder       *canalEntryBuilder
-	unresolvedBuf []canalFlatMessageInterface
-	resolvedBuf   []canalFlatMessageInterface
+	builder    *canalEntryBuilder
+	messageBuf []canalFlatMessageInterface
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
@@ -47,8 +46,7 @@ type CanalFlatEventBatchEncoder struct {
 func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	return &CanalFlatEventBatchEncoder{
 		builder:             NewCanalEntryBuilder(),
-		unresolvedBuf:       make([]canalFlatMessageInterface, 0),
-		resolvedBuf:         make([]canalFlatMessageInterface, 0),
+		messageBuf:          make([]canalFlatMessageInterface, 0),
 		enableTiDBExtension: false,
 	}
 }
@@ -317,31 +315,13 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	message, err := c.newFlatMessageForDML(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
-	c.unresolvedBuf = append(c.unresolvedBuf, message)
-	return EncoderNoOperation, nil
-}
-
-// AppendResolvedEvent receives the latest resolvedTs
-func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	nextIdx := 0
-	for _, msg := range c.unresolvedBuf {
-		if msg.getTikvTs() <= ts {
-			c.resolvedBuf = append(c.resolvedBuf, msg)
-		} else {
-			break
-		}
-		nextIdx++
-	}
-	c.unresolvedBuf = c.unresolvedBuf[nextIdx:]
-	if len(c.resolvedBuf) > 0 {
-		return EncoderNeedAsyncWrite, nil
-	}
-	return EncoderNoOperation, nil
+	c.messageBuf = append(c.messageBuf, message)
+	return nil
 }
 
 // EncodeDDLEvent encodes DDL events
@@ -356,11 +336,11 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 
 // Build implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
-	if len(c.resolvedBuf) == 0 {
+	if len(c.messageBuf) == 0 {
 		return nil
 	}
-	ret := make([]*MQMessage, len(c.resolvedBuf))
-	for i, msg := range c.resolvedBuf {
+	ret := make([]*MQMessage, len(c.messageBuf))
+	for i, msg := range c.messageBuf {
 		value, err := json.Marshal(msg)
 		if err != nil {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
@@ -370,13 +350,8 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 		m.IncRowsCount()
 		ret[i] = m
 	}
-	c.resolvedBuf = c.resolvedBuf[0:0]
+	c.messageBuf = make([]canalFlatMessageInterface, 0)
 	return ret
-}
-
-// MixedBuild is not used here
-func (c *CanalFlatEventBatchEncoder) MixedBuild(_ bool) []byte {
-	panic("MixedBuild not supported by CanalFlatEventBatchEncoder")
 }
 
 // Size implements the EventBatchEncoder interface
@@ -384,11 +359,7 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
 }
 
-// Reset is only supported by JSONEventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) Reset() {
-	panic("not supported")
-}
-
+// SetParams sets the encoding parameters for the canal flat protocol.
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	if s, ok := params["enable-tidb-extension"]; ok {
 		a, err := strconv.ParseBool(s)
@@ -407,7 +378,7 @@ type CanalFlatEventBatchDecoder struct {
 	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+func newCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,
@@ -525,7 +496,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
+		col := newColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {

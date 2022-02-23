@@ -2651,74 +2651,74 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	)
 
 	// check create table statement
-	schemaChanged, conflictStage := l.TrySyncForOneDDL(source, schema, table1, t0, t0)
+	schemaChanged, conflictStage := l.trySyncForOneDDL(source, schema, table1, t0, t0)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check alter table add column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t0, t1)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t0, t1)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check alter table drop column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t0, t2)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t0, t2)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check table rename column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t1, t3)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t1, t3)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
 
 	// check other table add column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t2, t4)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t2, t4)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check all table rename column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t4, t5)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t4, t5)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictResolved)
+	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check one table modify column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t5, t6)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t5, t6)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
 
 	// check other table drop column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t3, t7)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t3, t7)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check all table modify column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t7, t6)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t7, t6)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictResolved)
+	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check add column not null no default
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t6, t8)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
 	// check idempotent.
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t6, t8)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
 
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t6, t8)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictResolved)
+	c.Assert(conflictStage, Equals, ConflictNone)
 	// check idempotent.
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t6, t8)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
-	c.Assert(conflictStage, Equals, ConflictResolved)
+	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check multiple conflict DDL
 	// tb1 rename column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table1, t8, t9)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t8, t9)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
 	// tb2 modify column
-	schemaChanged, conflictStage = l.TrySyncForOneDDL(source, schema, table2, t8, t10)
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t8, t10)
 	c.Assert(schemaChanged, IsFalse)
 	c.Assert(conflictStage, Equals, ConflictDetected)
 }
