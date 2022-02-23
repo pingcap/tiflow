@@ -1327,7 +1327,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep"), IsNil)
 
 	// now: (worker1, source1) (worker2, source2) (worker3, source3) (worker4, free)
-	// test transfer source to a free worker, only worker1 is free
+	// test transfer source to a free worker, only worker4 is free
 	c.Assert(s.TransferSource(ctx, sourceID1, ""), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 }
