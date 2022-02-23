@@ -263,6 +263,9 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
+	k.metricsMonitor.Cleanup()
+
+	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
 		log.Warn("close kafka cluster admin with error", zap.Error(err),
@@ -273,7 +276,6 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
 	return nil
 }
 
@@ -319,8 +321,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var (
-	newSaramaConfigImpl                                 = newSaramaConfig
-	NewAdminClientImpl  kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+	newSaramaConfigImpl = newSaramaConfig
+	// NewAdminClientImpl specifies the build method for the admin client.
+	NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
@@ -385,7 +388,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		id:   changefeedID,
 		role: role,
 
-		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+		metricsMonitor: newSaramaMetricsMonitor(cfg.MetricRegistry,
 			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {
