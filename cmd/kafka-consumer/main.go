@@ -443,14 +443,6 @@ ClaimMessages:
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
-<<<<<<< HEAD
-=======
-				log.Info("Emit RowChangedEvent", zap.Any("row", row))
-				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
-				if !ok || lastCommitTs.(uint64) < row.CommitTs {
-					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
-				}
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598))
 			case model.MqMessageTypeResolved:
 				ts, err := batchDecoder.NextResolvedEvent()
 				if err != nil {
