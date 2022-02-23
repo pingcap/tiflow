@@ -18,9 +18,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/producer"
+	"go.uber.org/zap"
 )
 
 const (
@@ -123,6 +125,7 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 				return err
 			}
 		}
+
 		err := w.statistics.RecordBatchExecution(func() (int, error) {
 			thisBatchSize := 0
 			for _, message := range w.encoder.Build() {
@@ -132,6 +135,7 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 				}
 				thisBatchSize += message.GetRowsCount()
 			}
+			log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
 			return thisBatchSize, nil
 		})
 		if err != nil {
