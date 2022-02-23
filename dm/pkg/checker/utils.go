@@ -120,11 +120,6 @@ func (v MySQLVersion) String() string {
 	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
 }
 
-// IsMariaDB tells whether the version is mariadb.
-func IsMariaDB(version string) bool {
-	return strings.Contains(strings.ToUpper(version), "MARIADB")
-}
-
 // IsTiDBFromVersion tells whether the version is tidb.
 func IsTiDBFromVersion(version string) bool {
 	return strings.Contains(strings.ToUpper(version), "TIDB")

@@ -42,13 +42,17 @@ type actorNodeContext struct {
 	tickMessageThreshold int32
 	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
 	noTickMessageCount int32
+	tableName          string
+	throw              func(error)
 }
 
-func NewContext(stdCtx sdtContext.Context,
+func newContext(stdCtx sdtContext.Context,
+	tableName string,
 	tableActorRouter *actor.Router,
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
-	globalVars *context.GlobalVars) *actorNodeContext {
+	globalVars *context.GlobalVars,
+	throw func(error)) *actorNodeContext {
 	return &actorNodeContext{
 		Context:              stdCtx,
 		outputCh:             make(chan pipeline.Message, defaultOutputChannelSize),
@@ -58,6 +62,8 @@ func NewContext(stdCtx sdtContext.Context,
 		globalVars:           globalVars,
 		tickMessageThreshold: messagesPerTick,
 		noTickMessageCount:   0,
+		tableName:            tableName,
+		throw:                throw,
 	}
 }
 
@@ -74,18 +80,23 @@ func (c *actorNodeContext) ChangefeedVars() *context.ChangefeedVars {
 }
 
 func (c *actorNodeContext) Throw(err error) {
-	if err == nil {
-		return
-	}
-	log.Error("puller stopped", zap.Error(err))
-	_ = c.tableActorRouter.SendB(c, c.tableActorID, message.StopMessage())
+	// node error will be reported to processor, and then processor cancel table
+	c.throw(err)
 }
 
 // SendToNextNode send msg to the outputCh and notify the actor system,
 // to reduce the  actor message, only send tick message per threshold
 func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
-	c.outputCh <- msg
-	c.trySendTickMessage()
+	select {
+	// if the processor context is cancelled, return directly
+	// otherwise processor tick loop will be blocked if the chan is full， because actor is topped
+	case <-c.Context.Done():
+		log.Info("context is canceled",
+			zap.String("tableName", c.tableName),
+			zap.String("changefeed", c.changefeedVars.ID))
+	case c.outputCh <- msg:
+		c.trySendTickMessage()
+	}
 }
 
 func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {

@@ -262,6 +262,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 	writeData(w, resp)
 }
 
+// HandleAdminLogLevel handles requests to set the log level.
 func HandleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	var level string
 	data, err := io.ReadAll(r.Body)

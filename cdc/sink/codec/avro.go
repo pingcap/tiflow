@@ -87,20 +87,20 @@ func (a *AvroEventBatchEncoder) SetTimeZone(tz *time.Location) {
 
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
-func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	mqMessage := NewMQMessage(config.ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 
 	if !e.IsDelete() {
 		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, a.tz)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
-			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+			return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
 		}
 
 		evlp, err := res.toEnvelope()
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
-			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+			return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 		}
 
 		mqMessage.Value = evlp
@@ -113,20 +113,20 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols, a.tz)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
-		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
 	}
 
 	evlp, err := res.toEnvelope()
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
-		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+		return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 	}
 
 	mqMessage.Key = evlp
 	mqMessage.IncRowsCount()
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
-	return EncoderNeedAsyncWrite, nil
+	return nil
 }
 
 // EncodeCheckpointEvent is no-op for now
@@ -144,16 +144,6 @@ func (a *AvroEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	old := a.resultBuf
 	a.resultBuf = nil
 	return old
-}
-
-// MixedBuild implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Mixed Build only use for JsonEncoder")
-}
-
-// Reset implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) Reset() {
-	panic("Reset only used for JsonEncoder")
 }
 
 // Size is the current size of resultBuf
