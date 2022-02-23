@@ -135,7 +135,7 @@ func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
 	return workload
 }
 
-// Status returns the status of this table pipeline
+// Status returns the status of this table pipeline, sinkNode maintains the table status
 func (t *tablePipelineImpl) Status() TableStatus {
 	return t.sinkNode.Status()
 }

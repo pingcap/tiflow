@@ -16,6 +16,8 @@ package checker
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
@@ -42,7 +44,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	result := checker.Check(ctx)
@@ -56,7 +57,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	mock = initShardingMock(mock)
@@ -80,7 +80,6 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 			{Schema: "test-db", Name: "test-table-1"},
 			{Schema: "test-db", Name: "test-table-2"},
 		}},
-		nil,
 		false,
 		1)
 	mock = initShardingMock(mock)
@@ -175,6 +174,125 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+}
+
+func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, tc.IsNil)
+	ctx := context.Background()
+
+	printJSON := func(r *Result) {
+		rawResult, _ := json.MarshalIndent(r, "", "\t")
+		fmt.Println("\n" + string(rawResult))
+	}
+
+	cases := []struct {
+		createTable1SQL string
+		createTable2SQL string
+		expectState     State
+		errLen          int
+	}{
+		// optimistic check different column number
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL,
+				"d" int(11) NOT NULL,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateSuccess,
+		},
+		// optimistic check auto_increment conflict
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL AUTO_INCREMENT,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL AUTO_INCREMENT,
+				"d" int(11) NOT NULL,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateSuccess,
+		},
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL AUTO_INCREMENT,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL,
+				"d" int(11) NOT NULL,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateSuccess,
+		},
+		// must set auto_increment with key
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL AUTO_INCREMENT
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL,
+				"d" int(11) NOT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateFailure,
+			errLen:      1,
+		},
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL AUTO_INCREMENT,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL,
+				"d" int(11) NOT NULL
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateFailure,
+			errLen:      1,
+		},
+		// different auto_increment
+		{
+			createTable1SQL: `CREATE TABLE "test-table-1" (
+				"c" int(11) NOT NULL AUTO_INCREMENT,
+				PRIMARY KEY ("c")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			createTable2SQL: `CREATE TABLE "test-table-2" (
+				"c" int(11) NOT NULL,
+				"d" int(11) NOT NULL AUTO_INCREMENT,
+				PRIMARY KEY ("d")
+				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
+			expectState: StateFailure,
+			errLen:      1,
+		},
+	}
+
+	for _, cs := range cases {
+		maxConnecionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "2")
+		mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnecionsRow)
+		sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", "ANSI_QUOTES")
+		mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+		createTableRow1 := sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("test-table-1", cs.createTable1SQL)
+		mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow1)
+		createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("test-table-2", cs.createTable2SQL)
+		mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+		checker := NewOptimisticShardingTablesChecker(
+			"test-name",
+			map[string]*sql.DB{"test-source": db},
+			map[string][]*filter.Table{"test-source": {
+				&filter.Table{Schema: "test-db", Name: "test-table-1"},
+				&filter.Table{Schema: "test-db", Name: "test-table-2"},
+			}},
+			0)
+		result := checker.Check(ctx)
+		printJSON(result)
+		c.Assert(result.State, tc.Equals, cs.expectState)
+		c.Assert(len(result.Errors), tc.Equals, cs.errLen)
+		c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+	}
 }
 
 func initShardingMock(mock sqlmock.Sqlmock) sqlmock.Sqlmock {

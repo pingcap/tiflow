@@ -99,17 +99,18 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 
 func (n *sinkNode) ResolvedTs() model.Ts   { return atomic.LoadUint64(&n.resolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts { return atomic.LoadUint64(&n.checkpointTs) }
+func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
 func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
-	return n.InitWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	return nil
 }
 
-func (n *sinkNode) InitWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) error {
-	n.replicaConfig = replicaConfig
+func (n *sinkNode) initWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) {
 	n.isTableActorMode = isTableActorMode
-	return nil
+	n.replicaConfig = replicaConfig
 }
 
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.
@@ -351,15 +352,26 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			}
 		}
 	case pipeline.MessageTypeBarrier:
-		n.barrierTs = msg.BarrierTs
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		if err := n.updateBarrierTs(ctx, msg.BarrierTs); err != nil {
 			return false, errors.Trace(err)
 		}
 	}
 	return true, nil
 }
 
+func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
+	atomic.StoreUint64(&n.barrierTs, ts)
+	if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
+	return n.releaseResource(ctx)
+}
+
+func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)

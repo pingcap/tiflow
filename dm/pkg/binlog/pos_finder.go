@@ -30,6 +30,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
+// FakeBinlogName is used to bypass the checking of meta in task config when start-task with --start-time.
+const FakeBinlogName = "start-task with --start-time"
+
 type binlogPosFinder struct {
 	remote     bool
 	tctx       *tcontext.Context

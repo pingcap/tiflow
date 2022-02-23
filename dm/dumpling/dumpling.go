@@ -175,6 +175,12 @@ func (m *Dumpling) Close() {
 	m.closed.Store(true)
 }
 
+// Kill implements Unit.Kill.
+func (m *Dumpling) Kill() {
+	// TODO: implement kill
+	m.Close()
+}
+
 // Pause implements Unit.Pause.
 func (m *Dumpling) Pause() {
 	if m.closed.Load() {

@@ -25,11 +25,11 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -426,7 +426,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if _, err := filter.New(c.CaseSensitive, c.BAList); err != nil {
 		return terror.ErrConfigGenBAList.Delegate(err)
 	}
-	if _, err := router.NewTableRouter(c.CaseSensitive, c.RouteRules); err != nil {
+	if _, err := router.NewRouter(c.CaseSensitive, c.RouteRules); err != nil {
 		return terror.ErrConfigGenTableRouter.Delegate(err)
 	}
 	// NewMapping will fill arguments with the default values.

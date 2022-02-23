@@ -72,3 +72,6 @@ issues:
         - errcheck
         - gosec
         - makezero
+  include:
+    - EXC0012 # exported (.+) should have comment( \(or a comment on this block\))? or be unexported)
+    - EXC0014 # comment on exported (.+) should be of the form "(.+)..."

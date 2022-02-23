@@ -73,6 +73,16 @@ func (h *subTaskHolder) closeAllSubTasks() {
 	h.subTasks = make(map[string]*SubTask)
 }
 
+// killAllSubTasks kill and stop all subtask instances.
+func (h *subTaskHolder) killAllSubTasks() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, st := range h.subTasks {
+		st.Kill()
+	}
+	h.subTasks = make(map[string]*SubTask)
+}
+
 // findSubTask finds subtask instance by name.
 func (h *subTaskHolder) findSubTask(name string) *SubTask {
 	h.mu.RLock()
