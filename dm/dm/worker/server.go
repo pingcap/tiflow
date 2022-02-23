@@ -146,7 +146,7 @@ func (s *Server) Start() error {
 		s.observeRelayConfig(ctx, revRelay)
 	}(s.ctx)
 
-	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
+	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name, "")
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					bound, cfg, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
+					bound, cfg, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name, "")
 					if err1 != nil {
 						log.L().Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++

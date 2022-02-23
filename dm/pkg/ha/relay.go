@@ -73,16 +73,15 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 
 	ret := map[string]map[string]struct{}{}
 	for _, kv := range resp.Kvs {
-		source := string(kv.Value)
 		keys, err2 := common.UpstreamRelayWorkerKeyAdapter.Decode(string(kv.Key))
 		if err2 != nil {
 			return nil, 0, err2
 		}
-		if len(keys) != 1 {
+		if len(keys) != 2 {
 			// should not happened
-			return nil, 0, terror.Annotate(err, "illegal key of UpstreamRelayWorkerKeyAdapter")
+			return nil, 0, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
 		}
-		worker := keys[0]
+		worker, source := keys[0], keys[1]
 		var (
 			ok      bool
 			workers map[string]struct{}
@@ -114,10 +113,18 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 		if resp.Count > 1 {
 			return "", resp.Header.Revision, terror.ErrConfigMoreThanOne.Generate(resp.Count, "relay relationship", "worker: "+worker)
 		}
-		return string(resp.Kvs[0].Value), resp.Header.Revision, nil
+		keys, err2 := common.UpstreamRelayWorkerKeyAdapter.Decode(string(resp.Kvs[0].Key))
+		if err2 != nil {
+			return "", resp.Header.Revision, err2
+		}
+		if len(keys) != 2 {
+			// should not happened
+			return "", resp.Header.Revision, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
+		}
+		return keys[1], resp.Header.Revision, nil
 	}
 
-	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker))
+	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -128,7 +135,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
 		txnResp, _, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli,
-			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
+			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source)))
 		if err2 != nil {
 			return nil, 0, err
@@ -184,12 +191,12 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 // putRelayConfigOp returns PUT etcd operations for the relay relationship of the specified DM-worker.
 // k/v: worker-name -> source-id.
 func putRelayConfigOp(worker, source string) clientv3.Op {
-	return clientv3.OpPut(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), source)
+	return clientv3.OpPut(common.UpstreamRelayWorkerKeyAdapter.Encode(worker, source), source)
 }
 
 // deleteRelayConfigOp returns a DELETE etcd operation for the relay relationship of the specified DM-worker.
 func deleteRelayConfigOp(worker string) clientv3.Op {
-	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker))
+	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
 }
 
 // WatchRelayConfig watches PUT & DELETE operations for the relay relationship of the specified DM-worker.
@@ -198,7 +205,7 @@ func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
 	worker string, revision int64, outCh chan<- RelaySource, errCh chan<- error) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ch := cli.Watch(wCtx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithRev(revision))
+	ch := cli.Watch(wCtx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithRev(revision), clientv3.WithPrefix())
 
 	for {
 		select {

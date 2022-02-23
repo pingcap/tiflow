@@ -98,7 +98,7 @@ func GetAllWorkerInfo(cli *clientv3.Client) (map[string]WorkerInfo, int64, error
 func DeleteWorkerInfoRelayConfig(cli *clientv3.Client, worker string) (int64, error) {
 	ops := []clientv3.Op{
 		clientv3.OpDelete(common.WorkerRegisterKeyAdapter.Encode(worker)),
-		clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
+		clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err

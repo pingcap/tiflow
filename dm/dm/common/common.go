@@ -42,15 +42,15 @@ var (
 	// k/v: Encode(source-id) -> config.
 	UpstreamConfigKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/v2/upstream/config/")
 	// UpstreamBoundWorkerKeyAdapter is used to store address of worker in which MySQL-tasks which are running.
-	// k/v: Encode(worker-name) -> the bound relationship.
-	UpstreamBoundWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/bound-worker/")
+	// k/v: Encode(worker-name, source-id) -> the bound relationship.
+	UpstreamBoundWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/v2/bound-worker/")
 	// UpstreamLastBoundWorkerKeyAdapter is used to store address of worker in which MySQL-tasks which are running.
 	// different with UpstreamBoundWorkerKeyAdapter, this kv should not be deleted when unbound, to provide a priority
-	// k/v: Encode(worker-name) -> the bound relationship.
-	UpstreamLastBoundWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/last-bound-worker/")
+	// k/v: Encode(worker-name, source-id) -> the bound relationship.
+	UpstreamLastBoundWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/v2/last-bound-worker/")
 	// UpstreamRelayWorkerKeyAdapter is used to store the upstream which this worker needs to pull relay log
-	// k/v: Encode(worker-name) -> source-id.
-	UpstreamRelayWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/relay-worker/")
+	// k/v: Encode(worker-name, source-id) -> source-id.
+	UpstreamRelayWorkerKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/v2/relay-worker/")
 	// UpstreamSubTaskKeyAdapter is used to store SubTask which are subscribing data from MySQL source.
 	// k/v: Encode(source-id, task-name) -> SubTaskConfig.
 	UpstreamSubTaskKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/upstream/subtask/")
@@ -111,13 +111,14 @@ var (
 
 func keyAdapterKeysLen(s KeyAdapter) int {
 	switch s {
-	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter, UpstreamBoundWorkerKeyAdapter,
+	case WorkerRegisterKeyAdapter, UpstreamConfigKeyAdapter,
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
-		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskTemplateKeyAdapter:
+		OpenAPITaskTemplateKeyAdapter:
 		return 1
 	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter, StageValidatorKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,
-		ShardDDLOptimismSourceTablesKeyAdapter, LoadTaskKeyAdapter, TaskCliArgsKeyAdapter:
+		ShardDDLOptimismSourceTablesKeyAdapter, LoadTaskKeyAdapter, TaskCliArgsKeyAdapter,
+		UpstreamBoundWorkerKeyAdapter, UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter:
 		return 2
 	case ShardDDLOptimismInfoKeyAdapter, ShardDDLOptimismOperationKeyAdapter:
 		return 4
@@ -215,6 +216,19 @@ var (
 	// StageRelayKeyAdapterV1 is used to store the running stage of the relay.
 	// k/v: Encode(source-id) -> the running stage of the relay.
 	StageRelayKeyAdapterV1 KeyAdapter = keyEncoderDecoder("/dm-master/stage/relay/")
+	// TODO: support rolling upgrade from lower versions for UpstreamBoundWorkerKeyAdapterV1, UpstreamLastBoundWorkerKeyAdapterV1, UpstreamRelayWorkerKeyAdapterV1
+	// we should also avoid tasks conflict writing during upgrade
+
+	// UpstreamBoundWorkerKeyAdapterV1 is used to store address of worker in which MySQL-tasks which are running.
+	// k/v: Encode(worker-name) -> the bound relationship.
+	UpstreamBoundWorkerKeyAdapterV1 KeyAdapter = keyHexEncoderDecoder("/dm-master/bound-worker/")
+	// UpstreamLastBoundWorkerKeyAdapterV1 is used to store address of worker in which MySQL-tasks which are running.
+	// different with UpstreamBoundWorkerKeyAdapter, this kv should not be deleted when unbound, to provide a priority
+	// k/v: Encode(worker-name) -> the bound relationship.
+	UpstreamLastBoundWorkerKeyAdapterV1 KeyAdapter = keyHexEncoderDecoder("/dm-master/last-bound-worker/")
+	// UpstreamRelayWorkerKeyAdapterV1 is used to store the upstream which this worker needs to pull relay log
+	// k/v: Encode(worker-name) -> source-id.
+	UpstreamRelayWorkerKeyAdapterV1 KeyAdapter = keyHexEncoderDecoder("/dm-master/relay-worker/")
 )
 
 // NoSubTaskMsg returns a formatted string for subtask not started.

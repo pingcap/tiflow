@@ -144,7 +144,7 @@ type Scheduler struct {
 	unbounds map[string]struct{}
 
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
-	lastBound map[string]ha.SourceBound
+	lastBound map[string]map[string]ha.SourceBound
 
 	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
@@ -202,7 +202,7 @@ func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
 		workers:           make(map[string]*Worker),
 		bounds:            make(map[string]*Worker),
 		unbounds:          make(map[string]struct{}),
-		lastBound:         make(map[string]ha.SourceBound),
+		lastBound:         make(map[string]map[string]ha.SourceBound),
 		expectRelayStages: make(map[string]ha.Stage),
 		relayWorkers:      make(map[string]map[string]struct{}),
 		loadTasks:         make(map[string]map[string]string),
@@ -1786,7 +1786,7 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 	// 2. get all history bound relationships.
 	// it should no new bound relationship added between this call and the below `GetKeepAliveWorkers`,
 	// because no DM-master leader are doing the scheduler.
-	sbm, _, err := ha.GetSourceBound(s.etcdCli, "")
+	sbm, _, err := ha.GetSourceBound(s.etcdCli, "", "")
 	if err != nil {
 		return 0, err
 	}
@@ -1830,7 +1830,8 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 			}
 
 			// set the stage as Bound and record the bound relationship if exists.
-			if bound, ok := sbm[name]; ok {
+			if boundMap, ok := sbm[name]; ok {
+				bound := ha.GetSourceBoundFromMap(boundMap)
 				// source bounds without source configuration should be deleted later
 				if _, ok := scm[bound.Source]; ok {
 					err2 = s.updateStatusToBound(w, bound)
@@ -2123,7 +2124,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	// check if last bound is still available.
 	// NOTE: if worker isn't in lastBound, we'll get "zero" SourceBound and it's OK, because "zero" string is not in
 	// unbounds
-	source := s.lastBound[w.baseInfo.Name].Source
+	source := ha.GetSourceBoundFromMap(s.lastBound[w.baseInfo.Name]).Source
 	if _, ok := s.unbounds[source]; !ok {
 		source = ""
 	}
@@ -2204,7 +2205,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	relayWorkers := s.relayWorkers[source]
 	// 1. try to find a history worker in relay workers...
 	if len(relayWorkers) > 0 {
-		for workerName, bound := range s.lastBound {
+		for workerName, boundMap := range s.lastBound {
+			bound := ha.GetSourceBoundFromMap(boundMap)
 			if bound.Source == source {
 				w, ok := s.workers[workerName]
 				if !ok {
@@ -2243,7 +2245,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	}
 	// then a history worker for this source...
 	if worker == nil {
-		for workerName, bound := range s.lastBound {
+		for workerName, boundMap := range s.lastBound {
+			bound := ha.GetSourceBoundFromMap(boundMap)
 			if bound.Source == source {
 				w, ok := s.workers[workerName]
 				if !ok {
@@ -2352,7 +2355,10 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 		return err
 	}
 	s.bounds[b.Source] = w
-	s.lastBound[b.Worker] = b
+	if _, ok := s.lastBound[b.Worker]; !ok {
+		s.lastBound[b.Worker] = make(map[string]ha.SourceBound)
+	}
+	s.lastBound[b.Worker][b.Source] = b
 	delete(s.unbounds, b.Source)
 	return nil
 }

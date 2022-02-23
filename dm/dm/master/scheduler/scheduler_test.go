@@ -673,10 +673,11 @@ func (t *testScheduler) workerOffline(c *C, s *Scheduler, worker string) {
 	c.Assert(err, IsNil)
 	_, ok := wm[worker]
 	c.Assert(ok, IsTrue)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker)
+	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	_, ok = sbm[worker]
-	c.Assert(ok, IsFalse)
+	c.Assert(ok, IsTrue)
+	c.Assert(sbm[worker], HasLen, 0)
 }
 
 func (t *testScheduler) workerFree(c *C, s *Scheduler, worker string) {
@@ -688,10 +689,11 @@ func (t *testScheduler) workerFree(c *C, s *Scheduler, worker string) {
 	c.Assert(err, IsNil)
 	_, ok := wm[worker]
 	c.Assert(ok, IsTrue)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker)
+	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	_, ok = sbm[worker]
-	c.Assert(ok, IsFalse)
+	c.Assert(ok, IsTrue)
+	c.Assert(sbm[worker], HasLen, 0)
 }
 
 func (t *testScheduler) workerBound(c *C, s *Scheduler, bound ha.SourceBound) {
@@ -703,22 +705,23 @@ func (t *testScheduler) workerBound(c *C, s *Scheduler, bound ha.SourceBound) {
 	c.Assert(err, IsNil)
 	_, ok := wm[bound.Worker]
 	c.Assert(ok, IsTrue)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, bound.Worker)
+	sbm, _, err := ha.GetSourceBound(etcdTestCli, bound.Worker, bound.Source)
 	c.Assert(err, IsNil)
-	boundDeepEqualExcludeRev(c, sbm[bound.Worker], bound)
+	boundDeepEqualExcludeRev(c, sbm[bound.Worker][bound.Source], bound)
 }
 
 func (t *testScheduler) sourceBounds(c *C, s *Scheduler, expectBounds, expectUnbounds []string) {
 	c.Assert(s.BoundSources(), DeepEquals, expectBounds)
 	c.Assert(s.UnboundSources(), DeepEquals, expectUnbounds)
 
-	wToB, _, err := ha.GetSourceBound(etcdTestCli, "")
+	wToB, _, err := ha.GetSourceBound(etcdTestCli, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(wToB, HasLen, len(expectBounds))
 
 	sToB := make(map[string]ha.SourceBound, len(wToB))
 	for _, b := range wToB {
-		sToB[b.Source] = b
+		bd := ha.GetSourceBoundFromMap(b)
+		sToB[bd.Source] = bd
 	}
 	for _, source := range expectBounds {
 		c.Assert(sToB[source], NotNil)
@@ -823,7 +826,7 @@ func (t *testScheduler) TestRestartScheduler(c *C) {
 	t.workerExist(c, s, workerInfo1)
 	// step 2: start a worker
 	// step 2.1: worker start watching source bound
-	bsm, revBound, err := ha.GetSourceBound(etcdTestCli, workerName1)
+	bsm, revBound, err := ha.GetSourceBound(etcdTestCli, workerName1, "")
 	c.Assert(err, IsNil)
 	c.Assert(bsm, HasLen, 0)
 	sourceBoundCh := make(chan ha.SourceBound, 10)
@@ -1128,8 +1131,8 @@ func (t *testScheduler) TestLastBound(c *C) {
 	s.sourceCfgs[sourceID1] = sourceCfg1
 	s.sourceCfgs[sourceID2] = sourceCfg2
 
-	s.lastBound[workerName1] = ha.SourceBound{Source: sourceID1}
-	s.lastBound[workerName2] = ha.SourceBound{Source: sourceID2}
+	s.lastBound[workerName1] = map[string]ha.SourceBound{sourceID1: {Source: sourceID1}}
+	s.lastBound[workerName2] = map[string]ha.SourceBound{sourceID2: {Source: sourceID2}}
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
@@ -1194,7 +1197,7 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 	s.workers[workerName1] = worker1
 	// sourceID2 doesn't have a source config and not in unbound
 	s.sourceCfgs[sourceID1] = sourceCfg1
-	s.lastBound[workerName1] = ha.SourceBound{Source: sourceID2}
+	s.lastBound[workerName1] = map[string]ha.SourceBound{sourceID2: {Source: sourceID2}}
 	s.unbounds[sourceID1] = struct{}{}
 	// step2: worker1 doesn't go to last bounded source, because last source doesn't have a source config (might be removed)
 	worker1.ToFree()
@@ -1623,7 +1626,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	c.Assert(bounded, IsTrue)
 
 	s.started.Store(false)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, "")
+	sbm, _, err := ha.GetSourceBound(etcdTestCli, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(sbm, HasLen, 2)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -1636,7 +1639,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	// there isn't any source config in etcd
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
 	c.Assert(s.bounds, HasLen, 0)
-	sbm, _, err = ha.GetSourceBound(etcdTestCli, "")
+	sbm, _, err = ha.GetSourceBound(etcdTestCli, "", "")
 	c.Assert(err, IsNil)
 	c.Assert(sbm, HasLen, 0)
 	cancel()
