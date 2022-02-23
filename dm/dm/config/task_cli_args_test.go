@@ -36,7 +36,7 @@ func (t *testConfig) TestTaskCliArgsDowngrade(c *C) {
 	}
 	data := s.ToJSON()
 
-	expected := `{"start_time":"123","safe_mode_duration":"1s","wait_time_on_stop_duration":"1s","future_field":"456"}`
+	expected := `{"start_time":"123","safe_mode_duration":"1s","wait_time_on_stop":"1s","future_field":"456"}`
 	c.Assert(data, Equals, expected)
 
 	afterDowngrade := &TaskCliArgs{}
@@ -59,8 +59,8 @@ func (t *testConfig) TestTaskCliArgsVerify(c *C) {
 	wrongSafeModeDuration := TaskCliArgs{SafeModeDuration: "1"}
 	c.Assert(wrongSafeModeDuration.Verify(), NotNil)
 
-	rightWaitTimeOnStopDuration := TaskCliArgs{WaitTimeOnStopDuration: "1s"}
-	c.Assert(rightWaitTimeOnStopDuration.Verify(), IsNil)
-	wrongWaitTimeOnStopDuration := TaskCliArgs{WaitTimeOnStopDuration: "1"}
-	c.Assert(wrongWaitTimeOnStopDuration.Verify(), NotNil)
+	rightWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1s"}
+	c.Assert(rightWaitTimeOnStop.Verify(), IsNil)
+	wrongWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1"}
+	c.Assert(wrongWaitTimeOnStop.Verify(), NotNil)
 }

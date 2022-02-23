@@ -1812,7 +1812,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 
 	// test use cliArgs
 	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime", "return()"))
-	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStopDuration: "2s"}
+	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStop: "2s"}
 	ctx3, cancel := context.WithCancel(context.Background())
 	cancel()
 	runCtx, runCancel = context.WithCancel(context.Background())

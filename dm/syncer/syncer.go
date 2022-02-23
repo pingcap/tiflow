@@ -1481,8 +1481,8 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.refreshCliArgs()
 
 		waitDuration := defaultMaxPauseOrStopWaitTime
-		if s.cliArgs != nil && s.cliArgs.WaitTimeOnStopDuration != "" {
-			waitDuration, _ = time.ParseDuration(s.cliArgs.WaitTimeOnStopDuration)
+		if s.cliArgs != nil && s.cliArgs.WaitTimeOnStop != "" {
+			waitDuration, _ = time.ParseDuration(s.cliArgs.WaitTimeOnStop)
 		}
 		prepareForWaitTime := time.Since(needToExitTime)
 		failpoint.Inject("recordAndIgnorePrepareTime", func() {
