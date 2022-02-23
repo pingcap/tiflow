@@ -2593,7 +2593,7 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
 		resp2       *pb.StartValidationResponse
-		err2        error
+		err2, err   error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2627,6 +2627,20 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
 	// if the validator stage is `RUNNING`: then report error
 	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+	for taskName := range subTaskCfgs {
+		for _, cfg := range subTaskCfgs[taskName] {
+			cfg.ValidatorCfg.Mode = req.Mode
+		}
+	}
+	err = s.scheduler.OperateValidationTask(pb.Stage_Running, subTaskCfgs)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	resp.Result = true
+	resp.Msg = "succeed to start validation!"
 	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
