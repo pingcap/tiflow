@@ -268,7 +268,7 @@ func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {
 				PRIMARY KEY ("d")
 				) ENGINE=InnoDB DEFAULT CHARSET=latin1`,
 			expectState: StateFailure,
-			errLen:      3, // 3 auto_increment warning
+			errLen:      3, // 2 auto_increment warning
 		},
 	}
 
