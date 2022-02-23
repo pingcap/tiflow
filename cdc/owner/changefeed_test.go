@@ -15,6 +15,9 @@ package owner
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -62,22 +65,32 @@ func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
 	return nil
 }
 
-type mockAsyncSink struct {
-	// AsyncSink
+type mockDDLSink struct {
+	// DDLSink
 	ddlExecuting *model.DDLEvent
 	ddlDone      bool
 	checkpointTs model.Ts
 	syncPoint    model.Ts
 	syncPointHis []model.Ts
+
+	wg sync.WaitGroup
 }
 
-func (m *mockAsyncSink) EmitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
+func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
+	m.wg.Add(1)
+	go func() {
+		<-ctx.Done()
+		m.wg.Done()
+	}()
+}
+
+func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
 	defer func() { m.ddlDone = false }()
 	return m.ddlDone, nil
 }
 
-func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint64) error {
+func (m *mockDDLSink) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
 	if checkpointTs == m.syncPoint {
 		return nil
 	}
@@ -86,19 +99,16 @@ func (m *mockAsyncSink) SinkSyncpoint(ctx cdcContext.Context, checkpointTs uint6
 	return nil
 }
 
-func (m *mockAsyncSink) Initialize(ctx cdcContext.Context, tableInfo []*model.SimpleTableInfo) error {
-	return nil
-}
-
-func (m *mockAsyncSink) EmitCheckpointTs(ctx cdcContext.Context, ts uint64) {
+func (m *mockDDLSink) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 }
 
-func (m *mockAsyncSink) Close(ctx context.Context) error {
+func (m *mockDDLSink) close(ctx context.Context) error {
+	m.wg.Wait()
 	return nil
 }
 
-func (m *mockAsyncSink) Barrier(ctx context.Context) error {
+func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
@@ -116,8 +126,8 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *or
 	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func() DDLSink {
+		return &mockDDLSink{}
 	})
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
@@ -248,7 +258,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	// ddl puller resolved ts grow uo
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
-	mockAsyncSink := cf.sink.(*mockAsyncSink)
+	mockDDLSink := cf.sink.(*mockDDLSink)
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barriers set in initialize is handled
@@ -258,7 +268,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	c.Assert(cf.schema.AllPhysicalTables(), check.HasLen, 0)
 
 	// executing the ddl finished
-	mockAsyncSink.ddlDone = true
+	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
@@ -270,10 +280,10 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE DATABASE `test1`")
+	c.Assert(mockDDLSink.ddlExecuting.Query, check.Equals, "CREATE DATABASE `test1`")
 
 	// executing the ddl finished
-	mockAsyncSink.ddlDone = true
+	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
@@ -285,10 +295,10 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
 	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockAsyncSink.ddlExecuting.Query, check.Equals, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
+	c.Assert(mockDDLSink.ddlExecuting.Query, check.Equals, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
 
 	// executing the ddl finished
-	mockAsyncSink.ddlDone = true
+	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
 	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, check.HasKey, job.TableID)
@@ -311,7 +321,7 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	tester.MustApplyPatches()
 
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
-	mockAsyncSink := cf.sink.(*mockAsyncSink)
+	mockDDLSink := cf.sink.(*mockDDLSink)
 	// add 5s to resolvedTs
 	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 	// tick 20 times
@@ -319,11 +329,11 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
 	}
-	for i := 1; i < len(mockAsyncSink.syncPointHis); i++ {
+	for i := 1; i < len(mockDDLSink.syncPointHis); i++ {
 		// check the time interval between adjacent sync points is less or equal than one second
-		c.Assert(mockAsyncSink.syncPointHis[i]-mockAsyncSink.syncPointHis[i-1], check.LessEqual, uint64(1000<<18))
+		c.Assert(mockDDLSink.syncPointHis[i]-mockDDLSink.syncPointHis[i-1], check.LessEqual, uint64(1000<<18))
 	}
-	c.Assert(len(mockAsyncSink.syncPointHis), check.GreaterEqual, 5)
+	c.Assert(len(mockDDLSink.syncPointHis), check.GreaterEqual, 5)
 }
 
 func (s *changefeedSuite) TestFinished(c *check.C) {
@@ -492,4 +502,73 @@ func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
 	c.Assert(func() {
 		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
 	}, check.Panics, "invalid ddlQuery statement size")
+}
+
+func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx := cdcContext.NewContext4Test(baseCtx, true)
+	info := ctx.ChangefeedVars().Info
+	dir := c.MkDir()
+	info.Config.Consistent = &config.ConsistentConfig{
+		Level:   "eventual",
+		Storage: filepath.Join("nfs://", dir),
+	}
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   ctx.ChangefeedVars().ID,
+		Info: info,
+	})
+	testChangefeedReleaseResource(c, ctx, cancel, dir, true /*expectedInitialized*/)
+}
+
+func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx := cdcContext.NewContext4Test(baseCtx, true)
+	info := ctx.ChangefeedVars().Info
+	info.State = model.StateStopped
+	dir := c.MkDir()
+	info.Config.Consistent = &config.ConsistentConfig{
+		Level:   "eventual",
+		Storage: filepath.Join("nfs://", dir),
+	}
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   ctx.ChangefeedVars().ID,
+		Info: info,
+	})
+	testChangefeedReleaseResource(c, ctx, cancel, dir, false /*expectedInitialized*/)
+}
+
+func testChangefeedReleaseResource(
+	c *check.C,
+	ctx cdcContext.Context,
+	cancel context.CancelFunc,
+	redoLogDir string,
+	expectedInitialized bool,
+) {
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	c.Assert(cf.initialized, check.Equals, expectedInitialized)
+
+	// remove changefeed from state manager by admin job
+	cf.feedStateManager.PushAdminJob(&model.AdminJob{
+		CfID: cf.id,
+		Type: model.AdminRemove,
+	})
+	// changefeed tick will release resources
+	err := cf.tick(ctx, state, captures)
+	c.Assert(err, check.IsNil)
+	cancel()
+	// check redo log dir is deleted
+	_, err = os.Stat(redoLogDir)
+	c.Assert(os.IsNotExist(err), check.IsTrue)
 }

@@ -113,6 +113,29 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	return p
 }
 
+var processorIgnorableError = []*errors.Error{
+	cerror.ErrAdminStopProcessor,
+	cerror.ErrReactorFinished,
+	cerror.ErrRedoWriterStopped,
+}
+
+// isProcessorIgnorableError returns true if the error means the processor exits
+// normally, caused by changefeed pause, remove, etc.
+func isProcessorIgnorableError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Cause(err) == context.Canceled {
+		return true
+	}
+	for _, e := range processorIgnorableError {
+		if e.Equal(err) {
+			return true
+		}
+	}
+	return false
+}
+
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
@@ -127,8 +150,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
-	cause := errors.Cause(err)
-	if cause == context.Canceled || cerror.ErrAdminStopProcessor.Equal(cause) || cerror.ErrReactorFinished.Equal(cause) {
+	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -273,6 +295,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutCaptureAddrInCtx(stdCtx, p.captureInfo.AdvertiseAddr)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
@@ -296,10 +319,19 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[sink.OptChangefeedID] = p.changefeed.ID
 	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
+
+	start := time.Now()
 	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
+		log.Info("processor new sink failed",
+			zap.String("changefeed", p.changefeed.ID),
+			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
+	log.Info("processor try new sink success",
+		zap.Duration("duration", time.Since(start)))
+
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
@@ -321,8 +353,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	default:
 		return nil
 	}
-	cause := errors.Cause(err)
-	if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
+	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
 			cdcContext.ZapFieldCapture(ctx),
 			cdcContext.ZapFieldChangefeed(ctx),
@@ -463,6 +494,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
+		ctx.ChangefeedVars().ID,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
@@ -519,7 +551,7 @@ func (p *processor) sendError(err error) {
 	select {
 	case p.errCh <- err:
 	default:
-		if errors.Cause(err) != context.Canceled {
+		if !isProcessorIgnorableError(err) {
 			log.Error("processor receives redundant error", zap.Error(err))
 		}
 	}
@@ -817,6 +849,7 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 }
 
 func (p *processor) Close() error {
+	log.Info("processor closing ...", zap.String("changefeed", p.changefeedID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -838,7 +871,18 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		return p.sinkManager.Close(ctx)
+		log.Info("processor try to close the sinkManager",
+			zap.String("changefeed", p.changefeedID))
+		start := time.Now()
+		if err := p.sinkManager.Close(ctx); err != nil {
+			log.Info("processor close sinkManager failed",
+				zap.String("changefeed", p.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		log.Info("processor close sinkManager success",
+			zap.String("changefeed", p.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }

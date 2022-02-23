@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -60,6 +61,9 @@ type mqSink struct {
 	resolvedReceiver    *notify.Receiver
 
 	statistics *Statistics
+
+	role util.Role
+	id   model.ChangeFeedID
 }
 
 func newMqSink(
@@ -100,6 +104,9 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
+
 	k := &mqSink{
 		mqProducer:     mqProducer,
 		dispatcher:     d,
@@ -114,7 +121,10 @@ func newMqSink(
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics: NewStatistics(ctx, "MQ"),
+
+		role: role,
+		id:   changefeedID,
 	}
 
 	go func() {
@@ -124,7 +134,8 @@ func newMqSink(
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", changefeedID), zap.Any("role", k.role))
 			}
 		}
 	}()
@@ -135,7 +146,10 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored",
+				zap.Uint64("start-ts", row.StartTs),
+				zap.String("changefeed", k.id),
+				zap.Any("role", k.role))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -216,6 +230,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("query", ddl.Query),
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("changefeed", k.id),
+			zap.Any("role", k.role),
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
@@ -233,7 +249,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
+	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commitTs", ddl.CommitTs),
+		zap.String("changefeed", k.id), zap.Any("role", k.role))
 	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
@@ -294,7 +311,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 					return 0, err
 				}
 			}
-			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
+			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize),
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return thisBatchSize, nil
 		})
 	}
@@ -364,7 +382,9 @@ func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, 
 	log.Warn("writeToProducer called with no-op",
 		zap.ByteString("key", message.Key),
 		zap.ByteString("value", message.Value),
-		zap.Int32("partition", partition))
+		zap.Int32("partition", partition),
+		zap.String("changefeed", k.id),
+		zap.Any("role", k.role))
 	return nil
 }
 
