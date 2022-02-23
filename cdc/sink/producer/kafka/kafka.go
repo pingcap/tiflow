@@ -500,9 +500,10 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		}
 	}()
 
-	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
+	if err := validateAndCreateTopic(admin, topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
@@ -579,8 +580,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
-	opts map[string]string) error {
+func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -607,7 +607,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
 			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 		}
-		opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
@@ -647,7 +646,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
-	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
