@@ -683,7 +683,6 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 			}
 			encodeTi := schemacmp.Encode(ti)
 			c.joinedMu.Lock()
-			log.L().Logger.Debug("get schemacmp", zap.Stringer("ti", encodeTi), zap.Stringer("joined", c.joined), zap.Bool("pk is handle", ti.PKIsHandle))
 			if c.joined == nil {
 				c.joined = &encodeTi
 				c.joinedMu.Unlock()
