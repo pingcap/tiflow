@@ -236,7 +236,7 @@ func (vw *validateWorker) compareData(sourceData, targetData []*dbutil.ColumnDat
 }
 
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.ColumnData, error) {
-	tctx := tcontext.NewContext(context.Background(), log.L())
+	tctx := tcontext.NewContext(vw.ctx, log.L())
 	fullTableName := cond.Table.Target.String()
 	pkColumnNames := make([]string, 0, len(cond.Table.pkIndices))
 	for i := range cond.Table.pkIndices {
@@ -267,7 +267,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 			colVal := genColData(rowData[idx].Data)
 			pkVals = append(pkVals, string(colVal))
 		}
-		pk := strings.Join(pkVals, "-")
+		pk := genRowKey(pkVals)
 		result[pk] = rowData
 	}
 	return result, nil

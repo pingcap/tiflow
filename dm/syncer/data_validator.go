@@ -435,12 +435,7 @@ func hashTablePk(s string) uint32 {
 }
 
 func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
-	// for every row in the table
-	// 1. join primary key by '-'
-	// 2. hash (tableName, primaryKey) to hashVal
-	// 3. dispatch the row change to dispatchMap[hashVal][tableName]
-	hashKey := strings.Join([]string{row.table.Source.String(), key}, "-")
-	hashVal := int(hashTablePk(hashKey)) % v.workerCnt
+	hashVal := int(hashTablePk(key)) % v.workerCnt
 	v.workers[hashVal].rowChangeCh <- row
 }
 
@@ -519,7 +514,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		for _, idx := range pkIndices {
 			pkValue[idx] = fmt.Sprintf("%v", row[idx])
 		}
-		key := strings.Join(pkValue, "-")
+		key := genRowKey(pkValue)
 
 		if changeType == rowUpdated {
 			afterRowChangeType := changeType
@@ -528,7 +523,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 			for _, idx := range pkIndices {
 				afterPkValue[idx] = fmt.Sprintf("%v", afterRow[idx])
 			}
-			afterKey := strings.Join(afterPkValue, "-")
+			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {
 				// convert to delete and insert
 				v.dispatchRowChange(key, &rowChange{
@@ -582,4 +577,8 @@ func getRowChangeType(t replication.EventType) rowChangeType {
 		// replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
 		return rowDeleted
 	}
+}
+
+func genRowKey(pkValues []string) string {
+	return strings.Join(pkValues, "-")
 }
