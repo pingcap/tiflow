@@ -15,11 +15,13 @@ package etcd
 
 import (
 	"context"
+	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
@@ -41,6 +43,14 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+	// If no msg comes from an etcd watchCh for etcdWatchChTimeoutDuration long,
+	// we should cancel the watchCh and request a new watchCh from etcd client
+	etcdWatchChTimeoutDuration = 10 * time.Second
+	// If no msg comes from an etcd watchCh for etcdRequestProgressDuration long,
+	// we should call RequestProgress of etcd client
+	etcdRequestProgressDuration = 1 * time.Second
+	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
+	etcdWatchChBufferSize = 16
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -50,11 +60,13 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
+	// clock is for making it easier to mock time-related data structures in unit tests
+	clock clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics}
+	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
 // Unwrap returns a clientv3.Client
@@ -164,8 +176,76 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	return c.cli.Watch(ctx, key, opts...)
+func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
+	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
+	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
+	return watchCh
+}
+
+// WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
+	defer func() {
+		close(outCh)
+		log.Info("WatchWithChan exited", zap.String("role", role))
+	}()
+	var lastRevision int64
+	watchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	watchCh := c.cli.Watch(watchCtx, key, opts...)
+
+	ticker := c.clock.Ticker(etcdRequestProgressDuration)
+	defer ticker.Stop()
+	lastReceivedResponseTime := c.clock.Now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			cancel()
+			return
+		case response := <-watchCh:
+			lastReceivedResponseTime = c.clock.Now()
+			if response.Err() == nil && !response.IsProgressNotify() {
+				lastRevision = response.Header.Revision
+			}
+
+		Loop:
+			// we must loop here until the response is sent to outCh
+			// or otherwise the response will be lost
+			for {
+				select {
+				case <-ctx.Done():
+					cancel()
+					return
+				case outCh <- response: // it may block here
+					break Loop
+				case <-ticker.C:
+					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck",
+							zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+							zap.String("role", role))
+					}
+				}
+			}
+
+			ticker.Reset(etcdRequestProgressDuration)
+		case <-ticker.C:
+			if err := c.RequestProgress(ctx); err != nil {
+				log.Warn("failed to request progress for etcd watcher", zap.Error(err))
+			}
+			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+				// cancel the last cancel func to reset it
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh",
+					zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+					zap.Stack("stack"),
+					zap.String("role", role))
+				cancel()
+				watchCtx, cancel = context.WithCancel(ctx)
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+				// we need to reset lastReceivedResponseTime after reset Watch
+				lastReceivedResponseTime = c.clock.Now()
+			}
+		}
+	}
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.

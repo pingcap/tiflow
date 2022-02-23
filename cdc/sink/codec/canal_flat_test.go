@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -124,6 +124,8 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 			c.Assert(msgs, check.HasLen, int(resolvedTs-lastResolved))
 
 			for j := range msgs {
+				c.Assert(msgs[j].GetRowsCount(), check.Equals, 1)
+
 				var msg canalFlatMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				c.Assert(err, check.IsNil)

@@ -14,7 +14,7 @@
 package cli
 
 import (
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 )
 

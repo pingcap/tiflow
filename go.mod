@@ -1,4 +1,4 @@
-module github.com/pingcap/ticdc
+module github.com/pingcap/tiflow
 
 go 1.16
 
@@ -8,6 +8,7 @@ require (
 	github.com/Shopify/sarama v1.27.2
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/apache/pulsar-client-go v0.1.1
+	github.com/benbjohnson/clock v1.1.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e

@@ -23,10 +23,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.

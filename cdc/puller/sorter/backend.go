@@ -13,7 +13,7 @@
 
 package sorter
 
-import "github.com/pingcap/ticdc/cdc/model"
+import "github.com/pingcap/tiflow/cdc/model"
 
 type backEnd interface {
 	reader() (backEndReader, error)

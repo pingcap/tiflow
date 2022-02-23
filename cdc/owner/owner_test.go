@@ -21,14 +21,14 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -191,6 +191,44 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
+}
+
+func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Mismatched state and admin job.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		Config:         config.GetDefaultReplicaConfig(),
+		CreatorVersion: "4.0.14",
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
 }
 
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {

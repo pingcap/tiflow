@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )

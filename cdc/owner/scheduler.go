@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -300,6 +300,11 @@ func (s *scheduler) handleJobs(jobs []*schedulerJob) {
 func (s *scheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+			if status == nil {
+				log.Warn("task status of the capture is not found, may be the key in etcd was deleted", zap.String("captureID", captureID), zap.String("changeFeedID", s.state.ID))
+				return status, false, nil
+			}
+
 			changed := false
 			for tableID, operation := range status.Operation {
 				if operation.Status == model.OperFinished {

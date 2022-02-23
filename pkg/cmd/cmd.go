@@ -16,9 +16,9 @@ package cmd
 import (
 	"os"
 
-	"github.com/pingcap/ticdc/pkg/cmd/cli"
-	"github.com/pingcap/ticdc/pkg/cmd/server"
-	"github.com/pingcap/ticdc/pkg/cmd/version"
+	"github.com/pingcap/tiflow/pkg/cmd/cli"
+	"github.com/pingcap/tiflow/pkg/cmd/server"
+	"github.com/pingcap/tiflow/pkg/cmd/version"
 	"github.com/spf13/cobra"
 )
 

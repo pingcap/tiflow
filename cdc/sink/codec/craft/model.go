@@ -15,8 +15,8 @@ package craft
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -496,6 +496,11 @@ func (b *RowChangedEventBuffer) Reset() {
 // Size of buffer
 func (b *RowChangedEventBuffer) Size() int {
 	return b.estimatedSize
+}
+
+// RowsCount return Number of rows batched in this buffer
+func (b *RowChangedEventBuffer) RowsCount() int {
+	return b.eventsCount
 }
 
 // GetHeaders returns headers of buffer

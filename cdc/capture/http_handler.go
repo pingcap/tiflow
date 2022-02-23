@@ -20,15 +20,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/owner"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/br/pkg/httputil"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -74,7 +74,7 @@ func (h *HTTPHandler) ListChangefeed(c *gin.Context) {
 	// get all changefeed status
 	statuses, err := h.capture.etcdClient.GetAllChangeFeedStatus(ctx)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -128,38 +128,25 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 
 	info, err := h.capture.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	status, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	processorInfos, err := h.capture.etcdClient.GetAllTaskStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -185,7 +172,7 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		TaskStatus:     taskStatus,
 	}
 
-	c.JSON(http.StatusOK, changefeedDetail)
+	c.IndentedJSON(http.StatusOK, changefeedDetail)
 }
 
 // CreateChangefeed creates a changefeed
@@ -206,29 +193,25 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	var changefeedConfig model.ChangefeedConfig
 	if err := c.BindJSON(&changefeedConfig); err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
 
 	info, err := verifyCreateChangefeedConfig(c, changefeedConfig, h.capture)
 	if err != nil {
-		if cerror.ErrPDEtcdAPIError.Equal(err) {
-			c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	infoStr, err := info.Marshal()
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	err = h.capture.etcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -255,18 +238,13 @@ func (h *HTTPHandler) PauseChangefeed(c *gin.Context) {
 
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -301,18 +279,13 @@ func (h *HTTPHandler) ResumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -354,21 +327,16 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 	changefeedID := c.Param(apiOpVarChangefeedID)
 
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	info, err := h.capture.etcdClient.GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 	if info.State != model.StateStopped {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped")))
+		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
 
@@ -376,19 +344,19 @@ func (h *HTTPHandler) UpdateChangefeed(c *gin.Context) {
 	// filter_rules, ignore_txn_start_ts, mounter_worker_num, sink_config
 	var changefeedConfig model.ChangefeedConfig
 	if err = c.BindJSON(&changefeedConfig); err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	err = h.capture.etcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -413,18 +381,13 @@ func (h *HTTPHandler) RemoveChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	// check if the changefeed exists && check if the etcdClient work well
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -460,18 +423,13 @@ func (h *HTTPHandler) RebalanceTable(c *gin.Context) {
 	changefeedID := c.Param(apiOpVarChangefeedID)
 
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	// check if the changefeed exists
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -502,18 +460,13 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 	// check if the changefeed exists
 	_, _, err := h.capture.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-			return
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -523,12 +476,12 @@ func (h *HTTPHandler) MoveTable(c *gin.Context) {
 	}{}
 	err = c.BindJSON(&data)
 	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		return
 	}
 
 	if err := model.ValidateChangefeedID(data.CaptureID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", data.CaptureID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", data.CaptureID))
 		return
 	}
 
@@ -576,33 +529,25 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 
 	changefeedID := c.Param(apiOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
 		return
 	}
 
 	captureID := c.Param(apiOpVarCaptureID)
 	if err := model.ValidateChangefeedID(captureID); err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", changefeedID)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", captureID))
 		return
 	}
 
 	_, status, err := h.capture.etcdClient.GetTaskStatus(ctx, changefeedID, captureID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	_, position, err := h.capture.etcdClient.GetTaskPosition(ctx, changefeedID, captureID)
 	if err != nil {
-		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
-		}
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -612,7 +557,7 @@ func (h *HTTPHandler) GetProcessor(c *gin.Context) {
 		tables = append(tables, tableID)
 	}
 	processorDetail.Tables = tables
-	c.JSON(http.StatusOK, processorDetail)
+	c.IndentedJSON(http.StatusOK, processorDetail)
 }
 
 // ListProcessor lists all processors in the TiCDC cluster
@@ -628,7 +573,7 @@ func (h *HTTPHandler) ListProcessor(c *gin.Context) {
 	ctx := c.Request.Context()
 	infos, err := h.capture.etcdClient.GetProcessors(ctx)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 	resps := make([]*model.ProcessorCommonInfo, len(infos))
@@ -658,7 +603,7 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 
 	ownerID, err := h.capture.etcdClient.GetOwnerID(c, kv.CaptureOwnerKey)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -728,14 +673,13 @@ func SetLogLevel(c *gin.Context) {
 	}{}
 	err := c.BindJSON(&data)
 	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err.Error()))
 		return
 	}
 
 	err = logutil.SetLogLevel(data.Level)
 	if err != nil {
-		c.IndentedJSON(http.StatusBadRequest,
-			model.NewHTTPError(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err)))
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", data.Level))
 		return
 	}
 	log.Warn("log level changed", zap.String("level", data.Level))
@@ -747,7 +691,7 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
 	if len(c.GetHeader(forWardFromCapture)) != 0 {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(cerror.ErrRequestForwardErr.FastGenByArgs()))
+		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
 	c.Header(forWardFromCapture, h.capture.Info().ID)
@@ -764,13 +708,13 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		return nil
 	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(getOwnerRetryMaxTime))
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
 	tslConfig, err := config.GetGlobalServerConfig().Security.ToTLSConfigWithVerify()
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -792,7 +736,7 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	cli := httputil.NewClient(tslConfig)
 	resp, err := cli.Do(req)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 
@@ -810,7 +754,7 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 	defer resp.Body.Close()
 	_, err = bufio.NewReader(resp.Body).WriteTo(c.Writer)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 }
