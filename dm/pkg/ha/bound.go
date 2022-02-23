@@ -128,23 +128,27 @@ func ReplaceSourceBound(cli *clientv3.Client, source, oldWorker, newWorker strin
 
 // GetSourceBound gets the source bound relationship for the specified DM-worker.
 // if the bound relationship for the worker name not exist, return with `err == nil`.
-// if the worker name is "", it will return all bound relationships as a map{worker-name: bound}.
-// if the worker name is given, it will return a map{worker-name: bound} whose length is 1.
-func GetSourceBound(cli *clientv3.Client, worker string) (map[string]SourceBound, int64, error) {
+// if the source name and the worker are "", it will return all bound relationships as a map{worker-name:map{source-name:bound}.
+// if the worker name is given, it will return a map{worker-name:map{source-name:bound} whose length is 1 but contains all this worker's bounds.
+// if the source name and the worker name are given", it will return a map{worker-name:map{source-name:bound} which contains 1 or 0 bound.
+func GetSourceBound(cli *clientv3.Client, worker, source string) (map[string]map[string]SourceBound, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
 	var (
-		sbm  = make(map[string]SourceBound)
+		sbm  = make(map[string]map[string]SourceBound)
 		resp *clientv3.GetResponse
 		err  error
 	)
 	failpoint.Inject("FailToGetSourceCfg", func() {
 		failpoint.Return(sbm, 0, context.DeadlineExceeded)
 	})
-	if worker != "" {
-		resp, err = cli.Get(ctx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker))
-	} else {
+	switch {
+	case source != "":
+		resp, err = cli.Get(ctx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker, source))
+	case worker != "":
+		resp, err = cli.Get(ctx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+	default:
 		resp, err = cli.Get(ctx, common.UpstreamBoundWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	}
 
@@ -152,7 +156,7 @@ func GetSourceBound(cli *clientv3.Client, worker string) (map[string]SourceBound
 		return sbm, 0, err
 	}
 
-	sbm, err = sourceBoundFromResp(worker, resp)
+	sbm, err = sourceBoundFromResp(resp)
 	if err != nil {
 		return sbm, 0, err
 	}
@@ -172,7 +176,7 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 		return sbm, 0, err
 	}
 
-	sbm, err = sourceBoundFromResp("", resp)
+	sbm, err = lastSourceBoundFromResp(resp)
 	if err != nil {
 		return sbm, 0, err
 	}
@@ -185,36 +189,38 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 // if source bound is empty, will return an empty sourceBound and an empty source config
 // if source bound is not empty but sourceConfig is empty, will return an error
 // if the source bound is different for over retryNum times, will return an error.
-func GetSourceBoundConfig(cli *clientv3.Client, worker string) (SourceBound, *config.SourceConfig, int64, error) {
+func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBound, *config.SourceConfig, int64, error) {
 	var (
 		bound    SourceBound
 		newBound SourceBound
 		cfg      *config.SourceConfig
 		ok       bool
 		retryNum = defaultGetSourceBoundConfigRetry
+		sbm      map[string]SourceBound
 	)
-	sbm, rev, err := GetSourceBound(cli, worker)
+	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
 		return bound, cfg, 0, err
 	}
-	if bound, ok = sbm[worker]; !ok {
+	if sbm, ok = wbm[worker]; !ok {
 		return bound, cfg, rev, nil
 	}
+	bound = GetSourceBoundFromMap(sbm)
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker)),
+		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source)))
 		if err2 != nil {
 			return bound, cfg, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
-		sbm2, err2 := sourceBoundFromResp(worker, (*clientv3.GetResponse)(boundResp))
+		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
 			return bound, cfg, 0, err2
 		}
 
-		newBound, ok = sbm2[worker]
+		newBound, ok = sbm2[worker][bound.Source]
 		// when ok is false, newBound will be empty which means bound for this worker has been deleted in this turn
 		// if bound is not empty, we should wait for another turn to make sure bound is really deleted.
 		if newBound != bound {
@@ -262,7 +268,7 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker string) (SourceBound, *co
 func WatchSourceBound(ctx context.Context, cli *clientv3.Client, worker string, revision int64, outCh chan<- SourceBound, errCh chan<- error) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ch := cli.Watch(wCtx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithRev(revision))
+	ch := cli.Watch(wCtx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithRev(revision), clientv3.WithPrefix())
 
 	for {
 		select {
@@ -327,16 +333,14 @@ func sourceBoundFromKey(key string) (SourceBound, error) {
 		return bound, err
 	}
 	bound.Worker = ks[0]
+	bound.Source = ks[1]
 	return bound, nil
 }
 
-func sourceBoundFromResp(worker string, resp *clientv3.GetResponse) (map[string]SourceBound, error) {
-	sbm := make(map[string]SourceBound)
+func sourceBoundFromResp(resp *clientv3.GetResponse) (map[string]map[string]SourceBound, error) {
+	sbm := make(map[string]map[string]SourceBound)
 	if resp.Count == 0 {
 		return sbm, nil
-	} else if worker != "" && resp.Count > 1 {
-		// this should not happen.
-		return sbm, terror.ErrConfigMoreThanOne.Generate(resp.Count, "bound relationship", "worker: "+worker)
 	}
 
 	for _, kvs := range resp.Kvs {
@@ -345,7 +349,27 @@ func sourceBoundFromResp(worker string, resp *clientv3.GetResponse) (map[string]
 			return sbm, err
 		}
 		bound.Revision = kvs.ModRevision
-		sbm[bound.Worker] = bound
+		if _, ok := sbm[bound.Worker]; !ok {
+			sbm[bound.Worker] = make(map[string]SourceBound)
+		}
+		sbm[bound.Worker][bound.Source] = bound
+	}
+	return sbm, nil
+}
+
+func lastSourceBoundFromResp(resp *clientv3.GetResponse) (map[string]SourceBound, error) {
+	sbm := make(map[string]SourceBound)
+	if resp.Count == 0 {
+		return sbm, nil
+	}
+
+	for _, kvs := range resp.Kvs {
+		bound, err := sourceBoundFromJSON(string(kvs.Value))
+		if err != nil {
+			return sbm, err
+		}
+		bound.Revision = kvs.ModRevision
+		sbm[bound.Source] = bound
 	}
 	return sbm, nil
 }
@@ -353,13 +377,13 @@ func sourceBoundFromResp(worker string, resp *clientv3.GetResponse) (map[string]
 // deleteSourceBoundOp returns a DELETE etcd operation for the bound relationship of the specified DM-worker.
 func deleteSourceBoundOp(worker string) []clientv3.Op {
 	return []clientv3.Op{
-		clientv3.OpDelete(common.UpstreamBoundWorkerKeyAdapter.Encode(worker)),
+		clientv3.OpDelete(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 	}
 }
 
 // deleteLastSourceBoundOp returns a DELETE etcd operation for the last bound relationship of the specified DM-worker.
 func deleteLastSourceBoundOp(worker string) clientv3.Op {
-	return clientv3.OpDelete(common.UpstreamLastBoundWorkerKeyAdapter.Encode(worker))
+	return clientv3.OpDelete(common.UpstreamLastBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
 }
 
 // putSourceBoundOp returns PUT etcd operations for the bound relationship.
@@ -369,10 +393,19 @@ func putSourceBoundOp(bound SourceBound) ([]clientv3.Op, error) {
 	if err != nil {
 		return []clientv3.Op{}, err
 	}
-	key1 := common.UpstreamBoundWorkerKeyAdapter.Encode(bound.Worker)
+	key1 := common.UpstreamBoundWorkerKeyAdapter.Encode(bound.Worker, bound.Source)
 	op1 := clientv3.OpPut(key1, value)
-	key2 := common.UpstreamLastBoundWorkerKeyAdapter.Encode(bound.Worker)
+	key2 := common.UpstreamLastBoundWorkerKeyAdapter.Encode(bound.Worker, bound.Source)
 	op2 := clientv3.OpPut(key2, value)
 
 	return []clientv3.Op{op1, op2}, nil
+}
+
+// GetSourceBoundFromMap is a temporary function to get source bound,
+// need to be removed after all functions of supporting worker bound to multi sources are implemented.
+func GetSourceBoundFromMap(sbm map[string]SourceBound) SourceBound {
+	for _, bound := range sbm {
+		return bound
+	}
+	return NewSourceBound("", "")
 }

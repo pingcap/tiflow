@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"

@@ -64,12 +64,14 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	c.Assert(rev3, Equals, rev2)
 	relayStage.Revision = rev1
 	c.Assert(st1, DeepEquals, relayStage)
-	sbm1, rev3, err := GetSourceBound(etcdTestCli, worker)
+	sbm1, rev3, err := GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Equals, rev2)
 	c.Assert(sbm1, HasLen, 1)
 	bound.Revision = rev1
-	c.Assert(sbm1[worker], DeepEquals, bound)
+	c.Assert(sbm1[worker], HasLen, 1)
+	c.Assert(sbm1[worker][bound.Source], DeepEquals, bound)
+
 	scm1, rev3, err := GetSourceCfg(etcdTestCli, source, 0)
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Equals, rev2)
@@ -86,7 +88,7 @@ func (t *testForEtcd) TestOpsEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Equals, rev4)
 	c.Assert(st2, Equals, emptyStage)
-	sbm2, rev5, err := GetSourceBound(etcdTestCli, worker)
+	sbm2, rev5, err := GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Equals, rev4)
 	c.Assert(sbm2, HasLen, 0)

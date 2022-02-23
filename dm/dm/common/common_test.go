@@ -18,18 +18,10 @@ import (
 	"path"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func TestCommon(t *testing.T) {
-	TestingT(t)
-}
-
-type testCommon struct{}
-
-var _ = Suite(&testCommon{})
-
-func (t *testCommon) TestKeyAdapter(c *C) {
+func TestKeyAdapter(t *testing.T) {
 	testCases := []struct {
 		keys    []string
 		adapter KeyAdapter
@@ -51,9 +43,9 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 			want:    "/dm-master/v2/upstream/config/6d7973716c31",
 		},
 		{
-			keys:    []string{"127.0.0.1:2382"},
+			keys:    []string{"127.0.0.1:2382", "mysql1"},
 			adapter: UpstreamBoundWorkerKeyAdapter,
-			want:    "/dm-master/bound-worker/3132372e302e302e313a32333832",
+			want:    "/dm-master/v2/bound-worker/3132372e302e302e313a32333832/6d7973716c31",
 		},
 		{
 			keys:    []string{"mysql1", "test"},
@@ -84,14 +76,14 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 
 	for _, ca := range testCases {
 		encKey := ca.adapter.Encode(ca.keys...)
-		c.Assert(encKey, Equals, ca.want)
+		require.Equal(t, ca.want, encKey)
 		decKey, err := ca.adapter.Decode(encKey)
-		c.Assert(err, IsNil)
-		c.Assert(decKey, DeepEquals, ca.keys)
+		require.NoError(t, err)
+		require.Equal(t, ca.keys, decKey)
 	}
 }
 
-func (t *testCommon) TestEncodeAsPrefix(c *C) {
+func TestEncodeAsPrefix(t *testing.T) {
 	testCases := []struct {
 		keys    []string
 		adapter KeyAdapter
@@ -106,22 +98,22 @@ func (t *testCommon) TestEncodeAsPrefix(c *C) {
 
 	for _, ca := range testCases {
 		encKey := ca.adapter.Encode(ca.keys...)
-		c.Assert(encKey, Equals, ca.want)
+		require.Equal(t, ca.want, encKey)
 		_, err := ca.adapter.Decode(encKey)
-		c.Assert(err, NotNil)
+		require.Error(t, err)
 	}
 }
 
-func (t *testCommon) TestIsErrNetClosing(c *C) {
+func TestIsErrNetClosing(t *testing.T) {
 	server, err := net.Listen("tcp", "localhost:0")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	err = server.Close()
-	c.Assert(IsErrNetClosing(err), IsFalse)
+	require.False(t, IsErrNetClosing(err))
 	_, err = server.Accept()
-	c.Assert(IsErrNetClosing(err), IsTrue)
+	require.True(t, IsErrNetClosing(err))
 }
 
-func (t *testCommon) TestJoinUseSlash(c *C) {
+func TestJoinUseSlash(t *testing.T) {
 	// because we use "/" in Encode
-	c.Assert(path.Join("a", "b"), Equals, "a/b")
+	require.Equal(t, "a/b", path.Join("a", "b"))
 }
