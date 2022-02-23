@@ -41,17 +41,19 @@ type mqEvent struct {
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
-	msgChan  chan mqEvent
-	encoder  codec.EventBatchEncoder
-	producer producer.Producer
+	msgChan    chan mqEvent
+	encoder    codec.EventBatchEncoder
+	producer   producer.Producer
+	statistics *Statistics
 }
 
 // newFlushWorker creates a new flush worker.
-func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer) *flushWorker {
+func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer, statistics *Statistics) *flushWorker {
 	w := &flushWorker{
-		msgChan:  make(chan mqEvent),
-		encoder:  encoder,
-		producer: producer,
+		msgChan:    make(chan mqEvent),
+		encoder:    encoder,
+		producer:   producer,
+		statistics: statistics,
 	}
 	return w
 }
@@ -121,11 +123,19 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 				return err
 			}
 		}
-		for _, message := range w.encoder.Build() {
-			err := w.producer.AsyncSendMessage(ctx, message, partition)
-			if err != nil {
-				return err
+		err := w.statistics.RecordBatchExecution(func() (int, error) {
+			thisBatchSize := 0
+			for _, message := range w.encoder.Build() {
+				err := w.producer.AsyncSendMessage(ctx, message, partition)
+				if err != nil {
+					return 0, err
+				}
+				thisBatchSize += message.GetRowsCount()
 			}
+			return thisBatchSize, nil
+		})
+		if err != nil {
+			return err
 		}
 	}
 

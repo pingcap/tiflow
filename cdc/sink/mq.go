@@ -106,7 +106,8 @@ func newMqSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	flushWorker := newFlushWorker(encoder, mqProducer)
+	statistics := NewStatistics(ctx, "MQ")
+	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
@@ -116,7 +117,7 @@ func newMqSink(
 		protocol:       protocol,
 		flushWorker:    flushWorker,
 		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
-		statistics:     NewStatistics(ctx, "MQ"),
+		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
 	}
