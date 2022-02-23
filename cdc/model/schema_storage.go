@@ -309,6 +309,11 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 
 // IsEligible returns whether the table is a eligible table
 func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
+	// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
+	// See https://github.com/pingcap/tiflow/issues/4559
+	if ti.IsSequence() {
+		return false
+	}
 	if forceReplicate {
 		return true
 	}
