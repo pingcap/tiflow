@@ -292,8 +292,11 @@ func TestCollectMetric(t *testing.T) {
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
 	defer cleanup()
 
-	s := &Server{cfg: cfg}
 	registerMetrics()
+	s := &Server{
+		cfg:     cfg,
+		metrics: newServerMasterMetric(),
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -312,17 +315,11 @@ func TestCollectMetric(t *testing.T) {
 	s.jobManager = jobManager
 	s.executorManager = executorManager
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		s.collectMetricLoop(ctx, time.Millisecond*10)
-	}()
+	s.collectLeaderMetric()
 	apiURL := fmt.Sprintf("http://%s", masterAddr)
 	testCustomedPrometheusMetrics(t, apiURL)
 	s.Stop()
 	cancel()
-	wg.Wait()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
