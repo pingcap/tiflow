@@ -28,9 +28,9 @@ const (
 // TaskCliArgs is the task command line arguments, these arguments have higher priority than the config file and
 // downstream checkpoint, but may need to be removed after the first time they take effect.
 type TaskCliArgs struct {
-	StartTime               string `toml:"start-time" json:"start_time"`
-	SafeModeDuration        string `toml:"safe-mode-duration" json:"safe_mode_duration"`
-	StopWaitTimeOutDuration string `toml:"stop-wait-timeout-duration" json:"stop_wait_timeout_duration"`
+	StartTime              string `toml:"start-time" json:"start_time"`
+	SafeModeDuration       string `toml:"safe-mode-duration" json:"safe_mode_duration"`
+	WaitTimeOnStopDuration string `toml:"wait-time-on-stop-duration" json:"wait_time_on_stop_duration"`
 }
 
 // ToJSON returns json marshal result.
@@ -66,8 +66,8 @@ func (t *TaskCliArgs) Verify() error {
 		}
 	}
 
-	if t.StopWaitTimeOutDuration != "" {
-		_, err := time.ParseDuration(t.StopWaitTimeOutDuration)
+	if t.WaitTimeOnStopDuration != "" {
+		_, err := time.ParseDuration(t.WaitTimeOnStopDuration)
 		if err != nil {
 			return terror.Annotate(err, "error while parse stop_wait_timeout_duration, expected in the format like '1s' or '1h'")
 		}
