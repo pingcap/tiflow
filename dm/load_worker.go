@@ -58,10 +58,6 @@ func (d *loadWorker) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
-func (d *loadWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &struct{}{}
-}
-
 func (d *loadWorker) Workload() model.RescUnit {
 	log.L().Info("loadWorker.Workload")
 	return 0

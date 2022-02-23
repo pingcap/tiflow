@@ -54,8 +54,6 @@ type JobMasterImpl interface {
 	OnWorkerOnline(worker WorkerHandle) error
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
-	GetWorkerStatusExtTypeInfo() interface{}
-	GetJobMasterStatusExtTypeInfo() interface{}
 
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
@@ -226,10 +224,6 @@ func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (j *jobMasterImplAsWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return j.inner.GetWorkerStatusExtTypeInfo()
-}
-
 type jobMasterImplAsMasterImpl struct {
 	inner JobMasterImpl
 }
@@ -267,8 +261,4 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
 	log.L().Panic("unexpected Close call")
 	return nil
-}
-
-func (j *jobMasterImplAsMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return j.inner.GetJobMasterStatusExtTypeInfo()
 }

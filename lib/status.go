@@ -38,8 +38,9 @@ type StatusSender struct {
 	// [Idle] ==SendStatus==> [Pending] ==sendStatus(pool)==> [Sending]
 	// [Sending] ==sent successfully==> [Idle]
 	// [Sending] ==need to retry==> [Pending]
-	fsmState         atomic.Int32
-	lastUnsentStatus *WorkerStatus
+	fsmState           atomic.Int32
+	lastUnsentStatus   *WorkerStatus
+	lastUnsentStatusMu sync.RWMutex
 
 	pool workerpool.AsyncPool
 
@@ -85,6 +86,18 @@ func (s *StatusSender) Tick(ctx context.Context) error {
 	return nil
 }
 
+func (s *StatusSender) getLastUnsentStatus() *WorkerStatus {
+	s.lastUnsentStatusMu.Lock()
+	defer s.lastUnsentStatusMu.Unlock()
+	return s.lastUnsentStatus
+}
+
+func (s *StatusSender) setLastUnsentStatus(status *WorkerStatus) {
+	s.lastUnsentStatusMu.Lock()
+	defer s.lastUnsentStatusMu.Unlock()
+	s.lastUnsentStatus = status
+}
+
 // SendStatus is used by the business logic in a worker to notify its master
 // of a status change.
 // This function is non-blocking and if any error occurred during or after network IO,
@@ -93,7 +106,7 @@ func (s *StatusSender) SendStatus(ctx context.Context, status WorkerStatus) erro
 	if s.fsmState.Load() != senderFSMIdle {
 		return derror.ErrWorkerUpdateStatusTryAgain.GenWithStackByArgs()
 	}
-	s.lastUnsentStatus = &status
+	s.setLastUnsentStatus(&status)
 	if old := s.fsmState.Swap(senderFSMPending); old != senderFSMIdle {
 		log.L().Panic("StatusSender: unexpected fsm state",
 			zap.Int32("old-fsm-state", old))
@@ -110,7 +123,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 			return
 		}
 
-		status := s.lastUnsentStatus
+		status := s.getLastUnsentStatus()
 		if err := s.workerMetaClient.Store(ctx, s.workerID, status); err != nil {
 			s.onError(err)
 		}
@@ -137,6 +150,7 @@ func (s *StatusSender) sendStatus(ctx context.Context) error {
 			log.L().Panic("StatusSender: unexpected fsm state",
 				zap.Int32("old-fsm-state", old))
 		}
+		s.setLastUnsentStatus(nil)
 	})
 	return errors.Trace(err)
 }

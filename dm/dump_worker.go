@@ -55,10 +55,6 @@ func (d *dumpWorker) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
-func (d *dumpWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &struct{}{}
-}
-
 func (d *dumpWorker) Workload() model.RescUnit {
 	log.L().Info("dumpWorker.Workload")
 	return 0

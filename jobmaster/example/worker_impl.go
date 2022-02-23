@@ -77,11 +77,6 @@ func (w *exampleWorker) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: code}
 }
 
-func (w *exampleWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	// dummy
-	return &struct{}{}
-}
-
 func (w *exampleWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("OnMasterFailover")
 	return nil

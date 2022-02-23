@@ -174,10 +174,13 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient)
+	dummySt := &dummyStatus{Val: 4}
+	ext, err := dummySt.Marshal()
+	require.NoError(t, err)
 	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
-		Code: WorkerStatusNormal,
-		Ext:  &dummyStatus{Val: 4},
+		Code:     WorkerStatusNormal,
+		ExtBytes: ext,
 	})
 	require.NoError(t, err)
 
@@ -197,8 +200,8 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	status := master.GetWorkers()[workerID1].Status()
 	require.Equal(t, &WorkerStatus{
-		Code: WorkerStatusNormal,
-		Ext:  &dummyStatus{Val: 4},
+		Code:     WorkerStatusNormal,
+		ExtBytes: ext,
 	}, status)
 }
 

@@ -97,18 +97,15 @@ func (c *MasterMetadataClient) GenerateEpoch(ctx context.Context) (Epoch, error)
 type WorkerMetadataClient struct {
 	masterID     MasterID
 	metaKVClient metadata.MetaKV
-	extTpi       interface{}
 }
 
 func NewWorkerMetadataClient(
 	masterID MasterID,
 	metaClient metadata.MetaKV,
-	extTpi interface{},
 ) *WorkerMetadataClient {
 	return &WorkerMetadataClient{
 		masterID:     masterID,
 		metaKVClient: metaClient,
-		extTpi:       extTpi,
 	}
 }
 
@@ -128,17 +125,10 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*Wo
 		return nil, errors.Trace(err)
 	}
 
-	if err := workerMeta.fillExt(c.extTpi); err != nil {
-		return nil, errors.Trace(err)
-	}
 	return &workerMeta, nil
 }
 
 func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *WorkerStatus) error {
-	if err := data.marshalExt(); err != nil {
-		return errors.Trace(err)
-	}
-
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Trace(err)

@@ -89,22 +89,6 @@ func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0)
-}
-
-func (m *testJobMasterImpl) GetJobMasterStatusExtTypeInfo() interface{} {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called()
-	return args.Get(0)
-}
-
 func (m *testJobMasterImpl) Workload() model.RescUnit {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -148,8 +132,6 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	defer cancel()
 
 	jobMaster.mu.Lock()
-	jobMaster.On("GetWorkerStatusExtTypeInfo").Return(&dummyStatus{})
-	jobMaster.On("GetJobMasterStatusExtTypeInfo").Return(&dummyStatus{})
 	jobMaster.On("InitImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 

@@ -56,10 +56,6 @@ func (s *syncWorker) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
 }
 
-func (s *syncWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &struct{}{}
-}
-
 func (s *syncWorker) Workload() model.RescUnit {
 	log.L().Info("syncWorker.Workload")
 	return 0

@@ -57,11 +57,6 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
-
-	// GetWorkerStatusExtTypeInfo returns an empty object that described the actual type
-	// of the `Ext` field in WorkerStatus.
-	// The returned type's kind must be Array, Chan, Map, Ptr, or Slice.
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 const (
@@ -211,7 +206,6 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 		m.messageHandlerManager,
 		m.metaKVClient,
 		m.pool,
-		m.Impl.GetWorkerStatusExtTypeInfo(),
 		&m.timeoutConfig)
 
 	m.startBackgroundTasks()
@@ -619,11 +613,4 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 	}()
 
 	return workerID, nil
-}
-
-func (m *DefaultBaseMaster) GetWorkerStatusExtTypeInfo() interface{} {
-	// This function provides a trivial default implementation of
-	// GetWorkerStatusExtTypeInfo.
-	info := int64(0)
-	return &info
 }

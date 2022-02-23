@@ -48,8 +48,6 @@ type workerManagerImpl struct {
 	masterID      MasterID
 	timeoutConfig TimeoutConfig
 
-	extTpi interface{}
-
 	// to help unit testing
 	clock clock.Clock
 
@@ -67,7 +65,6 @@ func newWorkerManager(
 	messageHandleManager p2p.MessageHandlerManager,
 	metaClient metadata.MetaKV,
 	pool workerpool.AsyncPool,
-	extTpi interface{},
 	timeoutConfig *TimeoutConfig,
 ) workerManager {
 	return &workerManagerImpl{
@@ -79,8 +76,6 @@ func newWorkerManager(
 		masterEpoch:   curEpoch,
 		masterID:      id,
 		timeoutConfig: *timeoutConfig,
-
-		extTpi: extTpi,
 
 		clock: clock.New(),
 
@@ -270,7 +265,7 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 		justOnlined: true,
 	}
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient, m.extTpi)
+	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
 	receiver := NewStatusReceiver(
 		id,
 		workerMetaClient,
@@ -315,7 +310,7 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient, m.extTpi)
+	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
 	err := workerMetaClient.Store(ctx, id, &WorkerStatus{
 		Code: WorkerStatusCreated,
 	})

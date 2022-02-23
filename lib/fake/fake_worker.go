@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/hanfei1991/microcosm/lib"
@@ -24,8 +25,6 @@ type (
 		tick   int64
 	}
 )
-
-type dummyStatus struct{}
 
 func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
@@ -52,7 +51,10 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 
 func (d *dummyWorker) Status() lib.WorkerStatus {
 	if d.init {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: d.tick}
+		return lib.WorkerStatus{
+			Code:     lib.WorkerStatusNormal,
+			ExtBytes: []byte(fmt.Sprintf("%d", d.tick)),
+		}
 	}
 	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}
 }
@@ -63,10 +65,6 @@ func (d *dummyWorker) Workload() model.RescUnit {
 
 func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 	return nil
-}
-
-func (d *dummyWorker) GetWorkerStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
 }
 
 func (d *dummyWorker) CloseImpl(ctx context.Context) error {

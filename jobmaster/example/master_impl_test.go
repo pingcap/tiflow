@@ -88,7 +88,7 @@ func TestExampleMaster(t *testing.T) {
 
 	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &lib.WorkerStatus{
 		Code: lib.WorkerStatusInit,
-	}, &struct{}{})
+	})
 
 	require.Eventually(t, func() bool {
 		err := master.Poll(ctx)

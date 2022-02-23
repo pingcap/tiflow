@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -157,6 +158,10 @@ type dummyStatus struct {
 	Val int
 }
 
-func (m *MockMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
+func (s *dummyStatus) Marshal() ([]byte, error) {
+	return json.Marshal(s)
+}
+
+func (s *dummyStatus) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, s)
 }

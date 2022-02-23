@@ -156,14 +156,6 @@ func (m *Master) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
 }
 
-func (m *Master) GetWorkerStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
-}
-
-func (m *Master) GetJobMasterStatusExtTypeInfo() interface{} {
-	return &dummyStatus{}
-}
-
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{

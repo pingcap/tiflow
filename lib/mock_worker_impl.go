@@ -61,14 +61,6 @@ func (w *mockWorkerImpl) Status() WorkerStatus {
 	return args.Get(0).(WorkerStatus)
 }
 
-func (w *mockWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	args := w.Called()
-	return args.Get(0)
-}
-
 func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

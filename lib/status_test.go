@@ -42,7 +42,7 @@ func TestStatusSender(t *testing.T) {
 	err := masterClient.InitMasterInfoFromMeta(ctx)
 	require.NoError(t, err)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient)
 	sender := NewStatusSender(
 		workerID1,
 		masterClient,
@@ -57,7 +57,7 @@ func TestStatusSender(t *testing.T) {
 	err = sender.SendStatus(ctx, WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message",
-		Ext:          dummyStatus{Val: 5},
+		ExtBytes:     fastMarshalDummyStatus(t, 5),
 	})
 	require.NoError(t, err)
 
@@ -76,7 +76,7 @@ func TestStatusSender(t *testing.T) {
 	err = sender.SendStatus(ctx, WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message1",
-		Ext:          dummyStatus{Val: 5},
+		ExtBytes:     fastMarshalDummyStatus(t, 5),
 	})
 	require.NoError(t, err)
 
@@ -134,7 +134,7 @@ func TestStatusReceiver(t *testing.T) {
 	}()
 
 	metaClient := metadata.NewMetaMock()
-	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient)
 	mockMsgHandlerManager := p2p.NewMockMessageHandlerManager()
 	mockClock := clock.NewMock()
 	mockClock.Set(time.Now())
@@ -145,8 +145,7 @@ func TestStatusReceiver(t *testing.T) {
 		&WorkerStatus{
 			Code:         WorkerStatusInit,
 			ErrorMessage: "test message",
-			ExtBytes:     nil,
-			Ext:          &dummyStatus{Val: 4},
+			ExtBytes:     fastMarshalDummyStatus(t, 5),
 		},
 	)
 	require.NoError(t, err)
@@ -159,15 +158,13 @@ func TestStatusReceiver(t *testing.T) {
 	require.Equal(t, WorkerStatus{
 		Code:         WorkerStatusInit,
 		ErrorMessage: "test message",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 4},
+		ExtBytes:     fastMarshalDummyStatus(t, 5),
 	}, receiver.Status())
 
 	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message1",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 5},
+		ExtBytes:     fastMarshalDummyStatus(t, 5),
 	})
 	require.NoError(t, err)
 
@@ -196,15 +193,13 @@ func TestStatusReceiver(t *testing.T) {
 	require.Equal(t, WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message1",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 5},
+		ExtBytes:     fastMarshalDummyStatus(t, 5),
 	}, status)
 
 	err = workerMetaClient.Store(ctx, workerID1, &WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message2",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 6},
+		ExtBytes:     fastMarshalDummyStatus(t, 6),
 	})
 	require.NoError(t, err)
 
@@ -215,8 +210,7 @@ func TestStatusReceiver(t *testing.T) {
 	require.NotEqual(t, WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message2",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 6},
+		ExtBytes:     fastMarshalDummyStatus(t, 6),
 	}, status)
 
 	mockClock.Add(11 * time.Second)
@@ -239,8 +233,7 @@ func TestStatusReceiver(t *testing.T) {
 	require.Equal(t, WorkerStatus{
 		Code:         WorkerStatusNormal,
 		ErrorMessage: "test message2",
-		ExtBytes:     nil,
-		Ext:          &dummyStatus{Val: 6},
+		ExtBytes:     fastMarshalDummyStatus(t, 6),
 	}, status)
 
 	cancel()

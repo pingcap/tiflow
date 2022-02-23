@@ -49,10 +49,6 @@ type JobManagerImplV2 struct {
 	masterMetaClient      *lib.MasterMetadataClient
 }
 
-func (jm *JobManagerImplV2) GetWorkerStatusExtTypeInfo() interface{} {
-	return struct{}{}
-}
-
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	panic("not implemented")
 }

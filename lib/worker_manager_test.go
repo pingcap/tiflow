@@ -14,6 +14,13 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+func fastMarshalDummyStatus(t *testing.T, val int) []byte {
+	dummySt := &dummyStatus{Val: val}
+	bytes, err := dummySt.Marshal()
+	require.NoError(t, err)
+	return bytes
+}
+
 func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +47,6 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
@@ -106,7 +112,6 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
@@ -167,7 +172,6 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
@@ -290,7 +294,6 @@ func TestWorkerManagerInitialization(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
@@ -341,12 +344,12 @@ func TestUpdateStatus(t *testing.T) {
 	mockMeta := metadata.NewMetaMock()
 	pool := workerpool.NewDefaultAsyncPool(1)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, mockMeta, &dummyStatus{})
+	workerMetaClient := NewWorkerMetadataClient(masterName, mockMeta)
 	err := workerMetaClient.Store(ctx, workerID1,
 		&WorkerStatus{
 			Code:         WorkerStatusInit,
 			ErrorMessage: "fake",
-			Ext:          &dummyStatus{Val: 7},
+			ExtBytes:     fastMarshalDummyStatus(t, 7),
 		})
 	require.NoError(t, err)
 
@@ -365,7 +368,6 @@ func TestUpdateStatus(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 
@@ -388,7 +390,7 @@ func TestUpdateStatus(t *testing.T) {
 		&WorkerStatus{
 			Code:         WorkerStatusError,
 			ErrorMessage: "fake",
-			Ext:          &dummyStatus{Val: 7},
+			ExtBytes:     fastMarshalDummyStatus(t, 7),
 		})
 	require.NoError(t, err)
 
@@ -411,7 +413,7 @@ func TestUpdateStatus(t *testing.T) {
 	require.Equal(t, &WorkerStatus{
 		Code:         WorkerStatusError,
 		ErrorMessage: "fake",
-		Ext:          &dummyStatus{Val: 7},
+		ExtBytes:     fastMarshalDummyStatus(t, 7),
 	}, handle.Status())
 
 	cancel()
@@ -444,7 +446,6 @@ func TestWorkerTimedOut(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
@@ -508,7 +509,6 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 		msgHandlerManager,
 		mockMeta,
 		pool,
-		&dummyStatus{},
 		&defaultTimeoutConfig).(*workerManagerImpl)
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
