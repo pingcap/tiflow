@@ -32,21 +32,13 @@ type EventBatchEncoder interface {
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
+	AppendRowChangedEvent(e *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
 	Build() []*MQMessage
-	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
-	// This is used for cdc log, to merge key and value into one byte slice
-	// when first create file, we should set withVersion to true, to tell us that
-	// the first 8 byte represents the encoder version
-	// TODO decouple it out
-	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
-	// Reset reset the kv buffer
-	Reset()
 	// SetParams provides the encoder with more info on the sink
 	SetParams(params map[string]string) error
 }
@@ -151,11 +143,11 @@ type EncoderResult uint8
 
 // Enum types of EncoderResult
 const (
-	EncoderNoOperation EncoderResult = iota
-	EncoderNeedAsyncWrite
+	EncoderNeedAsyncWrite EncoderResult = iota
 	EncoderNeedSyncWrite
 )
 
+// EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
 	Build(ctx context.Context) (EventBatchEncoder, error)
 }
