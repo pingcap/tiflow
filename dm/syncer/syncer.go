@@ -289,13 +289,13 @@ func (s *Syncer) refreshCliArgs() {
 		// for dummy syncer in ut
 		return
 	}
-	s.Lock()
-	defer s.Unlock()
-	var err error
-	s.cliArgs, err = ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
+	cliArgs, err := ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
 	if err != nil {
 		s.tctx.L().Error("failed to get task cli args", zap.Error(err))
 	}
+	s.Lock()
+	s.cliArgs = cliArgs
+	s.Unlock()
 }
 
 func (s *Syncer) newJobChans() {
@@ -909,12 +909,12 @@ func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 
 // only used in tests.
 var (
-	lastLocation              binlog.Location
-	lastLocationNum           int
-	waitJobsDone              bool
-	failExecuteSQL            bool
-	failOnce                  atomic.Bool
-	waitBeforeRunExitDuration time.Duration
+	lastLocationForTest              binlog.Location
+	lastLocationNumForTest           int
+	waitJobsDoneForTest              bool
+	failExecuteSQLForTest            bool
+	failOnceForTest                  atomic.Bool
+	waitBeforeRunExitDurationForTest time.Duration
 )
 
 // TODO: move to syncer/job.go
@@ -924,41 +924,41 @@ var (
 func (s *Syncer) addJob(job *job) {
 	failpoint.Inject("countJobFromOneEvent", func() {
 		if job.tp == dml {
-			if job.currentLocation.Position.Compare(lastLocation.Position) == 0 {
-				lastLocationNum++
+			if job.currentLocation.Position.Compare(lastLocationForTest.Position) == 0 {
+				lastLocationNumForTest++
 			} else {
-				lastLocation = job.currentLocation
-				lastLocationNum = 1
+				lastLocationForTest = job.currentLocation
+				lastLocationNumForTest = 1
 			}
 			// trigger a flush after see one job
-			if lastLocationNum == 1 {
-				waitJobsDone = true
-				s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 1 {
+				waitJobsDoneForTest = true
+				s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocationForTest))
 			}
 			// mock a execution error after see two jobs.
-			if lastLocationNum == 2 {
-				failExecuteSQL = true
-				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 2 {
+				failExecuteSQLForTest = true
+				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
 	})
 	failpoint.Inject("countJobFromOneGTID", func() {
 		if job.tp == dml {
-			if binlog.CompareLocation(job.currentLocation, lastLocation, true) == 0 {
-				lastLocationNum++
+			if binlog.CompareLocation(job.currentLocation, lastLocationForTest, true) == 0 {
+				lastLocationNumForTest++
 			} else {
-				lastLocation = job.currentLocation
-				lastLocationNum = 1
+				lastLocationForTest = job.currentLocation
+				lastLocationNumForTest = 1
 			}
 			// trigger a flush after see one job
-			if lastLocationNum == 1 {
-				waitJobsDone = true
-				s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 1 {
+				waitJobsDoneForTest = true
+				s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocationForTest))
 			}
 			// mock a execution error after see two jobs.
-			if lastLocationNum == 2 {
-				failExecuteSQL = true
-				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 2 {
+				failExecuteSQLForTest = true
+				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
 	})
@@ -1490,7 +1490,7 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		})
 		waitDuration -= prepareForWaitTime
 		failpoint.Inject("recordAndIgnorePrepareTime", func() {
-			waitBeforeRunExitDuration = waitDuration
+			waitBeforeRunExitDurationForTest = waitDuration
 		})
 		if waitDuration.Seconds() < 0 {
 			s.tctx.L().Info("wait transaction end timeout, exit now")
@@ -1869,7 +1869,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		})
 		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnce.CAS(false, true) {
+			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnceForTest.CAS(false, true) {
 				err = errors.New("failpoint triggered")
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
@@ -2412,9 +2412,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	}
 
 	failpoint.Inject("flushFirstJob", func() {
-		if waitJobsDone {
+		if waitJobsDoneForTest {
 			s.tctx.L().Info("trigger flushFirstJob")
-			waitJobsDone = false
+			waitJobsDoneForTest = false
 
 			err2 := s.flushJobs()
 			if err2 != nil {

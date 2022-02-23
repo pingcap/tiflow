@@ -230,7 +230,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	})
 
 	failpoint.Inject("failSecondJob", func() {
-		if failExecuteSQL && failOnce.CAS(false, true) {
+		if failExecuteSQLForTest && failOnceForTest.CAS(false, true) {
 			w.logger.Info("trigger failSecondJob")
 			err = terror.ErrDBExecuteFailed.Delegate(errors.New("failSecondJob"), "mock")
 			failpoint.Return()

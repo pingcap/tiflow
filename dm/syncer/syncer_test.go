@@ -1820,6 +1820,6 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	syncer.runWg.Add(1)
 	syncer.waitBeforeRunExit(ctx3)
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
-	require.Equal(t, 2*time.Second, waitBeforeRunExitDuration)
+	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
 	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
 }

@@ -47,8 +47,10 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	s := &Syncer{
 		tctx:     tcontext.Background().WithLogger(l),
 		safeMode: mode.NewSafeMode(), cli: etcdTestCli,
-		cfg: &config.SubTaskConfig{Name: "test", SourceID: "test",
-			SyncerConfig: config.SyncerConfig{CheckpointFlushInterval: 1}},
+		cfg: &config.SubTaskConfig{
+			Name: "test", SourceID: "test",
+			SyncerConfig: config.SyncerConfig{CheckpointFlushInterval: 1},
+		},
 	}
 
 	// test enable by task cliArgs
