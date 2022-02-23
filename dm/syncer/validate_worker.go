@@ -258,7 +258,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 
 	result := make(map[string][]*dbutil.ColumnData, 0)
 	for rows.Next() {
-		rowData, err := ScanRow(rows)
+		rowData, err := scanRow(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +273,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 	return result, nil
 }
 
-func ScanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
+func scanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, errors.Trace(err)
