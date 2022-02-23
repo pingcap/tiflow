@@ -588,7 +588,7 @@ func (st *SubTask) Resume(relay relay.Process) error {
 		return nil
 	}
 
-	if !st.stageCAS(pb.Stage_Paused, pb.Stage_Resuming) {
+	if !st.stageCAS(pb.Stage_Paused, pb.Stage_Resuming) && !st.stageCAS(pb.Stage_Stopped, pb.Stage_Resuming) {
 		return terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
 	}
 
