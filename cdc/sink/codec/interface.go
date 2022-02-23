@@ -39,8 +39,8 @@ type EventBatchEncoder interface {
 	Build() []*MQMessage
 	// Size returns the size of the batch(bytes)
 	Size() int
-	// SetParams provides the encoder with more info on the sink
-	SetParams(config *Config)
+	// setParams provides the encoder with more info on the sink
+	setParams(config *Config)
 }
 
 // MQMessage represents an MQ message to the mqSink

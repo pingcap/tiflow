@@ -82,7 +82,7 @@ func (e *CraftEventBatchEncoder) Size() int {
 }
 
 // SetParams reads relevant parameters for craft protocol
-func (e *CraftEventBatchEncoder) SetParams(config *Config) {
+func (e *CraftEventBatchEncoder) setParams(config *Config) {
 	e.maxMessageBytes = config.maxMessageBytes
 	e.maxBatchSize = config.maxBatchSize
 }
@@ -102,7 +102,7 @@ type craftEventBatchEncoderBuilder struct {
 // Build a CraftEventBatchEncoder
 func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := NewCraftEventBatchEncoder()
-	encoder.SetParams(b.config)
+	encoder.setParams(b.config)
 	return encoder
 }
 

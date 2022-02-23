@@ -497,7 +497,7 @@ func (d *CanalEventBatchEncoder) Size() int {
 }
 
 // SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(_ *Config) {
+func (d *CanalEventBatchEncoder) setParams(_ *Config) {
 	// no op
 }
 
@@ -543,7 +543,7 @@ type canalEventBatchEncoderBuilder struct {
 // Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewCanalEventBatchEncoder()
-	encoder.SetParams(b.config)
+	encoder.setParams(b.config)
 
 	return encoder
 }

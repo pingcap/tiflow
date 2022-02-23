@@ -516,7 +516,7 @@ func (d *JSONEventBatchEncoder) Size() int {
 }
 
 // SetParams reads relevant parameters for Open Protocol
-func (d *JSONEventBatchEncoder) SetParams(config *Config) {
+func (d *JSONEventBatchEncoder) setParams(config *Config) {
 	d.maxMessageBytes = config.maxMessageBytes
 	d.maxBatchSize = config.maxBatchSize
 }
@@ -528,7 +528,7 @@ type jsonEventBatchEncoderBuilder struct {
 // Build a JSONEventBatchEncoder
 func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
 	encoder := NewJSONEventBatchEncoder()
-	encoder.SetParams(b.config)
+	encoder.setParams(b.config)
 
 	return encoder
 }

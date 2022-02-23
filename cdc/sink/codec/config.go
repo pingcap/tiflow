@@ -40,6 +40,7 @@ type Config struct {
 	avroRegistry string
 }
 
+// NewConfig return a Config for codec
 func NewConfig(protocol string) *Config {
 	return &Config{
 		protocol: protocol,
@@ -52,6 +53,7 @@ func NewConfig(protocol string) *Config {
 	}
 }
 
+// Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 	params := sinkURI.Query()
 	if s := params.Get("enable-tidb-extension"); s != "" {
@@ -85,11 +87,13 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 	return nil
 }
 
+// WithMaxMessageBytes set the `maxMessageBytes`
 func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 	c.maxMessageBytes = bytes
 	return c
 }
 
+// Validate the Config
 func (c *Config) Validate() error {
 	if c.protocol != "canal-json" && c.enableTiDBExtension {
 		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only support canal-json protocol`)
@@ -110,6 +114,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// GetMaxMessageBytes return the maxMessageBytes for the codec
 func (c *Config) GetMaxMessageBytes() int {
 	return c.maxMessageBytes
 }

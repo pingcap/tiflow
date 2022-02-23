@@ -35,7 +35,7 @@ type maxwellEventBatchEncoderBuilder struct {
 // Build a `MaxwellEventBatchEncoder`
 func (b *maxwellEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewMaxwellEventBatchEncoder()
-	encoder.SetParams(b.config)
+	encoder.setParams(b.config)
 	return encoder
 }
 
@@ -180,7 +180,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 // SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(config *Config) {
+func (d *MaxwellEventBatchEncoder) setParams(config *Config) {
 	// no op
 }
 

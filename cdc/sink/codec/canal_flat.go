@@ -57,7 +57,7 @@ type canalFlatEventBatchEncoderBuilder struct {
 // Build a `CanalFlatEventBatchEncoder`
 func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
 	encoder := NewCanalFlatEventBatchEncoder()
-	encoder.SetParams(b.config)
+	encoder.setParams(b.config)
 
 	return encoder
 }
@@ -361,7 +361,7 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
-func (c *CanalFlatEventBatchEncoder) SetParams(config *Config) {
+func (c *CanalFlatEventBatchEncoder) setParams(config *Config) {
 	c.enableTiDBExtension = config.enableTiDBExtension
 }
 
