@@ -218,7 +218,7 @@ type kafkaSaramaProducer struct {
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
 	clientLock    sync.RWMutex
-	admin         sarama.ClusterAdmin
+	admin         kafka.ClusterAdminClient
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
 	syncProducer  sarama.SyncProducer
@@ -428,7 +428,7 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
+	k.metricsMonitor.cleanup()
 
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
@@ -506,11 +506,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	defer func() {
-		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err))
-		}
-	}()
 
 	if err := validateAndCreateTopic(admin, topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -528,11 +523,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	}
 
 	syncProducer, err := sarama.NewSyncProducerFromClient(client)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	admin, err := sarama.NewClusterAdminFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -562,7 +552,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		id:   changefeedID,
 		role: role,
 
-		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+		metricsMonitor: newSaramaMetricsMonitor(cfg.MetricRegistry,
 			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {

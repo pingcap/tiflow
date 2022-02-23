@@ -16,8 +16,8 @@ package kafka
 import (
 	"strconv"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -177,7 +177,7 @@ type saramaMetricsMonitor struct {
 	changefeedID string
 
 	registry metrics.Registry
-	admin    sarama.ClusterAdmin
+	admin    kafka.ClusterAdminClient
 }
 
 // CollectMetrics collect all monitored metrics
@@ -266,7 +266,7 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 	return nil
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin sarama.ClusterAdmin) *saramaMetricsMonitor {
+func newSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
 	return &saramaMetricsMonitor{
 		captureAddr:  captureAddr,
 		changefeedID: changefeedID,
@@ -275,7 +275,7 @@ func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 	}
 }
 
-func (sm *saramaMetricsMonitor) Cleanup() {
+func (sm *saramaMetricsMonitor) cleanup() {
 	sm.cleanUpProducerMetrics()
 	if err := sm.cleanUpBrokerMetrics(); err != nil {
 		log.Warn("clean up broker metrics failed", zap.Error(err))
