@@ -89,11 +89,11 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
 
-	// close twice
-	w.Close()
+	// stop twice
+	w.Stop(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	w.Close()
+	w.Stop(true)
 	c.Assert(w.closed.Load(), IsTrue)
 	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
 	c.Assert(w.closed.Load(), IsTrue)
@@ -205,11 +205,11 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
 	subtaskCfg.Timezone = "UTC"
-	c.Assert(s.getWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
+	c.Assert(s.getSourceWorker(true).StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
 
 	// check task in paused state
 	c.Assert(utils.WaitSomething(100, 100*time.Millisecond, func() bool {
-		subtaskStatus, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		subtaskStatus, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range subtaskStatus {
 			if st.Name == taskName && st.Stage == pb.Stage_Paused {
 				return true
@@ -220,7 +220,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	//nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
-	rtsc, ok := s.getWorker(true).taskStatusChecker.(*realTaskStatusChecker)
+	rtsc, ok := s.getSourceWorker(true).taskStatusChecker.(*realTaskStatusChecker)
 	c.Assert(ok, IsTrue)
 	defer func() {
 		// close multiple time
@@ -230,7 +230,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 
 	// check task will be auto resumed
 	c.Assert(utils.WaitSomething(10, 100*time.Millisecond, func() bool {
-		sts, _, _ := s.getWorker(true).QueryStatus(context.Background(), taskName)
+		sts, _, _ := s.getSourceWorker(true).QueryStatus(context.Background(), taskName)
 		for _, st := range sts {
 			if st.Name == taskName && st.Stage == pb.Stage_Running {
 				return true
@@ -302,7 +302,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 	// start worker
 	w, err := NewSourceWorker(sourceCfg, etcdCli, "", "")
 	c.Assert(err, IsNil)
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		w.Start()
 	}()
@@ -474,7 +474,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		w.Start()
 	}()
@@ -553,7 +553,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	c.Assert(status, HasLen, 1)
 	c.Assert(status[0].Name, Equals, subtaskCfg.Name)
 	c.Assert(status[0].Stage, Equals, pb.Stage_Running)
-	w.Close()
+	w.Stop(true)
 	cancel2()
 	wg.Wait()
 }
@@ -592,7 +592,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		w.Start()
 	}()
@@ -713,7 +713,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer w.Close()
+	defer w.Stop(true)
 	go func() {
 		c.Assert(w.EnableRelay(false), IsNil)
 		w.Start()

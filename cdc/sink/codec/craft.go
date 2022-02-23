@@ -54,17 +54,12 @@ func (e *CraftEventBatchEncoder) flush() {
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
+func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
 		e.flush()
 	}
-	return EncoderNoOperation, nil
-}
-
-// AppendResolvedEvent is no-op
-func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
@@ -83,19 +78,9 @@ func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Only JsonEncoder supports mixed build")
-}
-
 // Size implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.Size()
-}
-
-// Reset implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) Reset() {
-	e.rowChangedBuffer.Reset()
 }
 
 // SetParams reads relevant parameters for craft protocol

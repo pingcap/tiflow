@@ -261,15 +261,6 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 		return nil, errors.Trace(err)
 	}
 
-	if base.Delete && !m.enableOldValue && (tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
-		handleColIDs, fieldTps, _ := tableInfo.GetRowColInfos()
-		preRow, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, fieldTps, m.tz, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		preRowExist = true
-	}
-
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
