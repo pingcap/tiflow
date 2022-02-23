@@ -236,11 +236,13 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			if len(task.DeleteReq.Range[0]) != 0 && len(task.DeleteReq.Range[1]) != 0 {
 				// Force write pending write batch before delete range.
 				if err := ldb.maybeWrite(true); err != nil {
-					log.Panic("db error", zap.Error(err))
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("taleID", task.TableID))
 				}
 				start, end := task.DeleteReq.Range[0], task.DeleteReq.Range[1]
 				if err := ldb.db.DeleteRange(start, end); err != nil {
-					log.Panic("db error", zap.Error(err))
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("taleID", task.TableID))
 				}
 				ldb.tryScheduleCompact()
 			}
