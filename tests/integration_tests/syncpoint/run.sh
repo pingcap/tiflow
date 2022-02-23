@@ -5,7 +5,7 @@
 #   It will record the syncpoint map of upstream and downstream to a table to achieve snapshot level consistency replication
 # [STEP]:
 #   1. Create changefeed with --sync-point --sync-interval=10s
-#   2. After test, get all syncpoints from tidb_cdc.syncpoint_v1 
+#   2. After test, get all syncpoints from tidb_cdc.syncpoint_v1
 #   3. Get all ddl history from Upstream TiDB
 #   4. Check if the syncpoint is in the process of a ddl, if not, using syncpoint to check data diff of upstream and downstream
 
@@ -100,35 +100,35 @@ function checkPrimaryTsNotInDDL() {
 		commit_ts=${tsos[((2 * $i - 1))]}
 		if [[ ($primary_ts > $start_ts) && ($primary_ts < $commit_ts) ]]; then
 			echo "$start_ts $commit_ts"
-            return
+			return
 		fi
 	done
 }
 
 # check whether the synpoint happens after test ddl to avoid `no table need to be compared` of sync_diff_inspector
-# we need to make sure that the syncpoint we check is after the `CREATE table` 
+# we need to make sure that the syncpoint we check is after the `CREATE table`
 function checkValidSyncPointTs() {
 	primary_ts=$1
-    first_ddl_ts=$2
-    echo "syncpoint primary_ts: $primary_ts, first_ddl_ts: $first_ddl_ts"
-    if [[ ($primary_ts < $first_ddl_ts) ]]; then
-        echo 0
-        return
-    fi
-    echo 1
+	first_ddl_ts=$2
+	echo "syncpoint primary_ts: $primary_ts, first_ddl_ts: $first_ddl_ts"
+	if [[ ($primary_ts < $first_ddl_ts) ]]; then
+		echo 0
+		return
+	fi
+	echo 1
 }
 
 function checkDiff() {
 	primaryArr=($(grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
 	secondaryArr=($(grep secondary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'))
 	tsos=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history | grep -E "real_start_ts|FinishedTS" | grep -oE "[0-9]*"))
-    firstDDLTs=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history |grep -B 3 "CREATE table testSync" |grep "real_start_ts"| grep -oE "[0-9]*"))
+	firstDDLTs=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history | grep -B 3 "CREATE table testSync" | grep "real_start_ts" | grep -oE "[0-9]*"))
 	num=${#primaryArr[*]}
 	for ((i = 0; i < $num; i++)); do
-        if [[ 1 != $(checkValidSyncPointTs ${primaryArr[$i]} $firstDDLTs) ]]; then
-            echo "skip invalid syncpoint primary_ts: ${primaryArr[$i]}, first_ddl_ts: $firstDDLTs"
-            continue
-        fi
+		if [[ 1 != $(checkValidSyncPointTs ${primaryArr[$i]} $firstDDLTs) ]]; then
+			echo "skip invalid syncpoint primary_ts: ${primaryArr[$i]}, first_ddl_ts: $firstDDLTs"
+			continue
+		fi
 
 		check_in_ddl=$(checkPrimaryTsNotInDDL ${primaryArr[$i]} $tsos)
 		if [[ ! -z $check_in_ddl ]]; then
