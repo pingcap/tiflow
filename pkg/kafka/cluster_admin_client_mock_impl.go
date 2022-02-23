@@ -38,9 +38,12 @@ const (
 )
 
 var (
+	// BrokerMessageMaxBytes is the broker's `message.max.bytes`
 	BrokerMessageMaxBytes = defaultBrokerMessageMaxBytes
-	TopicMaxMessageBytes  = defaultTopicMaxMessageBytes
-	MinInSyncReplicas     = defaultMinInsyncReplicas
+	// TopicMaxMessageBytes is the topic's `max.message.bytes`
+	TopicMaxMessageBytes = defaultTopicMaxMessageBytes
+	// MinInSyncReplicas is the `min.insync.replicas`
+	MinInSyncReplicas = defaultMinInsyncReplicas
 )
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.

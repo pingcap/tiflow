@@ -412,6 +412,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
+// AdjustConfig adjust the `Config` and `sarama.Config` by condition.
 func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
@@ -491,6 +492,7 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *
 	return nil
 }
 
+// CreateTopic create the topic by `topicConfig`.
 func CreateTopic(admin kafka.ClusterAdminClient, config *topicConfig) error {
 	topics, err := admin.ListTopics()
 	if err != nil {

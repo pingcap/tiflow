@@ -104,6 +104,7 @@ type topicConfig struct {
 	replicationFactor int16
 }
 
+// DeriveTopicConfig derive a `topicConfig` from the `Config`
 func (c *Config) DeriveTopicConfig(topicName string) *topicConfig {
 	return &topicConfig{
 		name:              topicName,
