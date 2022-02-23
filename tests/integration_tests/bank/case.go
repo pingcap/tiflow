@@ -598,6 +598,7 @@ type dataRow struct {
 	SchemeID    int64
 	TblID       int64
 	RowCount    int64
+	CreateTime  string
 	StartTime   string
 	EndTime     *string
 	State       string
@@ -624,7 +625,7 @@ func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
 	var line dataRow
 	row := db.QueryRow(query, tableName)
 	if err := row.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
-		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+		&line.TblID, &line.RowCount, &line.CreateTime, &line.StartTime, &line.EndTime, &line.State); err != nil {
 		if err != sql.ErrNoRows {
 			log.Info("rows scan failed", zap.Error(err))
 		}
