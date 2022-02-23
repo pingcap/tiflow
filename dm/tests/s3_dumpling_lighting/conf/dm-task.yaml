@@ -1,5 +1,5 @@
 ---
-name: s3_dumpling_lightning
+name: test
 task-mode: all
 is-sharding: true
 meta-schema: "dm_meta"
@@ -51,7 +51,7 @@ mydumpers:
 loaders:
   global:
     pool-size: 16
-    dir: "s3://dmbucket/dump?region=us-west-2&endpoint=http://127.0.0.1:8688&access_key=s3accesskey&secret_access_key=s3secretkey&force_path_style=true"
+    dir: placeholder
     import-mode: "sql"
 
 syncers:

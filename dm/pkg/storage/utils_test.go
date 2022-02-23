@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -31,93 +32,93 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsS3AndAdjustS3Path(t *testing.T) {
+func TestIsS3(t *testing.T) {
 	testPaths := []string{
 		"",
 		"1invalid:",
 		"file:///tmp/storage",
 		"/tmp/storage",
 		"./tmp/storage",
-		"./tmp/storage.mysql-replica-01",
-		"./tmp/storage.t-Ë!s`t",
 		"tmp/storage",
 		"s3:///bucket/more/prefix",
 		"s3://bucket2/prefix",
 		"s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
 		"s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
-		"s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
-		"s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
 	}
 
 	testIsS3Results := []bool{
-		false, false, false, false, false, false, false, false, true, true, true, true, true, true,
+		false, false, false, false, false, false, true, true, true, true,
 	}
 
 	for i, testPath := range testPaths {
 		isS3 := IsS3Path(testPath)
 		require.Equal(t, testIsS3Results[i], isS3)
 	}
+}
 
-	testAdjustResults := []struct {
-		hasErr bool
-		res    string
+func TestIsS3AndAdjustS3Path(t *testing.T) {
+	testPaths := []struct {
+		isURLFormat bool
+		rawPath     string
+		expectPath  string
 	}{
-		{false, ""},
-		{true, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
-		{false, "file:///tmp/storage.mysql-replica-01"},
-		{false, "/tmp/storage.mysql-replica-01"},
-		{false, "./tmp/storage.mysql-replica-01"},
-		{false, "./tmp/storage.mysql-replica-01"},
-		{false, "./tmp/storage.t-Ë!s`t.mysql-replica-01"},
-		{false, "tmp/storage.mysql-replica-01"},
-		{false, "s3:///bucket/more/prefix.mysql-replica-01"},
-		{false, "s3://bucket2/prefix.mysql-replica-01"},
-		{false, "s3://bucket3/prefix/path.mysql-replica-01?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc"},
-		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
-		{false, "s3://bucket4/prefix/path.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
-		{false, "s3://bucket4/prefix/path.t-Ë!s`t.mysql-replica-01?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{true, "file:///tmp/storage", "file:///tmp/storage.placeholder"},
+		{false, "/tmp/storage", "/tmp/storage.placeholder"},
+		{false, "./tmp/storage", "./tmp/storage.placeholder"},
+		{false, "tmp/storage", "tmp/storage.placeholder"},
+		{true, "s3:///bucket/more/prefix", "s3:///bucket/more/prefix.placeholder"},
+		{true, "s3://bucket2/prefix", "s3://bucket2/prefix.placeholder"},
+		{
+			true, "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+			"s3://bucket3/prefix/path.placeholder?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+		},
+		{
+			true, "s3://bucket3/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+			"s3://bucket3/prefix/path.placeholder?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt%2BPaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+		},
 	}
 
-	for i, testPath := range testPaths {
-		newDir, err := AdjustPath(testPath, "mysql-replica-01")
-		if testAdjustResults[i].hasErr {
-			require.Error(t, err)
-			require.Regexp(t, testAdjustResults[i].res, err.Error())
-		} else {
-			require.NoError(t, err)
-			require.Equal(t, testAdjustResults[i].res, newDir)
-		}
-	}
-
-	// special suffix
-	testAdjustResults = []struct {
-		hasErr bool
-		res    string
+	testUniqueIDs := []struct {
+		test   string
+		expect string
 	}{
-		{false, ""},
-		{true, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*"},
-		{false, "file:///tmp/storage.t-Ë!s`t"},
-		{false, "/tmp/storage.t-Ë!s`t"},
-		{false, "./tmp/storage.t-Ë!s`t"},
-		{false, "./tmp/storage.mysql-replica-01.t-Ë!s`t"},
-		{false, "./tmp/storage.t-Ë!s`t"},
-		{false, "tmp/storage.t-Ë!s`t"},
-		{false, "s3:///bucket/more/prefix.t-Ë!s`t"},
-		{false, "s3://bucket2/prefix.t-Ë!s`t"},
-		{false, "s3://bucket3/prefix/path.t-Ë!s`t?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc"},
-		{false, "s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
-		{false, "s3://bucket4/prefix/path.mysql-replica-01.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
-		{false, "s3://bucket4/prefix/path.t-Ë!s`t?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw"},
+		{"mysql-replica-01", "mysql-replica-01"},
+		{"t-Ë!s`t", "t-%C3%8B%21s%60t"},
+		{"abc???bcd", "abc%3F%3F%3Fbcd"},
+		{"ab?c/b%cËd", "ab%3Fc/b%25c%C3%8Bd"},
+		{"a%2F%3Fbc", "a%252F%253Fbc"},
 	}
 
-	for i, testPath := range testPaths {
-		newDir, err := AdjustPath(testPath, "t-Ë!s`t")
-		if testAdjustResults[i].hasErr {
-			require.Error(t, err)
-			require.Regexp(t, testAdjustResults[i].res, err.Error())
-		} else {
+	for _, testUniqueID := range testUniqueIDs {
+		for _, testPath := range testPaths {
+			// ""
+			res, err := AdjustPath("", "")
 			require.NoError(t, err)
-			require.Equal(t, testAdjustResults[i].res, newDir)
+			require.Equal(t, "", res)
+			res, err = AdjustPath(testPath.rawPath, "")
+			require.NoError(t, err)
+			require.Equal(t, testPath.rawPath, res)
+			res, err = AdjustPath("", testUniqueID.test)
+			require.NoError(t, err)
+			require.Equal(t, "", res)
+			// error
+			_, err = AdjustPath("1invalid:", testUniqueID.test)
+			require.Error(t, err)
+			require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
+			// normal
+			var expectPath string
+			if testPath.isURLFormat {
+				expectPath = strings.ReplaceAll(testPath.expectPath, "placeholder", testUniqueID.expect)
+			} else {
+				expectPath = strings.ReplaceAll(testPath.expectPath, "placeholder", testUniqueID.test)
+			}
+			res, err = AdjustPath(testPath.rawPath, testUniqueID.test)
+			require.NoError(t, err)
+			require.Equal(t, expectPath, res)
+			// repeat
+			res, err = AdjustPath(expectPath, testUniqueID.test)
+			require.NoError(t, err)
+			require.Equal(t, expectPath, res)
 		}
 	}
 }

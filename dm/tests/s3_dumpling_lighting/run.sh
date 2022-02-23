@@ -6,11 +6,14 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 TASK_NAME="s3_dumpling_lightning"
+SPECIAL_TASK_NAME="ab?c/b%cËd"
 SOURCE_ID1="mysql-replica-01"
 db="s3_dumpling_lightning"
 db1="s3_dumpling_lightning1"
 tb="t"
 tb1="t1"
+S3_DIR="s3://dmbucket/dump?region=us-west-2\&endpoint=http://127.0.0.1:8688\&access_key=s3accesskey\&secret_access_key=s3secretkey\&force_path_style=true"
+LOCAL_TEST_DIR="./dumpdata"
 
 # s3 config
 s3_ACCESS_KEY="s3accesskey"
@@ -75,8 +78,8 @@ function dir_should_not_exist() {
 	fi
 }
 
-# $1 == true will checkDumpFile
-# $1 == false will not
+# $1 == true will checkDumpFile, false will not
+# $2 == task_name used for check dump file exist or not
 function run_test() {
 
 	cleanup_data
@@ -85,10 +88,9 @@ function run_test() {
 	start_s3
 
 	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	check_master_port_offline 1
+	wait_process_exit dm-master.test
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	wait_process_exit dm-worker.test
 
 	if $1; then
 		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/S3GetDumpFilesCheck=return()"
@@ -118,7 +120,10 @@ function run_test() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "start task"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s#name: test#name: $2#g" $WORK_DIR/dm-task.yaml
+	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task.yaml
+	dmctl_start_task $WORK_DIR/dm-task.yaml "--remove-meta"
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -132,10 +137,10 @@ function run_test() {
 
 	# check dump file
 	if $1; then
-		check_dump_s3_exist $db1 $tb1 $TASK_NAME $SOURCE_ID1
+		check_dump_s3_exist $db1 $tb1 $2 $SOURCE_ID1
 		export GO_FAILPOINTS=""
 	else
-		dir_should_not_exist "${s3_DBPATH}/${dumpPath}.${TASK_NAME}.${SOURCE_ID1}"
+		dir_should_not_exist "${s3_DBPATH}/${dumpPath}.${2}.${SOURCE_ID1}"
 	fi
 
 	cleanup_s3
@@ -149,10 +154,9 @@ function run_error_check() {
 	start_s3
 
 	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	check_master_port_offline 1
+	wait_process_exit dm-master.test
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	wait_process_exit dm-worker.test
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/TestRemoveMetaFile=return()"
 
@@ -178,7 +182,10 @@ function run_error_check() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "start task"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s#name: test#name: $TASK_NAME#g" $WORK_DIR/dm-task.yaml
+	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task.yaml
+	dmctl_start_task $WORK_DIR/dm-task.yaml "--remove-meta"
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -192,13 +199,66 @@ function run_error_check() {
 	cleanup_s3
 }
 
+function test_local_special_name() {
+	cleanup_data
+
+	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	wait_process_exit dm-master.test
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	wait_process_exit dm-worker.test
+
+	# start dm master and worker
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	echo "prepare source data"
+	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/clean_data.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_file $cur/data/clean_data.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	echo "start task"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s#name: test#name: $SPECIAL_TASK_NAME#g" $WORK_DIR/dm-task.yaml
+	sed -i "s#dir: placeholder#dir: $LOCAL_TEST_DIR#g" $WORK_DIR/dm-task.yaml
+	dmctl_start_task $WORK_DIR/dm-task.yaml "--remove-meta"
+
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	echo "check task result"
+	# wait
+	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+
+	# check table data
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
+}
+
 function run() {
-	run_test true
+	run_test true $TASK_NAME
 	echo "run s3 test with check dump files success"
-	run_test false
+	run_test false $TASK_NAME
 	echo "run s3 test without check dump files success"
+	run_test true $SPECIAL_TASK_NAME
+	echo "run s3 test with special task-name and check dump files success"
+	run_test false $SPECIAL_TASK_NAME
+	echo "run s3 test with special task-name and without check dump files success"
 	run_error_check
 	echo "run s3 test error check success"
+	# # TODO local special name will be resolved after fix https://github.com/pingcap/tidb/issues/32549
+	# test_local_special_name
+	# echo "run local special task-name success"
 }
 
 cleanup_data $TEST_NAME

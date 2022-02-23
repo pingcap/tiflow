@@ -15,7 +15,6 @@ package storage
 
 import (
 	"context"
-	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -29,24 +28,27 @@ import (
 
 // AdjustPath adjust rawURL, add uniqueId as path suffix.
 func AdjustPath(rawURL string, uniqueID string) (string, error) {
-	if rawURL == "" {
+	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
 	}
 	u, err := bstorage.ParseRawURL(rawURL)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	trimPath := strings.TrimRight(u.Path, "/")
-	// avoid duplicate add uniqueID
-	if uniqueID != "" && !strings.HasSuffix(trimPath, uniqueID) {
-		u.Path = trimPath + "." + uniqueID
-		newURL, err := url.QueryUnescape(u.String())
-		if err != nil {
-			return "", errors.Trace(err)
+	// not url format, we don't use url library to avoid being escaped or unescaped
+	if u.Scheme == "" {
+		// avoid duplicate add uniqueID
+		if !strings.HasSuffix(rawURL, uniqueID) {
+			return rawURL + "." + uniqueID, nil
 		}
-		return newURL, nil
+		return rawURL, nil
 	}
-
+	// u.Path is an unescaped string and can be used as normal
+	if !strings.HasSuffix(u.Path, uniqueID) {
+		u.Path = u.Path + "." + uniqueID
+		// u.String will return escaped url and can be used safely in other steps
+		return u.String(), err
+	}
 	return rawURL, nil
 }
 
@@ -55,7 +57,7 @@ func IsS3Path(rawURL string) bool {
 	if rawURL == "" {
 		return false
 	}
-	u, err := url.Parse(rawURL)
+	u, err := bstorage.ParseRawURL(rawURL)
 	if err != nil {
 		return false
 	}

@@ -138,6 +138,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 		if worker != "" && worker != workerName {
 			return "", "", terror.ErrLoadTaskWorkerNotMatch.Generate(worker, workerName)
 		}
+		return "", "", terror.ErrParseMydumperMeta.Generate(err, "not found")
 	}
 	if terror.ErrMetadataNoBinlogLoc.Equal(err) {
 		log.L().Warn("dumped metadata doesn't have binlog location, it's OK if DM doesn't enter incremental mode")
