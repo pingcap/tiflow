@@ -461,6 +461,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrKafkaTopicExprInvalid"]
+error = '''
+invalid topic expression
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
