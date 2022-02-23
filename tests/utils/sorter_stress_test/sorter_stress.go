@@ -52,7 +52,7 @@ func main() {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:    60,
+		MaxMemoryPercentage:  60,
 		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
 	}
 	config.StoreGlobalServerConfig(conf)

@@ -158,7 +158,7 @@ func TestParseCfg(t *testing.T) {
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    80,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
 			SortDir:                config.DefaultSortDir,
@@ -301,7 +301,7 @@ server-worker-pool-size = 16
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         10000000,
-			MaxMemoryPressure:      3,
+			MaxMemoryPercentage:    3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
@@ -434,7 +434,7 @@ cert-allowed-cn = ["dd","ee"]
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    3,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,

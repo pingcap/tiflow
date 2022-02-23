@@ -717,12 +717,12 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return ls.outputCh
 }
 
-// CleanupFunc returns a funcation that cleans up sorter's data.
+// CleanupFunc returns a function that cleans up sorter's data.
 func (ls *Sorter) CleanupFunc() func(context.Context) error {
 	return func(ctx context.Context) error {
 		task := message.Task{UID: ls.uid, TableID: ls.tableID}
 		task.DeleteReq = &message.DeleteRequest{
-			// We do not set task.Delte.Count, because we don't know
+			// We do not set task.Delete.Count, because we don't know
 			// how many key-value pairs in the range.
 			Range: [2][]byte{
 				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
