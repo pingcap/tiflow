@@ -42,6 +42,7 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -216,7 +217,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	// create an etcd client used in the whole server instance.
 	// NOTE: we only use the local member's address now, but we can use all endpoints of the cluster if needed.
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, tls.TLSConfig())
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tls.TLSConfig())
 	if err != nil {
 		return
 	}
@@ -575,7 +576,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -2587,4 +2588,182 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	reflect.ValueOf(respPointer).Elem().Set(reflect.Zero(respType))
 	*errPointer = terror.ErrMasterRequestIsNotForwardToLeader
 	return true
+}
+
+func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
+	var (
+		resp2       *pb.StartValidationResponse
+		err2        error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StartValidationResponse{}
+	if (req.IsAllTask && len(req.TaskName) > 0) || (!req.IsAllTask && len(req.TaskName) == 0) {
+		resp.Result = false
+		resp.Msg = "either `task-name` or `all-task` should be set"
+		return resp, nil
+	}
+	if req.Mode != config.ValidationFull && req.Mode != config.ValidationFast {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: wait for #4479 and update the validator stage in etcd
+	// get the validator stage: common.StageValidatorKeyAdapter.Encode(source, task-name)
+	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
+	// if the validator stage is `RUNNING`: then report error
+	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
+	var (
+		resp2       *pb.StopValidationResponse
+		err2        error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StopValidationResponse{}
+	if (req.IsAllTask && len(req.TaskName) > 0) || (!req.IsAllTask && len(req.TaskName) == 0) {
+		resp.Result = false
+		resp.Msg = "either `task-name` or `all-task` should be set"
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: update the validator stage in etcd
+	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	var (
+		resp2       *pb.GetValidationStatusResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.FilterStatus != strings.ToLower(pb.Stage_Running.String()) && req.FilterStatus != strings.ToLower(pb.Stage_Stopped.String()) {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
+		return resp, err
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: get validation status from worker
+	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
+}
+
+func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	var (
+		resp2       *pb.GetValidationErrorResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationErrorResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: get validation error from worker
+	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
+}
+
+func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	var (
+		resp2       *pb.OperateValidationErrorResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.IsAllError && req.ErrId != "" {
+		resp.Result = false
+		resp.Msg = "either `all` error flags or `error id` should be set"
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: operate validation error at worker
+	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
 }

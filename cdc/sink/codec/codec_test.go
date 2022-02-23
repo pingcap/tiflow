@@ -354,7 +354,7 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 	encoder.SetParams(config)
 
 	for _, event := range events {
-		_, err := encoder.AppendRowChangedEvent(event)
+		err := encoder.AppendRowChangedEvent(event)
 		if err != nil {
 			return nil, err
 		}

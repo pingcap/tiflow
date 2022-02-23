@@ -498,7 +498,7 @@ func (b *RowChangedEventBuffer) Size() int {
 	return b.estimatedSize
 }
 
-// Number of rows batched in this buffer
+// RowsCount returns number of rows batched in this buffer.
 func (b *RowChangedEventBuffer) RowsCount() int {
 	return b.eventsCount
 }

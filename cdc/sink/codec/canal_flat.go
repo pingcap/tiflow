@@ -312,13 +312,13 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	message, err := c.newFlatMessageForDML(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	c.messageBuf = append(c.messageBuf, message)
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent encodes DDL events
@@ -351,11 +351,6 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// MixedBuild is not used here
-func (c *CanalFlatEventBatchEncoder) MixedBuild(_ bool) []byte {
-	panic("MixedBuild not supported by CanalFlatEventBatchEncoder")
-}
-
 // Size implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
@@ -377,7 +372,7 @@ type CanalFlatEventBatchDecoder struct {
 	enableTiDBExtension bool
 }
 
-func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+func newCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,
@@ -495,7 +490,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := NewColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
+		col := newColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {

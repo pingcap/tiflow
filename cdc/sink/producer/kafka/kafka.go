@@ -320,6 +320,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
+// NewAdminClientImpl specifies the build method for the admin client.
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
@@ -375,7 +376,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, s
 		id:   changefeedID,
 		role: role,
 
-		metricsMonitor: NewSaramaMetricsMonitor(saramaConfig.MetricRegistry,
+		metricsMonitor: newSaramaMetricsMonitor(saramaConfig.MetricRegistry,
 			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {
