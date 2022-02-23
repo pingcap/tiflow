@@ -27,7 +27,7 @@ import (
 
 const (
 	// flushBatchSize is the batch size of the flush worker.
-	flushBatchSize = 4096
+	flushBatchSize = 2048
 	// flushInterval is the interval of the flush worker.
 	flushInterval = 500 * time.Millisecond
 )
