@@ -110,10 +110,4 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	_, leaderID, _, err = s2.election.LeaderInfo(ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(leaderID, check.Equals, cfg2.Name)
-<<<<<<< HEAD
-
-	cancel()
-=======
-	c.Assert(clusterID, check.Equals, s2.ClusterID())
->>>>>>> 7ccbdff7e (test(dm): fix unsteable test TestFailToStartLeader (#4566))
 }
