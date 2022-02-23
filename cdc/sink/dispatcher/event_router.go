@@ -86,8 +86,10 @@ func (s *EventRouter) matchDispatcher(row *model.RowChangedEvent) (topic.Dispatc
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
 func getPartitionDispatcher(ruleConfig *config.DispatchRule, partitionNum int32, enableOldValue bool) partition.Dispatcher {
-	var d partition.Dispatcher
-	var rule partitionDispatchRule
+	var (
+		d    partition.Dispatcher
+		rule partitionDispatchRule
+	)
 	rule.fromString(ruleConfig.PartitionRule)
 	switch rule {
 	case partitionDispatchRuleRowID, partitionDispatchRuleIndexValue:
