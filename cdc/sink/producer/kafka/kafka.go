@@ -772,46 +772,39 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	return config, err
 }
 
-func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
-	target := "message.max.bytes"
+// getBrokerConfig gets broker config by name.
+func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return "", err
 	}
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.BrokerResource,
 		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{target},
+		ConfigNames: []string{brokerConfigName},
 	})
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != target {
-		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
-			"since cannot find the `message.max.bytes` from the broker's configuration, " +
-				"ticdc decline to create the topic and changefeed to prevent potential error")
+	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
+		return "", errors.New(fmt.Sprintf(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName))
 	}
 
-	result, err := strconv.Atoi(configEntries[0].Value)
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	return result, nil
+	return configEntries[0].Value, nil
 }
 
-func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail) (int, error) {
-	if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
-		result, err := strconv.Atoi(*a)
-		if err != nil {
-			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
-		return result, nil
+// getTopicConfig gets topic config by name.
+// If the topic does not have this configuration, we will try to get it from the broker's configuration.
+// NOTICE: The configuration names of topic and broker may be different for the same configuration.
+func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
+		return *a, nil
 	}
 
-	return getBrokerMessageMaxBytes(admin)
+	return getBrokerConfig(admin, brokerConfigName)
 }
 
 // adjust the partition-num by the topic's partition count
