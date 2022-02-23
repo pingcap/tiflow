@@ -172,11 +172,11 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.addWorker(workerID1, executorNodeID1)
+	err := safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
-	err = manager.addWorker(workerID2, executorNodeID2)
+	err = safeAddWorker(manager, workerID2, executorNodeID2)
 	require.NoError(t, err)
-	err = manager.addWorker(workerID3, executorNodeID3)
+	err = safeAddWorker(manager, workerID3, executorNodeID3)
 	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx, msgSender)
@@ -324,6 +324,12 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	wg.Wait()
 }
 
+func safeAddWorker(manager *workerManagerImpl, id WorkerID, executorNodeID p2p.NodeID) error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.addWorker(id, executorNodeID)
+}
+
 func TestUpdateStatus(t *testing.T) {
 	t.Parallel()
 
@@ -363,7 +369,7 @@ func TestUpdateStatus(t *testing.T) {
 		&defaultTimeoutConfig,
 	).(*workerManagerImpl)
 
-	err = manager.addWorker(workerID1, executorNodeID1)
+	err = safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -444,7 +450,7 @@ func TestWorkerTimedOut(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.addWorker(workerID1, executorNodeID1)
+	err := safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
@@ -507,7 +513,7 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	err := manager.addWorker(workerID1, executorNodeID1)
+	err := safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
 	offlined, onlined := manager.Tick(ctx, msgSender)
