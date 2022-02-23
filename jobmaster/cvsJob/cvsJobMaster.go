@@ -194,6 +194,11 @@ func (jm *JobMaster) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusNormal, Ext: jm.counter}
 }
 
+func (jm *JobMaster) GetWorkerStatusExtTypeInfo() interface{} {
+	var dummy int64
+	return &dummy
+}
+
 func (jm *JobMaster) listSrcFiles(ctx context.Context) ([]string, error) {
 	conn, err := grpc.Dial(jm.syncInfo.SrcHost, grpc.WithInsecure())
 	if err != nil {

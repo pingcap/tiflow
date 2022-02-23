@@ -3,29 +3,71 @@ package lib
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
 )
 
 type BaseJobMaster interface {
-	BaseMaster
-	BaseWorker
+	Init(ctx context.Context) error
+	Poll(ctx context.Context) error
+	Close(ctx context.Context) error
+	OnError(err error)
+
+	MetaKVClient() metadata.MetaKV
+
+	GetWorkers() map[WorkerID]WorkerHandle
+
+	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+
+	Workload() model.RescUnit
+
+	JobMasterID() MasterID
+	ID() worker.RunnableID
+	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
+
+	// IsBaseJobMaster is an empty function used to prevent accidental implementation
+	// of this interface.
+	IsBaseJobMaster()
 }
 
-type defaultBaseJobMaster struct {
-	master BaseMaster
-	worker BaseWorker
+type DefaultBaseJobMaster struct {
+	master *DefaultBaseMaster
+	worker *DefaultBaseWorker
+	impl   JobMasterImpl
+}
+
+type JobMasterImpl interface {
+	InitImpl(ctx context.Context) error
+	Tick(ctx context.Context) error
+	CloseImpl(ctx context.Context) error
+
+	OnMasterRecovered(ctx context.Context) error
+	OnWorkerDispatched(worker WorkerHandle, result error) error
+	OnWorkerOnline(worker WorkerHandle) error
+	OnWorkerOffline(worker WorkerHandle, reason error) error
+	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+	GetWorkerStatusExtTypeInfo() interface{}
+	GetJobMasterStatusExtTypeInfo() interface{}
+
+	Workload() model.RescUnit
+	OnJobManagerFailover(reason MasterFailoverReason) error
+
+	// IsJobMasterImpl is an empty function used to prevent accidental implementation
+	// of this interface.
+	IsJobMasterImpl()
 }
 
 func NewBaseJobMaster(
 	ctx *dcontext.Context,
-	masterImpl MasterImpl,
-	workerImpl WorkerImpl,
+	jobMasterImpl JobMasterImpl,
 	masterID MasterID,
 	workerID WorkerID,
 	messageHandlerManager p2p.MessageHandlerManager,
@@ -39,85 +81,189 @@ func NewBaseJobMaster(
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, masterImpl, workerID, messageHandlerManager,
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, messageHandlerManager,
 		messageRouter, metaKVClient, executorClientManager, serverMasterClient)
 	baseWorker := NewBaseWorker(
-		workerImpl, messageHandlerManager, messageRouter, metaKVClient,
+		&jobMasterImplAsWorkerImpl{jobMasterImpl}, messageHandlerManager, messageRouter, metaKVClient,
 		workerID, masterID)
-	return &defaultBaseJobMaster{
-		master: baseMaster,
-		worker: baseWorker,
+	return &DefaultBaseJobMaster{
+		master: baseMaster.(*DefaultBaseMaster),
+		worker: baseWorker.(*DefaultBaseWorker),
+		impl:   jobMasterImpl,
 	}
 }
 
-func (d *defaultBaseJobMaster) MetaKVClient() metadata.MetaKV {
+func (d *DefaultBaseJobMaster) MetaKVClient() metadata.MetaKV {
 	return d.master.MetaKVClient()
 }
 
-func (d *defaultBaseJobMaster) Init(ctx context.Context) error {
-	if err := d.worker.Init(ctx); err != nil {
+func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	if err := d.master.Init(ctx); err != nil {
+
+	isFirstStartUp, err := d.master.doInit(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if isFirstStartUp {
+		if err := d.impl.InitImpl(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		if err := d.master.markInitializedInMetadata(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		if err := d.impl.OnMasterRecovered(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if err := d.worker.doPostInit(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
+	if err := d.master.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	if err := d.worker.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	if err := d.impl.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (d *defaultBaseJobMaster) Poll(ctx context.Context) error {
-	if err := d.worker.Poll(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	if err := d.master.Poll(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (d *defaultBaseJobMaster) MasterID() MasterID {
+func (d *DefaultBaseJobMaster) MasterID() MasterID {
 	return d.master.MasterID()
 }
 
-func (d *defaultBaseJobMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (d *DefaultBaseJobMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return d.master.GetWorkers()
 }
 
-func (d *defaultBaseJobMaster) Close(ctx context.Context) error {
-	if err := d.master.Close(ctx); err != nil {
-		// TODO should we close the worker anyways even if closing the master has failed?
+func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
+	if err := d.impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	if err := d.worker.Close(ctx); err != nil {
-		return errors.Trace(err)
-	}
+
+	d.master.doClose()
+	d.worker.doClose()
 	return nil
 }
 
-func (d *defaultBaseJobMaster) OnError(err error) {
+func (d *DefaultBaseJobMaster) OnError(err error) {
 	// TODO refine the OnError logic.
 	d.master.OnError(err)
 }
 
-func (d *defaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
+func (d *DefaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
 	return d.master.RegisterWorker(ctx, workerID)
 }
 
-func (d *defaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost)
 }
 
-func (d *defaultBaseJobMaster) GetWorkerStatusExtTypeInfo() interface{} {
-	return d.master.GetWorkerStatusExtTypeInfo()
-}
-
-func (d *defaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
+func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status WorkerStatus) error {
 	return d.worker.UpdateStatus(ctx, status)
 }
 
-func (d *defaultBaseJobMaster) Workload() model.RescUnit {
+func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }
 
-func (d *defaultBaseJobMaster) ID() worker.RunnableID {
+func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
+}
+
+func (d *DefaultBaseJobMaster) JobMasterID() MasterID {
+	return d.master.MasterID()
+}
+
+func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status WorkerStatus) error {
+	return d.worker.UpdateStatus(ctx, status)
+}
+
+func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
+}
+
+type jobMasterImplAsWorkerImpl struct {
+	inner JobMasterImpl
+}
+
+func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
+	log.L().Panic("unexpected Init call")
+	return nil
+}
+
+func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
+	log.L().Panic("unexpected Poll call")
+	return nil
+}
+
+func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
+	return j.inner.Workload()
+}
+
+func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
+	return j.inner.OnJobManagerFailover(reason)
+}
+
+func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
+	log.L().Panic("unexpected Close call")
+	return nil
+}
+
+func (j *jobMasterImplAsWorkerImpl) GetWorkerStatusExtTypeInfo() interface{} {
+	return j.inner.GetWorkerStatusExtTypeInfo()
+}
+
+type jobMasterImplAsMasterImpl struct {
+	inner JobMasterImpl
+}
+
+func (j *jobMasterImplAsMasterImpl) Tick(ctx context.Context) error {
+	log.L().Panic("unexpected poll call")
+	return nil
+}
+
+func (j *jobMasterImplAsMasterImpl) InitImpl(ctx context.Context) error {
+	log.L().Panic("unexpected init call")
+	return nil
+}
+
+func (j *jobMasterImplAsMasterImpl) OnMasterRecovered(ctx context.Context) error {
+	return j.inner.OnMasterRecovered(ctx)
+}
+
+func (j *jobMasterImplAsMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
+	return j.inner.OnWorkerDispatched(worker, result)
+}
+
+func (j *jobMasterImplAsMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
+	return j.inner.OnWorkerOnline(worker)
+}
+
+func (j *jobMasterImplAsMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) error {
+	return j.inner.OnWorkerOffline(worker, reason)
+}
+
+func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
+	return j.inner.OnWorkerMessage(worker, topic, message)
+}
+
+func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
+	log.L().Panic("unexpected Close call")
+	return nil
+}
+
+func (j *jobMasterImplAsMasterImpl) GetWorkerStatusExtTypeInfo() interface{} {
+	return j.inner.GetJobMasterStatusExtTypeInfo()
 }

@@ -4,15 +4,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
+	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // Config represents the job config of fake master
@@ -34,6 +34,15 @@ type Master struct {
 	pendingWorkerSet map[lib.WorkerID]int
 	tick             int64
 	config           *Config
+}
+
+func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
+	log.L().Info("FakeMaster: OnJobManagerFailover", zap.Any("reason", reason))
+	return nil
+}
+
+func (m *Master) IsJobMasterImpl() {
+	panic("unreachable")
 }
 
 func (m *Master) ID() worker.RunnableID {
@@ -147,6 +156,14 @@ func (m *Master) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
 }
 
+func (m *Master) GetWorkerStatusExtTypeInfo() interface{} {
+	return &dummyStatus{}
+}
+
+func (m *Master) GetJobMasterStatusExtTypeInfo() interface{} {
+	return &dummyStatus{}
+}
+
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{
@@ -156,7 +173,6 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 	deps := ctx.Dependencies
 	base := lib.NewBaseJobMaster(
 		ctx,
-		ret,
 		ret,
 		masterID,
 		workerID,

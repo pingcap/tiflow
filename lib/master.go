@@ -81,7 +81,6 @@ type BaseMaster interface {
 	RegisterWorker(ctx context.Context, workerID WorkerID) error
 	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
-	GetWorkerStatusExtTypeInfo() interface{}
 }
 
 type DefaultBaseMaster struct {
@@ -177,23 +176,10 @@ func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
 }
 
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	isInit, epoch, err := m.initMetadata(ctx)
+	isInit, err := m.doInit(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.currentEpoch.Store(epoch)
-	m.workerManager = newWorkerManager(
-		m.id,
-		!isInit,
-		epoch,
-		m.messageSender,
-		m.messageHandlerManager,
-		m.metaKVClient,
-		m.pool,
-		m.Impl.GetWorkerStatusExtTypeInfo(),
-		&m.timeoutConfig)
-
-	m.startBackgroundTasks()
 
 	if isInit {
 		if err := m.Impl.InitImpl(ctx); err != nil {
@@ -211,7 +197,41 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	return nil
 }
 
+func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, err error) {
+	isInit, epoch, err := m.initMetadata(ctx)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	m.currentEpoch.Store(epoch)
+	m.workerManager = newWorkerManager(
+		m.id,
+		!isInit,
+		epoch,
+		m.messageSender,
+		m.messageHandlerManager,
+		m.metaKVClient,
+		m.pool,
+		m.Impl.GetWorkerStatusExtTypeInfo(),
+		&m.timeoutConfig)
+
+	m.startBackgroundTasks()
+
+	return isInit, nil
+}
+
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
+	if err := m.doPoll(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := m.Impl.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	select {
 	case err := <-m.errCh:
 		if err != nil {
@@ -229,11 +249,6 @@ func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
 		return errors.Trace(err)
 	}
-
-	if err := m.Impl.Tick(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	return nil
 }
 
@@ -245,16 +260,24 @@ func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
 
+func (m *DefaultBaseMaster) doClose() {
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	close(m.closeCh)
+	m.wg.Wait()
+	if err := m.messageHandlerManager.Clean(closeCtx); err != nil {
+		log.L().Warn("Failed to clean up message handlers",
+			zap.String("master-id", m.id))
+	}
+}
+
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
-	close(m.closeCh)
-	m.wg.Wait()
-	if err := m.messageHandlerManager.Clean(ctx); err != nil {
-		return errors.Trace(err)
-	}
+	m.doClose()
 	return nil
 }
 
