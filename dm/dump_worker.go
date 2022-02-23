@@ -13,19 +13,20 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
-var _ lib.WorkerImpl = &dumpWorker{}
+var _ lib.Worker = &dumpWorker{}
 
 type dumpWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	cfg        *config.SubTaskConfig
 	unitHolder *unitHolder
 }
 
-func newDumpWorker(cfg lib.WorkerConfig) lib.Worker {
+func newDumpWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &dumpWorker{
-		cfg: subtaskCfg,
+		BaseWorker: base,
+		cfg:        subtaskCfg,
 	}
 }
 

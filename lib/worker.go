@@ -57,6 +57,7 @@ type BaseWorker interface {
 	ID() runtime.RunnableID
 	MetaKVClient() metadata.MetaKV
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 }
 
 type DefaultBaseWorker struct {
@@ -259,6 +260,14 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatu
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (w *DefaultBaseWorker) SendMessage(
+	ctx context.Context,
+	topic p2p.Topic,
+	message interface{},
+) (bool, error) {
+	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {

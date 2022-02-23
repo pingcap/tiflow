@@ -194,6 +194,11 @@ func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status Worke
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+	// master will use WorkerHandle to send message
+	return d.worker.SendMessage(ctx, topic, message)
+}
+
 type jobMasterImplAsWorkerImpl struct {
 	inner JobMasterImpl
 }

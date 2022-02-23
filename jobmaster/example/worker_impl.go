@@ -13,10 +13,14 @@ import (
 
 var _ lib.Worker = &exampleWorker{}
 
-var tickKey = "tick_count"
+var (
+	tickKey   = "tick_count"
+	testTopic = "test_topic"
+	testMsg   = "test_msg"
+)
 
 type exampleWorker struct {
-	*lib.DefaultBaseWorker
+	lib.BaseWorker
 
 	work struct {
 		mu        sync.Mutex
@@ -34,12 +38,15 @@ func (w *exampleWorker) run() {
 	count := w.work.tickCount
 	w.work.mu.Unlock()
 	// nolint:errcheck
-	_, _ = w.DefaultBaseWorker.MetaKVClient().Put(
+	_, _ = w.BaseWorker.MetaKVClient().Put(
 		context.TODO(), tickKey, strconv.Itoa(count))
 
 	w.work.mu.Lock()
 	w.work.finished = true
 	w.work.mu.Unlock()
+
+	// nolint:errcheck
+	_, _ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg)
 }
 
 func (w *exampleWorker) InitImpl(ctx context.Context) error {

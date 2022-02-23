@@ -14,7 +14,7 @@ import (
 
 func newExampleWorker() *exampleWorker {
 	self := &exampleWorker{}
-	self.DefaultBaseWorker = lib.MockBaseWorker(workerID, masterID, self)
+	self.BaseWorker = lib.MockBaseWorker(workerID, masterID, self)
 	return self
 }
 
@@ -43,12 +43,13 @@ func TestExampleWorker(t *testing.T) {
 		return worker.Status().Code == lib.WorkerStatusFinished
 	}, time.Second, time.Millisecond*100)
 
-	resp, err := worker.DefaultBaseWorker.MetaKVClient().Get(ctx, tickKey)
+	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)
 	require.NoError(t, err)
 	etcdResp := resp.(*clientv3.GetResponse)
 	require.Len(t, etcdResp.Kvs, 1)
 	require.Equal(t, "2", string(etcdResp.Kvs[0].Value))
 
+	lib.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*lib.DefaultBaseWorker), testTopic, testMsg)
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }
