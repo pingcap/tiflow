@@ -78,19 +78,9 @@ func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Only JsonEncoder supports mixed build")
-}
-
 // Size implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.Size()
-}
-
-// Reset implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) Reset() {
-	e.rowChangedBuffer.Reset()
 }
 
 // SetParams reads relevant parameters for craft protocol
