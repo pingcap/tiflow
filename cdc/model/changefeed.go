@@ -251,9 +251,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
-	if info.Config.TableActor == nil {
-		info.Config.TableActor = defaultConfig.TableActor
-	}
 
 	return nil
 }

@@ -65,9 +65,6 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
-  },
-  "table-actor": {
-    "event-batch-size": 32
   }
 }`
 
@@ -112,6 +109,9 @@ const (
   },
   "debug": {
     "enable-table-actor": false,
+    "table-actor": {
+      "event-batch-size": 32
+    },
     "enable-db-sorter": false,
     "db": {
       "count": 8,
@@ -188,9 +188,6 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
-  },
-  "table-actor": {
-    "event-batch-size": 3
   }
 }`
 
@@ -239,9 +236,6 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
-  },
-  "table-actor": {
-    "event-batch-size": 3
   }
 }`
 )

@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
@@ -54,10 +55,8 @@ func newContext(stdCtx sdtContext.Context,
 	globalVars *context.GlobalVars,
 	throw func(error)) *actorNodeContext {
 	batchSize := defaultEventBatchSize
-	if changefeedVars != nil && changefeedVars.Info != nil &&
-		changefeedVars.Info.Config != nil &&
-		changefeedVars.Info.Config.TableActor != nil {
-		batchSize = changefeedVars.Info.Config.TableActor.EventBatchSize
+	if config.GetGlobalServerConfig().Debug.TableActor != nil {
+		batchSize = config.GetGlobalServerConfig().Debug.TableActor.EventBatchSize
 	}
 	return &actorNodeContext{
 		Context:          stdCtx,
