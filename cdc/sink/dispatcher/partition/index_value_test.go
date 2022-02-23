@@ -25,7 +25,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 
 	testCases := []struct {
 		row             *model.RowChangedEvent
-		exceptPartition int32
+		expectPartition int32
 	}{
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -43,7 +43,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 2},
+		}, expectPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -60,7 +60,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 11},
+		}, expectPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -77,7 +77,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 2},
+		}, expectPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -94,7 +94,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -111,7 +111,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -128,7 +128,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 14},
+		}, expectPartition: 14},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -145,10 +145,10 @@ func TestIndexValueDispatcher(t *testing.T) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 2},
+		}, expectPartition: 2},
 	}
 	p := NewIndexValueDispatcher(16)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.DispatchRowChangedEvent(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }

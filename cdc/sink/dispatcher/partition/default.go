@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+// DefaultDispatcher is the default partition dispatcher.
 type DefaultDispatcher struct {
 	partitionNum   int32
 	tbd            *TableDispatcher
@@ -24,6 +25,7 @@ type DefaultDispatcher struct {
 	enableOldValue bool
 }
 
+// NewDefaultDispatcher creates a DefaultDispatcher.
 func NewDefaultDispatcher(partitionNum int32, enableOldValue bool) *DefaultDispatcher {
 	return &DefaultDispatcher{
 		partitionNum:   partitionNum,
@@ -33,6 +35,7 @@ func NewDefaultDispatcher(partitionNum int32, enableOldValue bool) *DefaultDispa
 	}
 }
 
+// DispatchRowChangedEvent returns the target partition to which a row changed event should be dispatched.
 func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	if d.enableOldValue {
 		return d.tbd.DispatchRowChangedEvent(row)

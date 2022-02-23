@@ -62,7 +62,7 @@ const (
 
 type mqSink struct {
 	mqProducer     producer.Producer
-	mqDispatcher   *dispatcher.MqDispatcher
+	eventRouter    *dispatcher.EventRouter
 	encoderBuilder codec.EncoderBuilder
 	filter         *filter.Filter
 	protocol       config.Protocol
@@ -101,7 +101,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewMqDispatcher(replicaConfig, partitionNum, defaultTopic)
+	d, err := dispatcher.NewEventRouter(replicaConfig, partitionNum, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -122,7 +122,7 @@ func newMqSink(
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
-		mqDispatcher:   d,
+		eventRouter:    d,
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
 		protocol:       protocol,
@@ -177,7 +177,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 				zap.Any("role", k.role))
 			continue
 		}
-		_, partition := k.mqDispatcher.DispatchRowChangedEvent(row)
+		_, partition := k.eventRouter.DispatchRowChangedEvent(row)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

@@ -18,11 +18,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/hash"
 )
 
+// IndexValueDispatcher is a partition dispatcher which dispatches events based on the index value.
 type IndexValueDispatcher struct {
 	partitionNum int32
 	hasher       *hash.PositionInertia
 }
 
+// NewIndexValueDispatcher creates a IndexValueDispatcher.
 func NewIndexValueDispatcher(partitionNum int32) *IndexValueDispatcher {
 	return &IndexValueDispatcher{
 		partitionNum: partitionNum,
@@ -30,6 +32,7 @@ func NewIndexValueDispatcher(partitionNum int32) *IndexValueDispatcher {
 	}
 }
 
+// DispatchRowChangedEvent returns the target partition to which a row changed event should be dispatched.
 func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
