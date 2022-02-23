@@ -720,6 +720,7 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	ver, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* explicitTables */)
 	c.Assert(err, check.IsNil)
@@ -734,6 +735,22 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	c.Assert(len(clone.tables), check.Equals, len(snap.tables))
 	c.Assert(len(clone.schemas), check.Equals, len(snap.schemas))
 	c.Assert(len(clone.partitionTable), check.Equals, len(snap.partitionTable))
+=======
+	require.Nil(t, err)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* forceReplicate */)
+	require.Nil(t, err)
+
+	clone := snap.Clone()
+	require.Equal(t, clone.tableNameToID, snap.tableNameToID)
+	require.Equal(t, clone.schemaNameToID, snap.schemaNameToID)
+	require.Equal(t, clone.truncateTableID, snap.truncateTableID)
+	require.Equal(t, clone.ineligibleTableID, snap.ineligibleTableID)
+	require.Equal(t, clone.currentTs, snap.currentTs)
+	require.Equal(t, clone.forceReplicate, snap.forceReplicate)
+	require.Equal(t, len(clone.tables), len(snap.tables))
+	require.Equal(t, len(clone.schemas), len(snap.schemas))
+	require.Equal(t, len(clone.partitionTable), len(snap.partitionTable))
+>>>>>>> 036c6aef6 (cdc: always ignore sequence tables (#4563))
 
 	tableCount := len(snap.tables)
 	clone.tables = make(map[int64]*model.TableInfo)
@@ -764,6 +781,7 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	ver2, err := store.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* explicitTables */)
 	c.Assert(err, check.IsNil)
@@ -773,6 +791,17 @@ func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	c.Assert(err, check.IsNil)
 	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* explicitTables */)
 	c.Assert(err, check.IsNil)
+=======
+	require.Nil(t, err)
+	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
+	require.Nil(t, err)
+	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
+	require.Nil(t, err)
+	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
+	require.Nil(t, err)
+	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
+	require.Nil(t, err)
+>>>>>>> 036c6aef6 (cdc: always ignore sequence tables (#4563))
 
 	c.Assert(len(snap2.tables)-len(snap1.tables), check.Equals, 5)
 	// some system tables are also ineligible

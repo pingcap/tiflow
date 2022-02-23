@@ -144,6 +144,7 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 		},
 	})
 }
+<<<<<<< HEAD
 
 func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -169,3 +170,5 @@ func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
 		},
 	})
 }
+=======
+>>>>>>> 036c6aef6 (cdc: always ignore sequence tables (#4563))
