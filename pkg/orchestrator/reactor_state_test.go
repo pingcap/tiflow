@@ -85,7 +85,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						TableActor:       &config.TableActorConfig{EventBatchSize: 32},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -147,7 +146,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						TableActor:       &config.TableActorConfig{EventBatchSize: 32},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -216,7 +214,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Cyclic:           &config.CyclicConfig{},
 						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						TableActor:       &config.TableActorConfig{EventBatchSize: 32},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -344,7 +341,6 @@ func TestPatchInfo(t *testing.T) {
 			Cyclic:     defaultConfig.Cyclic,
 			Scheduler:  defaultConfig.Scheduler,
 			Consistent: defaultConfig.Consistent,
-			TableActor: defaultConfig.TableActor,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -363,7 +359,6 @@ func TestPatchInfo(t *testing.T) {
 			Cyclic:     defaultConfig.Cyclic,
 			Scheduler:  defaultConfig.Scheduler,
 			Consistent: defaultConfig.Consistent,
-			TableActor: defaultConfig.TableActor,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
