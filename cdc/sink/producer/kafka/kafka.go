@@ -478,8 +478,7 @@ var (
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
-	opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
@@ -805,7 +804,6 @@ func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, t
 	return getBrokerConfig(admin, brokerConfigName)
 }
 
-// adjust the partition-num by the topic's partition count
 func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
