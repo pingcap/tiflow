@@ -39,39 +39,39 @@ where `resource type`, `command` and `flags` are:
 
 ### dmctl commands for Task
 
-| Command | Full Syntax Example                                                                                                                 | Flags                                                                                                                            | Arguments              | Description                                                       |
-|---------|-------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|------------------------|-------------------------------------------------------------------|
-| check   | `dmctl task check --error-count=1 --warn-count=1 task1.yaml`                                                                        | --error-count(default: 10), --warn-count(default: 10)                                                                            | config-file            | check the task config yaml file.                                  |
-| create  | `dmctl task create task1.yaml`                                                                                                      |                                                                                                                                  | config-file            | create a stopped task with config file.                           |
-| update  | `dmctl task update task1 task1.yaml`                                                                                                |                                                                                                                                  | task-name, config-file | update a stopped task with config file.                           |
-| delete  | `dmctl task delete --yes --force task1`                                                                                             | --yes(default: false), --force(default: false)                                                                                   | task-name              | delete a task and remove all meta data for this task.             |
-| get     | `dmctl task get --output="new_task.yaml" task1`                                                                                     | --output(can be omitted)                                                                                                         | task-name              | show the task config in yaml format, also support output to file. |
-| list    | `dmctl task list --stage="Running" --source="source1,source2"`                                                                      | --source(can be omitted), --stage(can be omitted)                                                                                |                        | list all tasks in current cluster.                                |
-| status  | `dmctl task status --source="source1,source2" task1`                                                                                | --source(can be omitted)                                                                                                         | task-name              | show task detail status.                                          |
-| start   | `dmctl task start --source="source1,source2" --remove-meta --start-time="2021-01-01 00:00:00" --safe-mode-time-duration="1s" task1` | --source(can be omitted), --remove-meta(default: false), --start-time(can be omitted), --safe-mode-time-duration(can be omitted) | task-name              | start a stopped task with many flags.                             |
-| stop    | `dmctl task stop --source="source1,source2" --timeout="60s" task1`                                                                  | --source(can be omitted), --timeout(default: "10s")                                                                              | task-name              | stop a running task with many flags.                              |
+| Command | Full Syntax Example                                                                                                                 | Flags                                                                            | Arguments              | Description                                                       |
+|---------|-------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|------------------------|-------------------------------------------------------------------|
+| check   | `dmctl task check --error-count=1 --warn-count=1 task1.yaml`                                                                        | --error-count(default: 10), --warn-count(default: 10)                            | config-file            | check the task config yaml file.                                  |
+| create  | `dmctl task create task1.yaml`                                                                                                      |                                                                                  | config-file            | create a stopped task with config file.                           |
+| update  | `dmctl task update task1 task1.yaml`                                                                                                |                                                                                  | task-name, config-file | update a stopped task with config file.                           |
+| delete  | `dmctl task delete --yes --force task1`                                                                                             | --yes(default: false), --force(default: false)                                   | task-name              | delete a task and remove all meta data for this task.             |
+| get     | `dmctl task get --output="new_task.yaml" task1`                                                                                     | --output                                                                         | task-name              | show the task config in yaml format, also support output to file. |
+| list    | `dmctl task list --stage="Running" --source="source1,source2"`                                                                      | --source, --stage                                                                |                        | list all tasks in current cluster.                                |
+| status  | `dmctl task status --source="source1,source2" task1`                                                                                | --source                                                                         | task-name              | show task detail status.                                          |
+| start   | `dmctl task start --source="source1,source2" --remove-meta --start-time="2021-01-01 00:00:00" --safe-mode-time-duration="1s" task1` | --source, --remove-meta(default: false), --start-time, --safe-mode-time-duration | task-name              | start a stopped task with many flags.                             |
+| stop    | `dmctl task stop --source="source1,source2" --timeout="60s" task1`                                                                  | --source, --timeout(default: "10s")                                              | task-name              | stop a running task with many flags.                              |
 
 ### dmctl commands for Source
 
-| Command  | Full Syntax Example                                | Flags                    | Arguments                | Description                                                         |
-|----------|----------------------------------------------------|--------------------------|--------------------------|---------------------------------------------------------------------|
-| create   | `dmctl source create source1.yaml`                 |                          | config-file              | create source with config file.                                     |
-| update   | `dmctl source update source1 source1.yaml`         |                          | source-name, config-file | update a source with config file.                                   |
-| delete   | `dmctl source delete --force source1`              | --force(default: false)  | source-name              | delete a source with config file.                                   |
-| get      | `dmctl source get --output="source1.yaml" source1` | --output(can be omitted) | source-name              | show the source config in yaml format, also support output to file. |
-| list     | `dmctl source list`                                |                          |                          | list all source in current cluster.                                 |
-| status   | `dmctl source status source1`                      |                          | source-name              | show source detail status.                                          |
-| enable   | `dmctl source enable source1`                      |                          | source-name              | enable a disabled source.                                           |
-| disable  | `dmctl source disable source1`                     |                          | source-name              | disable a source and also stop the running subtasks of this source. |
-| transfer | `dmctl source transfer source1 worker1`            |                          | source-name, worker-name | transfers a source to a free worker.                                |
+| Command  | Full Syntax Example                                | Flags                   | Arguments                | Description                                                         |
+|----------|----------------------------------------------------|-------------------------|--------------------------|---------------------------------------------------------------------|
+| create   | `dmctl source create source1.yaml`                 |                         | config-file              | create source with config file.                                     |
+| update   | `dmctl source update source1 source1.yaml`         |                         | source-name, config-file | update a source with config file.                                   |
+| delete   | `dmctl source delete --force source1`              | --force(default: false) | source-name              | delete a source with config file.                                   |
+| get      | `dmctl source get --output="source1.yaml" source1` | --output                | source-name              | show the source config in yaml format, also support output to file. |
+| list     | `dmctl source list`                                |                         |                          | list all source in current cluster.                                 |
+| status   | `dmctl source status source1`                      |                         | source-name              | show source detail status.                                          |
+| enable   | `dmctl source enable source1`                      |                         | source-name              | enable a disabled source.                                           |
+| disable  | `dmctl source disable source1`                     |                         | source-name              | disable a source and also stop the running subtasks of this source. |
+| transfer | `dmctl source transfer source1 worker1`            |                         | source-name, worker-name | transfers a source to a free worker.                                |
 
 ### dmctl commands for Relay
 
-| Command | Full Syntax Example                                                                                 | Flags                         | Arguments              | Description                                                                  |
-|---------|-----------------------------------------------------------------------------------------------------|-------------------------------|------------------------|------------------------------------------------------------------------------|
-| start   | `dmctl relay start --worker-name="worker1" source1`                                                 | --worker-name(can be omitted) | source-name            | start relay for a source on a worker.                                        |
-| stop    | `dmctl relay stop --worker-name="worker1" source1`                                                  | --worker-name(can be omitted) | source-name            | stop relay for a source on a worker.                                         |
-| purge   | `dmctl relay purge --sub-dir="2ae76434-f79f-11e8-bde2-024ac130008.000001" source1 mysql-bin.000006` | --sub-dir(can be omitted)     | source-name, file-name | purges relay log files of the DM-worker according to the specified filename. |
+| Command | Full Syntax Example                                                                                 | Flags         | Arguments              | Description                                                                  |
+|---------|-----------------------------------------------------------------------------------------------------|---------------|------------------------|------------------------------------------------------------------------------|
+| start   | `dmctl relay start --worker-name="worker1" source1`                                                 | --worker-name | source-name            | start relay for a source on a worker.                                        |
+| stop    | `dmctl relay stop --worker-name="worker1" source1`                                                  | --worker-name | source-name            | stop relay for a source on a worker.                                         |
+| purge   | `dmctl relay purge --sub-dir="2ae76434-f79f-11e8-bde2-024ac130008.000001" source1 mysql-bin.000006` | --sub-dir     | source-name, file-name | purges relay log files of the DM-worker according to the specified filename. |
 
 ### dmctl commands for DDL-LOCK
 
@@ -82,14 +82,14 @@ where `resource type`, `command` and `flags` are:
 
 ### dmctl commands for member
 
-| Command                    | Full Syntax Example                                   | Flags                                          | Arguments          | Description                                       |
-|----------------------------|-------------------------------------------------------|------------------------------------------------|--------------------|---------------------------------------------------|
-| member list                | `dmctl member list --name="master-1" --role="master"` | --name(can be omitted), --role(can be omitted) |                    | show members of current cluster by name and role. |
-| member offline             | `dmctl member offline master-1`                       |                                                | master/worker-name | offline members of current cluster by name.       |
-| member evict-leader        | `dmctl member evict-leader master-1`                  |                                                | master-name        | evict leader for master node.                     |
-| member cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                                                | master-name        | cancel evict leader for master node.              |
+| Command                    | Full Syntax Example                                   | Flags          | Arguments          | Description                                       |
+|----------------------------|-------------------------------------------------------|----------------|--------------------|---------------------------------------------------|
+| member list                | `dmctl member list --name="master-1" --role="master"` | --name, --role |                    | show members of current cluster by name and role. |
+| member offline             | `dmctl member offline master-1`                       |                | master/worker-name | offline members of current cluster by name.       |
+| member evict-leader        | `dmctl member evict-leader master-1`                  |                | master-name        | evict leader for master node.                     |
+| member cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                | master-name        | cancel evict leader for master node.              |
 
-### Optimized  dmctl for interaction mode (optional)
+### Optimized dmctl for interaction mode (optional)
 
 The current interaction of dmctl still has room for optimization, and I hope to take this opportunity to do some optimization of the interaction experience, focusing on the user can quickly select the command they want to enter through the keyboard, instead of entering commands by their memory.
 
