@@ -138,9 +138,9 @@ func (ldb *DBActor) close(err error) {
 	ldb.closedWg.Done()
 }
 
-func (ldb *DBActor) trySchdeduleCompact() {
+func (ldb *DBActor) tryScheduleCompact() {
 	// Schedule a compact task when there are too many deletion.
-	if ldb.compact.trySchdeduleCompact(ldb.id, ldb.deleteCount) {
+	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
 		// Reset delete key count if schedule compaction successfully.
 		ldb.deleteCount = 0
 	}
@@ -242,7 +242,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 				if err := ldb.db.DeleteRange(start, end); err != nil {
 					log.Panic("db error", zap.Error(err))
 				}
-				ldb.trySchdeduleCompact()
+				ldb.tryScheduleCompact()
 			}
 		}
 		if task.IterReq != nil {

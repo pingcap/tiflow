@@ -547,7 +547,7 @@ func (state *pollState) tryGetIterator(
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
 			// Force trigger a compaction if Iterator.Fisrt is too slow.
-			state.compact.trySchdeduleCompact(state.actorID, int(math.MaxInt32))
+			state.compact.tryScheduleCompact(state.actorID, int(math.MaxInt32))
 		}
 		return nil, true
 	default:

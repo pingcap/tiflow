@@ -156,9 +156,9 @@ type CompactScheduler struct {
 	router *actor.Router
 }
 
-// trySchdeduleCompact try to schedule a compact task.
+// tryScheduleCompact try to schedule a compact task.
 // Returns true if it schedules compact task successfully.
-func (s *CompactScheduler) trySchdeduleCompact(id actor.ID, deleteCount int) bool {
+func (s *CompactScheduler) tryScheduleCompact(id actor.ID, deleteCount int) bool {
 	task := message.Task{
 		DeleteReq: &message.DeleteRequest{
 			// Compactor only needs count. DeleteRange is wrote by db actor.

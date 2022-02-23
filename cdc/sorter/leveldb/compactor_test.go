@@ -119,7 +119,7 @@ func TestScheduleCompact(t *testing.T) {
 	compact := NewCompactScheduler(router)
 
 	// Must schedule successfully.
-	require.True(t, compact.trySchdeduleCompact(mb.ID(), 3))
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	msg, ok := mb.Receive()
 	require.True(t, ok)
 	task := message.Task{DeleteReq: &message.DeleteRequest{}}
@@ -127,8 +127,8 @@ func TestScheduleCompact(t *testing.T) {
 	require.EqualValues(t, actormsg.SorterMessage(task), msg)
 
 	// Skip sending unnecessary tasks.
-	require.True(t, compact.trySchdeduleCompact(mb.ID(), 3))
-	require.True(t, compact.trySchdeduleCompact(mb.ID(), 3))
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	msg, ok = mb.Receive()
 	require.True(t, ok)
 	require.EqualValues(t, actormsg.SorterMessage(task), msg)
