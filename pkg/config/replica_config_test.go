@@ -42,6 +42,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			Columns: []string{"a", "b"},
 		},
 	}
+	conf.Actor = &ActorConfig{EventBatchSize: 3}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIdentJSON(t, b))

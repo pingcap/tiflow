@@ -65,6 +65,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
+  },
+  "actor": {
+    "event-batch-size": 32
   }
 }`
 
@@ -185,6 +188,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
+  },
+  "actor": {
+    "event-batch-size": 3
   }
 }`
 
@@ -233,6 +239,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
+  },
+  "actor": {
+    "event-batch-size": 3
   }
 }`
 )

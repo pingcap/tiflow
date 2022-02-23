@@ -26,7 +26,7 @@ import (
 )
 
 // send a tick message to actor if we get 32 pipeline messages
-const messagesPerTick = 32
+const messagesPerTick = uint32(32)
 
 // actorNodeContext implements the NodeContext interface, with this we do not need
 // to change too much logic to implement the table actor.
@@ -39,9 +39,9 @@ type actorNodeContext struct {
 	tableActorID         actor.ID
 	changefeedVars       *context.ChangefeedVars
 	globalVars           *context.GlobalVars
-	tickMessageThreshold int32
+	tickMessageThreshold uint32
 	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
-	noTickMessageCount int32
+	noTickMessageCount uint32
 	tableName          string
 	throw              func(error)
 }
@@ -53,6 +53,10 @@ func newContext(stdCtx sdtContext.Context,
 	changefeedVars *context.ChangefeedVars,
 	globalVars *context.GlobalVars,
 	throw func(error)) *actorNodeContext {
+	batchSize := messagesPerTick
+	if changefeedVars.Info.Config.Actor != nil {
+		batchSize = changefeedVars.Info.Config.Actor.EventBatchSize
+	}
 	return &actorNodeContext{
 		Context:              stdCtx,
 		outputCh:             make(chan pipeline.Message, defaultOutputChannelSize),
@@ -60,15 +64,15 @@ func newContext(stdCtx sdtContext.Context,
 		tableActorID:         tableActorID,
 		changefeedVars:       changefeedVars,
 		globalVars:           globalVars,
-		tickMessageThreshold: messagesPerTick,
+		tickMessageThreshold: batchSize,
 		noTickMessageCount:   0,
 		tableName:            tableName,
 		throw:                throw,
 	}
 }
 
-func (c *actorNodeContext) setTickMessageThreshold(threshold int32) {
-	atomic.StoreInt32(&c.tickMessageThreshold, threshold)
+func (c *actorNodeContext) setTickMessageThreshold(threshold uint32) {
+	atomic.StoreUint32(&c.tickMessageThreshold, threshold)
 }
 
 func (c *actorNodeContext) GlobalVars() *context.GlobalVars {
@@ -129,12 +133,12 @@ func (c *actorNodeContext) tryGetProcessedMessage() *pipeline.Message {
 }
 
 func (c *actorNodeContext) trySendTickMessage() {
-	threshold := atomic.LoadInt32(&c.tickMessageThreshold)
-	atomic.AddInt32(&c.noTickMessageCount, 1)
-	count := atomic.LoadInt32(&c.noTickMessageCount)
+	threshold := atomic.LoadUint32(&c.tickMessageThreshold)
+	atomic.AddUint32(&c.noTickMessageCount, 1)
+	count := atomic.LoadUint32(&c.noTickMessageCount)
 	// resolvedTs message will be sent by puller periodically
 	if count >= threshold {
 		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
-		atomic.StoreInt32(&c.noTickMessageCount, 0)
+		atomic.StoreUint32(&c.noTickMessageCount, 0)
 	}
 }
