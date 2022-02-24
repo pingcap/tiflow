@@ -25,7 +25,7 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	c := NewConfig(config.ProtocolDefault, timeutil.SystemLocation())
-	require.Equal(t, c.protocol, "fake-protocol")
+	require.Equal(t, c.protocol, config.ProtocolDefault)
 	require.Equal(t, c.maxMessageBytes, config.DefaultMaxMessageBytes)
 	require.Equal(t, c.maxBatchSize, defaultMaxBatchSize)
 	require.Equal(t, c.enableTiDBExtension, false)
