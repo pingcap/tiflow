@@ -33,7 +33,7 @@ const (
 	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
 	defaultMaxMessageBytes = "1048576"
 
-	// defaultMinInsyncReplicas specifies the default min insync replicas for broker and default topic.
+	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
 	defaultMinInsyncReplicas = "1"
 )
 
