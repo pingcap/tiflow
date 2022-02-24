@@ -155,11 +155,11 @@ func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credent
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(c), nil
+		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
 		return newAvroEventBatchEncoderBuilder(credential, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(c), nil
+		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
 		return newCanalFlatEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:

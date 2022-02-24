@@ -29,14 +29,13 @@ import (
 
 type maxwellEventBatchEncoderBuilder struct{}
 
-// Build a `MaxwellEventBatchEncoder`
-func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
-	encoder := NewMaxwellEventBatchEncoder()
-	return encoder
-}
-
 func newMaxwellEventBatchEncoderBuilder() EncoderBuilder {
 	return &maxwellEventBatchEncoderBuilder{}
+}
+
+// Build a `MaxwellEventBatchEncoder`
+func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
+	return NewMaxwellEventBatchEncoder()
 }
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation

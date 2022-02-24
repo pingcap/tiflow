@@ -534,10 +534,9 @@ type canalEventBatchEncoderBuilder struct{}
 
 // Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
-	encoder := NewCanalEventBatchEncoder()
-	return encoder
+	return NewCanalEventBatchEncoder()
 }
 
-func newCanalEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+func newCanalEventBatchEncoderBuilder() EncoderBuilder {
 	return &canalEventBatchEncoderBuilder{}
 }
