@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// send a tick message to actor if we get 32 pipeline events
+// defaultEventBatchSize send a tick message to actor if we get 32 pipeline events
 const defaultEventBatchSize = uint32(32)
 
 // actorNodeContext implements the NodeContext interface, with this we do not need
