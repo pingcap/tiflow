@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -29,12 +30,12 @@ import (
 
 func TestContext(t *testing.T) {
 	t.Parallel()
-	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz", Info: &model.ChangeFeedInfo{}}, &context.GlobalVars{}, throwDoNothing)
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
 	ctx.SendToNextNode(pipeline.BarrierMessage(1))
-	require.Equal(t, int32(1), ctx.noTickMessageCount)
+	require.Equal(t, uint32(1), ctx.eventCount)
 	wait(t, 500*time.Millisecond, func() {
 		msg := ctx.Message()
 		require.Equal(t, pipeline.MessageTypeBarrier, msg.Tp)
@@ -90,7 +91,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
 	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{}, throwDoNothing)
-	actorContext.setTickMessageThreshold(2)
+	actorContext.setEventBatchSize(2)
 	actorContext.SendToNextNode(pipeline.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 0, len(ch))
