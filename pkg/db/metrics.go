@@ -66,6 +66,13 @@ var (
 		Name:      "write_delay_total",
 		Help:      "The total number of leveldb delay",
 	}, []string{"capture", "id"})
+
+	dbBlockCacheAccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "db",
+		Name:      "block_cache_access_total",
+		Help:      "The total number of leveldb block cache access",
+	}, []string{"capture", "id", "type"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -77,4 +84,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(dbReadBytes)
 	registry.MustRegister(dbWriteDelayDuration)
 	registry.MustRegister(dbWriteDelayCount)
+	registry.MustRegister(dbBlockCacheAccess)
 }
