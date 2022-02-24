@@ -67,7 +67,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -95,7 +95,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -268,7 +268,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      0, // disable memory sort
+		MaxMemoryPercentage:    0, // disable memory sort
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -312,7 +312,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -389,7 +389,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,

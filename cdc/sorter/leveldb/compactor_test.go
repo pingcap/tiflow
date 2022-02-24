@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -42,14 +43,40 @@ func TestCompactorPoll(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	mockDB := mockCompactDB{DB: db, compact: make(chan struct{}, 1)}
 	closedWg := new(sync.WaitGroup)
-	compactor, _, err := NewCompactActor(1, &mockDB, closedWg, "")
+	cfg.CompactionDeletionThreshold = 2
+	cfg.CompactionPeriod = 1
+	compactor, _, err := NewCompactActor(1, &mockDB, closedWg, cfg, "")
 	require.Nil(t, err)
 
-	closed := !compactor.Poll(ctx, []actormsg.Message{actormsg.TickMessage()})
+	// Must not trigger compact.
+	task := message.Task{DeleteReq: &message.DeleteRequest{}}
+	task.DeleteReq.Count = 0
+	closed := !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
+	require.False(t, closed)
+	select {
+	case <-mockDB.compact:
+		t.Fatal("Must trigger compact")
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// Must trigger compact.
+	task.DeleteReq.Count = 2 * cfg.CompactionDeletionThreshold
+	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
+	require.False(t, closed)
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("Must trigger compact")
+	case <-mockDB.compact:
+	}
+
+	// Must trigger compact.
+	time.Sleep(time.Duration(cfg.CompactionPeriod) * time.Second * 2)
+	task.DeleteReq.Count = cfg.CompactionDeletionThreshold / 2
+	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
 	require.False(t, closed)
 	select {
 	case <-time.After(5 * time.Second):
@@ -70,14 +97,15 @@ func TestComactorContextCancel(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenLevelDB(ctx, 1, t.TempDir(), cfg)
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewCompactActor(0, db, closedWg, "")
+	ldb, _, err := NewCompactActor(0, db, closedWg, cfg, "")
 	require.Nil(t, err)
 
 	cancel()
-	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.TickMessage()})
+	closed := !ldb.Poll(
+		ctx, []actormsg.Message{actormsg.SorterMessage(message.Task{})})
 	require.True(t, closed)
 	closedWg.Wait()
 	require.Nil(t, db.Close())
@@ -88,26 +116,35 @@ func TestScheduleCompact(t *testing.T) {
 	router := actor.NewRouter(t.Name())
 	mb := actor.NewMailbox(actor.ID(1), 1)
 	router.InsertMailbox4Test(mb.ID(), mb)
-	compact := NewCompactScheduler(
-		router, config.GetDefaultServerConfig().Debug.DB)
-	compact.compactThreshold = 2
+	compact := NewCompactScheduler(router)
 
-	// Too few deletion, should not trigger compact.
-	require.False(t, compact.maybeCompact(mb.ID(), 1))
-	_, ok := mb.Receive()
-	require.False(t, ok)
-	// Must trigger compact.
-	require.True(t, compact.maybeCompact(mb.ID(), 3))
+	// Must schedule successfully.
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	msg, ok := mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, actormsg.TickMessage(), msg)
+	task := message.Task{DeleteReq: &message.DeleteRequest{}}
+	task.DeleteReq.Count = 3
+	require.EqualValues(t, actormsg.SorterMessage(task), msg)
 
 	// Skip sending unnecessary tasks.
-	require.True(t, compact.maybeCompact(mb.ID(), 3))
-	require.True(t, compact.maybeCompact(mb.ID(), 3))
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
+	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	msg, ok = mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, actormsg.TickMessage(), msg)
+	require.EqualValues(t, actormsg.SorterMessage(task), msg)
 	_, ok = mb.Receive()
 	require.False(t, ok)
+}
+
+func TestDeleteThrottle(t *testing.T) {
+	t.Parallel()
+	dt := deleteThrottle{
+		countThreshold: 2,
+		period:         1 * time.Second,
+	}
+
+	require.False(t, dt.trigger(1, time.Now()))
+	require.True(t, dt.trigger(3, time.Now()))
+	time.Sleep(2 * dt.period)
+	require.True(t, dt.trigger(0, time.Now()))
 }
