@@ -31,12 +31,7 @@ import (
 
 var _ = check.Suite(&ddlSinkSuite{})
 
-<<<<<<< HEAD:cdc/owner/async_sink_test.go
-type asyncSinkSuite struct {
-}
-=======
 type ddlSinkSuite struct{}
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598)):cdc/owner/ddl_sink_test.go
 
 type mockSink struct {
 	sink.Sink
@@ -89,22 +84,7 @@ func newDDLSink4Test() (DDLSink, *mockSink) {
 	return ddlSink, mockSink
 }
 
-<<<<<<< HEAD:cdc/owner/async_sink_test.go
-func (s *asyncSinkSuite) TestInitialize(c *check.C) {
-	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mockSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
-	tableInfos := []*model.SimpleTableInfo{{Schema: "test"}}
-	err := sink.Initialize(ctx, tableInfos)
-	c.Assert(err, check.IsNil)
-	c.Assert(tableInfos, check.DeepEquals, mockSink.initTableInfo)
-}
-
-func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
-=======
 func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
->>>>>>> b5a932dfb (owner(ticdc): asynchronously create sink (#3598)):cdc/owner/ddl_sink_test.go
 	defer testleak.AfterTest(c)()
 	ddlSink, mSink := newDDLSink4Test()
 	ctx := cdcContext.NewBackendContext4Test(true)
