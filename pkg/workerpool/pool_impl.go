@@ -158,7 +158,14 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 }
 
 func (h *defaultEventHandle) Unregister() {
+<<<<<<< HEAD
 	if !atomic.CompareAndSwapInt32(&h.isCancelled, 0, 1) {
+=======
+	if !atomic.CompareAndSwapInt32(&h.status, handleRunning, handleCancelled) {
+		// call synchronize so that the returning of Unregister cannot race
+		// with the calling of the errorHandler, if an error is already being processed.
+		h.worker.synchronize()
+>>>>>>> 79be93739 (pkg/workerpool(cdc): fix race between handling error and unregistering handler (#4605))
 		// already cancelled
 		return
 	}
