@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -400,7 +401,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
 		c.Assert(err, check.IsNil)
 
-		encoderConfig := codec.NewConfig("open-protocol")
+		encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
 		err = encoderConfig.Apply(sinkURI, map[string]string{})
 		c.Assert(err, check.IsNil)
 		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)

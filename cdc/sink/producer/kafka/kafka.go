@@ -429,7 +429,7 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *
 	info, exists := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
-		// make sure that producer's `maxMessageBytes` smaller than topic's `max.message.bytes`
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
 			kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
@@ -473,7 +473,7 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *
 
 	// when create the topic, `max.message.bytes` is decided by the broker,
 	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
-	// TiCDC need to make sure that the producer's `maxMessageBytes` won't larger than
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
 		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+

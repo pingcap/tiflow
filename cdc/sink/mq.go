@@ -319,7 +319,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	if err := replicaConfig.Apply(sinkURI).Validate(); err != nil {
+	if err := replicaConfig.ApplyProtocol(sinkURI).Validate(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
