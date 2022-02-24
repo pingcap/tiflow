@@ -20,13 +20,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"go.uber.org/zap"
 )
 
-// send a tick message to actor if we get 32 pipeline messages
-const messagesPerTick = 32
+// defaultEventBatchSize specifies that if we get 32 pipeline events, a tick message is sent to the actor.
+const defaultEventBatchSize = uint32(32)
 
 // actorNodeContext implements the NodeContext interface, with this we do not need
 // to change too much logic to implement the table actor.
@@ -34,16 +35,16 @@ const messagesPerTick = 32
 // the Throw function handle error and stop the actor
 type actorNodeContext struct {
 	sdtContext.Context
-	outputCh             chan pipeline.Message
-	tableActorRouter     *actor.Router
-	tableActorID         actor.ID
-	changefeedVars       *context.ChangefeedVars
-	globalVars           *context.GlobalVars
-	tickMessageThreshold int32
-	// noTickMessageCount is the count of pipeline message that no tick message is sent to actor
-	noTickMessageCount int32
-	tableName          string
-	throw              func(error)
+	outputCh         chan pipeline.Message
+	tableActorRouter *actor.Router
+	tableActorID     actor.ID
+	changefeedVars   *context.ChangefeedVars
+	globalVars       *context.GlobalVars
+	eventBatchSize   uint32
+	// eventCount is the count of pipeline event that no tick message is sent to actor
+	eventCount uint32
+	tableName  string
+	throw      func(error)
 }
 
 func newContext(stdCtx sdtContext.Context,
@@ -53,22 +54,26 @@ func newContext(stdCtx sdtContext.Context,
 	changefeedVars *context.ChangefeedVars,
 	globalVars *context.GlobalVars,
 	throw func(error)) *actorNodeContext {
+	batchSize := defaultEventBatchSize
+	if config.GetGlobalServerConfig().Debug.TableActor != nil {
+		batchSize = config.GetGlobalServerConfig().Debug.TableActor.EventBatchSize
+	}
 	return &actorNodeContext{
-		Context:              stdCtx,
-		outputCh:             make(chan pipeline.Message, defaultOutputChannelSize),
-		tableActorRouter:     tableActorRouter,
-		tableActorID:         tableActorID,
-		changefeedVars:       changefeedVars,
-		globalVars:           globalVars,
-		tickMessageThreshold: messagesPerTick,
-		noTickMessageCount:   0,
-		tableName:            tableName,
-		throw:                throw,
+		Context:          stdCtx,
+		outputCh:         make(chan pipeline.Message, defaultOutputChannelSize),
+		tableActorRouter: tableActorRouter,
+		tableActorID:     tableActorID,
+		changefeedVars:   changefeedVars,
+		globalVars:       globalVars,
+		eventBatchSize:   batchSize,
+		eventCount:       0,
+		tableName:        tableName,
+		throw:            throw,
 	}
 }
 
-func (c *actorNodeContext) setTickMessageThreshold(threshold int32) {
-	atomic.StoreInt32(&c.tickMessageThreshold, threshold)
+func (c *actorNodeContext) setEventBatchSize(eventBatchSize uint32) {
+	atomic.StoreUint32(&c.eventBatchSize, eventBatchSize)
 }
 
 func (c *actorNodeContext) GlobalVars() *context.GlobalVars {
@@ -129,12 +134,12 @@ func (c *actorNodeContext) tryGetProcessedMessage() *pipeline.Message {
 }
 
 func (c *actorNodeContext) trySendTickMessage() {
-	threshold := atomic.LoadInt32(&c.tickMessageThreshold)
-	atomic.AddInt32(&c.noTickMessageCount, 1)
-	count := atomic.LoadInt32(&c.noTickMessageCount)
-	// resolvedTs message will be sent by puller periodically
+	threshold := atomic.LoadUint32(&c.eventBatchSize)
+	atomic.AddUint32(&c.eventCount, 1)
+	count := atomic.LoadUint32(&c.eventCount)
+	// resolvedTs event will be sent by puller periodically
 	if count >= threshold {
 		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
-		atomic.StoreInt32(&c.noTickMessageCount, 0)
+		atomic.StoreUint32(&c.eventCount, 0)
 	}
 }

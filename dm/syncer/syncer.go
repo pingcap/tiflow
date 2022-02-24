@@ -1251,7 +1251,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 
 	s.logAndClearFilteredStatistics()
 
-	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" && s.cli != nil {
 		clone := *s.cliArgs
 		clone.StartTime = ""
 		err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone)
@@ -3733,6 +3733,9 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 
 // delLoadTask is called when finish restoring data, to delete load worker in etcd.
 func (s *Syncer) delLoadTask() error {
+	if s.cli == nil {
+		return nil
+	}
 	_, _, err := ha.DelLoadTask(s.cli, s.cfg.Name, s.cfg.SourceID)
 	if err != nil {
 		return err
