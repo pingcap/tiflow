@@ -139,7 +139,7 @@ func (c *ReplicaConfig) Validate() error {
 	return nil
 }
 
-// Apply sinkURI to fill the `ReplicaConfig`
+// ApplyProtocol sinkURI to fill the `ReplicaConfig`
 func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
 	params := sinkURI.Query()
 	if s := params.Get(ProtocolKey); s != "" {
