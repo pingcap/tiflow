@@ -155,7 +155,7 @@ func newMqSink(
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics: NewStatistics(ctx, "MQ"),
 
 		role: role,
 		id:   changefeedID,
@@ -436,7 +436,6 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	if topic == "" {
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
-
 	producer, err := kafka.NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)

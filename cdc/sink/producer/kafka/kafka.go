@@ -293,17 +293,14 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 var (
-	newSaramaConfigImpl                                 = newSaramaConfig
-	NewAdminClientImpl  kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+	newSaramaConfigImpl = newSaramaConfig
+	// NewAdminClientImpl specifies the build method for the admin client.
+	NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 )
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	role := util.RoleFromCtx(ctx)
-	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
-		zap.String("changefeed", changefeedID), zap.Any("role", role))
-
+	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
@@ -315,19 +312,14 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	}
 	defer func() {
 		if err := admin.Close(); err != nil {
-			log.Warn("close kafka cluster admin failed", zap.Error(err),
-				zap.String("changefeed", changefeedID), zap.Any("role", role))
+			log.Warn("close kafka cluster admin failed", zap.Error(err))
 		}
 	}()
 
-	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
+	if err := validateAndCreateTopic(admin, topic, config, cfg); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
+	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
@@ -396,8 +388,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
-	opts map[string]string) error {
+func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config, opts map[string]string) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -409,7 +400,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
 		// else the producer will send message that too large to make topic reject, then changefeed would error.
 		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
-		topicMaxMessageBytes, err := getTopicMaxMessageBytes(admin, info)
+		topicMaxMessageBytes, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName, kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
@@ -441,7 +432,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
 	// Kafka would create the topic with broker's `message.max.bytes`,
 	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol.
-	brokerMessageMaxBytes, err := getBrokerMessageMaxBytes(admin)
+	brokerMessageMaxBytes, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -482,44 +473,37 @@ func init() {
 	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
 }
 
-func getBrokerMessageMaxBytes(admin sarama.ClusterAdmin) (int, error) {
-	target := "message.max.bytes"
+// getBrokerConfig gets broker config by name.
+func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
 	_, controllerID, err := admin.DescribeCluster()
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return "", err
 	}
 
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.BrokerResource,
 		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{target},
+		ConfigNames: []string{brokerConfigName},
 	})
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != target {
-		return 0, cerror.ErrKafkaNewSaramaProducer.GenWithStack(
-			"since cannot find the `message.max.bytes` from the broker's configuration, " +
-				"ticdc decline to create the topic and changefeed to prevent potential error")
+	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
+		return "", errors.New(fmt.Sprintf(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName))
 	}
 
-	result, err := strconv.Atoi(configEntries[0].Value)
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	return result, nil
+	return configEntries[0].Value, nil
 }
 
-func getTopicMaxMessageBytes(admin sarama.ClusterAdmin, info sarama.TopicDetail) (int, error) {
-	if a, ok := info.ConfigEntries["max.message.bytes"]; ok {
-		result, err := strconv.Atoi(*a)
-		if err != nil {
-			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-		}
-		return result, nil
+// getTopicConfig gets topic config by name.
+// If the topic does not have this configuration, we will try to get it from the broker's configuration.
+// NOTICE: The configuration names of topic and broker may be different for the same configuration.
+func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
+		return *a, nil
 	}
 
-	return getBrokerMessageMaxBytes(admin)
+	return getBrokerConfig(admin, brokerConfigName)
 }
