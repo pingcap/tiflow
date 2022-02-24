@@ -530,9 +530,7 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 	return encoder
 }
 
-type canalEventBatchEncoderBuilder struct {
-	config *Config
-}
+type canalEventBatchEncoderBuilder struct{}
 
 // Build a `CanalEventBatchEncoder`
 func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
@@ -541,5 +539,5 @@ func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
 }
 
 func newCanalEventBatchEncoderBuilder(config *Config) EncoderBuilder {
-	return &canalEventBatchEncoderBuilder{config: config}
+	return &canalEventBatchEncoderBuilder{}
 }

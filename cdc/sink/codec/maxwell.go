@@ -27,9 +27,7 @@ import (
 	"github.com/tikv/pd/pkg/tsoutil"
 )
 
-type maxwellEventBatchEncoderBuilder struct {
-	config *Config
-}
+type maxwellEventBatchEncoderBuilder struct{}
 
 // Build a `MaxwellEventBatchEncoder`
 func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
@@ -37,8 +35,8 @@ func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	return encoder
 }
 
-func newMaxwellEventBatchEncoderBuilder(config *Config) EncoderBuilder {
-	return &maxwellEventBatchEncoderBuilder{config: config}
+func newMaxwellEventBatchEncoderBuilder() EncoderBuilder {
+	return &maxwellEventBatchEncoderBuilder{}
 }
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation

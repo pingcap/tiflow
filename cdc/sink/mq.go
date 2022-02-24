@@ -98,7 +98,7 @@ func newMqSink(
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 
-	encoder := encoderBuilder.Build(ctx)
+	encoder := encoderBuilder.Build()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -223,7 +223,7 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	encoder := k.encoderBuilder.Build(ctx)
+	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
@@ -248,7 +248,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
 
-	encoder := k.encoderBuilder.Build(ctx)
+	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)

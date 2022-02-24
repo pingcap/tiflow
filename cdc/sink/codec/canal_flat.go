@@ -355,11 +355,6 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
 }
 
-// Reset is only supported by JSONEventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) Reset() {
-	panic("not supported")
-}
-
 // CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
 	data                []byte
