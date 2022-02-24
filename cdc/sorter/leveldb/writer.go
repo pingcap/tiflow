@@ -98,6 +98,6 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		},
 	})
 	// It's ok if send fails, as resolved ts events are received periodically.
-	w.readerRouter.Send(w.readerActorID, msg)
+	_ = w.readerRouter.Send(w.readerActorID, msg)
 	return true
 }
