@@ -2628,8 +2628,10 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 	// if the validator stage is `RUNNING`: then report error
 	// otherwise: update the subtask config & etcd.Put(validator stage: running)
 	for taskName := range subTaskCfgs {
-		for _, cfg := range subTaskCfgs[taskName] {
+		for sourceID := range subTaskCfgs[taskName] {
+			cfg := subTaskCfgs[taskName][sourceID]
 			cfg.ValidatorCfg.Mode = req.Mode
+			subTaskCfgs[taskName][sourceID] = cfg
 		}
 	}
 	err = s.scheduler.OperateValidationTask(pb.Stage_Running, subTaskCfgs)
@@ -2648,7 +2650,7 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
 	var (
 		resp2       *pb.StopValidationResponse
-		err2        error
+		err, err2   error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
@@ -2672,7 +2674,15 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: update the validator stage in etcd
+	err = s.scheduler.OperateValidationTask(pb.Stage_Stopped, subTaskCfgs)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	resp.Result = true
+	resp.Msg = "succeed to stop validation!"
 	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }

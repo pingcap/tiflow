@@ -145,6 +145,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)), IsTrue)
+	// c.Assert(terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(pb.Stage_Running, map[string]map[string]config.SubTaskConfig{})), IsTrue)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -792,6 +793,12 @@ func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source str
 	default:
 		c.Assert(stageM, HasLen, 0)
 	}
+}
+
+func (t *testScheduler) validatorModeMatch(c *C, s *Scheduler, task, source string, expectMode string) {
+	cfg := s.getSubTaskCfgByTaskSource(task, source)
+	c.Assert(cfg, NotNil)
+	c.Assert(cfg.ValidatorCfg.Mode, Equals, expectMode)
 }
 
 func (t *testScheduler) TestRestartScheduler(c *C) {
@@ -1966,4 +1973,71 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	c.Assert(worker.Stage(), Equals, WorkerBound)
 	c.Assert(worker.RelaySourceID(), HasLen, 0)
 	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
+}
+
+func (t *testScheduler) TestOperateValidatorTask(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		taskName    = "task-1"
+		keepAlive   = int64(2)
+		subtaskCfg  config.SubTaskConfig
+	)
+	c.Assert(subtaskCfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	subtaskCfg.SourceID = sourceID1
+	subtaskCfg.Name = taskName
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
+	c.Assert(subtaskCfg.Adjust(true), IsNil)
+
+	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	s.etcdCli = etcdTestCli
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	c.Assert(s.recoverSources(), IsNil)
+	_, err = s.recoverWorkersBounds()
+	c.Assert(err, IsNil)
+	s.Start(ctx, etcdTestCli)
+	// CASE 1: start subtask without starting validation
+	c.Assert(s.AddSubTasks(false, subtaskCfg), IsNil) // create new subtask without validation
+	t.subTaskCfgExist(c, s, subtaskCfg)
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
+	stCfgs := make(map[string]map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name] = make(map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // start running validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // stage not changed
+
+	// CASE 2: stop running subtask
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)                  // stop stopped validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
+
+	// CASE 3: start subtask with fast mode
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
 }

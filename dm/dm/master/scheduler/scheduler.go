@@ -2684,25 +2684,24 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 	for taskName := range stCfgs {
 		for _, cfg := range stCfgs[taskName] {
 			stageM, _, err := ha.GetValidatorStage(s.etcdCli, cfg.SourceID, cfg.Name, 0)
-			if _, ok := stageM[cfg.Name]; !ok || err != nil {
+			if err != nil {
 				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
 			}
-			if stageM[cfg.Name].Expect == expectStage {
+			if v, ok := stageM[cfg.Name]; ok && v.Expect == expectStage {
 				warnInfo := fmt.Sprintf("subtask validator is already %s\n", expectStage.String())
-				s.logger.Warn(
+				s.logger.Info(
 					warnInfo,
 					zap.String("taskName", cfg.Name),
 					zap.String("source", cfg.SourceID),
 				)
 			} else {
-				if expectStage != pb.Stage_Running {
-					// update in scheduler
+				if expectStage == pb.Stage_Running {
 					// don't need to update config if stopping the validator task
 					v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
 					m := v.(map[string]config.SubTaskConfig)
 					m[cfg.SourceID] = cfg
+					newCfgs = append(newCfgs, cfg)
 				}
-				newCfgs = append(newCfgs, cfg)
 				validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
 			}
 		}
@@ -2713,9 +2712,12 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 		m[stage.Source] = stage
 	}
 	// 2. setting subtask stage in etcd
-	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
-	if err != nil {
-		return terror.Annotate(err, "fail to set new validator stage")
+	if len(newCfgs) > 0 || len(validatorStages) > 0 {
+		_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
+		if err != nil {
+			return terror.Annotate(err, "fail to set new validator stage")
+		}
+		return err
 	}
-	return err
+	return nil
 }
