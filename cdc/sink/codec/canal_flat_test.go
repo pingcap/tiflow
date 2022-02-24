@@ -88,7 +88,7 @@ func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessage4aDML(c *check.C) {
+func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 	defer testleak.AfterTest(c)()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
 	c.Assert(encoder, check.NotNil)
