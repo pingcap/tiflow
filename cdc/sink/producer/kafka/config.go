@@ -149,6 +149,11 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 
 	producerConfig.ClientID = params.Get("kafka-client-id")
 
+	s = sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
+	}
+
 	s = params.Get("ca")
 	if s != "" {
 		producerConfig.Credential.CAPath = s
