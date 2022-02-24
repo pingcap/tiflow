@@ -144,6 +144,7 @@ func newMqSink(
 	s := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
+		newEncoder: newEncoder,
 		filter:     filter,
 		protocol:   protocol,
 
