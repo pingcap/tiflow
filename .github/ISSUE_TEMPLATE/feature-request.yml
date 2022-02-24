@@ -1,6 +1,6 @@
 name: "\U0001F680 Feature Request"
 description: Request a new feature
-labels: ["subject/new-feature"]
+labels: ["type/feature"]
 body:
   - type: textarea
     id: problem

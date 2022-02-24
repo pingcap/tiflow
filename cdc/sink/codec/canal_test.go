@@ -85,7 +85,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		size := encoder.Size()
@@ -411,6 +411,7 @@ var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT, "9223372036854775807"},
 	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "9223372036854775807"},
 	{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeDECIMAL, "9223372036854775808"},
+	{&model.Column{Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0", Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "0"},
 
 	{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL, "3.14"},
 	{&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE, "2.71"},
@@ -454,7 +455,8 @@ func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
 		obtainedMySQLType := getMySQLType(item.column)
 		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
 
-		obtainedJavaSQLType := getJavaSQLType(item.column, obtainedMySQLType)
+		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
+		c.Assert(err, check.IsNil)
 		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
 	}
 }

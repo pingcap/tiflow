@@ -90,10 +90,9 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 
 		events := 0
 		for _, row := range cs {
-			op, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			events++
 			c.Assert(err, check.IsNil)
-			c.Assert(op, check.Equals, EncoderNoOperation)
 		}
 		// test normal decode
 		if len(cs) > 0 {
@@ -189,8 +188,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
@@ -213,8 +211,7 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
