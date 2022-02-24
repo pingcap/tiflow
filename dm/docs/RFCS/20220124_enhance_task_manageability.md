@@ -29,13 +29,13 @@ New syntax of dmctl is `dmctl [resource type] [command] [flags] [arguments]`
 
 where `resource type`, `command` and `flags` are:
 
-- `resource type`: Specifies the resource you want to control. resource types are case-insensitive and there are limited resource types. currently there are only these types of resource types: `task`, `source`, `relay`, `ddl-lock` and `member`.
+- `resource type` specifies the resource you want to control. `resource type`s are case-insensitive and limited. Currently there are only these: `task`, `source`, `relay`, `ddl-lock` and `member`.
 
-- `command`: Specifies the operation that you want to perform on one or more resources, for example `create`, `get`, `update`, `delete`, `etc`.
+- `command` specifies the operation that you want to perform on one or more resources, for example `create`, `get`, `update`, `delete`, etc.
 
-- `flags`: Specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server.
+- `flags` specifies optional flags. For example, you can use the `--master-addr` flags to specify the address and port of the DM-Master server.
 
-- `arguments`: Specifies the required arguments for this command, such as the name of the `task` and task config file.
+- `arguments` specifies the required arguments for this command, such as the name of the `task` and task config file.
 
 ### dmctl commands for Task
 
@@ -59,7 +59,7 @@ where `resource type`, `command` and `flags` are:
 | update   | `dmctl source update source1 source1.yaml`         |                         | source-name, config-file | update a source with config file.                                   |
 | delete   | `dmctl source delete --force source1`              | --force(default: false) | source-name              | delete a source with config file.                                   |
 | get      | `dmctl source get --output="source1.yaml" source1` | --output                | source-name              | show the source config in yaml format, also support output to file. |
-| list     | `dmctl source list`                                |                         |                          | list all source in current cluster.                                 |
+| list     | `dmctl source list`                                |                         |                          | list all sources in current cluster.                                 |
 | status   | `dmctl source status source1`                      |                         | source-name              | show source detail status.                                          |
 | enable   | `dmctl source enable source1`                      |                         | source-name              | enable a disabled source.                                           |
 | disable  | `dmctl source disable source1`                     |                         | source-name              | disable a source and also stop the running subtasks of this source. |
