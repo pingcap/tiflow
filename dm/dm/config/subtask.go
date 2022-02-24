@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/router"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -395,10 +396,25 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	dirSuffix := "." + c.Name
-	if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) { // check to support multiple times calling
-		// if not ends with the task name, we append the task name to the tail
-		c.LoaderConfig.Dir += dirSuffix
+	// adjust dir
+	if c.Mode == ModeAll || c.Mode == ModeFull {
+		// check
+		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
+		if isS3 && c.ImportMode == LoadModeLoader {
+			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
+		}
+		// add suffix
+		var dirSuffix string
+		if isS3 {
+			dirSuffix = c.Name + "." + c.SourceID
+		} else {
+			dirSuffix = c.Name
+		}
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		if err != nil {
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+		}
+		c.LoaderConfig.Dir = newDir
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {

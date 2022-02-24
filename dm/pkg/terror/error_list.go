@@ -252,6 +252,8 @@ const (
 	codeConfigValidationMode
 	codeContinuousValidatorCfgNotFound
 	codeConfigStartTimeTooLate
+	codeConfigLoaderDirInvalid
+	codeConfigLoaderS3NotSupport
 )
 
 // Binlog operation error code list.
@@ -917,6 +919,8 @@ var (
 	ErrConfigValidationMode                = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
 	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `continuous-validator-config-name` config in task configuration file.")
 	ErrConfigStartTimeTooLate              = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
+	ErrConfigLoaderDirInvalid              = New(codeConfigLoaderDirInvalid, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is invalid", "Please check the `dir` config in task configuration file.")
+	ErrConfigLoaderS3NotSupport            = New(codeConfigLoaderS3NotSupport, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is s3 dir, but s3 is not supported", "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
