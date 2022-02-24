@@ -317,7 +317,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
-	size := defaultMsgBatchSizePerActor * 4
+	size := DefaultMsgBatchSizePerActor * 4
 	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,
@@ -404,7 +404,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		syncCount: syncCount,
 	}
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	require.Nil(t, sys.Spawn(mb, fa))
 
 	// Test 5 seconds
@@ -447,7 +447,7 @@ func TestPollStoppedActor(t *testing.T) {
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
-	cap := defaultMsgBatchSizePerActor * 4
+	cap := DefaultMsgBatchSizePerActor * 4
 	mb := NewMailbox(id, cap)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
@@ -477,7 +477,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
@@ -532,7 +532,7 @@ func TestSendBeforeClose(t *testing.T) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
 
@@ -587,7 +587,7 @@ func TestSendAfterClose(t *testing.T) {
 
 	id := ID(777)
 	dropCount := 1
-	cap := defaultMsgBatchSizePerActor + dropCount
+	cap := DefaultMsgBatchSizePerActor + dropCount
 	mb := NewMailbox(id, cap)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
@@ -653,7 +653,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	size := defaultMsgBatchSizePerActor * 4
+	size := DefaultMsgBatchSizePerActor * 4
 	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,

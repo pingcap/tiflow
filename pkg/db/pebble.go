@@ -47,12 +47,12 @@ func (logger *pebbleLogger) Fatalf(format string, args ...interface{}) {
 
 // TODO: Update DB config once we switch to pebble,
 //       as some configs are not applicable to pebble.
-func buildPebbleOption(id int, cfg *config.DBConfig) (pebble.Options, *writeStall) {
+func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Options, *writeStall) {
 	var option pebble.Options
 	option.ErrorIfExists = true
-	option.DisableWAL = true
+	option.DisableWAL = false // Delete range requires WAL.
 	option.MaxOpenFiles = cfg.MaxOpenFiles / cfg.Count
-	option.Cache = pebble.NewCache(int64(cfg.BlockCacheSize / cfg.Count))
+	option.Cache = pebble.NewCache(int64(memInByte))
 	option.MaxConcurrentCompactions = 6
 	option.L0CompactionThreshold = cfg.CompactionL0Trigger
 	option.L0StopWritesThreshold = cfg.WriteL0PauseTrigger
@@ -98,8 +98,10 @@ func buildPebbleOption(id int, cfg *config.DBConfig) (pebble.Options, *writeStal
 }
 
 // OpenPebble opens a pebble.
-func OpenPebble(ctx context.Context, id int, path string, cfg *config.DBConfig) (DB, error) {
-	option, ws := buildPebbleOption(id, cfg)
+func OpenPebble(
+	ctx context.Context, id int, path string, memInByte int, cfg *config.DBConfig,
+) (DB, error) {
+	option, ws := buildPebbleOption(id, memInByte, cfg)
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
@@ -151,6 +153,10 @@ func (p *pebbleDB) Batch(cap int) Batch {
 	}
 }
 
+func (p *pebbleDB) DeleteRange(start, end []byte) error {
+	return p.db.DeleteRange(start, end, nil)
+}
+
 func (p *pebbleDB) Compact(start, end []byte) error {
 	return p.db.Compact(start, end)
 }
@@ -190,6 +196,10 @@ func (p *pebbleDB) CollectMetrics(captureAddr string, i int) {
 	for level, metric := range stats.Levels {
 		metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
 	}
+	dbBlockCacheAccess.
+		WithLabelValues(captureAddr, id, "hit").Set(float64(stats.BlockCache.Hits))
+	dbBlockCacheAccess.
+		WithLabelValues(captureAddr, id, "miss").Set(float64(stats.BlockCache.Misses))
 }
 
 type pebbleBatch struct {
@@ -230,10 +240,6 @@ var _ Iterator = (*pebbleIter)(nil)
 
 func (i pebbleIter) Valid() bool {
 	return i.Iterator.Valid()
-}
-
-func (i pebbleIter) First() bool {
-	return i.Iterator.First()
 }
 
 func (i pebbleIter) Seek(key []byte) bool {

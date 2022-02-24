@@ -252,9 +252,9 @@ func (ls *Sorter) buildTask(
 	}
 
 	return message.Task{
-		UID:     ls.uid,
-		TableID: ls.tableID,
-		Events:  writes,
+		UID:      ls.uid,
+		TableID:  ls.tableID,
+		WriteReq: writes,
 	}, nil
 }
 
@@ -542,12 +542,12 @@ func (state *pollState) tryGetIterator(
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false
-		state.iter.First()
+		state.iter.Seek([]byte(""))
 		duration := time.Since(start)
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
 			// Force trigger a compaction if Iterator.Fisrt is too slow.
-			state.compact.maybeCompact(state.actorID, int(math.MaxInt32))
+			state.compact.tryScheduleCompact(state.actorID, int(math.MaxInt32))
 		}
 		return nil, true
 	default:
@@ -717,7 +717,18 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return ls.outputCh
 }
 
-// CleanupTask returns a clean up task that delete sorter's data.
-func (ls *Sorter) CleanupTask() actormsg.Message {
-	return actormsg.SorterMessage(message.NewCleanupTask(ls.uid, ls.tableID))
+// CleanupFunc returns a function that cleans up sorter's data.
+func (ls *Sorter) CleanupFunc() func(context.Context) error {
+	return func(ctx context.Context) error {
+		task := message.Task{UID: ls.uid, TableID: ls.tableID}
+		task.DeleteReq = &message.DeleteRequest{
+			// We do not set task.Delete.Count, because we don't know
+			// how many key-value pairs in the range.
+			Range: [2][]byte{
+				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+			},
+		}
+		return ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
+	}
 }
