@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -55,9 +54,9 @@ type canalFlatEventBatchEncoderBuilder struct {
 }
 
 // Build a `CanalFlatEventBatchEncoder`
-func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
+func (b *canalFlatEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCanalFlatEventBatchEncoder()
-	encoder.setParams(b.config)
+	encoder.(*CanalFlatEventBatchEncoder).enableTiDBExtension = b.config.enableTiDBExtension
 
 	return encoder
 }
@@ -359,10 +358,6 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 // Reset is only supported by JSONEventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
-}
-
-func (c *CanalFlatEventBatchEncoder) setParams(config *Config) {
-	c.enableTiDBExtension = config.enableTiDBExtension
 }
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.

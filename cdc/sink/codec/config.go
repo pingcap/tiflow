@@ -16,6 +16,7 @@ package codec
 import (
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -38,6 +39,7 @@ type Config struct {
 
 	// avro only
 	avroRegistry string
+	tz           *time.Location
 }
 
 // NewConfig return a Config for codec
@@ -99,8 +101,14 @@ func (c *Config) Validate() error {
 		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only support canal-json protocol`)
 	}
 
-	if c.protocol == "avro" && c.avroRegistry == "" {
-		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "registry"`)
+	if c.protocol == "avro" {
+		if c.avroRegistry == "" {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "registry"`)
+		}
+
+		if c.tz == nil {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack("Avro protocol requires timezone to be set")
+		}
 	}
 
 	if c.maxMessageBytes <= 0 {

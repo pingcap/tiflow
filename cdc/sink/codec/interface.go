@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"encoding/binary"
 	"time"
 
@@ -39,8 +38,6 @@ type EventBatchEncoder interface {
 	Build() []*MQMessage
 	// Size returns the size of the batch(bytes)
 	Size() int
-	// setParams provides the encoder with more info on the sink
-	setParams(config *Config)
 }
 
 // MQMessage represents an MQ message to the mqSink
@@ -149,7 +146,7 @@ const (
 
 // EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
-	Build(ctx context.Context) EventBatchEncoder
+	Build() EventBatchEncoder
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder

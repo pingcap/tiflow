@@ -14,8 +14,6 @@
 package codec
 
 import (
-	"context"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
@@ -81,12 +79,6 @@ func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.Size()
 }
 
-// SetParams reads relevant parameters for craft protocol
-func (e *CraftEventBatchEncoder) setParams(config *Config) {
-	e.maxMessageBytes = config.maxMessageBytes
-	e.maxBatchSize = config.maxBatchSize
-}
-
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
@@ -100,9 +92,10 @@ type craftEventBatchEncoderBuilder struct {
 }
 
 // Build a CraftEventBatchEncoder
-func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
+func (b *craftEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCraftEventBatchEncoder()
-	encoder.setParams(b.config)
+	encoder.(*CraftEventBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
+	encoder.(*CraftEventBatchEncoder).maxBatchSize = b.config.maxBatchSize
 	return encoder
 }
 

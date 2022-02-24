@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -496,11 +495,6 @@ func (d *CanalEventBatchEncoder) Size() int {
 	return proto.Size(d.packet)
 }
 
-// SetParams is no-op for now
-func (d *CanalEventBatchEncoder) setParams(_ *Config) {
-	// no op
-}
-
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)
@@ -541,10 +535,8 @@ type canalEventBatchEncoderBuilder struct {
 }
 
 // Build a `CanalEventBatchEncoder`
-func (b *canalEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
+func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCanalEventBatchEncoder()
-	encoder.setParams(b.config)
-
 	return encoder
 }
 

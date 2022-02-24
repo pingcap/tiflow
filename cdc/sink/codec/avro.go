@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -157,11 +156,6 @@ func (a *AvroEventBatchEncoder) Size() int {
 		sum += len(msg.Value)
 	}
 	return sum
-}
-
-// SetParams is no-op for now
-func (a *AvroEventBatchEncoder) setParams(_ *Config) {
-	// no op
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
@@ -514,6 +508,7 @@ type avroEventBatchEncoderBuilder struct {
 	config             *Config
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
+	tz                 *time.Location
 }
 
 const (
@@ -537,16 +532,16 @@ func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Co
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
+		tz:                 config.tz,
 	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
+func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
-	encoder.setParams(b.config)
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
-	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
+	encoder.SetTimeZone(b.tz)
 
 	return encoder
 }

@@ -14,8 +14,6 @@
 package codec
 
 import (
-	"context"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -81,7 +79,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 		}
 	}
 
-	encoder := encoderBuilder.Build(context.Background())
+	encoder := encoderBuilder.Build()
 	for _, cs := range s.rowCases {
 		events := 0
 		for _, row := range cs {
@@ -99,7 +97,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 		}
 	}
 
-	encoder = encoderBuilder.Build(context.Background())
+	encoder = encoderBuilder.Build()
 	for _, cs := range s.ddlCases {
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
@@ -111,7 +109,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 		}
 	}
 
-	encoder = encoderBuilder.Build(context.Background())
+	encoder = encoderBuilder.Build()
 	for _, cs := range s.resolvedTsCases {
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -127,7 +125,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig("craft").WithMaxMessageBytes(256)
-	encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -150,7 +148,7 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig("craft").WithMaxMessageBytes(10485760)
 	config.maxBatchSize = 64
-	encoder := newCraftEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -199,7 +197,7 @@ func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
 	config := NewConfig("craft")
 
 	builder := &craftEventBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build(context.Background()).(*CraftEventBatchEncoder)
+	encoder, ok := builder.Build().(*CraftEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)

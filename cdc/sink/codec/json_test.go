@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"sort"
 	"testing"
 
@@ -109,7 +108,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 	}
 
 	for _, cs := range s.rowCases {
-		encoder := encoderBuilder.Build(context.Background())
+		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
@@ -126,7 +125,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		}
 	}
 	for _, cs := range s.ddlCases {
-		encoder := encoderBuilder.Build(context.Background())
+		encoder := encoderBuilder.Build()
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -139,7 +138,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 	}
 
 	for _, cs := range s.resolvedTsCases {
-		encoder := encoderBuilder.Build(context.Background())
+		encoder := encoderBuilder.Build()
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -155,7 +154,7 @@ func (s *batchSuite) TestBuildJSONEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig("open-protocol")
 	builder := &jsonEventBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build(context.Background()).(*JSONEventBatchEncoder)
+	encoder, ok := builder.Build().(*JSONEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
 	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
@@ -174,19 +173,19 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 87 + 44
 	config := NewConfig("open-protocol").WithMaxMessageBytes(a)
-	encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder := newJSONEventBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.IsNil)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
-	encoder = newJSONEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	err = encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.NotNil)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
-	encoder = newJSONEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
@@ -203,7 +202,7 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 
 	config := NewConfig("open-protocol").WithMaxMessageBytes(1048576)
 	config.maxBatchSize = 64
-	encoder := newJSONEventBatchEncoderBuilder(config).Build(context.Background())
+	encoder := newJSONEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,

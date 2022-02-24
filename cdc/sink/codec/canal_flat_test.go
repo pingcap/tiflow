@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"encoding/json"
 
 	"github.com/pingcap/check"
@@ -76,13 +75,13 @@ func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
 	config := NewConfig("canal-json")
 
 	builder := &canalFlatEventBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	encoder, ok := builder.Build().(*CanalFlatEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
 
 	config.enableTiDBExtension = true
 	builder = &canalFlatEventBatchEncoderBuilder{config: config}
-	encoder, ok = builder.Build(context.Background()).(*CanalFlatEventBatchEncoder)
+	encoder, ok = builder.Build().(*CanalFlatEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
 }

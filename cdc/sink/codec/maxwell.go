@@ -15,7 +15,6 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"encoding/json"
 
@@ -33,9 +32,8 @@ type maxwellEventBatchEncoderBuilder struct {
 }
 
 // Build a `MaxwellEventBatchEncoder`
-func (b *maxwellEventBatchEncoderBuilder) Build(_ context.Context) EventBatchEncoder {
+func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewMaxwellEventBatchEncoder()
-	encoder.setParams(b.config)
 	return encoder
 }
 
@@ -177,11 +175,6 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	d.valueBuf.Write(value)
 	d.batchSize++
 	return nil
-}
-
-// SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) setParams(config *Config) {
-	// no op
 }
 
 // Column represents a column in maxwell

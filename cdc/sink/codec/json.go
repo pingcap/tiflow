@@ -15,7 +15,6 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -515,20 +514,15 @@ func (d *JSONEventBatchEncoder) Size() int {
 	return -1
 }
 
-// SetParams reads relevant parameters for Open Protocol
-func (d *JSONEventBatchEncoder) setParams(config *Config) {
-	d.maxMessageBytes = config.maxMessageBytes
-	d.maxBatchSize = config.maxBatchSize
-}
-
 type jsonEventBatchEncoderBuilder struct {
 	config *Config
 }
 
 // Build a JSONEventBatchEncoder
-func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) EventBatchEncoder {
+func (b *jsonEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewJSONEventBatchEncoder()
-	encoder.setParams(b.config)
+	encoder.(*JSONEventBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
+	encoder.(*JSONEventBatchEncoder).maxBatchSize = b.config.maxBatchSize
 
 	return encoder
 }
