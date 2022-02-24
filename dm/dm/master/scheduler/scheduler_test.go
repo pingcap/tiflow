@@ -676,8 +676,7 @@ func (t *testScheduler) workerOffline(c *C, s *Scheduler, worker string) {
 	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	_, ok = sbm[worker]
-	c.Assert(ok, IsTrue)
-	c.Assert(sbm[worker], HasLen, 0)
+	c.Assert(ok, IsFalse)
 }
 
 func (t *testScheduler) workerFree(c *C, s *Scheduler, worker string) {
@@ -692,8 +691,7 @@ func (t *testScheduler) workerFree(c *C, s *Scheduler, worker string) {
 	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	_, ok = sbm[worker]
-	c.Assert(ok, IsTrue)
-	c.Assert(sbm[worker], HasLen, 0)
+	c.Assert(ok, IsFalse)
 }
 
 func (t *testScheduler) workerBound(c *C, s *Scheduler, bound ha.SourceBound) {
@@ -900,7 +898,6 @@ func (t *testScheduler) TestRestartScheduler(c *C) {
 	unbounds := s.UnboundSources()
 	c.Assert(unbounds, HasLen, 1)
 	c.Assert(unbounds[0], Equals, sourceID1)
-	sourceBound1.Source = ""
 	sourceBound1.IsDeleted = true
 	checkSourceBoundCh()
 
