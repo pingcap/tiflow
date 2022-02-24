@@ -138,6 +138,14 @@ func (ldb *DBActor) close(err error) {
 	ldb.closedWg.Done()
 }
 
+func (ldb *DBActor) tryScheduleCompact() {
+	// Schedule a compact task when there are too many deletion.
+	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		ldb.deleteCount = 0
+	}
+}
+
 func (ldb *DBActor) maybeWrite(force bool) error {
 	bytes := len(ldb.wb.Repr())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
@@ -154,12 +162,6 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 			ldb.wb.Reset()
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
-		}
-
-		// Schedule a compact task when there are too many deletion.
-		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
-			// Reset delete key count if schedule compaction successfully.
-			ldb.deleteCount = 0
 		}
 	}
 	return nil
@@ -215,7 +217,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
 
-		for k, v := range task.Events {
+		for k, v := range task.WriteReq {
 			if len(v) != 0 {
 				ldb.wb.Put([]byte(k), v)
 			} else {
@@ -227,6 +229,22 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			// Do not force write, batching for efficiency.
 			if err := ldb.maybeWrite(false); err != nil {
 				log.Panic("db error", zap.Error(err))
+			}
+		}
+		if task.DeleteReq != nil {
+			ldb.deleteCount += task.DeleteReq.Count
+			if len(task.DeleteReq.Range[0]) != 0 && len(task.DeleteReq.Range[1]) != 0 {
+				// Force write pending write batch before delete range.
+				if err := ldb.maybeWrite(true); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				start, end := task.DeleteReq.Range[0], task.DeleteReq.Range[1]
+				if err := ldb.db.DeleteRange(start, end); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				ldb.tryScheduleCompact()
 			}
 		}
 		if task.IterReq != nil {

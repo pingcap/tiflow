@@ -34,10 +34,10 @@ import (
 const (
 	// The max number of workers of a system.
 	maxWorkerNum = 64
-	// defaultActorBatchSize is the default size of polled actor batch.
-	defaultActorBatchSize = 1
-	// defaultMsgBatchSizePerActor is the default size of receive message batch.
-	defaultMsgBatchSizePerActor = 64
+	// DefaultActorBatchSize is the default size of polled actor batch.
+	DefaultActorBatchSize = 1
+	// DefaultMsgBatchSizePerActor is the default size of receive message batch.
+	DefaultMsgBatchSizePerActor = 64
 )
 
 var (
@@ -284,8 +284,8 @@ func NewSystemBuilder(name string) *SystemBuilder {
 	return &SystemBuilder{
 		name:                 name,
 		numWorker:            defaultWorkerNum,
-		actorBatchSize:       defaultActorBatchSize,
-		msgBatchSizePerActor: defaultMsgBatchSizePerActor,
+		actorBatchSize:       DefaultActorBatchSize,
+		msgBatchSizePerActor: DefaultMsgBatchSizePerActor,
 	}
 }
 
@@ -457,6 +457,7 @@ func (s *System) poll(ctx context.Context, id int) {
 				rd.Unlock()
 				return
 			}
+
 			// Batch receive ready procs.
 			n := rd.batchReceiveProcs(batchPBuf)
 			if n != 0 {

@@ -43,7 +43,7 @@ func TestDB(t *testing.T) {
 	require.Nil(t, err)
 	testDB(t, db)
 
-	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), cfg)
+	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), 0, cfg)
 	require.Nil(t, err)
 	testDB(t, db)
 }
@@ -81,9 +81,9 @@ func testDB(t *testing.T, db DB) {
 		Limit: []byte("k4"),
 	}, nil)
 	iter := db.Iterator([]byte(""), []byte("k4"))
-	// First
-	require.True(t, liter.First())
-	require.True(t, iter.First())
+	// Seek
+	require.True(t, liter.Seek([]byte{}))
+	require.True(t, iter.Seek([]byte{}))
 	// Valid
 	require.True(t, liter.Valid())
 	require.True(t, iter.Valid())
@@ -125,7 +125,7 @@ func TestPebbleMetrics(t *testing.T) {
 	cfg.Count = 1
 
 	id := 1
-	option, ws := buildPebbleOption(id, cfg)
+	option, ws := buildPebbleOption(id, 0, cfg)
 	db, err := pebble.Open(t.TempDir(), &option)
 	require.Nil(t, err)
 	pdb := &pebbleDB{
@@ -204,7 +204,8 @@ func BenchmarkNext(b *testing.B) {
 	}, {
 		name: "pebble",
 		dbfn: func(name string) DB {
-			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), cfg)
+			gb := 1024 * 1024 * 1024
+			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), gb, cfg)
 			require.Nil(b, err)
 			return db
 		},
@@ -243,7 +244,7 @@ func BenchmarkNext(b *testing.B) {
 					iter := db.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)))
 					require.Nil(b, iter.Error())
 					for i := 0; i < b.N; i++ {
-						for ok := iter.First(); ok; ok = iter.Next() {
+						for ok := iter.Seek([]byte{}); ok; ok = iter.Next() {
 						}
 					}
 				})

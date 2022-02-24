@@ -456,6 +456,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrKafkaTopicExprInvalid"]
+error = '''
+invalid topic expression
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
@@ -1014,6 +1019,11 @@ unified sorter backend is terminating
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
 unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
+'''
+
+["CDC:ErrUnimplemented"]
+error = '''
+unimplemented %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]
