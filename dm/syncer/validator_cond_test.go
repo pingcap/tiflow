@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getTableDiff(t *testing.T, schemaName, tableName, creatSQL string) *validateTableInfo {
+func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) *validateTableInfo {
 	var (
 		err       error
 		parser2   *parser.Parser
@@ -37,15 +37,20 @@ func getTableDiff(t *testing.T, schemaName, tableName, creatSQL string) *validat
 	require.NoError(t, err)
 	tableInfo, err = dbutil.GetTableInfoBySQL(creatSQL, parser2)
 	require.NoError(t, err)
-	columnMap := make(map[string]*model.ColumnInfo)
-	for _, col := range tableInfo.Columns {
-		columnMap[col.Name.O] = col
-	}
 	var primaryIdx *model.IndexInfo
 	for _, idx := range tableInfo.Indices {
 		if idx.Primary {
 			primaryIdx = idx
 		}
+	}
+	require.NotNil(t, primaryIdx)
+	columnMap := make(map[string]*model.ColumnInfo)
+	for _, col := range tableInfo.Columns {
+		columnMap[col.Name.O] = col
+	}
+	pkIndices := make([]int, len(primaryIdx.Columns))
+	for i, col := range primaryIdx.Columns {
+		pkIndices[i] = columnMap[col.Name.O].Offset
 	}
 	tableDiff := &validateTableInfo{
 		Source: &filter.Table{
@@ -54,12 +59,17 @@ func getTableDiff(t *testing.T, schemaName, tableName, creatSQL string) *validat
 		},
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
+		Target: &filter.Table{
+            Schema: schemaName,
+            Name:   tableName,
+        },
+		pkIndices: pkIndices,
 	}
 	return tableDiff
 }
 
-func formatCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
-	tblDiff := getTableDiff(t, schemaName, tblName, creatSQL)
+func genValidationCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
+	tblDiff := genValidateTableInfo(t, schemaName, tblName, creatSQL)
 	return &Cond{
 		Table:    tblDiff,
 		PkValues: pkvs,
@@ -86,7 +96,7 @@ func TestCondSelectMultiKey(t *testing.T) {
 		key1, key2 := strconv.Itoa(i+1), strconv.Itoa(i+2)
 		pkValues = append(pkValues, []string{key1, key2})
 	}
-	cond := formatCond(t, "test_cond", "test1", creatTbl, pkValues)
+	cond := genValidationCond(t, "test_cond", "test1", creatTbl, pkValues)
 	// format query string
 	rowsQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s;", "`test_cond`.`test1`", cond.GetWhere())
 	mock.ExpectQuery(
@@ -155,7 +165,7 @@ func TestCondGetWhereArgs(t *testing.T) {
 		},
 	}
 	for i := 0; i < len(cases); i++ {
-		cond := formatCond(t, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
+		cond := genValidationCond(t, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
 		require.Equal(t, cases[i].where, cond.GetWhere())
 		rawArgs := cond.GetArgs()
 		for j := 0; j < 3; j++ {

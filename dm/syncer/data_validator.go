@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -115,12 +116,10 @@ type DataValidator struct {
 	streamerController *StreamerController
 
 	result           pb.ProcessResult
-	batchRowCnt      int
 	validateInterval time.Duration
 	workers          []*validateWorker
 	rowsEventChan    chan *replication.BinlogEvent // unbuffered is enough
-	changeEventCount []int
-	tables           map[string]*validateTableInfo
+	changeEventCount []atomic.Int64
 	workerCnt        int
 
 	// such as table without primary key
@@ -130,27 +129,31 @@ type DataValidator struct {
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
 	v := &DataValidator{
-		cfg:     cfg,
-		syncer:  syncerObj,
-		stage:   pb.Stage_Stopped,
+		cfg:    cfg,
+		syncer: syncerObj,
+		stage:  pb.Stage_Stopped,
+		// todo: many place may put into this channel, choose a proper channel size or enhance error handling
 		errChan: make(chan error, 1),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
-	v.workerCnt = defaultWorkerCnt
-	v.batchRowCnt = defaultBatchRowCount
+	v.workerCnt = cfg.ValidatorCfg.WorkerCount
 	v.workers = make([]*validateWorker, v.workerCnt)
 	v.rowsEventChan = make(chan *replication.BinlogEvent)
-	v.tables = make(map[string]*validateTableInfo)
-	v.changeEventCount = make([]int, 4)
+	v.changeEventCount = make([]atomic.Int64, 4)
 	v.validateInterval = validationInterval
 
+	v.unsupportedTable = make(map[string]string)
 	v.waitSyncerTimer = utils.NewStoppedTimer()
 
 	return v
 }
 
 func (v *DataValidator) initialize() error {
+	v.ctx, v.cancel = context.WithCancel(context.Background())
+	v.tctx = tcontext.NewContext(v.ctx, v.L)
+	v.result.Reset()
+
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
 	defer cancelFunc()
 	tctx := tcontext.NewContext(newCtx, v.L)
@@ -162,6 +165,7 @@ func (v *DataValidator) initialize() error {
 		}
 		dbconn.CloseBaseDB(tctx, v.fromDB)
 		dbconn.CloseBaseDB(tctx, v.toDB)
+		v.cancel()
 	}()
 
 	dbCfg := v.cfg.From
@@ -199,9 +203,6 @@ func (v *DataValidator) Start(expect pb.Stage) {
 		return
 	}
 
-	v.ctx, v.cancel = context.WithCancel(context.Background())
-	v.tctx = tcontext.NewContext(v.ctx, v.L)
-
 	if err := v.initialize(); err != nil {
 		v.fillResult(err, false)
 		return
@@ -229,23 +230,20 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 		defer v.Unlock()
 	}
 
-	var errs []*pb.ProcessError
-	if utils.IsContextCanceledError(err) {
-		v.L.Info("filter out context cancelled error", log.ShortError(err))
-	} else {
-		errs = append(errs, unit.NewProcessError(err))
-	}
-
+	// todo: if error, validation is stopped( and cancelled), and we may receive a cancelled error.
+	// todo: do we need this cancel field?
 	isCanceled := false
 	select {
 	case <-v.ctx.Done():
 		isCanceled = true
 	default:
 	}
+	v.result.IsCanceled = isCanceled
 
-	v.result = pb.ProcessResult{
-		IsCanceled: isCanceled,
-		Errors:     errs,
+	if utils.IsContextCanceledError(err) {
+		v.L.Info("filter out context cancelled error", log.ShortError(err))
+	} else {
+		v.result.Errors = append(v.result.Errors, unit.NewProcessError(err))
 	}
 }
 
@@ -302,6 +300,9 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 }
 
 func (v *DataValidator) waitSyncerRunning() error {
+	if v.syncer.IsRunning() {
+		return nil
+	}
 	for {
 		select {
 		case <-v.ctx.Done():
@@ -323,10 +324,12 @@ func (v *DataValidator) doValidate() {
 
 	// todo: syncer may change replication location(start from timestamp, sharding resync), how validator react?
 	location := v.syncer.checkpoint.FlushedGlobalPoint()
-	err := v.streamerController.Start(v.tctx, location)
-	if err != nil {
-		v.errChan <- terror.Annotate(err, "fail to start streamer controller")
-		return
+	if v.streamerController.IsClosed() {
+		err := v.streamerController.Start(v.tctx, location)
+		if err != nil {
+			v.errChan <- terror.Annotate(err, "fail to start streamer controller")
+			return
+		}
 	}
 
 	v.L.Info("start continuous validation")
@@ -364,7 +367,7 @@ func (v *DataValidator) doValidate() {
 
 		switch ev := e.Event.(type) {
 		case *replication.RowsEvent:
-			if err = v.processEventRows(e.Header, ev); err != nil {
+			if err = v.processRowsEvent(e.Header, ev); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
 				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
@@ -439,7 +442,7 @@ func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
 	v.workers[hashVal].rowChangeCh <- row
 }
 
-func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *replication.RowsEvent) error {
+func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
 	sourceTable := &filter.Table{
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
@@ -491,7 +494,7 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 	}
 
 	changeType := getRowChangeType(header.EventType)
-	v.changeEventCount[changeType]++
+	v.changeEventCount[changeType].Inc()
 
 	columnMap := make(map[string]*model.ColumnInfo)
 	for _, col := range tableInfo.Columns {
@@ -556,14 +559,6 @@ func (v *DataValidator) processEventRows(header *replication.EventHeader, ev *re
 		}
 	}
 	return nil
-}
-
-func (v *DataValidator) getRowCount(c map[string]*tableChange) int {
-	res := 0
-	for _, val := range c {
-		res += len(val.rows)
-	}
-	return res
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent
