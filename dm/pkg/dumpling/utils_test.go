@@ -14,7 +14,9 @@
 package dumpling
 
 import (
+	"context"
 	"os"
+	"path"
 	"strings"
 	"testing"
 
@@ -39,6 +41,8 @@ func (t *testSuite) TestParseMetaData(c *C) {
 	f, err := os.CreateTemp("", "metadata")
 	c.Assert(err, IsNil)
 	defer os.Remove(f.Name())
+	fdir := path.Dir(f.Name())
+	fname := path.Base(f.Name())
 
 	testCases := []struct {
 		source   string
@@ -232,11 +236,11 @@ Finished dump at: 2020-09-30 12:16:49
 			"",
 		},
 	}
-
+	ctx := context.Background()
 	for _, tc := range testCases {
 		err2 := os.WriteFile(f.Name(), []byte(tc.source), 0o644)
 		c.Assert(err2, IsNil)
-		loc, loc2, err2 := ParseMetaData(f.Name(), "mysql")
+		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql")
 		c.Assert(err2, IsNil)
 		c.Assert(loc.Position, DeepEquals, tc.pos)
 		gs, _ := gtid.ParserGTID("mysql", tc.gsetStr)
@@ -255,7 +259,7 @@ Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	c.Assert(err, IsNil)
-	_, _, err = ParseMetaData(f.Name(), "mysql")
+	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql")
 	c.Assert(terror.ErrMetadataNoBinlogLoc.Equal(err), IsTrue)
 }
 
