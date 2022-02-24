@@ -57,7 +57,7 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
-		// maxMessageBytes will be used to initialize producer
+		// MaxMessageBytes will be used to initialize producer
 		MaxMessageBytes:   config.DefaultMaxMessageBytes,
 		ReplicationFactor: 1,
 		Compression:       "none",
