@@ -27,8 +27,10 @@ const (
 )
 
 const (
-	// defaultMaxMessageBytes specifies the default max message bytes, default to 1048576
-	// it was used to initialize the default value for broker's `message.max.bytes` and topic's `max.message.bytes`
+	// defaultMaxMessageBytes specifies the default max message bytes,
+	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
+	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
 	defaultMaxMessageBytes = "1048576"
 
 	// defaultMinInsyncReplicas specifies the default min insync replicas for broker and default topic.
