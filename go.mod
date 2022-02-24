@@ -55,6 +55,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00
 	github.com/pingcap/kvproto v0.0.0-20211224055123-d1a140660c39
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
+	github.com/pingcap/mysql-tester v0.0.0-20211203024718-0ecb03c9cf5c // indirect
 	github.com/pingcap/tidb v1.1.0-beta.0.20220210065735-92f5a6340ca2
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20220210065735-92f5a6340ca2
