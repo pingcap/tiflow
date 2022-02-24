@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
-	cdckv "github.com/pingcap/tiflow/cdc/kv"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -172,10 +172,10 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	return pdClient, nil
 }
 
-func (f factoryImpl) KvStorage() (kv.Storage, error) {
+func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
 	pdAddr := f.GetPdAddr()
 	credential := f.GetCredential()
-	kvStore, err := cdckv.CreateTiStore(pdAddr, credential)
+	kvStore, err := kv.CreateTiStore(pdAddr, credential)
 	if err != nil {
 		return nil, errors.Annotatef(err,
 			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)

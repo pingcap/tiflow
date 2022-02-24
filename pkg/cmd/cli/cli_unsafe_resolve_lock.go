@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ func (o *unsafeResolveLockOptions) complete(f factory.Factory) error {
 }
 
 // run runs the `cli unsafe show-metadata` command.
-func (o *unsafeResolveLockOptions) run(_ *cobra.Command) error {
+func (o *unsafeResolveLockOptions) run() error {
 	ctx := context.GetDefaultContext()
 
 	conf := &log.Config{Level: "info", File: log.FileLogConfig{}}
@@ -83,8 +83,8 @@ func (o *unsafeResolveLockOptions) addFlags(cmd *cobra.Command) {
 		return
 	}
 
-	cmd.PersistentFlags().Uint64Var(&o.regionID, "region", 0, "Region ID")
-	cmd.PersistentFlags().Uint64Var(&o.ts, "ts", 0,
+	cmd.Flags().Uint64Var(&o.regionID, "region", 0, "Region ID")
+	cmd.Flags().Uint64Var(&o.ts, "ts", 0,
 		"resolve locks before the timestamp, default 1 minute ago from now")
 	_ = cmd.MarkFlagRequired("region")
 }
@@ -97,13 +97,13 @@ func newCmdResolveLock(f factory.Factory) *cobra.Command {
 		Use:   "resolve-lock",
 		Short: "resolve locks in regions",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			err := o.complete(f)
 			if err != nil {
 				return err
 			}
 
-			return o.run(cmd)
+			return o.run()
 		},
 	}
 
