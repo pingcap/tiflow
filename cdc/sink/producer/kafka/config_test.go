@@ -160,14 +160,6 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
-	// Illegal enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
 	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
 	sinkURI, err = url.Parse(uri)
