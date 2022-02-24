@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,160 +27,27 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/notify"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 const defaultPartitionNum = 3
 
-// Config stores user specified Kafka producer configuration
-type Config struct {
-	BrokerEndpoints []string
-	PartitionNum    int32
-
-	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
-	ReplicationFactor int16
-
-	Version         string
-	MaxMessageBytes int
-	Compression     string
-	ClientID        string
-	Credential      *security.Credential
-	SaslScram       *security.SaslScram
-	// control whether to create topic
-	AutoCreate bool
-}
-
-// NewConfig returns a default Kafka configuration
-func NewConfig() *Config {
-	return &Config{
-		Version: "2.4.0",
-		// MaxMessageBytes will be used to initialize producer, we set the default value (1M) identical to kafka broker.
-		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
-		Credential:        &security.Credential{},
-		SaslScram:         &security.SaslScram{},
-		AutoCreate:        true,
-	}
-}
-
-// Initialize the kafka configuration
-func (c *Config) Initialize(sinkURI *url.URL, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
-	params := sinkURI.Query()
-	s := params.Get("partition-num")
-	if s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		if a <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(a)
-		}
-		c.PartitionNum = int32(a)
-		if c.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
-		}
-	}
-
-	s = sinkURI.Query().Get("replication-factor")
-	if s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.ReplicationFactor = int16(a)
-	}
-
-	s = sinkURI.Query().Get("kafka-version")
-	if s != "" {
-		c.Version = s
-	}
-
-	s = sinkURI.Query().Get("max-message-bytes")
-	if s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxMessageBytes = a
-		opts["max-message-bytes"] = s
-	}
-
-	s = sinkURI.Query().Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-
-	s = sinkURI.Query().Get("compression")
-	if s != "" {
-		c.Compression = s
-	}
-
-	c.ClientID = sinkURI.Query().Get("kafka-client-id")
-
-	s = sinkURI.Query().Get("protocol")
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
-	s = sinkURI.Query().Get("ca")
-	if s != "" {
-		c.Credential.CAPath = s
-	}
-
-	s = sinkURI.Query().Get("cert")
-	if s != "" {
-		c.Credential.CertPath = s
-	}
-
-	s = sinkURI.Query().Get("key")
-	if s != "" {
-		c.Credential.KeyPath = s
-	}
-
-	s = sinkURI.Query().Get("sasl-user")
-	if s != "" {
-		c.SaslScram.SaslUser = s
-	}
-
-	s = sinkURI.Query().Get("sasl-password")
-	if s != "" {
-		c.SaslScram.SaslPassword = s
-	}
-
-	s = sinkURI.Query().Get("sasl-mechanism")
-	if s != "" {
-		c.SaslScram.SaslMechanism = s
-	}
-
-	s = sinkURI.Query().Get("auto-create-topic")
-	if s != "" {
-		autoCreate, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.AutoCreate = autoCreate
-	}
-
-	return nil
-}
-
 type kafkaSaramaProducer struct {
-	// clientLock is used to protect concurrent access of asyncClient and syncClient.
+	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock  sync.RWMutex
-	asyncClient sarama.AsyncProducer
-	syncClient  sarama.SyncProducer
-	// producersReleased records whether asyncClient and syncClient have been closed properly
+	clientLock    sync.RWMutex
+	client        sarama.Client
+	asyncProducer sarama.AsyncProducer
+	syncProducer  sarama.SyncProducer
+
+	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
 	topic             string
 	partitionNum      int32
@@ -198,6 +64,9 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
+
+	role util.Role
+	id   model.ChangeFeedID
 }
 
 type kafkaProducerClosingFlag = int32
@@ -228,14 +97,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
-		log.Info("failpoint error injected")
+		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
 
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
-		log.Panic("SinkFlushDMLPanic")
+		log.Panic("SinkFlushDMLPanic",
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	})
 
 	select {
@@ -243,7 +113,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, message *codec.MQ
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	case k.asyncClient.Input() <- msg:
+	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
 }
@@ -266,7 +136,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncClient.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(msgs)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -328,12 +198,13 @@ func (k *kafkaSaramaProducer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
-	log.Info("kafka producer closing...")
+	log.Info("kafka producer closing...", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	close(k.closeCh)
 }
 
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
+	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.Any("role", k.role))
 	k.stop()
 
 	k.clientLock.Lock()
@@ -345,22 +216,42 @@ func (k *kafkaSaramaProducer) Close() error {
 		return nil
 	}
 	k.producersReleased = true
-	// In fact close sarama sync client doesn't return any error.
-	// But close async client returns error if error channel is not empty, we
-	// don't populate this error to the upper caller, just add a log here.
+
+	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
+	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+	// that buffered messages flushed.
+	// Consider the situation that the broker does not respond, If the client is not
+	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+	// To prevent the scenario mentioned above, close client first.
 	start := time.Now()
-	err := k.asyncClient.Close()
-	if err != nil {
-		log.Error("close async client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+	if err := k.client.Close(); err != nil {
+		log.Error("close sarama client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
-		log.Info("async client closed", zap.Duration("duration", time.Since(start)))
+		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	}
+
+	start = time.Now()
+	err := k.asyncProducer.Close()
+	if err != nil {
+		log.Error("close async client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
+	} else {
+		log.Info("async client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 	start = time.Now()
-	err = k.syncClient.Close()
+	err = k.syncProducer.Close()
 	if err != nil {
-		log.Error("close sync client with error", zap.Error(err), zap.Duration("duration", time.Since(start)))
+		log.Error("close sync client with error", zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	} else {
-		log.Info("sync client closed", zap.Duration("duration", time.Since(start)))
+		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 	return nil
 }
@@ -368,6 +259,8 @@ func (k *kafkaSaramaProducer) Close() error {
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
+		log.Info("stop the kafka producer",
+			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
 	for {
@@ -377,16 +270,17 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case <-k.closeCh:
 			return nil
 		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err))
+			log.Warn("receive from failpoint chan", zap.Error(err),
+				zap.String("changefeed", k.id), zap.Any("role", k.role))
 			return err
-		case msg := <-k.asyncClient.Successes():
+		case msg := <-k.asyncProducer.Successes():
 			if msg == nil || msg.Metadata == nil {
 				continue
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
-		case err := <-k.asyncClient.Errors():
+		case err := <-k.asyncProducer.Errors():
 			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
 			// because Go would store the type info and the resulted `error` variable would not be nil,
 			// which will cause the pkg/error library to malfunction.
@@ -406,6 +300,8 @@ var (
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -427,11 +323,17 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
 
-	asyncClient, err := sarama.NewAsyncProducer(config.BrokerEndpoints, cfg)
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	syncClient, err := sarama.NewSyncProducer(config.BrokerEndpoints, cfg)
+
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	syncProducer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -442,10 +344,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, err
 	}
 	k := &kafkaSaramaProducer{
-		asyncClient:  asyncClient,
-		syncClient:   syncClient,
-		topic:        topic,
-		partitionNum: config.PartitionNum,
+		client:        client,
+		asyncProducer: asyncProducer,
+		syncProducer:  syncProducer,
+		topic:         topic,
+		partitionNum:  config.PartitionNum,
 		partitionOffset: make([]struct {
 			flushed uint64
 			sent    uint64
@@ -455,6 +358,9 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
+
+		id:   changefeedID,
+		role: role,
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -463,15 +369,12 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", k.id), zap.Any("role", role))
 			}
 		}
 	}()
 	return k, nil
-}
-
-func init() {
-	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
 }
 
 var (
@@ -582,99 +485,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 	return nil
 }
 
-func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
-	config := sarama.NewConfig()
-
-	version, err := sarama.ParseKafkaVersion(c.Version)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
-	}
-	var role string
-	if util.IsOwnerFromCtx(ctx) {
-		role = "owner"
-	} else {
-		role = "processor"
-	}
-	captureAddr := util.CaptureAddrFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-
-	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	config.Version = version
-	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders
-	// in this broker is broken, Kafka will election a new partition leader and
-	// replication logs, this process will last from a few seconds to a few minutes.
-	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute.
-	config.Metadata.Retry.Max = 120
-	config.Metadata.Retry.Backoff = 500 * time.Millisecond
-	// If it is not set, this means a metadata request against an unreachable
-	// cluster (all brokers are unreachable or unresponsive) can take up to
-	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
-	// Metadata.Retry.Backoff * Metadata.Retry.Max`
-	// to fail.
-	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/tiflow/issues/3352.
-	config.Metadata.Timeout = 1 * time.Minute
-
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = c.MaxMessageBytes
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-
-	// Time out in five minutes(600 * 500ms).
-	config.Producer.Retry.Max = 600
-	config.Producer.Retry.Backoff = 500 * time.Millisecond
-
-	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
-	case "none":
-		config.Producer.Compression = sarama.CompressionNone
-	case "gzip":
-		config.Producer.Compression = sarama.CompressionGZIP
-	case "snappy":
-		config.Producer.Compression = sarama.CompressionSnappy
-	case "lz4":
-		config.Producer.Compression = sarama.CompressionLZ4
-	case "zstd":
-		config.Producer.Compression = sarama.CompressionZSTD
-	default:
-		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
-		config.Producer.Compression = sarama.CompressionNone
-	}
-
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 20 * time.Second
-
-	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
-		config.Net.TLS.Enable = true
-		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	if c.SaslScram != nil && len(c.SaslScram.SaslUser) != 0 {
-		config.Net.SASL.Enable = true
-		config.Net.SASL.User = c.SaslScram.SaslUser
-		config.Net.SASL.Password = c.SaslScram.SaslPassword
-		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SaslScram.SaslMechanism)
-		if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-256") {
-			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256} }
-		} else if strings.EqualFold(c.SaslScram.SaslMechanism, "SCRAM-SHA-512") {
-			config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512} }
-		} else {
-			return nil, errors.New("Unsupported sasl-mechanism, should be SCRAM-SHA-256 or SCRAM-SHA-512")
-		}
-	}
-
-	return config, err
-}
-
 // getBrokerConfig gets broker config by name.
 func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
 	_, controllerID, err := admin.DescribeCluster()
@@ -708,30 +518,4 @@ func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, t
 	}
 
 	return getBrokerConfig(admin, brokerConfigName)
-}
-
-func (c *Config) setPartitionNum(realPartitionCount int32) error {
-	// user does not specify the `partition-num` in the sink-uri
-	if c.PartitionNum == 0 {
-		c.PartitionNum = realPartitionCount
-		return nil
-	}
-
-	if c.PartitionNum < realPartitionCount {
-		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
-			"Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", c.PartitionNum),
-			zap.Int32("topic partitions", realPartitionCount))
-		return nil
-	}
-
-	// Make sure that the user-specified `partition-num` is not greater than
-	// the real partition count, since messages would be dispatched to different
-	// partitions, this could prevent potential correctness problems.
-	if c.PartitionNum > realPartitionCount {
-		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
-			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
-			c.PartitionNum, realPartitionCount)
-	}
-	return nil
 }

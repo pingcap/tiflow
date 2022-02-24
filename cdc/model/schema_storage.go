@@ -17,14 +17,12 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-
-	"go.uber.org/zap"
-
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"go.uber.org/zap"
 )
 
 const (
@@ -139,7 +137,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
+	log.Debug("warped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
