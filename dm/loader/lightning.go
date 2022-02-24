@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -162,6 +163,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		}
 		l.sqlMode = sqlModes
 	}
+
 	return nil
 }
 
@@ -231,10 +233,16 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
-		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
-		cfg.Checkpoint.DSN = cpPath
-		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
+		// TODO lightning checkpoint will support s3 in other pr
+		if storage.IsS3Path(l.cfg.LoaderConfig.Dir) {
+			cfg.Checkpoint.Enable = false
+		} else {
+			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+			cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+			cfg.Checkpoint.DSN = cpPath
+			cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+		}
 		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
 		cfg.TiDB.Vars = make(map[string]string)
 		cfg.Routes = l.cfg.RouteRules
@@ -266,7 +274,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 	if l.finish.Load() {
 		if l.cfg.CleanDumpFile {
-			cleanDumpFiles(l.cfg)
+			cleanDumpFiles(ctx, l.cfg)
 		}
 	}
 	return err
@@ -283,7 +291,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		}
 		failpoint.Return()
 	})
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
