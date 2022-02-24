@@ -308,7 +308,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool, tz *time.Location) ([]*model.Column, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
@@ -327,7 +327,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
 		} else if fillWithDefaultValue {
-			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colValue, size, warn, err = getDefaultOrZeroValue(colInfo, tz)
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -360,7 +360,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue, m.tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -379,7 +379,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	var cols []*model.Column
 	if row.RowExist {
-		cols, err = datum2Column(tableInfo, row.Row, true)
+		cols, err = datum2Column(tableInfo, row.Row, true, m.tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -502,6 +502,10 @@ func formatColVal(datum types.Datum, tp byte) (
 	}
 }
 
+func getOriginDefaultValue(col *timodel.ColumnInfo, tz *time.Location) {
+
+}
+
 // Scenarios when call this function:
 // (1) column define default null at creating + insert without explicit column
 // (2) alter table add column default xxx + old existing data
@@ -512,8 +516,11 @@ func formatColVal(datum types.Datum, tp byte) (
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // TODO: Check default expr support
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+func getDefaultOrZeroValue(col *timodel.ColumnInfo, tz *time.Location) (interface{}, int, string, error) {
 	var d types.Datum
+	// NOTICE: In TiDB, default value type may not consistent with the column type
+	// Almost all types default value is string type
+	// ref: https://github.com/pingcap/tidb/blob/66d767374d/ddl/ddl_api.go#L849
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
 	// FIXME: Too many corner cases may hit here, like type truncate, timezone
