@@ -300,6 +300,8 @@ var (
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
@@ -320,6 +322,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	opts["max-message-bytes"] = strconv.Itoa(cfg.Producer.MaxMessageBytes)
+
+	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
@@ -388,22 +395,26 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config, opts map[string]string) error {
+func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	info, created := topics[topic]
+	info, exists := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
-	if created {
-		// make sure that topic's `max.message.bytes` is not less than given `max-message-bytes`
-		// else the producer will send message that too large to make topic reject, then changefeed would error.
-		// only the default `open protocol` and `craft protocol` use `max-message-bytes`, so check this for them.
-		topicMaxMessageBytes, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName, kafka.BrokerMessageMaxBytesConfigName)
+	if exists {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
+			kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
+		topicMaxMessageBytes, err := strconv.Atoi(topicMaxMessageBytesStr)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		}
+
 		if topicMaxMessageBytes < config.MaxMessageBytes {
 			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
@@ -429,15 +440,20 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
-	// when try to create the topic, we don't know how to set the `max.message.bytes` for the topic.
-	// Kafka would create the topic with broker's `message.max.bytes`,
-	// we have to make sure it's not greater than `max-message-bytes` for the default open protocol.
-	brokerMessageMaxBytes, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
 	}
+	brokerMessageMaxBytes, err := strconv.Atoi(brokerMessageMaxBytesStr)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
 
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < config.MaxMessageBytes {
 		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
@@ -446,7 +462,7 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
-	// topic not created yet, and user does not specify the `partition-num` in the sink uri.
+	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
 		config.PartitionNum = defaultPartitionNum
 		log.Warn("partition-num is not set, use the default partition count",

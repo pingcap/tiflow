@@ -15,8 +15,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -26,8 +24,6 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
@@ -64,45 +60,6 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 			c.Assert(id, check.Equals, tc.expected)
 		}
 	}
-}
-
-func (s *kafkaSuite) TestInitializeConfig(c *check.C) {
-	defer testleak.AfterTest(c)
-	cfg := NewConfig()
-
-	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
-		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
-	maxMessageSize := "4096" // 4kb
-	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
-
-	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
-
-	replicaConfig := config.GetDefaultReplicaConfig()
-
-	opts := make(map[string]string)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(err, check.IsNil)
-
-	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
-	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
-	c.Assert(cfg.Version, check.Equals, "2.6.0")
-	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
-
-	expectedOpts := map[string]string{
-		"max-message-bytes": maxMessageSize,
-		"max-batch-size":    "5",
-	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
-	}
-
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	err = cfg.Initialize(sinkURI, replicaConfig, opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
@@ -233,23 +190,6 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
-}
-
-func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
-	defer testleak.AfterTest(c)()
-	config := NewConfig()
-	err := config.setPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(2))
-
-	config.PartitionNum = 1
-	err = config.setPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(config.PartitionNum, check.Equals, int32(1))
-
-	config.PartitionNum = 3
-	err = config.setPartitionNum(2)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
 }
 
 func (s *kafkaSuite) TestValidateAndCreateTopic(c *check.C) {

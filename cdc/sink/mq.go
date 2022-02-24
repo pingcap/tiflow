@@ -78,13 +78,13 @@ func newMqSink(
 			resolvedTs uint64
 		}, 12800)
 	}
-	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
+	d, err := dispatcher.NewDispatcher(replicaConfig, mqProducer.GetPartitionNum())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	notifier := new(notify.Notifier)
 	var protocol codec.Protocol
-	protocol.FromString(config.Sink.Protocol)
+	protocol.FromString(replicaConfig.Sink.Protocol)
 
 	newEncoder := codec.NewEventBatchEncoder(protocol)
 	if protocol == codec.ProtocolAvro {
@@ -112,7 +112,7 @@ func newMqSink(
 			avroEncoder.SetTimeZone(util.TimezoneFromCtx(ctx))
 			return avroEncoder
 		}
-	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !config.EnableOldValue {
+	} else if (protocol == codec.ProtocolCanal || protocol == codec.ProtocolCanalJSON || protocol == codec.ProtocolMaxwell) && !replicaConfig.EnableOldValue {
 		log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
 			"Please update changefeed config", protocol.String()))
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol.String())))
@@ -142,11 +142,10 @@ func newMqSink(
 	role := util.RoleFromCtx(ctx)
 
 	s := &mqSink{
-		mqProducer:     mqProducer,
-		dispatcher:     d,
-		encoderBuilder: encoderBuilder,
-		filter:         filter,
-		protocol:       protocol,
+		mqProducer: mqProducer,
+		dispatcher: d,
+		filter:     filter,
+		protocol:   protocol,
 
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
@@ -162,7 +161,7 @@ func newMqSink(
 	}
 
 	go func() {
-		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -173,7 +172,7 @@ func newMqSink(
 			}
 		}
 	}()
-	return k, nil
+	return s, nil
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -278,9 +277,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
-		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+		zap.Uint64("commitTs", ddl.CommitTs), zap.String("changefeed", k.id), zap.Any("role", k.role))
+	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
 	return errors.Trace(err)
 }
 
