@@ -208,6 +208,15 @@ func TestDynamicTopicDispatcherForDDL(t *testing.T) {
 			},
 			expectedTopic: "cdc_person",
 		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "",
+					Table:  "",
+				},
+			},
+			expectedTopic: defaultTopic,
+		},
 	}
 
 	p := NewDynamicTopicDispatcher(defaultTopic, topicExpr)
