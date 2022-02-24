@@ -27,11 +27,9 @@ const (
 )
 
 const (
-	// defaultBrokerMessageMaxBytes specifies the broker's `message.max.bytes`, default to 1048576
-	defaultBrokerMessageMaxBytes = "1048576"
-
-	// defaultTopicMaxMessageBytes specifies the topic's `max.message.bytes`, default to 1048576.
-	defaultTopicMaxMessageBytes = "1048576"
+	// defaultMaxMessageBytes specifies the default max message bytes, default to 1048576
+	// it was used to initialize the default value for broker's `message.max.bytes` and topic's `max.message.bytes`
+	defaultMaxMessageBytes = "1048576"
 
 	// defaultMinInsyncReplicas specifies the default min insync replicas for broker and default topic.
 	defaultMinInsyncReplicas = "1"
@@ -39,9 +37,9 @@ const (
 
 var (
 	// BrokerMessageMaxBytes is the broker's `message.max.bytes`
-	BrokerMessageMaxBytes = defaultBrokerMessageMaxBytes
+	BrokerMessageMaxBytes = defaultMaxMessageBytes
 	// TopicMaxMessageBytes is the topic's `max.message.bytes`
-	TopicMaxMessageBytes = defaultTopicMaxMessageBytes
+	TopicMaxMessageBytes = defaultMaxMessageBytes
 	// MinInSyncReplicas is the `min.insync.replicas`
 	MinInSyncReplicas = defaultMinInsyncReplicas
 )
