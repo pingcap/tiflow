@@ -87,10 +87,8 @@ function run_test() {
 	# start s3 server
 	start_s3
 
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-master.test
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-worker.test
+	kill_dm_master
+	kill_dm_worker
 
 	if $1; then
 		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/S3GetDumpFilesCheck=return()"
@@ -153,10 +151,8 @@ function run_error_check() {
 	# start s3 server
 	start_s3
 
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-master.test
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-worker.test
+	kill_dm_master
+	kill_dm_worker
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/TestRemoveMetaFile=return()"
 
@@ -202,10 +198,8 @@ function run_error_check() {
 function test_local_special_name() {
 	cleanup_data
 
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-master.test
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	wait_process_exit dm-worker.test
+	kill_dm_master
+	kill_dm_worker
 
 	# start dm master and worker
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
