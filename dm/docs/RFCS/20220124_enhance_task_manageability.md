@@ -84,10 +84,10 @@ where `resource type`, `command` and `flags` are:
 
 | Command                    | Full Syntax Example                                   | Flags          | Arguments          | Description                                       |
 |----------------------------|-------------------------------------------------------|----------------|--------------------|---------------------------------------------------|
-| member list                | `dmctl member list --name="master-1" --role="master"` | --name, --role |                    | show members of current cluster by name and role. |
-| member offline             | `dmctl member offline master-1`                       |                | master/worker-name | offline members of current cluster by name.       |
-| member evict-leader        | `dmctl member evict-leader master-1`                  |                | master-name        | evict leader for master node.                     |
-| member cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                | master-name        | cancel evict leader for master node.              |
+| list                | `dmctl member list --name="master-1" --role="master"` | --name, --role |                    | show members of current cluster by name and role. |
+| offline             | `dmctl member offline master-1`                       |                | master/worker-name | offline members of current cluster by name.       |
+| evict-leader        | `dmctl member evict-leader master-1`                  |                | master-name        | evict leader for master node.                     |
+| cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                | master-name        | cancel evict leader for master node.              |
 
 ### Optimized dmctl for interaction mode (optional)
 
