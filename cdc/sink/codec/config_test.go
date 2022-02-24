@@ -63,7 +63,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.Error(t, err, "invalid syntax")
 
 	// Use enable-tidb-extension on other protocols
-	uri = "kafka://127.0.0.1:9092/abc?protocol=fake-protocol&enable-tidb-extension=true"
+	uri = "kafka://127.0.0.1:9092/abc?protocol=open-protocol&enable-tidb-extension=true"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
 
