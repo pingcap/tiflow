@@ -165,7 +165,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
-		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
+		p.memoryPressure() < int32(sorterConfig.MaxMemoryPercentage) {
 
 		ret := newMemoryBackEnd()
 		return ret, nil

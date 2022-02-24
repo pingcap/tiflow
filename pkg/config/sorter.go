@@ -22,7 +22,7 @@ type SorterConfig struct {
 	// maximum size for a heap
 	ChunkSizeLimit uint64 `toml:"chunk-size-limit" json:"chunk-size-limit"`
 	// the maximum memory use percentage that allows in-memory sorting
-	MaxMemoryPressure int `toml:"max-memory-percentage" json:"max-memory-percentage"`
+	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 	// the maximum memory consumption allowed for in-memory sorting
 	MaxMemoryConsumption uint64 `toml:"max-memory-consumption" json:"max-memory-consumption"`
 	// the size of workerpool
@@ -48,8 +48,8 @@ func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.NumWorkerPoolGoroutine < 1 {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
 	}
-	if c.MaxMemoryPressure < 0 || c.MaxMemoryPressure > 100 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage")
+	if c.MaxMemoryPercentage <= 0 || c.MaxMemoryPercentage > 80 {
+		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage and within (0, 80]")
 	}
 
 	return nil
