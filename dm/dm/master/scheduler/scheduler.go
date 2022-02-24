@@ -2714,5 +2714,8 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 	}
 	// 2. setting subtask stage in etcd
 	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
-	return terror.Annotate(err, "fail to set new validator stage")
+	if err != nil {
+		return terror.Annotate(err, "fail to set new validator stage")
+	}
+	return err
 }
