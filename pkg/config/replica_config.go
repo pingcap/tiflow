@@ -140,7 +140,7 @@ func (c *ReplicaConfig) Validate() error {
 }
 
 // Apply sinkURI to fill the `ReplicaConfig`
-func (c *ReplicaConfig) Apply(sinkURI *url.URL) *ReplicaConfig {
+func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
 	params := sinkURI.Query()
 	if s := params.Get(ProtocolKey); s != "" {
 		c.Sink.Protocol = s
