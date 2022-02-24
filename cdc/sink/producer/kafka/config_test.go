@@ -183,29 +183,6 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	cfg = NewConfig()
 	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
-
-	// Use enable-tidb-extension on other protocols.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
-
-	// Test enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	opts = make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(err, check.IsNil)
-	expectedOpts = map[string]string{
-		"enable-tidb-extension": "true",
-	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
-	}
 }
 
 func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {

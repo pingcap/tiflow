@@ -188,18 +188,6 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		producerConfig.AutoCreate = autoCreate
 	}
 
-	s = params.Get("enable-tidb-extension")
-	if s != "" {
-		_, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		if replicaConfig.Sink.Protocol != "canal-json" {
-			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("enable-tidb-extension only support canal-json protocol"))
-		}
-		opts["enable-tidb-extension"] = s
-	}
-
 	s = params.Get("dial-timeout")
 	if s != "" {
 		a, err := time.ParseDuration(s)
