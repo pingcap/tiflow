@@ -27,7 +27,7 @@ const (
 )
 
 const (
-	// defaultBrokerMessageMaxBytes specifies the broker's `message.max.bytes`, default to 1048576.
+	// defaultBrokerMessageMaxBytes specifies the broker's `message.max.bytes`, default to 1048576
 	defaultBrokerMessageMaxBytes = "1048576"
 
 	// defaultTopicMaxMessageBytes specifies the topic's `max.message.bytes`, default to 1048576.

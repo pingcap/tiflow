@@ -141,6 +141,15 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	c.Assert(cfg.Version, check.Equals, "2.6.0")
 	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
 
+	// multiple kafka broker endpoints
+	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	cfg = NewConfig()
+	err = cfg.Apply(sinkURI)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(cfg.BrokerEndpoints), check.Equals, 3)
+
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)

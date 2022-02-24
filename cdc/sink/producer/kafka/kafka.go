@@ -413,7 +413,8 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // AdjustConfig adjust the `Config` and `sarama.Config` by condition.
-func AdjustConfig(admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string) error {
+func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
+	saramaConfig *sarama.Config, topic string) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
