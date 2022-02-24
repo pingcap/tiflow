@@ -21,12 +21,12 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 var _ = check.Suite(&ddlSinkSuite{})
@@ -35,16 +35,10 @@ type ddlSinkSuite struct{}
 
 type mockSink struct {
 	sink.Sink
-	initTableInfo []*model.SimpleTableInfo
-	checkpointTs  model.Ts
-	ddl           *model.DDLEvent
-	ddlMu         sync.Mutex
-	ddlError      error
-}
-
-func (m *mockSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	m.initTableInfo = tableInfo
-	return nil
+	checkpointTs model.Ts
+	ddl          *model.DDLEvent
+	ddlMu        sync.Mutex
+	ddlError     error
 }
 
 func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -64,7 +58,7 @@ func (m *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockSink) Barrier(ctx context.Context) error {
+func (m *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 

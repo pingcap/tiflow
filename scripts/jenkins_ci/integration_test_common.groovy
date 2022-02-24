@@ -12,7 +12,7 @@ def prepare_binaries() {
                     deleteDir()
                     unstash 'ticdc'
 
-                    dir("go/src/github.com/pingcap/ticdc") {
+                    dir("go/src/github.com/pingcap/tiflow") {
                         sh """
                             GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make cdc
                             GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_build
@@ -22,14 +22,14 @@ def prepare_binaries() {
                             curl -F test/cdc/ci/ticdc_bin_${env.BUILD_NUMBER}.tar.gz=@ticdc_bin.tar.gz http://fileserver.pingcap.net/upload
                         """
                     }
-                    dir("go/src/github.com/pingcap/ticdc/tests") {
+                    dir("go/src/github.com/pingcap/tiflow/tests") {
                         def cases_name = sh (
                             script: 'find . -maxdepth 2 -mindepth 2 -name \'run.sh\' | awk -F/ \'{print $2}\'',
                             returnStdout: true
                         ).trim().split().join(" ")
                         sh "echo ${cases_name} > CASES"
                     }
-                    stash includes: "go/src/github.com/pingcap/ticdc/tests/CASES", name: "cases_name", useDefaultExcludes: false
+                    stash includes: "go/src/github.com/pingcap/tiflow/tests/CASES", name: "cases_name", useDefaultExcludes: false
                 }
             }
         }
@@ -50,7 +50,7 @@ def tests(sink_type, node_label) {
                     println "work space path:\n${ws}"
                     unstash 'ticdc'
 
-                    dir("go/src/github.com/pingcap/ticdc") {
+                    dir("go/src/github.com/pingcap/tiflow") {
                         sh """
                             rm -rf /tmp/tidb_cdc_test
                             mkdir -p /tmp/tidb_cdc_test
@@ -64,7 +64,7 @@ def tests(sink_type, node_label) {
                         tail /tmp/tidb_cdc_test/cov*
                         """
                     }
-                    stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "unit_test", useDefaultExcludes: false
+                    stash includes: "go/src/github.com/pingcap/tiflow/cov_dir/**", name: "unit_test", useDefaultExcludes: false
                 }
             }
         }
@@ -78,7 +78,7 @@ def tests(sink_type, node_label) {
                     println "work space path:\n${ws}"
                     println "this step will run tests: ${case_names}"
                     unstash 'ticdc'
-                    dir("go/src/github.com/pingcap/ticdc") {
+                    dir("go/src/github.com/pingcap/tiflow") {
                         download_binaries()
                         try {
                             sh """
@@ -110,7 +110,7 @@ def tests(sink_type, node_label) {
                             throw e;
                         }
                     }
-                    stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "integration_test_${step_name}", useDefaultExcludes: false
+                    stash includes: "go/src/github.com/pingcap/tiflow/cov_dir/**", name: "integration_test_${step_name}", useDefaultExcludes: false
                 }
             }
         }
@@ -118,7 +118,7 @@ def tests(sink_type, node_label) {
 
         unstash 'cases_name'
         def cases_name = sh (
-            script: 'cat go/src/github.com/pingcap/ticdc/tests/CASES',
+            script: 'cat go/src/github.com/pingcap/tiflow/tests/CASES',
             returnStdout: true
         ).trim().split()
 
@@ -235,7 +235,7 @@ def coverage() {
                 unstash "integration_test_step_${i-1}"
             }
 
-            dir("go/src/github.com/pingcap/ticdc") {
+            dir("go/src/github.com/pingcap/tiflow") {
                 container("golang") {
                     archiveArtifacts artifacts: 'cov_dir/*', fingerprint: true
 

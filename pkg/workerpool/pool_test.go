@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -207,10 +207,10 @@ func (s *workerPoolSuite) TestCancelHandle(c *check.C) {
 		}
 	}
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/pkg/workerpool/addEventDelayPoint", "1*sleep(500)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/addEventDelayPoint")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/workerpool/addEventDelayPoint")
 	}()
 
 	handle.Unregister()
@@ -240,10 +240,10 @@ func (s *workerPoolSuite) TestCancelTimer(c *check.C) {
 		return pool.Run(ctx)
 	})
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
+	err := failpoint.Enable("github.com/pingcap/tiflow/pkg/workerpool/unregisterDelayPoint", "sleep(5000)")
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/ticdc/pkg/workerpool/unregisterDelayPoint")
+		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/workerpool/unregisterDelayPoint")
 	}()
 
 	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
@@ -460,7 +460,7 @@ func TestSynchronizeLog(t *testing.T) {
 }
 
 // Benchmark workerpool with ping-pong workflow.
-// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/ticdc/pkg/workerpool
+// go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/tiflow/pkg/workerpool
 func BenchmarkWorkerpool(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

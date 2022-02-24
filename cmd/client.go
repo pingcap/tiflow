@@ -25,11 +25,11 @@ import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -282,9 +282,9 @@ func loop() {
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
 		command.SetOut(os.Stdout)
-		command.SetErr(os.Stdout)
+		command.SetErr(os.Stderr)
 		if err = command.Execute(); err != nil {
-			command.Println(err)
+			command.PrintErr(err.Error() + "\n")
 		}
 	}
 }

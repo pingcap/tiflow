@@ -18,9 +18,10 @@ import (
 	"math/rand"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 var _ = check.Suite(&schedulerSuite{})
@@ -84,8 +85,24 @@ func (s *schedulerSuite) finishTableOperation(captureID model.CaptureID, tableID
 
 func (s *schedulerSuite) TestScheduleOneCapture(c *check.C) {
 	defer testleak.AfterTest(c)()
+
 	s.reset(c)
-	captureID := "test-capture-1"
+	captureID := "test-capture-0"
+	s.addCapture(captureID)
+
+	_, _ = s.scheduler.Tick(s.state, []model.TableID{}, s.captures)
+
+	// Manually simulate the scenario where the corresponding key was deleted in the etcd
+	key := &etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeTaskStatus,
+		CaptureID:    captureID,
+		ChangefeedID: s.state.ID,
+	}
+	s.tester.MustUpdate(key.String(), nil)
+	s.tester.MustApplyPatches()
+
+	s.reset(c)
+	captureID = "test-capture-1"
 	s.addCapture(captureID)
 
 	// add three tables

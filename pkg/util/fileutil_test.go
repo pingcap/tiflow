@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type fileUtilSuite struct{}
@@ -98,8 +98,8 @@ func (s *fileUtilSuite) TestCheckDataDirSatisfied(c *check.C) {
 	conf.DataDir = dir
 	config.StoreGlobalServerConfig(conf)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied", ""), check.IsNil)
 	err := CheckDataDirSatisfied()
 	c.Assert(err, check.IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied"), check.IsNil)
 }
