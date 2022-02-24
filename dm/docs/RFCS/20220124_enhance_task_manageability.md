@@ -46,7 +46,7 @@ where `resource type`, `command`, `flags` and `arguments` are:
 | update  | `dmctl task update task1 task1.yaml`                                                                                                |                                                                                  | task-name, config-file | update a stopped task with config file.                           |
 | delete  | `dmctl task delete --yes --force task1`                                                                                             | --yes(default: false), --force(default: false)                                   | task-name              | delete a task and remove all meta data for this task.             |
 | get     | `dmctl task get --output="new_task.yaml" task1`                                                                                     | --output                                                                         | task-name              | show the task config in yaml format, also support output to file. |
-| list    | `dmctl task list --stage="Running" --source="source1,source2"`                                                                      | --source, --stage                                                                |                        | list all tasks in current cluster.                                |
+| list    | `dmctl task list --stage="Running" --source="source1,source2"`                                                                      | --source, --stage(Running/Stopped/Finished)                                      |                        | list all tasks in current cluster.                                |
 | status  | `dmctl task status --source="source1,source2" task1`                                                                                | --source                                                                         | task-name              | show task detail status.                                          |
 | start   | `dmctl task start --source="source1,source2" --remove-meta --start-time="2021-01-01 00:00:00" --safe-mode-time-duration="1s" task1` | --source, --remove-meta(default: false), --start-time, --safe-mode-time-duration | task-name              | start a stopped task with many flags.                             |
 | stop    | `dmctl task stop --source="source1,source2" --timeout="60s" task1`                                                                  | --source, --timeout(default: "10s")                                              | task-name              | stop a running task with many flags.                              |
@@ -57,9 +57,9 @@ where `resource type`, `command`, `flags` and `arguments` are:
 |----------|----------------------------------------------------|-------------------------|--------------------------|---------------------------------------------------------------------|
 | create   | `dmctl source create source1.yaml`                 |                         | config-file              | create source with config file.                                     |
 | update   | `dmctl source update source1 source1.yaml`         |                         | source-name, config-file | update a source with config file.                                   |
-| delete   | `dmctl source delete --force source1`              | --force(default: false) | source-name              | delete a source with config file.                                   |
+| delete   | `dmctl source delete --force source1`              | --force(default: false) | source-name              | delete a source.                                                    |
 | get      | `dmctl source get --output="source1.yaml" source1` | --output                | source-name              | show the source config in yaml format, also support output to file. |
-| list     | `dmctl source list`                                |                         |                          | list all sources in current cluster.                                 |
+| list     | `dmctl source list`                                |                         |                          | list all sources in current cluster.                                |
 | status   | `dmctl source status source1`                      |                         | source-name              | show source detail status.                                          |
 | enable   | `dmctl source enable source1`                      |                         | source-name              | enable a disabled source.                                           |
 | disable  | `dmctl source disable source1`                     |                         | source-name              | disable a source and also stop the running subtasks of this source. |
@@ -82,12 +82,12 @@ where `resource type`, `command`, `flags` and `arguments` are:
 
 ### dmctl commands for member
 
-| Command                    | Full Syntax Example                                   | Flags          | Arguments          | Description                                       |
-|----------------------------|-------------------------------------------------------|----------------|--------------------|---------------------------------------------------|
-| list                | `dmctl member list --name="master-1" --role="master"` | --name, --role |                    | show members of current cluster by name and role. |
-| offline             | `dmctl member offline master-1`                       |                | master/worker-name | offline members of current cluster by name.       |
-| evict-leader        | `dmctl member evict-leader master-1`                  |                | master-name        | evict leader for master node.                     |
-| cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                | master-name        | cancel evict leader for master node.              |
+| Command             | Full Syntax Example                                   | Flags                                | Arguments          | Description                                       |
+|---------------------|-------------------------------------------------------|--------------------------------------|--------------------|---------------------------------------------------|
+| list                | `dmctl member list --name="master-1" --role="master"` | --name, --role(master/worker/leader) |                    | show members of current cluster by name and role. |
+| offline             | `dmctl member offline master-1`                       |                                      | master/worker-name | offline members of current cluster by name.       |
+| evict-leader        | `dmctl member evict-leader master-1`                  |                                      | master-name        | evict leader for master node.                     |
+| cancel-evict-leader | `dmctl member cancel-evict-leader master-1`           |                                      | master-name        | cancel evict leader for master node.              |
 
 ### Optimized dmctl for interaction mode (optional)
 
