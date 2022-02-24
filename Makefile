@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl
+unit_test: check_failpoint_ctl generate_mock
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -233,6 +233,9 @@ data-flow-diagram: docs/data-flow.dot
 
 swagger-spec: tools/bin/swag
 	tools/bin/swag init --parseVendor -generalInfo cdc/api/open.go --output docs/swagger
+
+generate_mock: tools/bin/mockgen
+	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
 
 clean:
 	go clean -i ./...

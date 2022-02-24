@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -47,8 +46,6 @@ import (
 const (
 	// TiDBClusteredIndex is the variable name for clustered index.
 	TiDBClusteredIndex = "tidb_enable_clustered_index"
-	// downstream mock table id, consists of serial numbers of letters.
-	mockTableID = 121402101900011104
 )
 
 var (
@@ -92,6 +89,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		// bypass wait time of https://github.com/pingcap/tidb/pull/20550
 		conf.TiKVClient.AsyncCommit.SafeWindow = 0
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
+		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
+		conf.NewCollationsEnabledOnFirstBootstrap = false
 	})
 
 	if len(sessionCfg) == 0 {
@@ -397,13 +396,13 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
-		ti, err := tr.getTableInfoByCreateStmt(tctx, tableID)
+		downstreamTI, err := tr.getTableInfoByCreateStmt(tctx, tableID)
 		if err != nil {
 			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
 			return nil, err
 		}
 
-		dti = GetDownStreamTi(ti, originTi)
+		dti = GetDownStreamTI(downstreamTI, originTi)
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
 	return dti, nil
@@ -412,9 +411,14 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 // GetAvailableDownStreamUKIndexInfo gets available downstream UK whose data is not null.
 // note. this function will not init downstreamTrack.
 func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []interface{}) *model.IndexInfo {
-	dti, ok := tr.dsTracker.tableInfos[tableID]
+	dti := tr.dsTracker.tableInfos[tableID]
 
-	if !ok || len(dti.AvailableUKIndexList) == 0 {
+	return GetIdentityUKByData(dti, data)
+}
+
+// GetIdentityUKByData gets available downstream UK whose data is not null.
+func GetIdentityUKByData(downstreamTI *DownstreamTableInfo, data []interface{}) *model.IndexInfo {
+	if downstreamTI == nil || len(downstreamTI.AvailableUKIndexList) == 0 {
 		return nil
 	}
 	// func for check data is not null
@@ -422,7 +426,7 @@ func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []inte
 		return data[i] != nil
 	}
 
-	for _, uk := range dti.AvailableUKIndexList {
+	for _, uk := range downstreamTI.AvailableUKIndexList {
 		// check uk's column data is not null
 		if isSpecifiedIndexColumn(uk, fn) {
 			return uk
@@ -477,10 +481,11 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	ti, err := ddl.MockTableInfo(mock.NewContext(), stmtNode.(*ast.CreateTableStmt), mockTableID)
+	ti, err := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
+	ti.State = model.StatePublic
 	return ti, nil
 }
 
@@ -499,8 +504,8 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	return nil
 }
 
-// GetDownStreamTi constructs downstreamTable index cache by tableinfo.
-func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
+// GetDownStreamTI constructs downstreamTable index cache by tableinfo.
+func GetDownStreamTI(downstreamTI *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
 	var (
 		absoluteUKIndexInfo  *model.IndexInfo
 		availableUKIndexList = []*model.IndexInfo{}
@@ -510,10 +515,10 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 
 	// func for check not null constraint
 	fn := func(i int) bool {
-		return mysql.HasNotNullFlag(ti.Columns[i].Flag)
+		return mysql.HasNotNullFlag(downstreamTI.Columns[i].Flag)
 	}
 
-	for i, idx := range ti.Indices {
+	for i, idx := range downstreamTI.Indices {
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
@@ -536,7 +541,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 	// handle pk exceptional case.
 	// e.g. "create table t(a int primary key, b int)".
 	if !hasPk {
-		exPk := redirectIndexKeys(handlePkExCase(ti), originTi)
+		exPk := redirectIndexKeys(handlePkExCase(downstreamTI), originTi)
 		if exPk != nil {
 			absoluteUKIndexInfo = exPk
 			absoluteUKPosition = len(availableUKIndexList)
@@ -550,7 +555,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 	}
 
 	return &DownstreamTableInfo{
-		TableInfo:            ti,
+		TableInfo:            downstreamTI,
 		AbsoluteUKIndexInfo:  absoluteUKIndexInfo,
 		AvailableUKIndexList: availableUKIndexList,
 	}

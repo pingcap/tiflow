@@ -103,7 +103,7 @@ campaign owner failed
 
 ["CDC:ErrCaptureNotExist"]
 error = '''
-capture not exists, key: %s
+capture not exists, %s
 '''
 
 ["CDC:ErrCaptureRegister"]
@@ -123,12 +123,12 @@ capture suicide
 
 ["CDC:ErrChangeFeedAlreadyExists"]
 error = '''
-changefeed already exists, key: %s
+changefeed already exists, %s
 '''
 
 ["CDC:ErrChangeFeedNotExists"]
 error = '''
-changefeed not exists, key: %s
+changefeed not exists, %s
 '''
 
 ["CDC:ErrChangefeedAbnormalState"]
@@ -454,6 +454,11 @@ new sarama producer
 ["CDC:ErrKafkaSendMessage"]
 error = '''
 kafka send message failed
+'''
+
+["CDC:ErrKafkaTopicExprInvalid"]
+error = '''
+invalid topic expression
 '''
 
 ["CDC:ErrLeaseExpired"]
@@ -978,12 +983,12 @@ fail to create changefeed because target-ts %d is earlier than start-ts %d
 
 ["CDC:ErrTaskPositionNotExists"]
 error = '''
-task position not exists, key: %s
+task position not exists, %s
 '''
 
 ["CDC:ErrTaskStatusNotExists"]
 error = '''
-task status not exists, key: %s
+task status not exists, %s
 '''
 
 ["CDC:ErrTiKVEventFeed"]
@@ -1014,6 +1019,11 @@ unified sorter backend is terminating
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
 unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
+'''
+
+["CDC:ErrUnimplemented"]
+error = '''
+unimplemented %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]

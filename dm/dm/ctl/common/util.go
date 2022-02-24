@@ -232,20 +232,20 @@ func PrettyPrintResponseWithCheckTask(resp proto.Message, subStr string) bool {
 	)
 	switch chr := resp.(type) {
 	case *pb.StartTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)
 			}
 		}
 	case *pb.UpdateTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)

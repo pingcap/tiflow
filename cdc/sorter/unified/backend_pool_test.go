@@ -47,7 +47,7 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sortDir
-	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryPercentage = 90                       // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
@@ -123,7 +123,7 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sortDir
-	conf.Sorter.MaxMemoryPressure = 0 // force using files
+	conf.Sorter.MaxMemoryPercentage = 0 // force using files
 
 	backEndPool, err := newBackEndPool(sortDir, "")
 	c.Assert(err, check.IsNil)
@@ -157,7 +157,7 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sorterDir
-	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryPercentage = 90                       // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 

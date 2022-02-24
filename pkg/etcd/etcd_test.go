@@ -29,14 +29,13 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
-
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
 )
 
 type Captures []*model.CaptureInfo
@@ -408,6 +407,7 @@ func TestGetOwnerRevision(t *testing.T) {
 			defer wg.Done()
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
+			require.Nil(t, err)
 			election := concurrency.NewElection(sess, CaptureOwnerKey)
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)

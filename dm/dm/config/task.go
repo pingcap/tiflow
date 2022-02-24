@@ -56,6 +56,12 @@ const (
 	StrictCollationCompatible = "strict"
 )
 
+const (
+	ValidationNone = "none"
+	ValidationFast = "fast"
+	ValidationFull = "full"
+)
+
 // default config item values.
 var (
 	// TaskConfig.
@@ -136,6 +142,9 @@ type MySQLInstance struct {
 	Syncer           *SyncerConfig `yaml:"syncer"`
 	// SyncerThread is alias for WorkerCount in SyncerConfig, and its priority is higher than WorkerCount
 	SyncerThread int `yaml:"syncer-thread"`
+
+	ContinuousValidatorConfigName string          `yaml:"continuous-validator-config-name"`
+	ContinuousValidator           ValidatorConfig `yaml:"-"`
 }
 
 // VerifyAndAdjust does verification on configs, and adjust some configs.
@@ -327,6 +336,26 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+type ValidatorConfig struct {
+	Mode string `yaml:"mode" toml:"mode" json:"mode"`
+}
+
+func (v *ValidatorConfig) adjust() error {
+	if v.Mode == "" {
+		v.Mode = ValidationNone
+	}
+	if v.Mode != ValidationNone && v.Mode != ValidationFast && v.Mode != ValidationFull {
+		return terror.ErrConfigValidationMode
+	}
+	return nil
+}
+
+func defaultValidatorConfig() ValidatorConfig {
+	return ValidatorConfig{
+		Mode: ValidationNone,
+	}
+}
+
 // TaskConfig is the configuration for Task.
 type TaskConfig struct {
 	*flag.FlagSet `yaml:"-" toml:"-" json:"-"`
@@ -377,9 +406,10 @@ type TaskConfig struct {
 	BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
 	BAList map[string]*filter.Rules `yaml:"block-allow-list" toml:"block-allow-list" json:"block-allow-list"`
 
-	Mydumpers map[string]*MydumperConfig `yaml:"mydumpers" toml:"mydumpers" json:"mydumpers"`
-	Loaders   map[string]*LoaderConfig   `yaml:"loaders" toml:"loaders" json:"loaders"`
-	Syncers   map[string]*SyncerConfig   `yaml:"syncers" toml:"syncers" json:"syncers"`
+	Mydumpers  map[string]*MydumperConfig  `yaml:"mydumpers" toml:"mydumpers" json:"mydumpers"`
+	Loaders    map[string]*LoaderConfig    `yaml:"loaders" toml:"loaders" json:"loaders"`
+	Syncers    map[string]*SyncerConfig    `yaml:"syncers" toml:"syncers" json:"syncers"`
+	Validators map[string]*ValidatorConfig `yaml:"validators" toml:"validators" json:"validators"`
 
 	CleanDumpFile bool `yaml:"clean-dump-file" toml:"clean-dump-file" json:"clean-dump-file"`
 	// deprecated
@@ -413,6 +443,7 @@ func NewTaskConfig() *TaskConfig {
 		Mydumpers:               make(map[string]*MydumperConfig),
 		Loaders:                 make(map[string]*LoaderConfig),
 		Syncers:                 make(map[string]*SyncerConfig),
+		Validators:              make(map[string]*ValidatorConfig),
 		CleanDumpFile:           true,
 		CollationCompatible:     defaultCollationCompatible,
 	}
@@ -470,7 +501,7 @@ func (c *TaskConfig) RawDecode(data string) error {
 }
 
 // find unused items in config.
-var configRefPrefixes = []string{"RouteRules", "FilterRules", "ColumnMappingRules", "Mydumper", "Loader", "Syncer", "ExprFilter"}
+var configRefPrefixes = []string{"RouteRules", "FilterRules", "ColumnMappingRules", "Mydumper", "Loader", "Syncer", "ExprFilter", "Validator"}
 
 const (
 	routeRulesIdx = iota
@@ -480,9 +511,17 @@ const (
 	loaderIdx
 	syncerIdx
 	exprFilterIdx
+	validatorIdx
 )
 
-// adjust adjusts and verifies config.
+// Adjust adjusts and verifies config.
+func (c *TaskConfig) Adjust() error {
+	if c == nil {
+		return terror.ErrConfigYamlTransform.New("task config is nil")
+	}
+	return c.adjust()
+}
+
 func (c *TaskConfig) adjust() error {
 	if len(c.Name) == 0 {
 		return terror.ErrConfigNeedUniqueTaskName.Generate()
@@ -559,6 +598,12 @@ func (c *TaskConfig) adjust() error {
 		}
 		if len(setFields) > 1 {
 			return terror.ErrConfigExprFilterManyExpr.Generate(name, setFields)
+		}
+	}
+
+	for _, validatorCfg := range c.Validators {
+		if err := validatorCfg.adjust(); err != nil {
+			return err
 		}
 	}
 
@@ -684,6 +729,16 @@ func (c *TaskConfig) adjust() error {
 			inst.Syncer.WorkerCount = inst.SyncerThread
 		}
 
+		inst.ContinuousValidator = defaultValidatorConfig()
+		if inst.ContinuousValidatorConfigName != "" {
+			rule, ok := c.Validators[inst.ContinuousValidatorConfigName]
+			if !ok {
+				return terror.ErrContinuousValidatorCfgNotFound.Generate(i, inst.ContinuousValidatorConfigName)
+			}
+			globalConfigReferCount[configRefPrefixes[validatorIdx]+inst.ContinuousValidatorConfigName]++
+			inst.ContinuousValidator = *rule
+		}
+
 		// for backward compatible, set global config `ansi-quotes: true` if any syncer is true
 		if inst.Syncer.EnableANSIQuotes {
 			log.L().Warn("DM could discover proper ANSI_QUOTES, `enable-ansi-quotes` is no longer take effect")
@@ -753,6 +808,11 @@ func (c *TaskConfig) adjust() error {
 	for exprFilter := range c.ExprFilter {
 		if globalConfigReferCount[configRefPrefixes[exprFilterIdx]+exprFilter] == 0 {
 			unusedConfigs = append(unusedConfigs, exprFilter)
+		}
+	}
+	for key := range c.Validators {
+		if globalConfigReferCount[configRefPrefixes[validatorIdx]+key] == 0 {
+			unusedConfigs = append(unusedConfigs, key)
 		}
 	}
 

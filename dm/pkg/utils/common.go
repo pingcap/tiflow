@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
@@ -34,8 +33,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
+
+func init() {
+	ZeroSessionCtx = NewSessionCtx(nil)
+}
 
 // TrimCtrlChars returns a slice of the string s with all leading
 // and trailing control characters removed.
@@ -119,7 +123,7 @@ func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[s
 }
 
 // FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
-func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, router *router.Table) (map[string][]*filter.Table, error) {
+func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, router *router.RouteTable) (map[string][]*filter.Table, error) {
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
 
@@ -321,6 +325,9 @@ func (se *session) GetInfoSchema() sessionctx.InfoschemaMetaVersion {
 func (se *session) GetBuiltinFunctionUsage() map[string]uint32 {
 	return se.builtinFunctionUsage
 }
+
+// ZeroSessionCtx is used when the session variables is not important.
+var ZeroSessionCtx sessionctx.Context
 
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {

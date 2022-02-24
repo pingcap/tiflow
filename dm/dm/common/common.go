@@ -26,6 +26,9 @@ var (
 	useOfClosedErrMsg = "use of closed network connection"
 	// ClusterVersionKey is used to store the version of the cluster.
 	ClusterVersionKey = "/dm-cluster/version"
+	// ClusterIDKey is used to store the cluster id of the whole dm cluster. Cluster id is the unique identification of dm cluster
+	// After leader of dm master bootstraped, the leader will get the id from etcd or generate fresh one, and backfill to etcd.
+	ClusterIDKey = "/dm-cluster/id"
 	// WorkerRegisterKeyAdapter is used to encode and decode register key.
 	// k/v: Encode(worker-name) -> the information of the DM-worker node.
 	WorkerRegisterKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-worker/r/")
@@ -57,6 +60,9 @@ var (
 	// StageSubTaskKeyAdapter is used to store the running stage of the subtask.
 	// k/v: Encode(source-id, task-name) -> the running stage of the subtask.
 	StageSubTaskKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/stage/subtask/")
+	// StageValidatorKeyAdapter is used to store the running stage of the validator.
+	// k/v: Encode(source-id, task-name) -> the running stage of the validator.
+	StageValidatorKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/stage/validator/")
 
 	// ShardDDLPessimismInfoKeyAdapter is used to store shard DDL info in pessimistic model.
 	// k/v: Encode(task-name, source-id) -> shard DDL info.
@@ -109,7 +115,7 @@ func keyAdapterKeysLen(s KeyAdapter) int {
 		WorkerKeepAliveKeyAdapter, StageRelayKeyAdapter,
 		UpstreamLastBoundWorkerKeyAdapter, UpstreamRelayWorkerKeyAdapter, OpenAPITaskTemplateKeyAdapter:
 		return 1
-	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter,
+	case UpstreamSubTaskKeyAdapter, StageSubTaskKeyAdapter, StageValidatorKeyAdapter,
 		ShardDDLPessimismInfoKeyAdapter, ShardDDLPessimismOperationKeyAdapter,
 		ShardDDLOptimismSourceTablesKeyAdapter, LoadTaskKeyAdapter, TaskCliArgsKeyAdapter:
 		return 2

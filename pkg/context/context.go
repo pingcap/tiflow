@@ -192,8 +192,8 @@ func (ctx *throwContext) Throw(err error) {
 	}
 }
 
-// NewBackendContext4Test returns a new pipeline context for test, and use the
-// given context as parent context
+// NewContext4Test returns a new pipeline context for test, and use the
+// given context as parent context.
 func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{

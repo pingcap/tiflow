@@ -18,8 +18,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -32,16 +30,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
-
-type mqEvent struct {
-	row        *model.RowChangedEvent
-	resolvedTs model.Ts
-}
 
 type resolvedTsEvent struct {
 	tableID    model.TableID
@@ -66,20 +59,20 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       config.Protocol
 
-	partitionNum         int32
-	partitionInput       []chan mqEvent
-	partitionResolvedTs  []uint64
+	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
 	resolvedBuffer       chan resolvedTsEvent
-	resolvedNotifier     *notify.Notifier
-	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
+
+	role util.Role
+	id   model.ChangeFeedID
 }
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
 	err := protocol.FromString(replicaConfig.Sink.Protocol)
@@ -106,11 +99,15 @@ func newMqSink(
 		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
 	}
 
-	notifier := new(notify.Notifier)
-	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	role := util.RoleFromCtx(ctx)
+
+	encoder, err := encoderBuilder.Build(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	statistics := NewStatistics(ctx, "MQ")
+	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
@@ -118,16 +115,11 @@ func newMqSink(
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
 		protocol:       protocol,
-
-		partitionNum:        partitionNum,
-		partitionInput:      partitionInput,
-		partitionResolvedTs: make([]uint64, partitionNum),
-
-		resolvedBuffer:   make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
-		resolvedNotifier: notifier,
-		resolvedReceiver: resolvedReceiver,
-
-		statistics: NewStatistics(ctx, "MQ", opts),
+		flushWorker:    flushWorker,
+		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		statistics:     statistics,
+		role:           role,
+		id:             changefeedID,
 	}
 
 	go func() {
@@ -137,7 +129,8 @@ func newMqSink(
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", changefeedID), zap.Any("role", s.role))
 			}
 		}
 	}()
@@ -159,17 +152,17 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored",
+				zap.Uint64("start-ts", row.StartTs),
+				zap.String("changefeed", k.id),
+				zap.Any("role", k.role))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
+		case k.flushWorker.msgChan <- mqEvent{row: row, partition: partition}:
 		}
 		rowsCount++
 	}
@@ -224,30 +217,13 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	// flush resolvedTs to all partition workers
-	for i := 0; i < int(k.partitionNum); i++ {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
-		}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case k.flushWorker.msgChan <- mqEvent{resolvedTs: resolvedTs}:
 	}
 
-	// waiting for all row events are sent to mq producer
-flushLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-k.resolvedReceiver.C:
-			for i := 0; i < int(k.partitionNum); i++ {
-				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
-					continue flushLoop
-				}
-			}
-			return nil
-		}
-	}
+	return nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -262,7 +238,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
+	err = k.writeToProducer(ctx, msg, -1)
 	return errors.Trace(err)
 }
 
@@ -273,6 +249,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("query", ddl.Query),
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("changefeed", k.id),
+			zap.Any("role", k.role),
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
@@ -300,8 +278,9 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+		zap.String("changefeed", k.id), zap.Any("role", k.role))
+	err = k.writeToProducer(ctx, msg, partition)
 	return errors.Trace(err)
 }
 
@@ -317,129 +296,31 @@ func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 }
 
 func (k *mqSink) run(ctx context.Context) error {
-	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
 		return k.bgFlushTs(ctx)
 	})
-	for i := int32(0); i < k.partitionNum; i++ {
-		partition := i
-		wg.Go(func() error {
-			return k.runWorker(ctx, partition)
-		})
-	}
+	wg.Go(func() error {
+		return k.flushWorker.run(ctx)
+	})
 	return wg.Wait()
 }
 
-const batchSizeLimit = 4 * 1024 * 1024 // 4MB
-
-func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
-	input := k.partitionInput[partition]
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tick := time.NewTicker(500 * time.Millisecond)
-	defer tick.Stop()
-
-	flushToProducer := func(op codec.EncoderResult) error {
-		return k.statistics.RecordBatchExecution(func() (int, error) {
-			messages := encoder.Build()
-			thisBatchSize := 0
-			if len(messages) == 0 {
-				return 0, nil
-			}
-
-			for _, msg := range messages {
-				err := k.writeToProducer(ctx, msg, codec.EncoderNeedAsyncWrite, partition)
-				if err != nil {
-					return 0, err
-				}
-				thisBatchSize += msg.GetRowsCount()
-			}
-
-			if op == codec.EncoderNeedSyncWrite {
-				err := k.mqProducer.Flush(ctx)
-				if err != nil {
-					return 0, err
-				}
-			}
-			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
-			return thisBatchSize, nil
-		})
-	}
-	for {
-		var e mqEvent
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
-				return errors.Trace(err)
-			}
-			continue
-		case e = <-input:
-		}
-		// flush resolvedTs event
-		if e.row == nil {
-			if e.resolvedTs != 0 {
-				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				if err := flushToProducer(op); err != nil {
-					return errors.Trace(err)
-				}
-
-				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				k.resolvedNotifier.Notify()
-			}
-			continue
-		}
-		op, err := encoder.AppendRowChangedEvent(e.row)
+func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, partition int32) error {
+	if partition >= 0 {
+		err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
-
-		if encoder.Size() >= batchSizeLimit {
-			op = codec.EncoderNeedAsyncWrite
-		}
-
-		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
-			if err := flushToProducer(op); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-}
-
-func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {
-	switch op {
-	case codec.EncoderNeedAsyncWrite:
-		if partition >= 0 {
-			return k.mqProducer.AsyncSendMessage(ctx, message, partition)
-		}
-		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
-	case codec.EncoderNeedSyncWrite:
-		if partition >= 0 {
-			err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
-			if err != nil {
-				return err
-			}
-			return k.mqProducer.Flush(ctx)
-		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, message)
+		return k.mqProducer.Flush(ctx)
 	}
 
-	log.Warn("writeToProducer called with no-op",
-		zap.ByteString("key", message.Key),
-		zap.ByteString("value", message.Value),
-		zap.Int32("partition", partition))
-	return nil
+	return k.mqProducer.SyncBroadcastMessage(ctx, message)
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
+	opts map[string]string, errCh chan error) (*mqSink, error) {
 	producerConfig := kafka.NewConfig()
 	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -468,7 +349,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	return sink, nil
 }
 
-func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	producer, err := pulsar.NewProducer(sinkURI, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)

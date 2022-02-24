@@ -47,7 +47,7 @@ func (t *testForEtcd) TestSubTaskEtcd(c *C) {
 	c.Assert(tsm1, HasLen, 0)
 
 	// put subtask configs.
-	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1, cfg2}, []Stage{})
+	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1, cfg2}, []Stage{}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 
@@ -92,14 +92,14 @@ func (t *testForEtcd) TestSubTaskEtcd(c *C) {
 	c.Assert(tsm4, HasLen, 0)
 
 	// put subtask config.
-	rev6, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1}, []Stage{})
+	rev6, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1}, []Stage{}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(rev6, Greater, int64(0))
 
 	// update subtask config.
 	cfg3 := cfg1
 	cfg3.SourceID = "testForRevision"
-	rev7, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg3}, []Stage{})
+	rev7, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg3}, []Stage{}, nil)
 	c.Assert(err, IsNil)
 	c.Assert(rev7, Greater, rev6)
 

@@ -20,9 +20,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pingcap/failpoint"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +37,7 @@ func (a *testCase) String() string {
 
 func TestPProfPath(t *testing.T) {
 	router := gin.New()
-	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
+	RegisterRoutes(router, capture.NewCapture4Test(nil), nil)
 
 	apis := []*testCase{
 		{"/debug/pprof/", http.MethodGet},
@@ -63,7 +62,7 @@ func TestPProfPath(t *testing.T) {
 
 func TestHandleFailpoint(t *testing.T) {
 	router := gin.New()
-	RegisterRoutes(router, capture.NewCapture4Test(false), nil)
+	RegisterRoutes(router, capture.NewCapture4Test(nil), nil)
 	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
 	uri := fmt.Sprintf("/debug/fail/%s", fp)
 	body := bytes.NewReader([]byte("return(true)"))
