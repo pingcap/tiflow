@@ -27,7 +27,7 @@ This is mainly achieved by adding a new command `dmctl task create`, which creat
 
 New syntax of dmctl is `dmctl [resource type] [command] [flags] [arguments]`
 
-where `resource type`, `command` and `flags` are:
+where `resource type`, `command`, `flags` and `arguments` are:
 
 - `resource type` specifies the resource you want to control. `resource type`s are case-insensitive and limited. Currently there are only these: `task`, `source`, `relay`, `ddl-lock` and `member`.
 
