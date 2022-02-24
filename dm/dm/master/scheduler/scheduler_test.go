@@ -2010,11 +2010,12 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	//nolint:errcheck
 	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
 	c.Assert(s.recoverSources(), IsNil)
 	_, err = s.recoverWorkersBounds()
 	c.Assert(err, IsNil)
-	s.Start(ctx, etcdTestCli)
+	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
 	// CASE 1: start subtask without starting validation
 	c.Assert(s.AddSubTasks(false, subtaskCfg), IsNil) // create new subtask without validation
 	t.subTaskCfgExist(c, s, subtaskCfg)

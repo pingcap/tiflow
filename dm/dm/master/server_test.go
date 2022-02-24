@@ -2249,8 +2249,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	startResp, err := server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[1], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
 
@@ -2265,6 +2265,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsFalse)
 	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[1], pb.Stage_InvalidStage)
 
 	// 2.1 stop validation
 	validatorStopReq := &pb.StopValidationRequest{
@@ -2273,8 +2275,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	stopResp, err := server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[0], pb.Stage_Stopped)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[1], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
 
 	// 2.2 re-stop stopped task
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
@@ -2287,6 +2289,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsFalse)
 	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
 
 	// 3.1 start validation with mode fast
 	validatorStartReq.TaskName = taskName
@@ -2294,8 +2298,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[1], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
 
@@ -2305,8 +2309,8 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[0], pb.Stage_Stopped)
-	t.validatorStageMatch(c, server.scheduler, taskName, sources[1], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
 
 	// 4.2 start all tasks
 	validatorStartReq.TaskName = ""
@@ -2329,7 +2333,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	c.Assert(startResp.Msg, check.Matches, "either .* should be set")
 }
 
-func (t *testMaster) validatorStageMatch(c *check.C, s *scheduler.Scheduler, taskName, source string, expectStage pb.Stage) {
+func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
 	stage := ha.NewValidatorStage(expectStage, source, taskName)
 
 	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, taskName, 0)
@@ -2343,6 +2347,7 @@ func (t *testMaster) validatorStageMatch(c *check.C, s *scheduler.Scheduler, tas
 	}
 }
 
+//nolint:unparam
 func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string, expectMode string) {
 	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
 	v, ok := cfgs[task]
