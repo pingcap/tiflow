@@ -916,10 +916,6 @@ func (s *Server) UnlockDDLLock(ctx context.Context, req *pb.UnlockDDLLockRequest
 			if subtask.ShardMode == config.ShardOptimistic {
 				unlockType = config.ShardOptimistic
 			}
-			if unlockType != subtask.ShardMode {
-				resp.Msg = "subtasks has both optimistic and pessimistic modes which is invalid"
-				return resp, nil
-			}
 		}
 	} else {
 		// task is deleted so worker is not watching etcd, automatically set --force-remove

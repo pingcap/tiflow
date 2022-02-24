@@ -251,6 +251,7 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 			l++
 		}
 	}
+	// TODO: change this condition after unlock ddl supports unlock several tables at one time
 	if l != 1 {
 		return terror.ErrMasterLockIsResolving.Generatef("fail to find related info for lock %s", id)
 	}
@@ -267,6 +268,7 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 			l++
 		}
 	}
+	// TODO: change this condition after unlock ddl supports unlock several tables at one time
 	if l != 1 {
 		return terror.ErrMasterLockIsResolving.Generatef("fail to find related operation for lock %s", id)
 	}
