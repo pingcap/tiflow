@@ -3,10 +3,11 @@ package registry
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/fake"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -25,11 +26,15 @@ type dummyConfig struct {
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
-	ctx := dcontext.Background()
-	worker, err := GlobalWorkerRegistry().CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val":0}`))
+	worker, err := GlobalWorkerRegistry().CreateWorker(
+		makeCtxWithMockDeps(t),
+		fakeWorkerType,
+		"worker-1",
+		"master-1",
+		[]byte(`{"Val":0}`))
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, worker)
-	require.Equal(t, lib.WorkerID("worker-1"), worker.ID())
+	require.Equal(t, "worker-1", worker.ID())
 }
 
 func TestRegistryDuplicateType(t *testing.T) {

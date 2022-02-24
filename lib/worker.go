@@ -5,17 +5,19 @@ import (
 	"sync"
 	"time"
 
-	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
+
+	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type Worker interface {
@@ -83,19 +85,31 @@ type DefaultBaseWorker struct {
 	clock clock.Clock
 }
 
+type workerParams struct {
+	dig.In
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+}
+
 func NewBaseWorker(
+	ctx *dcontext.Context,
 	impl WorkerImpl,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
 	workerID WorkerID,
 	masterID MasterID,
 ) BaseWorker {
+	var params workerParams
+	if err := ctx.Deps().Fill(&params); err != nil {
+		log.L().Panic("Failed to fill dependencies for BaseWorker",
+			zap.Error(err))
+	}
+
 	return &DefaultBaseWorker{
 		Impl:                  impl,
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		metaKVClient:          metaKVClient,
+		messageHandlerManager: params.MessageHandlerManager,
+		messageSender:         params.MessageSender,
+		metaKVClient:          params.MetaKVClient,
 
 		masterID:      masterID,
 		id:            workerID,

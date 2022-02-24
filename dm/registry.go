@@ -32,12 +32,9 @@ type unitWorkerFactory struct {
 }
 
 func (u unitWorkerFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
-	deps := ctx.Dependencies
 	base := lib.NewBaseWorker(
+		ctx,
 		nil,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
 		workerID,
 		masterID,
 	)

@@ -6,7 +6,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
-	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -68,22 +67,15 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID MasterID,
 	workerID WorkerID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageRouter p2p.MessageSender,
-	metaKVClient metadata.MetaKV,
-	executorClientManager client.ClientsManager,
-	serverMasterClient client.MasterClient,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, messageHandlerManager,
-		messageRouter, metaKVClient, executorClientManager, serverMasterClient)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
-		&jobMasterImplAsWorkerImpl{jobMasterImpl}, messageHandlerManager, messageRouter, metaKVClient,
-		workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	return &DefaultBaseJobMaster{
 		master: baseMaster.(*DefaultBaseMaster),
 		worker: baseWorker.(*DefaultBaseWorker),

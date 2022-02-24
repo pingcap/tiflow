@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hanfei1991/microcosm/client"
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
@@ -40,13 +39,8 @@ type JobManagerImplV2 struct {
 	lib.BaseMaster
 	*JobFsm
 
-	messageHandlerManager p2p.MessageHandlerManager
-	messageSender         p2p.MessageSender
-	metaKVClient          metadata.MetaKV
-	executorClientManager client.ClientsManager
-	serverMasterClient    client.MasterClient
-	uuidGen               uuid.Generator
-	masterMetaClient      *lib.MasterMetadataClient
+	masterMetaClient *lib.MasterMetadataClient
+	uuidGen          uuid.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -116,34 +110,27 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	masterID lib.MasterID,
 	id lib.MasterID,
-	messageHandlerManager p2p.MessageHandlerManager,
-	messageSender p2p.MessageSender,
-	clients client.ClientsManager,
-	metaKVClient metadata.MetaKV,
 ) (*JobManagerImplV2, error) {
+	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metadata.MetaKV) (*lib.MasterMetadataClient, error) {
+		return lib.NewMasterMetadataClient(id, metaKV), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	impl := &JobManagerImplV2{
-		messageHandlerManager: messageHandlerManager,
-		messageSender:         messageSender,
-		executorClientManager: clients,
-		serverMasterClient:    clients.MasterClient(),
-		metaKVClient:          metaKVClient,
-		JobFsm:                NewJobFsm(),
-		uuidGen:               uuid.NewGenerator(),
-		masterMetaClient:      lib.NewMasterMetadataClient(id, metaKVClient),
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: masterMetaClient.(*lib.MasterMetadataClient),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
 		id,
-		impl.messageHandlerManager,
-		impl.messageSender,
-		impl.metaKVClient,
-		impl.executorClientManager,
-		impl.serverMasterClient,
 	)
-	err := impl.BaseMaster.Init(dctx.Context())
+
+	err = impl.BaseMaster.Init(dctx.Context())
 	if err != nil {
 		return nil, err
 	}

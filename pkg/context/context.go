@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -29,8 +30,10 @@ import (
 type Context struct {
 	Ctx          context.Context
 	Logger       log.Logger
-	Dependencies RuntimeDependencies
+	Dependencies RuntimeDependencies // Deprecated
 	Environ      Environment
+
+	deps *deps.Deps
 }
 
 // Background return a nop context.
@@ -77,6 +80,22 @@ func (c *Context) WithLogger(logger log.Logger) *Context {
 		Ctx:    c.Ctx,
 		Logger: logger,
 	}
+}
+
+// WithDeps puts a built dependency container into the context.
+func (c *Context) WithDeps(deps *deps.Deps) *Context {
+	return &Context{
+		Ctx:          c.Ctx,
+		Logger:       c.Logger,
+		Dependencies: c.Dependencies,
+		Environ:      c.Environ,
+		deps:         deps,
+	}
+}
+
+// Deps returns a handle used for dependency injection.
+func (c *Context) Deps() *deps.Deps {
+	return c.deps
 }
 
 // L returns real logger.

@@ -39,7 +39,7 @@ func setUpTest(t *testing.T) (newClient func() *clientv3.Client, close func()) {
 }
 
 const (
-	numMockNodesForCampaignTest = 16
+	numMockNodesForCampaignTest = 8
 )
 
 func TestEtcdElectionCampaign(t *testing.T) {

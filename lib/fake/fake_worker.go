@@ -74,12 +74,9 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 
 func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.Worker {
 	ret := &dummyWorker{}
-	dependencies := ctx.Dependencies
 	ret.BaseWorker = lib.NewBaseWorker(
+		ctx,
 		ret,
-		dependencies.MessageHandlerManager,
-		dependencies.MessageRouter,
-		dependencies.MetaKVClient,
 		id,
 		masterID)
 

@@ -15,6 +15,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -22,17 +24,27 @@ import (
 )
 
 func MockBaseMaster(id MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
+	ctx := dcontext.Background()
+	dp := deps.NewDeps()
+	err := dp.Provide(func() masterParamListForTest {
+		return masterParamListForTest{
+			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
+			MessageSender:         p2p.NewMockMessageSender(),
+			MetaKVClient:          metadata.NewMetaMock(),
+			ExecutorClientManager: client.NewClientManager(),
+			ServerMasterClient:    &client.MockServerMasterClient{},
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	ctx = ctx.WithDeps(dp)
+
 	ret := NewBaseMaster(
-		// ctx is nil for now
-		// TODO refine this
-		nil,
+		ctx,
 		masterImpl,
-		id,
-		p2p.NewMockMessageHandlerManager(),
-		p2p.NewMockMessageSender(),
-		metadata.NewMetaMock(),
-		client.NewClientManager(),
-		&client.MockServerMasterClient{})
+		id)
 
 	return ret.(*DefaultBaseMaster)
 }

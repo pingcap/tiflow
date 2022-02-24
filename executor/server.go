@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/deps"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
@@ -130,6 +132,46 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
+func (s *Server) buildDeps() (*deps.Deps, error) {
+	deps := deps.NewDeps()
+	err := deps.Provide(func() p2p.MessageHandlerManager {
+		return s.msgServer.MakeHandlerManager()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() p2p.MessageSender {
+		return p2p.NewMessageSender(s.p2pMsgRouter)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() metadata.MetaKV {
+		return s.metastore
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() client.ClientsManager {
+		return client.NewClientManager()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() client.MasterClient {
+		return s.cli
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return deps, nil
+}
+
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 
@@ -142,6 +184,12 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    s.cli,
 	}
+
+	dp, err := s.buildDeps()
+	if err != nil {
+		return nil, err
+	}
+	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 	masterMeta := &lib.MasterMetaExt{

@@ -3,11 +3,37 @@ package registry
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/fake"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/stretchr/testify/require"
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
+
+type paramList struct {
+	dig.Out
+
+	MessageHandlerManager p2p.MessageHandlerManager
+	MessageSender         p2p.MessageSender
+	MetaKVClient          metadata.MetaKV
+}
+
+func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
+	dp := deps.NewDeps()
+	err := dp.Provide(func() paramList {
+		return paramList{
+			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
+			MessageSender:         p2p.NewMockMessageSender(),
+			MetaKVClient:          metadata.NewMetaMock(),
+		}
+	})
+	require.NoError(t, err)
+	return dcontext.Background().WithDeps(dp)
+}
 
 func TestNewSimpleWorkerFactory(t *testing.T) {
 	dummyConstructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
@@ -18,7 +44,8 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &dummyConfig{Val: 1}, config)
 
-	newWorker, err := fac.NewWorker(dcontext.Background(), "my-worker", "my-master", &dummyConfig{Val: 1})
+	ctx := makeCtxWithMockDeps(t)
+	newWorker, err := fac.NewWorker(ctx, "my-worker", "my-master", &dummyConfig{Val: 1})
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, newWorker)
 }

@@ -162,17 +162,11 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		pendingWorkerSet: make(map[lib.WorkerID]int),
 		config:           config.(*Config),
 	}
-	deps := ctx.Dependencies
 	base := lib.NewBaseJobMaster(
 		ctx,
 		ret,
 		masterID,
 		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
 	)
 	ret.BaseJobMaster = base
 	return ret

@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -19,7 +22,6 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
@@ -547,9 +549,40 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return
 	}
 	dctx.Environ.MasterMetaExt = masterMetaExtBytes
-	s.jobManager, err = NewJobManagerImplV2(dctx, "", lib.JobManagerUUID,
-		s.msgService.MakeHandlerManager(), p2p.NewMessageSender(s.p2pMsgRouter),
-		clients, metadata.NewMetaEtcd(s.etcdClient))
+
+	dp := deps.NewDeps()
+	if err := dp.Provide(func() metadata.MetaKV {
+		return metadata.NewMetaEtcd(s.etcdClient)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.ClientsManager {
+		return clients
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() client.MasterClient {
+		return clients.MasterClient()
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageSender {
+		return p2p.NewMessageSender(s.p2pMsgRouter)
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() p2p.MessageHandlerManager {
+		return s.msgService.MakeHandlerManager()
+	}); err != nil {
+		return err
+	}
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
 	if err != nil {
 		return
 	}

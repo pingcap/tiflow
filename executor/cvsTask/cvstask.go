@@ -70,12 +70,9 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		buffer:            make(chan strPair, BUFFERSIZE),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 	}
-	deps := ctx.Dependencies
 	base := lib.NewBaseWorker(
+		ctx,
 		task,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
 		_workerID,
 		masterID,
 	)

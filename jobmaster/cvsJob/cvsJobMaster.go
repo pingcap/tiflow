@@ -60,18 +60,11 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
-	deps := ctx.Dependencies
-
 	base := lib.NewBaseJobMaster(
 		ctx,
 		jm,
 		masterID,
 		workerID,
-		deps.MessageHandlerManager,
-		deps.MessageRouter,
-		deps.MetaKVClient,
-		deps.ExecutorClientManager,
-		deps.ServerMasterClient,
 	)
 	jm.BaseJobMaster = base
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
