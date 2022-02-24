@@ -66,8 +66,9 @@ type IterRequest struct {
 	ResolvedTs uint64
 	// Range of a requested iterator.
 	Range [2][]byte
-	// Must be buffered channel to avoid blocking.
-	IterCh chan *LimitedIterator `json:"-"` // Make Task JSON printable.
+	// IterCallback is callback to send iterator back.
+	// It must be buffered channel to avoid blocking.
+	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
 }
 
 // Key is the key that is written to db.

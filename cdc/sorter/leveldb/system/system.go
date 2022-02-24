@@ -51,6 +51,8 @@ type System struct {
 	DBRouter      *actor.Router
 	WriterSystem  *actor.System
 	WriterRouter  *actor.Router
+	ReaderSystem  *actor.System
+	ReaderRouter  *actor.Router
 	compactSystem *actor.System
 	compactRouter *actor.Router
 	compactSched  *lsorter.CompactScheduler
@@ -76,12 +78,16 @@ func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System 
 	// writes to leveldb.
 	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
+	readerSystem, readerRouter := actor.NewSystemBuilder("sorter-reader").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	compactSched := lsorter.NewCompactScheduler(compactRouter)
 	return &System{
 		dbSystem:      dbSystem,
 		DBRouter:      dbRouter,
 		WriterSystem:  writerSystem,
 		WriterRouter:  writerRouter,
+		ReaderSystem:  readerSystem,
+		ReaderRouter:  readerRouter,
 		compactSystem: compactSystem,
 		compactRouter: compactRouter,
 		compactSched:  compactSched,
@@ -137,6 +143,7 @@ func (s *System) Start(ctx context.Context) error {
 	s.compactSystem.Start(ctx)
 	s.dbSystem.Start(ctx)
 	s.WriterSystem.Start(ctx)
+	s.ReaderSystem.Start(ctx)
 	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
 	totalMemory, err := memory.MemTotal()
 	if err != nil {
@@ -212,6 +219,7 @@ func (s *System) Stop() error {
 	// Close actors
 	s.broadcast(ctx, s.DBRouter, message.StopMessage())
 	s.broadcast(ctx, s.WriterRouter, message.StopMessage())
+	s.broadcast(ctx, s.ReaderRouter, message.StopMessage())
 	s.broadcast(ctx, s.compactRouter, message.StopMessage())
 	// Close metrics goroutine.
 	close(s.closedCh)
@@ -224,6 +232,10 @@ func (s *System) Stop() error {
 		return errors.Trace(err)
 	}
 	err = s.WriterSystem.Stop()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.ReaderSystem.Stop()
 	if err != nil {
 		return errors.Trace(err)
 	}

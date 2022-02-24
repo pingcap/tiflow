@@ -144,8 +144,11 @@ func makeTask(writes map[message.Key][]byte, rg [][]byte) ([]actormsg.Message, c
 	if len(rg) != 0 {
 		iterCh = make(chan *message.LimitedIterator, 1)
 		iterReq = &message.IterRequest{
-			Range:  [2][]byte{rg[0], rg[1]},
-			IterCh: iterCh,
+			Range: [2][]byte{rg[0], rg[1]},
+			IterCallback: func(iter *message.LimitedIterator) {
+				iterCh <- iter
+				close(iterCh)
+			},
 		}
 	}
 	return []actormsg.Message{actormsg.SorterMessage(message.Task{
