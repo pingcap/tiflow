@@ -47,6 +47,7 @@ type flushWorker struct {
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
 	statistics *Statistics
+	ticker     *time.Ticker
 }
 
 // newFlushWorker creates a new flush worker.
@@ -56,6 +57,7 @@ func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer,
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,
+		ticker:     time.NewTicker(flushInterval),
 	}
 	return w
 }
@@ -80,8 +82,8 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 		}
 	}
 
-	tick := time.NewTicker(flushInterval)
-	defer tick.Stop()
+	// Start a new tick to flush the batch.
+	w.ticker.Reset(flushInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -98,7 +100,7 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 			if len(events) >= flushBatchSize {
 				return events, nil
 			}
-		case <-tick.C:
+		case <-w.ticker.C:
 			return events, nil
 		}
 	}
@@ -149,6 +151,7 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 // run starts a loop that keeps collecting, sorting and sending messages
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) error {
+	defer w.ticker.Stop()
 	for {
 		events, err := w.batch(ctx)
 		if err != nil {
