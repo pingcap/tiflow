@@ -18,7 +18,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/hash"
 )
 
-// TableDispatcher is a partition dispatcher which dispatches events based on the schema and table name.
+// TableDispatcher is a partition dispatcher which dispatches events
+// based on the schema and table name.
 type TableDispatcher struct {
 	partitionNum int32
 	hasher       *hash.PositionInertia
@@ -32,7 +33,8 @@ func NewTableDispatcher(partitionNum int32) *TableDispatcher {
 	}
 }
 
-// DispatchRowChangedEvent returns the target partition to which a row changed event should be dispatched.
+// DispatchRowChangedEvent returns the target partition to which
+// a row changed event should be dispatched.
 func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	t.hasher.Reset()
 	// distribute partition by table

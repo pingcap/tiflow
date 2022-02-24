@@ -32,7 +32,8 @@ func NewIndexValueDispatcher(partitionNum int32) *IndexValueDispatcher {
 	}
 }
 
-// DispatchRowChangedEvent returns the target partition to which a row changed event should be dispatched.
+// DispatchRowChangedEvent returns the target partition to which
+// a row changed event should be dispatched.
 func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))

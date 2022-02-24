@@ -53,7 +53,8 @@ func (r *partitionDispatchRule) fromString(rule string) {
 	}
 }
 
-// EventRouter is a router, it determines which topic and which partition an event should be dispatched to.
+// EventRouter is a router, it determines which topic and which partition
+// an event should be dispatched to.
 type EventRouter struct {
 	rules []struct {
 		partitionDispatcher partition.Dispatcher
@@ -85,7 +86,8 @@ func (s *EventRouter) matchDispatcher(row *model.RowChangedEvent) (topic.Dispatc
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(ruleConfig *config.DispatchRule, partitionNum int32, enableOldValue bool) partition.Dispatcher {
+func getPartitionDispatcher(ruleConfig *config.DispatchRule, partitionNum int32,
+	enableOldValue bool) partition.Dispatcher {
 	var (
 		d    partition.Dispatcher
 		rule partitionDispatchRule
@@ -127,6 +129,9 @@ func getTopicDispatcher(ruleConfig *config.DispatchRule, defaultTopic string) (t
 
 // NewEventRouter creates a new EventRouter
 func NewEventRouter(cfg *config.ReplicaConfig, partitionNum int32, defaultTopic string) (*EventRouter, error) {
+	// If an event does not match any dispatching rules in the config file,
+	// it will be dispatched by the default partition dispatcher and
+	// static topic dispatcher because it matches *.* rule.
 	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
 		Matcher:       []string{"*.*"},
 		PartitionRule: "default",
