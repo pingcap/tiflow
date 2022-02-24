@@ -485,10 +485,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 	return nil
 }
 
-func init() {
-	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
-}
-
 // getBrokerConfig gets broker config by name.
 func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
 	_, controllerID, err := admin.DescribeCluster()
