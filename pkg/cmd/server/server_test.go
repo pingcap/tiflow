@@ -176,7 +176,10 @@ func TestParseCfg(t *testing.T) {
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -315,7 +318,10 @@ server-worker-pool-size = 16
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -452,7 +458,10 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -508,7 +517,10 @@ unknown3 = 3
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
 		EnableTableActor: false,
-		EnableDBSorter:   false,
+		TableActor: &config.TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableDBSorter: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
