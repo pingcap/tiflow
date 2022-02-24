@@ -15,11 +15,9 @@ package system
 
 import (
 	"context"
-	"math"
+	"sync"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,26 +31,23 @@ func TestStartAndStopSystem(t *testing.T) {
 
 func TestActorID(t *testing.T) {
 	sys := NewSystem()
-	type table struct {
-		changeFeed string
-		tableID    model.TableID
+	var ids [10000]uint64
+	group := sync.WaitGroup{}
+	for i := 0; i < 100; i++ {
+		group.Add(1)
+		go func(idx int) {
+			for j := 0; j < 100; j++ {
+				id := sys.ActorID()
+				ids[idx*100+j] = uint64(id)
+			}
+			group.Done()
+		}(i)
 	}
-	cases := []table{
-		{"abc", 1},
-		{"", -1},
-		{"", 0},
-		{"", math.MaxInt64},
-		{"afddeefessssssss", math.MaxInt64},
-		{"afddeefessssssss", 0},
-		{"afddeefessssssss", 1},
-	}
-	ids := make(map[actor.ID]bool)
-	for _, c := range cases {
-		id1 := sys.ActorID(c.changeFeed, c.tableID)
-		for i := 0; i < 10; i++ {
-			require.Equal(t, id1, sys.ActorID(c.changeFeed, c.tableID))
-		}
-		require.False(t, ids[id1])
-		ids[id1] = true
+	group.Wait()
+	idMap := make(map[uint64]struct{})
+	for _, id := range ids {
+		_, ok := idMap[id]
+		require.False(t, ok)
+		idMap[id] = struct{}{}
 	}
 }

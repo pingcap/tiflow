@@ -44,7 +44,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		size := encoder.Size()

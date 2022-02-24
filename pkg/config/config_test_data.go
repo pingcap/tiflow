@@ -109,6 +109,9 @@ const (
   },
   "debug": {
     "enable-table-actor": false,
+    "table-actor": {
+      "event-batch-size": 32
+    },
     "enable-db-sorter": false,
     "db": {
       "count": 8,

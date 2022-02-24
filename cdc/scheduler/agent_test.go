@@ -178,7 +178,7 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
-	agent.checkpointSender = &MockCheckpointSender{}
+	agent.checkpointSender = &mockCheckpointSender{}
 	messenger.On("SyncTaskStatuses", mock.Anything, []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil)
 	err := agent.Tick(ctx)
@@ -219,7 +219,7 @@ func TestOwnerMismatchShouldPanic(t *testing.T) {
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
-	agent.checkpointSender = &MockCheckpointSender{}
+	agent.checkpointSender = &mockCheckpointSender{}
 	messenger.On("SyncTaskStatuses", mock.Anything, []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil)
 	err := agent.Tick(ctx)

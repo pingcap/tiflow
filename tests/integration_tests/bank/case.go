@@ -589,20 +589,6 @@ func run(
 	}
 }
 
-type dataRow struct {
-	JobID       int64
-	DBName      string
-	TblName     string
-	JobType     string
-	SchemaState string
-	SchemeID    int64
-	TblID       int64
-	RowCount    int64
-	StartTime   string
-	EndTime     *string
-	State       string
-}
-
 func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string) (result string, err error) {
 	for {
 		select {
@@ -619,20 +605,16 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string)
 }
 
 func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
-	query := "admin show ddl jobs where table_name = ?"
+	query := "select END_TIME from information_schema.ddl_jobs where table_name = ?"
 	log.Info("try get end ts", zap.String("query", query))
-	var line dataRow
+	var endTime string
 	row := db.QueryRow(query, tableName)
-	if err := row.Scan(&line.JobID, &line.DBName, &line.TblName, &line.JobType, &line.SchemaState, &line.SchemeID,
-		&line.TblID, &line.RowCount, &line.StartTime, &line.EndTime, &line.State); err != nil {
+	if err := row.Scan(&endTime); err != nil {
 		if err != sql.ErrNoRows {
 			log.Info("rows scan failed", zap.Error(err))
 		}
 		return "", false
 	}
 
-	if line.EndTime == nil {
-		return "", true
-	}
-	return *line.EndTime, true
+	return endTime, true
 }

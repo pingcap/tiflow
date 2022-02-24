@@ -98,7 +98,10 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor:   false,
+		EnableTableActor: false,
+		TableActor: &TableActorConfig{
+			EventBatchSize: 32,
+		},
 		EnableNewScheduler: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
