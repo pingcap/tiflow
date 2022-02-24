@@ -220,9 +220,15 @@ func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 			continue
 		}
 		craftEncoder := NewCraftEventBatchEncoder()
-		jsonEncoder := NewJSONEventBatchEncoder()
+		craftEncoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
+		craftEncoder.(*CraftEventBatchEncoder).maxBatchSize = 64
 		craftMessages := s.encodeRowCase(c, craftEncoder, cs)
+
+		jsonEncoder := NewJSONEventBatchEncoder()
+		jsonEncoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
+		jsonEncoder.(*JSONEventBatchEncoder).maxBatchSize = 64
 		jsonMessages := s.encodeRowCase(c, jsonEncoder, cs)
+
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
 		protobuf2Messages := codecEncodeRowChangedPB2ToMessage(cs)
 		craftOriginal, craftCompressed := s.checkCompressedSize(craftMessages)
@@ -349,10 +355,6 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 }
 
 func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
-	//config := NewConfig("any-protocol-ok").WithMaxMessageBytes(8192)
-	//config.maxBatchSize = 64
-	//encoder.setParams(config)
-
 	for _, event := range events {
 		err := encoder.AppendRowChangedEvent(event)
 		if err != nil {
@@ -368,10 +370,17 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 
 func init() {
 	var err error
-	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(NewCraftEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+	encoder := NewCraftEventBatchEncoder()
+	encoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
+	encoder.(*CraftEventBatchEncoder).maxBatchSize = 64
+	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
-	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges); err != nil {
+
+	encoder = NewJSONEventBatchEncoder()
+	encoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
+	encoder.(*JSONEventBatchEncoder).maxBatchSize = 64
+	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 	codecPB1EncodedRowChanges = codecEncodeRowChangedPB1ToMessage(codecBenchmarkRowChanges)
@@ -380,14 +389,20 @@ func init() {
 
 func BenchmarkCraftEncoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
+	encoder := NewCraftEventBatchEncoderWithAllocator(allocator)
+	encoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
+	encoder.(*CraftEventBatchEncoder).maxBatchSize = 64
 	for i := 0; i < b.N; i++ {
-		_, _ = codecEncodeRowCase(NewCraftEventBatchEncoderWithAllocator(allocator), codecBenchmarkRowChanges)
+		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
+	encoder := NewJSONEventBatchEncoder()
+	encoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
+	encoder.(*JSONEventBatchEncoder).maxBatchSize = 64
 	for i := 0; i < b.N; i++ {
-		_, _ = codecEncodeRowCase(NewJSONEventBatchEncoder(), codecBenchmarkRowChanges)
+		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
