@@ -352,6 +352,11 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+<<<<<<< HEAD
+=======
+						zap.String("changefeed", w.session.client.changefeed),
+						zap.String("addr", w.storeAddr),
+>>>>>>> da440ec90 (kv,cmd(ticdc): refinement about resolve lock (#4643))
 						zap.Uint64("regionID", rts.regionID),
 						zap.Stringer("span", state.getRegionSpan()),
 						zap.Duration("duration", sinceLastResolvedTs),
