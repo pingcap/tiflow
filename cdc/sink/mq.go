@@ -74,12 +74,7 @@ func newMqSink(
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	var protocol config.Protocol
-	err := protocol.FromString(replicaConfig.Sink.Protocol)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, encoderConfig)
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, credential)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -110,7 +105,7 @@ func newMqSink(
 		dispatcher:     d,
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
-		protocol:       protocol,
+		protocol:       encoderConfig.Protocol(),
 		flushWorker:    flushWorker,
 		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
 		statistics:     statistics,
@@ -347,7 +342,12 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
+	var protocol config.Protocol
+	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -385,8 +385,12 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		return nil, err
 	}
 
-	// These two options are not used by Pulsar producer itself, but the encoders
-	encoderConfig := codec.NewConfig(replicaConfig.Sink.Protocol)
+	var protocol config.Protocol
+	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, errors.Trace(err)
 	}

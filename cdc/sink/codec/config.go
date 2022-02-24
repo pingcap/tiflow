@@ -28,9 +28,9 @@ const defaultMaxBatchSize int = 16
 
 // Config use to create the encoder
 type Config struct {
-	protocol string
+	protocol config.Protocol
 
-	// control batch behavior
+	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	maxMessageBytes int
 	maxBatchSize    int
 
@@ -43,7 +43,7 @@ type Config struct {
 }
 
 // NewConfig return a Config for codec
-func NewConfig(protocol string) *Config {
+func NewConfig(protocol config.Protocol, tz *time.Location) *Config {
 	return &Config{
 		protocol: protocol,
 
@@ -52,13 +52,21 @@ func NewConfig(protocol string) *Config {
 
 		enableTiDBExtension: false,
 		avroRegistry:        "",
+		tz:                  tz,
 	}
 }
+
+const (
+	codecOPTEnableTiDBExtension = "enable-tidb-extension"
+	codecOPTMaxBatchSize        = "max-batch-size"
+	codecOPTMaxMessageBytes     = "max-message-bytes"
+	codecAvroRegistry           = "registry"
+)
 
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 	params := sinkURI.Query()
-	if s := params.Get("enable-tidb-extension"); s != "" {
+	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
 			return err
@@ -66,7 +74,7 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 		c.enableTiDBExtension = b
 	}
 
-	if s := params.Get("max-batch-size"); s != "" {
+	if s := params.Get(codecOPTMaxBatchSize); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
 			return err
@@ -74,7 +82,7 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 		c.maxBatchSize = a
 	}
 
-	if s := params.Get("max-message-bytes"); s != "" {
+	if s := params.Get(codecOPTMaxMessageBytes); s != "" {
 		a, err := strconv.Atoi(s)
 		if err != nil {
 			return err
@@ -82,7 +90,7 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 		c.maxMessageBytes = a
 	}
 
-	if s, ok := opts["registry"]; ok {
+	if s, ok := opts[codecAvroRegistry]; ok {
 		c.avroRegistry = s
 	}
 
@@ -97,11 +105,11 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 
 // Validate the Config
 func (c *Config) Validate() error {
-	if c.protocol != "canal-json" && c.enableTiDBExtension {
+	if c.protocol != config.ProtocolCanalJSON && c.enableTiDBExtension {
 		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only support canal-json protocol`)
 	}
 
-	if c.protocol == "avro" {
+	if c.protocol == config.ProtocolAvro {
 		if c.avroRegistry == "" {
 			return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "registry"`)
 		}
@@ -122,7 +130,12 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// GetMaxMessageBytes return the maxMessageBytes for the codec
-func (c *Config) GetMaxMessageBytes() int {
+// MaxMessageBytes return the maxMessageBytes for the codec
+func (c *Config) MaxMessageBytes() int {
 	return c.maxMessageBytes
+}
+
+// Protocol return the protocol for the codec
+func (c *Config) Protocol() config.Protocol {
+	return c.protocol
 }

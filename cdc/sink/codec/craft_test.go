@@ -16,7 +16,9 @@ package codec
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -124,7 +126,7 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 
 func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig("craft").WithMaxMessageBytes(256)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(256)
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
@@ -146,7 +148,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig("craft").WithMaxMessageBytes(10485760)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(10485760)
 	config.maxBatchSize = 64
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
@@ -187,14 +189,14 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 
 func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig("craft").WithMaxMessageBytes(8192)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
 	s.testBatchCodec(c, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
 }
 
 func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig("craft")
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation())
 
 	builder := &craftEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CraftEventBatchEncoder)

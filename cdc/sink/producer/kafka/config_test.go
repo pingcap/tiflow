@@ -409,7 +409,7 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 		c.Assert(err, check.IsNil)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, encoderConfig.GetMaxMessageBytes())
+		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, encoderConfig.MaxMessageBytes())
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		c.Assert(err, check.IsNil)

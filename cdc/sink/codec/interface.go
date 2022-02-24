@@ -150,8 +150,8 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, c *Config) (EncoderBuilder, error) {
-	switch p {
+func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
+	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
@@ -165,7 +165,7 @@ func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credent
 	case config.ProtocolCraft:
 		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocolValue", int(p)))
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
 		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

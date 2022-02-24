@@ -19,7 +19,9 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -152,7 +154,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 
 func (s *batchSuite) TestBuildJSONEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
-	config := NewConfig("open-protocol")
+	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
 	builder := &jsonEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*JSONEventBatchEncoder)
 	c.Assert(ok, check.IsTrue)
@@ -172,7 +174,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 
 	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 87 + 44
-	config := NewConfig("open-protocol").WithMaxMessageBytes(a)
+	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(a)
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(testEvent)
 	c.Check(err, check.IsNil)
@@ -200,7 +202,7 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	config := NewConfig("open-protocol").WithMaxMessageBytes(1048576)
+	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(1048576)
 	config.maxBatchSize = 64
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
 
@@ -242,7 +244,7 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	config := NewConfig("open-protocol").WithMaxMessageBytes(8192)
+	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
 	s.testBatchCodec(c, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
 }

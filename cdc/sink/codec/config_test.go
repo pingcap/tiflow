@@ -17,13 +17,14 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewConfig(t *testing.T) {
-	c := NewConfig("fake-protocol")
+	c := NewConfig(config.ProtocolDefault, timeutil.SystemLocation())
 	require.Equal(t, c.protocol, "fake-protocol")
 	require.Equal(t, c.maxMessageBytes, config.DefaultMaxMessageBytes)
 	require.Equal(t, c.maxBatchSize, defaultMaxBatchSize)
@@ -39,8 +40,12 @@ func TestConfigApplyValidate(t *testing.T) {
 	protocol := sinkURI.Query().Get("protocol")
 	require.Equal(t, protocol, "canal-json")
 
-	c := NewConfig(protocol)
-	require.Equal(t, c.protocol, "canal-json")
+	var p config.Protocol
+	err = p.FromString(protocol)
+	require.Nil(t, err)
+
+	c := NewConfig(p, timeutil.SystemLocation())
+	require.Equal(t, c.protocol, config.ProtocolCanalJSON)
 
 	opts := make(map[string]string)
 	err = c.Apply(sinkURI, opts)
@@ -63,7 +68,10 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.Nil(t, err)
 
 	protocol = sinkURI.Query().Get("protocol")
-	c = NewConfig(protocol)
+	err = p.FromString(protocol)
+	require.Nil(t, err)
+
+	c = NewConfig(p, timeutil.SystemLocation())
 	err = c.Apply(sinkURI, opts)
 	require.Nil(t, err)
 	require.True(t, c.enableTiDBExtension)
@@ -78,9 +86,10 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	protocol = sinkURI.Query().Get("protocol")
 	require.Equal(t, protocol, "avro")
-
-	c = NewConfig(protocol)
-	require.Equal(t, c.protocol, "avro")
+	err = p.FromString(protocol)
+	require.Nil(t, err)
+	c = NewConfig(p, timeutil.SystemLocation())
+	require.Equal(t, c.protocol, config.ProtocolAvro)
 
 	err = c.Apply(sinkURI, opts)
 	require.Nil(t, err)
@@ -123,7 +132,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
 
-	c = NewConfig("open-protocol")
+	c = NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
 	err = c.Apply(sinkURI, opts)
 	require.Nil(t, err)
 

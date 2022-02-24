@@ -72,7 +72,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder := sink.encoderBuilder.Build(ctx)
+	encoder := sink.encoderBuilder.Build()
 
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
@@ -230,7 +230,7 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder := sink.encoderBuilder.Build(ctx)
+	encoder := sink.encoderBuilder.Build()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)
