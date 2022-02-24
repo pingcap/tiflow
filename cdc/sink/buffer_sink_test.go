@@ -34,7 +34,7 @@ func TestFlushTable(t *testing.T) {
 	defer func() {
 		cancel()
 	}()
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+	b := newBufferSink(ctx, newBlackHoleSink(ctx), make(chan error), 5, make(chan drawbackMsg))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
 	tbl1 := &model.TableName{TableID: 1}
@@ -74,7 +74,7 @@ func TestFlushTable(t *testing.T) {
 
 func TestFlushFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+	b := newBufferSink(ctx, newBlackHoleSink(ctx), make(chan error), 5, make(chan drawbackMsg))
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
 	require.Nil(t, err)
