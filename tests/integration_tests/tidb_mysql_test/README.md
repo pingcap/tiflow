@@ -8,7 +8,13 @@ https://github.com/pingcap/tiflow/issues/4674
 Migrate from TiDB mysql-test
 
 ## Step
-1.Setup upstream and downstream cluster
-2.build mysql_test
-3.run all cases
-4.check data
+1. Setup upstream and downstream cluster
+2. build mysql_test
+3. run all cases
+4. check data
+
+## Add New Test
+1. Add test and result file
+2. ./build.sh
+3. ./mysql_test
+to check if all tests work well
