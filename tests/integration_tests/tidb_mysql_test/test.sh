@@ -9,6 +9,6 @@ TEST_BIN_PATH=./mysql_test
 set -eu
 ./build.sh
 echo "run all mysql test cases"
-"$TEST_BIN_PATH" --host=${UP_TIDB_HOST} --port=${UP_TIDB_PORT} --log-level=error --all=true
+"$TEST_BIN_PATH" --host=${UP_TIDB_HOST} --port=${UP_TIDB_PORT} --log-level=error --all=true --reserve-schema=true
 
 echo "mysqltest end"

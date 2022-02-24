@@ -6,7 +6,6 @@ w_idmedium mediumint not null);
 ALTER TABLE warehouse ADD UNIQUE id_idx (w_idtiny);
 ALTER TABLE warehouse DROP INDEX id_idx;
 ALTER TABLE warehouse DROP PRIMARY KEY;
-Error 8200: Unsupported drop primary key when the table's pkIsHandle is true
 ALTER TABLE warehouse DROP COLUMN w_idmedium;
 drop table if exists t;
 create table t (c1 int);
