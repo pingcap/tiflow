@@ -52,16 +52,26 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 		},
 	}
 
-	// test enable by task cliArgs
+	// test enable by task cliArgs (disable is tested in it test)
 	duration, err := time.ParseDuration("2s")
 	require.NoError(t, err)
 	s.cliArgs = &config.TaskCliArgs{SafeModeDuration: duration.String()}
 	s.enableSafeModeInitializationPhase(s.tctx)
-	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
-	time.Sleep(duration) // wait for enableSafeModeInitializationPhase exit
+	s.Lock()
+	require.Nil(t, s.exitSafeModeTS) // not meet the first binlog
+	firstBinlogTS := int64(1)
+	require.NoError(t, s.checkAndSetSafeModeByBinlogTS(firstBinlogTS))
+	require.NotNil(t, s.exitSafeModeTS) // not meet the first binlog
+	require.Equal(t, s.exitSafeModeTS.Load(), int64(3))
+	require.Equal(t, *s.firstMeetBinlogTS, firstBinlogTS)
+	s.Unlock()
+	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, s.exitSafeModeTS.Load())) // not exit when binlog TS == exit TS
+	require.True(t, s.safeMode.Enable())
+	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, s.exitSafeModeTS.Load()+int64(1))) // exit when binlog TS > exit TS
 	require.False(t, s.safeMode.Enable())
 	s.Lock()
+	require.Nil(t, s.exitSafeModeTS)
 	require.Equal(t, s.cliArgs.SafeModeDuration, "")
 	s.Unlock()
 
@@ -73,7 +83,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
 
-	// test enable by SafeModeExitPoint
+	// test enable by SafeModeExitPoint (disable is tested in it test)
 	s.cfg.SafeMode = false
 	mockCheckpoint.safeModeExitPoint = &binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 123}}
 	s.enableSafeModeInitializationPhase(s.tctx)

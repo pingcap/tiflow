@@ -236,6 +236,9 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
+	firstMeetBinlogTS *int64
+	exitSafeModeTS    *atomic.Int64 // TS(in binlog header) need to exit safe mode.
+
 	locations *locationRecorder
 
 	relay                      relay.Process
@@ -588,6 +591,8 @@ func (s *Syncer) reset() {
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
+	s.firstMeetBinlogTS = nil
+	s.exitSafeModeTS = nil
 	switch s.cfg.ShardMode {
 	case config.ShardPessimistic:
 		// every time start to re-sync from resume, we reset status to make it like a fresh syncing
@@ -1492,7 +1497,7 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		failpoint.Inject("recordAndIgnorePrepareTime", func() {
 			waitBeforeRunExitDurationForTest = waitDuration
 		})
-		if waitDuration.Seconds() < 0 {
+		if waitDuration.Seconds() <= 0 {
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
 			return
@@ -2073,6 +2078,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 
+		// set exitSafeModeTS when meet first binlog
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+			if checkErr := s.checkAndSetSafeModeByBinlogTS(int64(e.Header.Timestamp)); checkErr != nil {
+				return checkErr
+			}
+		}
+		// check if need to exit safe mode by binlog header TS
+		if s.exitSafeModeTS != nil && !s.isReplacingOrInjectingErr && shardingReSync == nil {
+			if checkErr := s.checkAndExitSafeModeByBinlogTS(s.runCtx, int64(e.Header.Timestamp)); checkErr != nil {
+				return checkErr
+			}
+		}
 		ec := eventContext{
 			tctx:                s.runCtx,
 			header:              e.Header,
@@ -2163,6 +2180,42 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return nil
 		}
 	}
+}
+
+func (s *Syncer) checkAndSetSafeModeByBinlogTS(firstBinlogTS int64) error {
+	// see more in https://github.com/pingcap/tiflow/pull/4601#discussion_r814446628
+	duration, err := time.ParseDuration(s.cliArgs.SafeModeDuration)
+	if err != nil {
+		return err
+	}
+	s.firstMeetBinlogTS = &firstBinlogTS
+	exitTS := firstBinlogTS + int64(duration.Seconds())
+	s.exitSafeModeTS = atomic.NewInt64(exitTS)
+	s.tctx.L().Info("safe-mode will disable by task cli args", zap.Int64("ts", exitTS))
+	return nil
+}
+
+func (s *Syncer) checkAndExitSafeModeByBinlogTS(ctx *tcontext.Context, ts int64) error {
+	if s.exitSafeModeTS != nil && ts > s.exitSafeModeTS.Load() {
+		if err := s.safeMode.Add(ctx, -1); err != nil {
+			return err
+		}
+		s.exitSafeModeTS = nil
+		if !s.safeMode.Enable() {
+			s.tctx.L().Info("safe-mode disable by task cli args", zap.Int64("ts in binlog", ts))
+		}
+		// delete cliArgs in etcd
+		clone := *s.cliArgs
+		clone.SafeModeDuration = ""
+		if err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone); err2 != nil {
+			s.tctx.L().Error("failed to clean safe-mode-duration in task cli args", zap.Error(err2))
+		} else {
+			s.Lock()
+			s.cliArgs.SafeModeDuration = ""
+			s.Unlock()
+		}
+	}
+	return nil
 }
 
 type eventContext struct {

@@ -21,37 +21,12 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/ha"
 )
 
 func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
 	//nolint:errcheck
 	s.safeMode.Add(tctx, 1)
-	duration, _ := time.ParseDuration(s.cliArgs.SafeModeDuration)
-	duration -= time.Duration(s.tsOffset.Load())
-	s.tctx.L().Info("enable safe-mode because of task cli args", zap.Duration("duration", duration))
-	select {
-	case <-tctx.Context().Done():
-	case <-time.After(duration):
-		err := s.safeMode.Add(tctx, -1)
-		if err != nil {
-			// send error to the fatal chan to interrupt the process
-			s.runFatalChan <- unit.NewProcessError(err)
-		}
-		if !s.safeMode.Enable() {
-			s.tctx.L().Info("disable safe-mode after", zap.Duration("duration", duration))
-		}
-		// delete cliArgs in etcd
-		clone := *s.cliArgs
-		clone.SafeModeDuration = ""
-		if err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone); err2 != nil {
-			s.tctx.L().Error("failed to clean safe-mode-duration in task cli args", zap.Error(err2))
-		} else {
-			s.Lock()
-			s.cliArgs.SafeModeDuration = ""
-			s.Unlock()
-		}
-	}
+	s.tctx.L().Info("enable safe-mode because of task cli args")
 }
 
 func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
@@ -59,7 +34,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 
 	// cliArgs has higher priority than config
 	if s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
-		go s.enableSafeModeByTaskCliArgs(tctx)
+		s.enableSafeModeByTaskCliArgs(tctx)
 		return
 	}
 
