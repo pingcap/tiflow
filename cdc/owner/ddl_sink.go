@@ -121,11 +121,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-			log.Warn("ddl sink initialize failed", zap.Duration("elapsed", time.Since(start)))
+			log.Warn("ddl sink initialize failed",
+				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
-		log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
+		log.Info("ddl sink initialized, start processing...",
+			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
@@ -154,13 +156,16 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
 				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-					log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
+					log.Info("Execute DDL succeeded",
+						zap.String("changefeed", ctx.ChangefeedVars().ID),
+						zap.Bool("ignored", err != nil),
+						zap.Reflect("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", ctx.ChangefeedVars().ID),
+					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
 					zap.Reflect("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
