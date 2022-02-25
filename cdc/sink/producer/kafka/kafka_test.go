@@ -127,40 +127,22 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
-	// In TiCDC logic, resolved ts event will always notify the flush loop. Here we
-	// trigger the flushedNotifier periodically to prevent the flush loop block.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Millisecond * 100):
-				producer.flushedNotifier.Notify()
-			}
-		}
-	}()
-
 	err = producer.Flush(ctx)
 	c.Assert(err, check.IsNil)
-	expected := []struct {
-		flushed uint64
-		sent    uint64
-	}{
-		{100, 100},
-		{100, 100},
-	}
-	c.Assert(producer.partitionOffset, check.DeepEquals, expected)
 	select {
 	case err := <-errCh:
 		c.Fatalf("unexpected err: %s", err)
 	default:
 	}
+	producer.mu.Lock()
+	c.Assert(producer.mu.inflight, check.Equals, int64(0))
+	producer.mu.Unlock()
 	// check no events to flush
 	err = producer.Flush(ctx)
 	c.Assert(err, check.IsNil)
+	producer.mu.Lock()
+	c.Assert(producer.mu.inflight, check.Equals, int64(0))
+	producer.mu.Unlock()
 
 	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
 		Key:   []byte("test-broadcast"),
@@ -174,7 +156,6 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	err = producer.Close()
 	c.Assert(err, check.IsNil)
 	cancel()
-	wg.Wait()
 
 	// check send messages when context is canceled or producer closed
 	err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
