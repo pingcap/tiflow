@@ -402,7 +402,13 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 			require.Nil(t, err)
 			continue
 		}
-		params = append(params, col.Value)
+		if col.Type == mysql.TypeEnum {
+			params = append(params, col.Value.(types.Enum).Value)
+		} else if col.Type == mysql.TypeSet {
+			params = append(params, col.Value.(types.Set).Value)
+		} else {
+			params = append(params, col.Value)
+		}
 		if col.Type == mysql.TypeJSON {
 			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
 		} else {
@@ -880,7 +886,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res: uint64(0),
+			Res: types.Enum{Value: 0, Name: "e0"},
 		},
 		// mysql.TypeEnum + notnull + default
 		{
@@ -903,7 +909,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: uint64(0),
+			Res: types.Set{},
 		},
 		// mysql.TypeSet + notnull + default
 		{
