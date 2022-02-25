@@ -102,7 +102,7 @@ func (sm *saramaMetricsMonitor) CollectMetrics() {
 	}
 }
 
-func NewSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
+func newSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string) *saramaMetricsMonitor {
 	return &saramaMetricsMonitor{
 		captureAddr:  captureAddr,
 		changefeedID: changefeedID,

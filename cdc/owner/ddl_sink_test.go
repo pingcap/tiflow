@@ -23,17 +23,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
-var _ = check.Suite(&asyncSinkSuite{})
+var _ = check.Suite(&ddlSinkSuite{})
 
-type asyncSinkSuite struct {
-}
+type ddlSinkSuite struct{}
 
 type mockSink struct {
 	sink.Sink
@@ -70,23 +68,26 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 	return m.ddl
 }
 
-func newAsyncSink4Test(ctx cdcContext.Context, c *check.C) (cdcContext.Context, AsyncSink, *mockSink) {
-	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID:   "test-changefeed",
-		Info: &model.ChangeFeedInfo{SinkURI: "blackhole://", Config: config.GetDefaultReplicaConfig()},
-	})
-	sink, err := newAsyncSink(ctx)
-	c.Assert(err, check.IsNil)
+func newDDLSink4Test() (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	sink.(*asyncSinkImpl).sink = mockSink
-	return ctx, sink, mockSink
+	ddlSink := newDDLSink()
+	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
+		a.sink = mockSink
+		return nil
+	}
+	return ddlSink, mockSink
 }
 
-func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
+func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
+	ddlSink, mSink := newDDLSink4Test()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer func() {
+		cancel()
+		ddlSink.close(ctx)
+	}()
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
 	waitCheckpointGrowingUp := func(m *mockSink, targetTs model.Ts) error {
 		return retry.Do(context.Background(), func() error {
@@ -96,88 +97,92 @@ func (s *asyncSinkSuite) TestCheckpoint(c *check.C) {
 			return nil
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
 	}
-	sink.EmitCheckpointTs(ctx, 1)
+	ddlSink.emitCheckpointTs(ctx, 1)
 	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)
-	sink.EmitCheckpointTs(ctx, 10)
+	ddlSink.emitCheckpointTs(ctx, 10)
 	c.Assert(waitCheckpointGrowingUp(mSink, 10), check.IsNil)
 }
 
-func (s *asyncSinkSuite) TestExecDDL(c *check.C) {
+func (s *ddlSinkSuite) TestExecDDL(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
-	ddl1 := &model.DDLEvent{CommitTs: 1}
-	for {
-		done, err := sink.EmitDDLEvent(ctx, ddl1)
-		c.Assert(err, check.IsNil)
-		if done {
-			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
-			break
-		}
+	ddlSink, mSink := newDDLSink4Test()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer func() {
+		cancel()
+		ddlSink.close(ctx)
+	}()
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+
+	ddlEvents := []*model.DDLEvent{
+		{CommitTs: 1},
+		{CommitTs: 2},
+		{CommitTs: 3},
 	}
-	ddl2 := &model.DDLEvent{CommitTs: 2}
-	ddl3 := &model.DDLEvent{CommitTs: 3}
-	_, err := sink.EmitDDLEvent(ctx, ddl2)
-	c.Assert(err, check.IsNil)
-	for {
-		done, err := sink.EmitDDLEvent(ctx, ddl2)
-		c.Assert(err, check.IsNil)
-		if done {
-			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
-			break
-		}
-	}
-	_, err = sink.EmitDDLEvent(ctx, ddl3)
-	c.Assert(err, check.IsNil)
-	for {
-		done, err := sink.EmitDDLEvent(ctx, ddl3)
-		c.Assert(err, check.IsNil)
-		if done {
-			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl3)
-			break
+
+	for _, event := range ddlEvents {
+		for {
+			done, err := ddlSink.emitDDLEvent(ctx, event)
+			c.Assert(err, check.IsNil)
+			if done {
+				c.Assert(mSink.GetDDL(), check.DeepEquals, event)
+				break
+			}
 		}
 	}
 }
 
-func (s *asyncSinkSuite) TestExecDDLError(c *check.C) {
+func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
 	defer testleak.AfterTest(c)()
-	ctx := cdcContext.NewBackendContext4Test(false)
-	var resultErr error
-	var resultErrMu sync.Mutex
-	getResultErr := func() error {
+	ctx := cdcContext.NewBackendContext4Test(true)
+
+	var (
+		resultErr   error
+		resultErrMu sync.Mutex
+	)
+	readResultErr := func() error {
 		resultErrMu.Lock()
 		defer resultErrMu.Unlock()
 		return resultErr
 	}
+
+	ddlSink, mSink := newDDLSink4Test()
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		resultErrMu.Lock()
 		defer resultErrMu.Unlock()
 		resultErr = err
 		return nil
 	})
-	ctx, sink, mSink := newAsyncSink4Test(ctx, c)
-	defer sink.Close(ctx)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer func() {
+		cancel()
+		ddlSink.close(ctx)
+	}()
+
+	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
+
 	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
-		done, err := sink.EmitDDLEvent(ctx, ddl1)
+		done, err := ddlSink.emitDDLEvent(ctx, ddl1)
 		c.Assert(err, check.IsNil)
 		if done {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
 			break
 		}
 	}
-	c.Assert(getResultErr(), check.IsNil)
+	c.Assert(resultErr, check.IsNil)
+
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {
-		done, err := sink.EmitDDLEvent(ctx, ddl2)
+		done, err := ddlSink.emitDDLEvent(ctx, ddl2)
 		c.Assert(err, check.IsNil)
-		if done || getResultErr() != nil {
+
+		if done || readResultErr() != nil {
 			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(errors.Cause(getResultErr())), check.IsTrue)
+	c.Assert(cerror.ErrExecDDLFailed.Equal(readResultErr()), check.IsTrue)
 }
