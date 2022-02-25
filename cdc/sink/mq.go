@@ -54,7 +54,7 @@ const (
 
 type mqSink struct {
 	mqProducer     producer.Producer
-	dispatcher     dispatcher.Dispatcher
+	eventRouter    *dispatcher.EventRouter
 	encoderBuilder codec.EncoderBuilder
 	filter         *filter.Filter
 	protocol       config.Protocol
@@ -71,7 +71,7 @@ type mqSink struct {
 
 func newMqSink(
 	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	filter *filter.Filter, defaultTopic string, replicaConfig *config.ReplicaConfig, opts map[string]string,
 	errCh chan error,
 ) (*mqSink, error) {
 	var protocol config.Protocol
@@ -89,7 +89,7 @@ func newMqSink(
 	}
 
 	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
+	d, err := dispatcher.NewEventRouter(replicaConfig, partitionNum, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -111,7 +111,7 @@ func newMqSink(
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
-		dispatcher:     d,
+		eventRouter:    d,
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
 		protocol:       protocol,
@@ -158,7 +158,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 				zap.Any("role", k.role))
 			continue
 		}
-		partition := k.dispatcher.Dispatch(row)
+		_, partition := k.eventRouter.DispatchRowChangedEvent(row)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -342,7 +342,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, topic, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -376,7 +376,7 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, credential, producer, filter, "", replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
