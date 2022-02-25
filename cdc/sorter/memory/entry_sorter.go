@@ -145,6 +145,7 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 }
 
+// TryAddEntry tries to add an entry.
 func (es *EntrySorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return false, cerror.ErrSorterClosed.GenWithStackByArgs()

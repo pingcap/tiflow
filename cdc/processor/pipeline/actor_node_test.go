@@ -24,8 +24,8 @@ import (
 )
 
 func TestTryRun(t *testing.T) {
-	var pN AsyncMessageHolderFunc = func() *pipeline.Message { return nil }
-	var dp AsyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var pN asyncMessageHolderFunc = func() *pipeline.Message { return nil }
+	var dp asyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
 		return false, errors.New("error")
 	}
 	n := NewActorNode(pN, dp)

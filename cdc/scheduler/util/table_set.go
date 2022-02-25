@@ -52,8 +52,11 @@ func (r *TableRecord) Clone() *TableRecord {
 type TableStatus int32
 
 const (
+	// AddingTable is the status when a table is being added.
 	AddingTable = TableStatus(iota) + 1
+	// RemovingTable is the status when a table is being removed.
 	RemovingTable
+	// RunningTable is the status when a table is running.
 	RunningTable
 )
 

@@ -90,3 +90,24 @@ function restart_task() {
 			"\"unit\": \"Sync\"" 2
 	fi
 }
+
+function random_restart() {
+  modN=4
+  if [ $# -ge 1 ]; then
+    modN=$1
+  fi
+	mod=$(($RANDOM % $modN))
+	if [[ "$mod" == "0" ]]; then
+		echo "restart master"
+		restart_master
+	elif [[ "$mod" == "1" ]]; then
+		echo "restart worker1"
+		restart_worker1
+	elif [[ "$mod" == "2" ]]; then
+		echo "restart worker2"
+		restart_worker2
+	else
+		echo "restart task"
+		restart_task $cur/conf/double-source-optimistic.yaml
+	fi
+}

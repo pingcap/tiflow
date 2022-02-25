@@ -228,23 +228,6 @@ function DM_RESTART_TASK_MASTER_WORKER() {
 		"clean_table" "optimistic"
 }
 
-function random_restart() {
-	mod=$(($RANDOM % 4))
-	if [[ "$mod" == "0" ]]; then
-		echo "restart master"
-		restart_master
-	elif [[ "$mod" == "1" ]]; then
-		echo "restart worker1"
-		restart_worker1
-	elif [[ "$mod" == "2" ]]; then
-		echo "restart worker2"
-		restart_worker2
-	else
-		echo "restart task"
-		restart_task $cur/conf/double-source-optimistic.yaml
-	fi
-}
-
 function DM_STOP_TASK_FOR_A_SOURCE_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2);"
