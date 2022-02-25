@@ -78,7 +78,7 @@ func genValidationCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs 
 	}
 }
 
-func TestCondSelectMultiKey(t *testing.T) {
+func Test_validatorCond_SelectMultiKey(t *testing.T) {
 	var res *sql.Rows
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestCondSelectMultiKey(t *testing.T) {
 	require.NoError(t, res.Err())
 }
 
-func TestCondGetWhereArgs(t *testing.T) {
+func Test_validatorCond_GetWhereArgs(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()

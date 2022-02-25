@@ -37,16 +37,16 @@ func (c *Cond) GetWhere() string {
 	var b strings.Builder
 	pk := c.Table.PrimaryKey
 	isOneKey := len(pk.Columns) == 1
-	if !isOneKey {
+	if isOneKey {
+		b.WriteString(pk.Columns[0].Name.O)
+	} else {
 		b.WriteString("(")
-	}
-	for i := 0; i < len(pk.Columns); i++ {
-		if i != 0 {
-			b.WriteString(",")
+		for i := 0; i < len(pk.Columns); i++ {
+			if i != 0 {
+				b.WriteString(",")
+			}
+			b.WriteString(pk.Columns[i].Name.O)
 		}
-		b.WriteString(pk.Columns[i].Name.O)
-	}
-	if !isOneKey {
 		b.WriteString(")")
 	}
 	b.WriteString(" in (")

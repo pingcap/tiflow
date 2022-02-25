@@ -84,6 +84,7 @@ func (vw *validateWorker) run() {
 		case <-time.After(vw.interval):
 			err := vw.validateTableChange()
 			if err != nil {
+				// todo: better error handling
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
 				return
 			}

@@ -15,8 +15,6 @@ package syncer
 
 import (
 	"context"
-	"fmt"
-	"hash/fnv"
 	"strings"
 	"sync"
 	"time"
@@ -416,14 +414,8 @@ func (v *DataValidator) startValidateWorkers() {
 	}
 }
 
-func hashTablePk(s string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return h.Sum32()
-}
-
 func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
-	hashVal := int(hashTablePk(key)) % v.workerCnt
+	hashVal := int(utils.GenHashKey(key)) % v.workerCnt
 	v.workers[hashVal].rowChangeCh <- row
 }
 
@@ -500,7 +492,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		row := ev.Rows[i]
 		pkValue := make([]string, len(pk.Columns))
 		for _, idx := range pkIndices {
-			pkValue[idx] = fmt.Sprintf("%v", row[idx])
+			pkValue[idx] = string(genColData(row[idx]))
 		}
 		key := genRowKey(pkValue)
 
@@ -509,7 +501,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			afterRow := ev.Rows[i+1]
 			afterPkValue := make([]string, len(pk.Columns))
 			for _, idx := range pkIndices {
-				afterPkValue[idx] = fmt.Sprintf("%v", afterRow[idx])
+				afterPkValue[idx] = string(genColData(afterRow[idx]))
 			}
 			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {
