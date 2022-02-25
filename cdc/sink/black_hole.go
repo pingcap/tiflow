@@ -23,9 +23,9 @@ import (
 )
 
 // newBlackHoleSink creates a black hole sink
-func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
+func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
-		statistics: NewStatistics(ctx, "blackhole", opts),
+		statistics: NewStatistics(ctx, "blackhole"),
 	}
 }
 

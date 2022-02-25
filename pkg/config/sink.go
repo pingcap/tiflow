@@ -44,6 +44,7 @@ type DispatchRule struct {
 	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
 }
 
+// ColumnSelector represents a column selector for a table.
 type ColumnSelector struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	Columns []string `toml:"columns" json:"columns"`

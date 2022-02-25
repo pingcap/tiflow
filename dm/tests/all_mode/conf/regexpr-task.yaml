@@ -1,0 +1,47 @@
+---
+name: regexprtest
+task-mode: all
+is-sharding: false
+meta-schema: "dm_meta"
+timezone: "+04:00"
+# enable-heartbeat: true
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+  session:
+    tidb_skip_utf8_check: 1
+    tidb_disable_txn_auto_retry: off
+    tidb_retry_limit: "10"
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    route-rules: ["rule1"]
+    block-allow-list: "balist1"
+    loader:
+      import-mode: "loader"
+  - source-id: "mysql-replica-02"
+    route-rules: ["rule2"]
+    block-allow-list: "balist1"
+    loader:
+      import-mode: "loader"
+
+routes:
+  rule1:
+    schema-pattern: "~test2?[animal|human]"
+    table-pattern: "~tbl.*[cat|dog]+"
+    target-schema: "dtest2"
+    target-table: "dtable2"
+  rule2:
+    schema-pattern: "test4s_*"
+    table-pattern: "~testtable_[donot_delete]?"
+    target-schema: "dtest4"
+    target-table: "dtable4"
+
+block-allow-list:
+  balist1:
+    do-dbs: ["~test2?[animal|human]", "test4s_*"]

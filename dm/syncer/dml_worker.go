@@ -37,7 +37,7 @@ type DMLWorker struct {
 	chanSize     int
 	multipleRows bool
 	toDBConns    []*dbconn.DBConn
-	tctx         *tcontext.Context
+	syncCtx      *tcontext.Context
 	logger       log.Logger
 
 	// for metrics
@@ -76,7 +76,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		fatalFunc:            syncer.fatalFunc,
 		lagFunc:              syncer.updateReplicationJobTS,
 		updateJobMetricsFunc: syncer.updateJobMetrics,
-		tctx:                 syncer.tctx,
+		syncCtx:              syncer.syncCtx, // this ctx can be used to cancel all the workers
 		toDBConns:            syncer.toDBConns,
 		inCh:                 inCh,
 		flushCh:              make(chan *job),
@@ -113,7 +113,6 @@ func (w *DMLWorker) run() {
 	for i := 0; i < w.workerCount; i++ {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
-
 	for j := range w.inCh {
 		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
@@ -250,7 +249,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		time.Sleep(time.Duration(t) * time.Second)
 	})
 	// use background context to execute sqls as much as possible
-	ctx, cancel := w.tctx.WithTimeout(maxDMLExecutionDuration)
+	ctx, cancel := w.syncCtx.WithTimeout(maxDMLExecutionDuration)
 	defer cancel()
 	affect, err = db.ExecuteSQL(ctx, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
