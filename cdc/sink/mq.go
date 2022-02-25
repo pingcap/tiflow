@@ -195,10 +195,6 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			err = k.mqProducer.Flush(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
