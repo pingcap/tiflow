@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/shopspring/decimal"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -551,4 +553,17 @@ func getRowChangeType(t replication.EventType) rowChangeType {
 
 func genRowKey(pkValues []string) string {
 	return strings.Join(pkValues, "-")
+}
+
+func genColData(v interface{}) []byte {
+	switch dv := v.(type) {
+	case []byte:
+		return dv
+	case string:
+		return []byte(dv)
+	case decimal.Decimal:
+		return []byte(dv.String())
+	}
+	s := fmt.Sprintf("%v", v)
+	return []byte(s)
 }

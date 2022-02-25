@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/shopspring/decimal"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -344,17 +343,4 @@ func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData 
 		rowMap[r.key] = colValues
 	}
 	return rowMap
-}
-
-func genColData(v interface{}) []byte {
-	switch dv := v.(type) {
-	case []byte:
-		return dv
-	case string:
-		return []byte(dv)
-	case decimal.Decimal:
-		return []byte(dv.String())
-	}
-	s := fmt.Sprintf("%v", v)
-	return []byte(s)
 }

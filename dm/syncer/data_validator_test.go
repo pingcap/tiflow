@@ -24,6 +24,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -442,4 +443,17 @@ func Test_validator_getRowChangeType(t *testing.T) {
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv0))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv1))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv2))
+}
+
+func Test_validator_genColData(t *testing.T) {
+	res := genColData(1)
+	require.Equal(t, "1", string(res))
+	res = genColData(1.2)
+	require.Equal(t, "1.2", string(res))
+	res = genColData("abc")
+	require.Equal(t, "abc", string(res))
+	res = genColData([]byte{'\x01', '\x02', '\x03'})
+	require.Equal(t, "\x01\x02\x03", string(res))
+	res = genColData(decimal.NewFromInt(222123123))
+	require.Equal(t, "222123123", string(res))
 }

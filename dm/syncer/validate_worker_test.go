@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -416,17 +415,4 @@ func Test_ValidatorWorker_getSourceRowsForCompare(t *testing.T) {
 	require.Equal(t, []byte("1"), rows["a"][1].Data)
 	require.Equal(t, []byte("1"), rows["b"][0].Data)
 	require.Equal(t, []byte("2"), rows["b"][1].Data)
-}
-
-func Test_ValidatorWorker_genColData(t *testing.T) {
-	res := genColData(1)
-	require.Equal(t, "1", string(res))
-	res = genColData(1.2)
-	require.Equal(t, "1.2", string(res))
-	res = genColData("abc")
-	require.Equal(t, "abc", string(res))
-	res = genColData([]byte{'\x01', '\x02', '\x03'})
-	require.Equal(t, "\x01\x02\x03", string(res))
-	res = genColData(decimal.NewFromInt(222123123))
-	require.Equal(t, "222123123", string(res))
 }
