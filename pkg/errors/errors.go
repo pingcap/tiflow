@@ -19,6 +19,9 @@ import (
 
 // errors
 var (
+	// general errors
+	ErrUnimplemented = errors.Normalize("unimplemented %s", errors.RFCCodeText("CDC:ErrUnimplemented"))
+
 	// kv related errors
 	ErrWriteTsConflict         = errors.Normalize("write ts conflict", errors.RFCCodeText("CDC:ErrWriteTsConflict"))
 	ErrChangeFeedNotExists     = errors.Normalize("changefeed not exists, %s", errors.RFCCodeText("CDC:ErrChangeFeedNotExists"))

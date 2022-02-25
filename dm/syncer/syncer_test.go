@@ -1212,11 +1212,11 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *C) {
 	filename := filepath.Join(s.cfg.Dir, "metadata")
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: BAD METADATA"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), NotNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), NotNil)
 
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: mysql-bin.000003\n\tPos: 1234\n\tGTID:\n\n"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), IsNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), IsNil)
 
 	c.Assert(os.Remove(filename), IsNil)
 

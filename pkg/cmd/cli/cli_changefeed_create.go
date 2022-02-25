@@ -218,7 +218,7 @@ func (o *createChangefeedOptions) completeCfg(
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.Dispatcher) {
+		switch strings.ToLower(rules.PartitionRule) {
 		case "rowid", "index-value":
 			if cfg.EnableOldValue {
 				cmd.Printf("[WARN] This index-value distribution mode "+
