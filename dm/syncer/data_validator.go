@@ -112,7 +112,6 @@ type DataValidator struct {
 	result           pb.ProcessResult
 	validateInterval time.Duration
 	workers          []*validateWorker
-	rowsEventChan    chan *replication.BinlogEvent // unbuffered is enough
 	changeEventCount []atomic.Int64
 	workerCnt        int
 
@@ -133,7 +132,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
 	v.workers = make([]*validateWorker, v.workerCnt)
-	v.rowsEventChan = make(chan *replication.BinlogEvent)
 	v.changeEventCount = make([]atomic.Int64, 4)
 	v.validateInterval = validationInterval
 
