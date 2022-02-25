@@ -467,11 +467,11 @@ func formatColVal(datum types.Datum, tp byte) (
 		v := d.String()
 		return v, sizeOfString(v), "", nil
 	case mysql.TypeEnum:
-		v := datum.GetMysqlEnum().Value
+		v := datum.GetMysqlEnum()
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeSet:
-		v := datum.GetMysqlSet().Value
+		v := datum.GetMysqlSet()
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:

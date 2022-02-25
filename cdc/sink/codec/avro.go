@@ -293,7 +293,7 @@ func getAvroDataTypeFallback(v interface{}) (string, error) {
 var unsignedLongAvroType = avroLogicalType{
 	Type:        "bytes",
 	LogicalType: decimalType,
-	Precision:   8,
+	Precision:   64,
 	Scale:       0,
 }
 
@@ -305,6 +305,9 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeDouble:
 		return "double", nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		if col.Flag.IsBinary() {
+			return "bytes", nil
+		}
 		return "string", nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		return avroLogicalType{
@@ -317,9 +320,9 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 			LogicalType: timeMillis,
 		}, nil
 	case mysql.TypeEnum:
-		return unsignedLongAvroType, nil
+		return "string", nil
 	case mysql.TypeSet:
-		return unsignedLongAvroType, nil
+		return "string", nil
 	case mysql.TypeBit:
 		return unsignedLongAvroType, nil
 	case mysql.TypeNewDecimal:
@@ -341,7 +344,10 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeJSON:
 		return "string", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		return "bytes", nil
+		if col.Flag.IsBinary() {
+			return "bytes", nil
+		}
+		return "string", nil
 	case mysql.TypeYear:
 		return "long", nil
 	default:
@@ -434,7 +440,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if col.Flag.IsBinary() {
 			switch val := col.Value.(type) {
 			case string:
@@ -459,9 +465,9 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
-		return handleUnsignedInt64()
+		return col.Value.(types.Enum).Name, "string", nil
 	case mysql.TypeSet:
-		return handleUnsignedInt64()
+		return col.Value.(types.Set).Name, "string", nil
 	case mysql.TypeBit:
 		return handleUnsignedInt64()
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -149,6 +150,18 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 						if value.Data[v.Name] != string(v.Value.([]byte)) {
 							value.Old[v.Name] = string(v.Value.([]byte))
 						}
+					}
+				case mysql.TypeEnum:
+					if v.Value == nil {
+						value.Old[v.Name] = nil
+					} else {
+						value.Old[v.Name] = v.Value.(types.Enum).Value
+					}
+				case mysql.TypeSet:
+					if v.Value == nil {
+						value.Old[v.Name] = nil
+					} else {
+						value.Old[v.Name] = v.Value.(types.Set).Value
 					}
 				default:
 					if value.Data[v.Name] != v.Value {
