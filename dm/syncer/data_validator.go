@@ -66,6 +66,7 @@ const (
 // change of table
 // binlog changes are clustered into table changes
 // the validator validates changes of table-grain at a time.
+//nolint
 type tableChange struct {
 	table *validateTableInfo
 	rows  map[string]*rowChange
@@ -79,7 +80,8 @@ type rowChange struct {
 	data       []interface{}
 	theType    rowChangeType
 	lastMeetTS int64 // the last meet timestamp(in seconds)
-	failedCnt  int   // failed count
+	//nolint
+	failedCnt int // failed count
 }
 
 // DataValidator
@@ -113,7 +115,6 @@ type DataValidator struct {
 
 	result           pb.ProcessResult
 	validateInterval time.Duration
-	workers          []*validateWorker
 	changeEventCount []atomic.Int64
 	workerCnt        int
 
@@ -133,7 +134,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
-	v.workers = make([]*validateWorker, v.workerCnt)
 	v.changeEventCount = make([]atomic.Int64, 4)
 	v.validateInterval = validationInterval
 
@@ -403,20 +403,9 @@ func (v *DataValidator) Stage() pb.Stage {
 }
 
 func (v *DataValidator) startValidateWorkers() {
-	v.wg.Add(v.workerCnt)
-	for i := 0; i < v.workerCnt; i++ {
-		worker := newValidateWorker(v, i)
-		v.workers[i] = worker
-		go func() {
-			v.wg.Done()
-			worker.run()
-		}()
-	}
 }
 
 func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
-	hashVal := int(utils.GenHashKey(key)) % v.workerCnt
-	v.workers[hashVal].rowChangeCh <- row
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {

@@ -88,6 +88,7 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 	return cfg
 }
 
+//nolint
 func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBConn {
 	t.Helper()
 	baseDB := conn.NewBaseDB(db, func() {})
