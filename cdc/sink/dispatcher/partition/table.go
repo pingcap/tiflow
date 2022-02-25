@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,26 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/hash"
 )
 
-type tableDispatcher struct {
+// TableDispatcher is a partition dispatcher which dispatches events
+// based on the schema and table name.
+type TableDispatcher struct {
 	partitionNum int32
 	hasher       *hash.PositionInertia
 }
 
-func newTableDispatcher(partitionNum int32) *tableDispatcher {
-	return &tableDispatcher{
+// NewTableDispatcher creates a TableDispatcher.
+func NewTableDispatcher(partitionNum int32) *TableDispatcher {
+	return &TableDispatcher{
 		partitionNum: partitionNum,
 		hasher:       hash.NewPositionInertia(),
 	}
 }
 
-func (t *tableDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+// DispatchRowChangedEvent returns the target partition to which
+// a row changed event should be dispatched.
+func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
 	t.hasher.Reset()
 	// distribute partition by table
 	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))

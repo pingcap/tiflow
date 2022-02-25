@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"testing"
@@ -25,7 +25,7 @@ func TestTableDispatcher(t *testing.T) {
 
 	testCases := []struct {
 		row             *model.RowChangedEvent
-		exceptPartition int32
+		expectPartition int32
 	}{
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -33,52 +33,52 @@ func TestTableDispatcher(t *testing.T) {
 				Table:  "t1",
 			},
 			CommitTs: 1,
-		}, exceptPartition: 15},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 2,
-		}, exceptPartition: 15},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 3,
-		}, exceptPartition: 15},
+		}, expectPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 1,
-		}, exceptPartition: 5},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 2,
-		}, exceptPartition: 5},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 3,
-		}, exceptPartition: 5},
+		}, expectPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t3",
 			},
 			CommitTs: 3,
-		}, exceptPartition: 3},
+		}, expectPartition: 3},
 	}
-	p := newTableDispatcher(16)
+	p := NewTableDispatcher(16)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }

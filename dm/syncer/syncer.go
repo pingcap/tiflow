@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -44,7 +43,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	common2 "github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -59,6 +57,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -417,6 +416,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-checkpoint", Fn: s.checkpoint.Close})
 
 	err = s.checkpoint.Load(tctx)
@@ -1251,7 +1251,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 
 	s.logAndClearFilteredStatistics()
 
-	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" && s.cli != nil {
 		clone := *s.cliArgs
 		clone.StartTime = ""
 		err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone)
@@ -1568,7 +1568,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// some initialization that can't be put in Syncer.Init
 	if fresh && !skipLoadMeta {
 		// for fresh task, we try to load checkpoints from meta (file or config item)
-		err = s.checkpoint.LoadMeta()
+		err = s.checkpoint.LoadMeta(runCtx)
 		if err != nil {
 			return err
 		}
@@ -1625,9 +1625,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
+
+	failpoint.Inject("S3GetDumpFilesCheck", func() {
+		cleanDumpFile = false
+	})
+
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = os.RemoveAll(s.cfg.Dir); err != nil {
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
 			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
@@ -3187,10 +3192,12 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-
-	files, err := utils.CollectDirFiles(s.cfg.Dir)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
+		failpoint.Inject("S3GetDumpFilesCheck", func() {
+			panic(errors.Annotate(err, "fail to get dump files"))
+		})
 		return err
 	}
 	var dbs, tables []string
@@ -3228,12 +3235,12 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		filepath := path.Join(s.cfg.Dir, file)
-		content, err2 := common2.GetFileContent(filepath)
+		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("file", filepath),
+				zap.String("path", s.cfg.LoaderConfig.Dir),
+				zap.String("file", file),
 				zap.Error(err))
 			setFirstErr(err2)
 			continue
@@ -3247,7 +3254,8 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			err = s.schemaTracker.Exec(ctx, db, string(stmt))
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
-					zap.Any("file", filepath),
+					zap.Any("path", s.cfg.LoaderConfig.Dir),
+					zap.Any("file", file),
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)
@@ -3733,6 +3741,9 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 
 // delLoadTask is called when finish restoring data, to delete load worker in etcd.
 func (s *Syncer) delLoadTask() error {
+	if s.cli == nil {
+		return nil
+	}
 	_, _, err := ha.DelLoadTask(s.cli, s.cfg.Name, s.cfg.SourceID)
 	if err != nil {
 		return err
