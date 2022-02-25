@@ -209,18 +209,25 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
+	currentTs := oracle.GetPhysical(pdTime)
+
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
-		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
-		c.updateStatus(currentTs, newCheckpointTs, newResolvedTs)
+		c.updateStatus(newCheckpointTs, newResolvedTs)
+		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+	} else if c.state.Status != nil {
+		// We should keep the metrics updated even if the scheduler cannot
+		// advance the watermarks for now.
+		c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 	}
 	return nil
 }
@@ -546,7 +553,17 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
+
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+}
+
+func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
@@ -562,13 +579,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		return status, changed, nil
 	})
-	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
-
-	phyRTs := oracle.ExtractPhysical(resolvedTs)
-	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
-	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
