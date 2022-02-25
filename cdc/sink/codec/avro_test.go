@@ -71,6 +71,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
 			{"name": "mystring", "type": ["null", "string"], "default": null},
+			{"name": "myenum", "type": ["null", "string"], "default": null},
 			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
           ]
         }`)
@@ -89,6 +90,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeBlob},
 		{Name: "mystring", Value: "Hello World", Type: mysql.TypeBlob},
+		{Name: "myenum", Value: types.Enum{Value: 1, Name: "v"}, Type: mysql.TypeEnum},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 		{Name: "myjson", Value: "{\"foo\": \"bar\"}", Type: mysql.TypeJSON},
 	}, time.Local)
@@ -114,7 +116,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 			{"name": "myint", "type": ["null", "int"], "default": null},
 			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
-			{"name": "mybytes", "type": ["null", "string"], "default": null},
+			{"name": "mystring", "type": ["null", "string"], "default": null},
 			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
           ]
         }`)
@@ -135,7 +137,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
-		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
+		{Name: "mystring", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: timestamp.In(location).Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	}, location)
 	c.Assert(err, check.IsNil)
