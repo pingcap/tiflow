@@ -275,7 +275,7 @@ func newSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedI
 	}
 }
 
-func (sm *saramaMetricsMonitor) Cleanup() {
+func (sm *saramaMetricsMonitor) cleanup() {
 	sm.cleanUpProducerMetrics()
 	if err := sm.cleanUpBrokerMetrics(); err != nil {
 		log.Warn("clean up broker metrics failed", zap.Error(err))

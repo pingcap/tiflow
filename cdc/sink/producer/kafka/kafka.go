@@ -222,6 +222,7 @@ type kafkaSaramaProducer struct {
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
 	syncProducer  sarama.SyncProducer
+
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
 	topic             string
@@ -427,7 +428,7 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
+	k.metricsMonitor.cleanup()
 
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
@@ -561,7 +562,8 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err))
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("changefeed", k.id), zap.Any("role", role))
 			}
 		}
 	}()
