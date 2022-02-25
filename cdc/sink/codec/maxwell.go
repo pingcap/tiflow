@@ -298,11 +298,6 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 	return []*MQMessage{ret}
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	return nil
-}
-
 // Reset implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) Reset() {
 	d.keyBuf.Reset()

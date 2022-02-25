@@ -40,8 +40,9 @@ type SinkConfig struct {
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
-	Matcher    []string `toml:"matcher" json:"matcher"`
-	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
+	Matcher       []string `toml:"matcher" json:"matcher"`
+	PartitionRule string   `toml:"dispatcher" json:"dispatcher"`
+	TopicRule     string   `toml:"topic" json:"topic"`
 }
 
 // ColumnSelector represents a column selector for a table.
