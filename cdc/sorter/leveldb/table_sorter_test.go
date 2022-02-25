@@ -39,7 +39,7 @@ func newTestSorter(
 	mb := actor.NewMailbox(1, capacity)
 	router.InsertMailbox4Test(id, mb)
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	compact := NewCompactScheduler(nil, cfg)
+	compact := NewCompactScheduler(nil)
 	ls := NewSorter(ctx, 1, 1, router, id, compact, cfg)
 	return ls, mb
 }
@@ -172,7 +172,7 @@ func TestWaitInput(t *testing.T) {
 	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
 	defer dcancel()
 	cts, rts, n, err = ls.wait(dctx, false, eventsBuf)
-	require.Regexp(t, err, "context deadline exceeded")
+	require.Regexp(t, "context deadline exceeded", err)
 	require.Equal(t, 0, n)
 	require.EqualValues(t, 0, cts)
 	require.EqualValues(t, 0, rts)
@@ -205,7 +205,7 @@ func TestWaitOutput(t *testing.T) {
 	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
 	defer dcancel()
 	cts, rts, n, err = ls.wait(dctx, waitOutput, eventsBuf)
-	require.Regexp(t, err, "context deadline exceeded")
+	require.Regexp(t, "context deadline exceeded", err)
 	require.Equal(t, 0, n)
 	require.EqualValues(t, 0, cts)
 	require.EqualValues(t, 0, rts)
@@ -275,11 +275,9 @@ func TestBuildTask(t *testing.T) {
 			expectedEvents[key] = []byte{}
 		}
 		require.EqualValues(t, message.Task{
-			UID:                ls.uid,
-			TableID:            ls.tableID,
-			Events:             expectedEvents,
-			Cleanup:            false,
-			CleanupRatelimited: false,
+			UID:      ls.uid,
+			TableID:  ls.tableID,
+			WriteReq: expectedEvents,
 		}, task, "case #%d, %v", i, cs)
 	}
 }
@@ -673,7 +671,7 @@ func TestOutputIterEvents(t *testing.T) {
 		iter := db.Iterator(
 			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
 			encoding.EncodeTsKey(ls.uid, ls.tableID, cs.maxResolvedTs+1))
-		iter.First()
+		iter.Seek([]byte(""))
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
 		hasReadLastNext, exhaustedRTs, err :=
 			ls.outputIterEvents(iter, cs.hasReadNext, buf, cs.maxResolvedTs)
@@ -706,14 +704,13 @@ func TestStateIterator(t *testing.T) {
 	sema := semaphore.NewWeighted(1)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
 		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	mb := actor.NewMailbox(1, 1)
 	router := actor.NewRouter(t.Name())
 	router.InsertMailbox4Test(mb.ID(), mb)
 	state := pollState{
 		actorID:               mb.ID(),
 		iterFirstSlowDuration: 100 * time.Second,
-		compact:               NewCompactScheduler(router, cfg),
+		compact:               NewCompactScheduler(router),
 		iterMaxAliveDuration:  100 * time.Millisecond,
 		metricIterFirst:       metricIterDuration.WithLabelValues("first"),
 		metricIterRelease:     metricIterDuration.WithLabelValues("release"),
@@ -755,7 +752,7 @@ func TestStateIterator(t *testing.T) {
 		Iterator: db.Iterator([]byte{}, []byte{0xff}),
 		Sema:     sema,
 	}
-	require.True(t, state.iter.First())
+	require.True(t, state.iter.Seek([]byte("")))
 	state.iterAliveTime = time.Now()
 	time.Sleep(2 * state.iterMaxAliveDuration)
 	require.Nil(t, state.tryReleaseIterator())

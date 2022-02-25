@@ -581,7 +581,7 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	defer cancel()
 
 	l.newFileJobQueue()
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
@@ -763,7 +763,7 @@ func (l *Loader) Restore(ctx context.Context) error {
 				}
 			}
 			if l.cfg.CleanDumpFile {
-				cleanDumpFiles(l.cfg)
+				cleanDumpFiles(ctx, l.cfg)
 			}
 		}
 	} else if errors.Cause(err) != context.Canceled {
