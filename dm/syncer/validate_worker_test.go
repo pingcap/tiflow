@@ -16,11 +16,269 @@ package syncer
 import (
 	"context"
 	"database/sql/driver"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
+
+// split into 3 cases, since it may be unstable when put together.
+func Test_ValidatorWorker_run_insert_update(t *testing.T) {
+	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
+	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
+		"create table tbl1(a int primary key, b varchar(100))")
+
+	cfg := genSubtaskConfig(t)
+	_, mock, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.Start(pb.Stage_Stopped)
+	defer validator.cancel()
+
+	// insert & update same table, one success, one fail
+	worker := newValidateWorker(validator, 0)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "1",
+		pkValues:   []string{"1"},
+		data:       []interface{}{1, "a"},
+		theType:    rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	}
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "1",
+		pkValues:   []string{"1"},
+		data:       []interface{}{1, "b"},
+		theType:    rowUpdated,
+		lastMeetTS: time.Now().Unix(),
+	}
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "2",
+		pkValues:   []string{"2"},
+		data:       []interface{}{2, "2b"},
+		theType:    rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	}
+	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.receivedRowCount.Load() == 3
+	}))
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.validationCount.Load() > 0
+	}))
+	validator.cancel()
+	wg.Wait()
+	require.Equal(t, int64(3), worker.receivedRowCount.Load())
+	require.Equal(t, int64(2), worker.pendingRowCount.Load())
+	require.Len(t, worker.pendingChangesMap, 1)
+	require.Contains(t, worker.pendingChangesMap, tbl1.String())
+	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 2)
+	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "1")
+	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].theType)
+	require.Equal(t, int(worker.validationCount.Load()), worker.pendingChangesMap[tbl1.String()].rows["1"].failedCnt)
+	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "2")
+	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].theType)
+	require.Equal(t, int(worker.validationCount.Load()), worker.pendingChangesMap[tbl1.String()].rows["2"].failedCnt)
+}
+
+func Test_ValidatorWorker_run_all_validated(t *testing.T) {
+	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
+	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
+		"create table tbl1(a int primary key, b varchar(100))")
+
+	cfg := genSubtaskConfig(t)
+	_, mock, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.Start(pb.Stage_Stopped)
+	defer validator.cancel()
+
+	// insert & update same table, one success, one fail
+	worker := newValidateWorker(validator, 0)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "1",
+		pkValues:   []string{"1"},
+		data:       []interface{}{1, "a"},
+		theType:    rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	}
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "1",
+		pkValues:   []string{"1"},
+		data:       []interface{}{1, "b"},
+		theType:    rowUpdated,
+		lastMeetTS: time.Now().Unix(),
+	}
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo1,
+		key:        "2",
+		pkValues:   []string{"2"},
+		data:       []interface{}{2, "2b"},
+		theType:    rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	}
+	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "b").AddRow(2, "2b"))
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.receivedRowCount.Load() == 3
+	}))
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.validationCount.Load() > 0
+	}))
+	validator.cancel()
+	wg.Wait()
+	require.Equal(t, int64(3), worker.receivedRowCount.Load())
+	require.Equal(t, int64(0), worker.pendingRowCount.Load())
+	require.Len(t, worker.pendingChangesMap, 0)
+}
+
+func Test_ValidatorWorker_run_delete(t *testing.T) {
+	tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
+	tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
+	tableInfo2 := genValidateTableInfo(t, tbl2.Schema, tbl2.Name,
+		"create table tbl2(a varchar(100) primary key, b varchar(100))")
+	tableInfo3 := genValidateTableInfo(t, tbl3.Schema, tbl3.Name,
+		"create table tbl3(a varchar(100) primary key, b varchar(100))")
+
+	cfg := genSubtaskConfig(t)
+	_, mock, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.Start(pb.Stage_Stopped)
+	defer validator.cancel()
+
+	worker := newValidateWorker(validator, 0)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo2,
+		key:        "a",
+		pkValues:   []string{"a"},
+		data:       []interface{}{"a", "b"},
+		theType:    rowDeleted,
+		lastMeetTS: time.Now().Unix(),
+	}
+	worker.rowChangeCh <- &rowChange{
+		table:      tableInfo3,
+		key:        "aa",
+		pkValues:   []string{"aa"},
+		data:       []interface{}{"aa", "b"},
+		theType:    rowDeleted,
+		lastMeetTS: time.Now().Unix(),
+	}
+	mock.ExpectQuery("SELECT .* FROM .*tbl2.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}))
+	mock.ExpectQuery("SELECT .* FROM .*tbl3.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}).AddRow("aa", "b"))
+
+	// wait all events received by worker
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.receivedRowCount.Load() == 2
+	}))
+	currCnt := worker.validationCount.Load()
+	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
+		return worker.validationCount.Load() > currCnt
+	}))
+	validator.cancel()
+	wg.Wait()
+
+	require.Equal(t, int64(1), worker.pendingRowCount.Load())
+	require.Len(t, worker.pendingChangesMap, 1)
+	require.Contains(t, worker.pendingChangesMap, tbl3.String())
+	require.Len(t, worker.pendingChangesMap[tbl3.String()].rows, 1)
+	require.Contains(t, worker.pendingChangesMap[tbl3.String()].rows, "aa")
+	require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].theType)
+}
+
+func Test_ValidatorWorker_compareData(t *testing.T) {
+	worker := validateWorker{}
+	eq, err := worker.compareData([]*dbutil.ColumnData{{Data: []byte("1")}},
+		[]*dbutil.ColumnData{{IsNull: true}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+	require.NoError(t, err)
+	require.False(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
+		[]*dbutil.ColumnData{{Data: []byte("1.x")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+	require.Error(t, err)
+	require.False(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
+		[]*dbutil.ColumnData{{Data: []byte("1.1000011")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+	require.NoError(t, err)
+	require.False(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
+		[]*dbutil.ColumnData{{Data: []byte("1.1000001")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+	require.NoError(t, err)
+	require.True(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
+		[]*dbutil.ColumnData{{Data: []byte("1.1000001")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}})
+	require.NoError(t, err)
+	require.True(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1")}},
+		[]*dbutil.ColumnData{{Data: []byte("1")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+	require.NoError(t, err)
+	require.True(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("aaa")}},
+		[]*dbutil.ColumnData{{Data: []byte("aaa")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}})
+	require.NoError(t, err)
+	require.True(t, eq)
+	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("\x01\x02")}},
+		[]*dbutil.ColumnData{{Data: []byte("\x01\x02")}},
+		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}})
+	require.NoError(t, err)
+	require.True(t, eq)
+}
 
 func Test_ValidatorWorker_getTargetRows(t *testing.T) {
 	type testCase struct {
@@ -82,11 +340,11 @@ func Test_ValidatorWorker_getTargetRows(t *testing.T) {
 		}
 		dataRows := mock.NewRows(tc.allCols)
 		for j := range testCases[i].rowData {
-			var args []driver.Value
+			var rowData []driver.Value
 			for _, val := range tc.rowData[j] {
-				args = append(args, val)
+				rowData = append(rowData, val)
 			}
-			dataRows = dataRows.AddRow(args...)
+			dataRows = dataRows.AddRow(rowData...)
 		}
 		mock.ExpectQuery(tc.querySQL).WithArgs(args...).WillReturnRows(dataRows)
 		cond := &Cond{
@@ -100,8 +358,8 @@ func Test_ValidatorWorker_getTargetRows(t *testing.T) {
 			ctx:  context.Background(),
 			conn: dbConn,
 		}
-		targetRows, err := worker.getTargetRows(cond)
-		require.NoError(t, err)
+		targetRows, err2 := worker.getTargetRows(cond)
+		require.NoError(t, err2)
 		require.Equal(t, 3, len(targetRows))
 		for i, pkVs := range tc.pkValues {
 			key := genRowKey(pkVs)
@@ -119,4 +377,56 @@ func Test_ValidatorWorker_getTargetRows(t *testing.T) {
 			}
 		}
 	}
+
+	cond := &Cond{
+		Table:     genValidateTableInfo(t, "test", "tbl", "create table tbl(a int primary key)"),
+		ColumnCnt: 1,
+		PkValues:  [][]string{{"1"}},
+	}
+	worker := &validateWorker{
+		ctx:  context.Background(),
+		conn: genDBConn(t, db, genSubtaskConfig(t)),
+	}
+
+	// query error
+	mock.ExpectQuery("SELECT .* FROM .*").WithArgs(sqlmock.AnyArg()).WillReturnError(errors.New("query"))
+	_, err = worker.getTargetRows(cond)
+	require.EqualError(t, errors.Cause(err), "query")
+}
+
+func Test_ValidatorWorker_getSourceRowsForCompare(t *testing.T) {
+	rows := getSourceRowsForCompare([]*rowChange{
+		{
+			key: "a",
+			data: []interface{}{
+				nil, 1,
+			},
+		},
+		{
+			key: "b",
+			data: []interface{}{
+				1, 2,
+			},
+		},
+	})
+	require.Len(t, rows, 2)
+	require.Len(t, rows["a"], 2)
+	require.Len(t, rows["b"], 2)
+	require.True(t, rows["a"][0].IsNull)
+	require.Equal(t, []byte("1"), rows["a"][1].Data)
+	require.Equal(t, []byte("1"), rows["b"][0].Data)
+	require.Equal(t, []byte("2"), rows["b"][1].Data)
+}
+
+func Test_ValidatorWorker_genColData(t *testing.T) {
+	res := genColData(1)
+	require.Equal(t, "1", string(res))
+	res = genColData(1.2)
+	require.Equal(t, "1.2", string(res))
+	res = genColData("abc")
+	require.Equal(t, "abc", string(res))
+	res = genColData([]byte{'\x01', '\x02', '\x03'})
+	require.Equal(t, "\x01\x02\x03", string(res))
+	res = genColData(decimal.NewFromInt(222123123))
+	require.Equal(t, "222123123", string(res))
 }

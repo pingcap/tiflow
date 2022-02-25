@@ -20,6 +20,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/shopspring/decimal"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -34,6 +36,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+)
+
+const (
+	workerChannelSize = 1000
 )
 
 type validateWorker struct {
@@ -45,7 +51,25 @@ type validateWorker struct {
 	conn              *dbconn.DBConn
 	rowChangeCh       chan *rowChange
 	pendingChangesMap map[string]*tableChange
-	rowCount          int64
+	pendingRowCount   atomic.Int64
+	sync.Mutex
+
+	// used for test
+	receivedRowCount atomic.Int64 // number of rowChange received from channel
+	validationCount  atomic.Int64 // number of successful validation
+}
+
+func newValidateWorker(v *DataValidator, id int) *validateWorker {
+	return &validateWorker{
+		cfg:               v.cfg.ValidatorCfg,
+		ctx:               v.ctx,
+		interval:          v.validateInterval,
+		validator:         v,
+		L:                 v.L,
+		conn:              v.toDBConns[id],
+		rowChangeCh:       make(chan *rowChange, workerChannelSize),
+		pendingChangesMap: make(map[string]*tableChange),
+	}
 }
 
 func (vw *validateWorker) run() {
@@ -54,6 +78,7 @@ func (vw *validateWorker) run() {
 		case change := <-vw.rowChangeCh:
 			// todo: limit number of pending rows
 			vw.updateRowChange(change)
+			vw.receivedRowCount.Inc()
 		case <-vw.ctx.Done():
 			return
 		case <-time.After(vw.interval):
@@ -62,6 +87,7 @@ func (vw *validateWorker) run() {
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
 				return
 			}
+			vw.validationCount.Inc()
 		}
 	}
 }
@@ -81,16 +107,17 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 	if val, ok := change.rows[row.key]; ok {
 		val.data = row.data
 		val.theType = row.theType
-		val.lastMeetTs = row.lastMeetTs
+		val.lastMeetTS = row.lastMeetTS
 		val.failedCnt = 0 // clear failed count
 	} else {
 		change.rows[row.key] = row
-		vw.rowCount++
+		vw.pendingRowCount.Inc()
 	}
 }
 
 func (vw *validateWorker) validateTableChange() error {
 	failedChanges := make(map[string]*tableChange)
+	var failedRowCnt int64
 	for k, val := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
 		for _, r := range val.rows {
@@ -100,7 +127,7 @@ func (vw *validateWorker) validateTableChange() error {
 				insertUpdateChanges = append(insertUpdateChanges, r)
 			}
 		}
-		rows := make(map[string]*rowChange, 0)
+		rows := make(map[string]*rowChange)
 		if len(insertUpdateChanges) > 0 {
 			// todo: limit number of validated rows
 			failedRows, err := vw.validateRowChanges(val.table, insertUpdateChanges, false)
@@ -128,8 +155,10 @@ func (vw *validateWorker) validateTableChange() error {
 				table: val.table,
 				rows:  rows,
 			}
+			failedRowCnt += int64(len(rows))
 		}
 	}
+	vw.pendingRowCount.Store(failedRowCnt)
 	vw.pendingChangesMap = failedChanges
 	return nil
 }
@@ -205,34 +234,30 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 }
 
 func (vw *validateWorker) compareData(sourceData, targetData []*dbutil.ColumnData, columns []*model.ColumnInfo) (bool, error) {
-	equal := true
 	for i, column := range columns {
 		data1, data2 := sourceData[i], targetData[i]
+		if data1.IsNull != data2.IsNull {
+			return false, nil
+		}
 		str1, str2 := string(data1.Data), string(data2.Data)
-		if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
-			if data1.IsNull == data2.IsNull && data1.IsNull {
-				continue
-			}
-
+		if str1 == str2 {
+			continue
+		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
+			// source and target data have different precision?
 			num1, err1 := strconv.ParseFloat(str1, 64)
 			num2, err2 := strconv.ParseFloat(str2, 64)
 			if err1 != nil || err2 != nil {
+				// should not happen
 				return false, errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
 			}
 			if math.Abs(num1-num2) <= 1e-6 {
 				continue
 			}
-		} else {
-			if (str1 == str2) && (data1.IsNull == data2.IsNull) {
-				continue
-			}
 		}
-
-		equal = false
-		break
+		return false, nil
 	}
 
-	return equal, nil
+	return true, nil
 }
 
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.ColumnData, error) {
@@ -256,7 +281,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 	}
 	defer rows.Close()
 
-	result := make(map[string][]*dbutil.ColumnData, 0)
+	result := make(map[string][]*dbutil.ColumnData)
 	for rows.Next() {
 		rowData, err := scanRow(rows)
 		if err != nil {
@@ -270,7 +295,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 		pk := genRowKey(pkVals)
 		result[pk] = rowData
 	}
-	return result, nil
+	return result, rows.Err()
 }
 
 func scanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {

@@ -28,6 +28,7 @@ import (
 )
 
 func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) *validateTableInfo {
+	t.Helper()
 	var (
 		err       error
 		parser2   *parser.Parser
@@ -60,15 +61,16 @@ func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) 
 		Info:       tableInfo,
 		PrimaryKey: primaryIdx,
 		Target: &filter.Table{
-            Schema: schemaName,
-            Name:   tableName,
-        },
+			Schema: schemaName,
+			Name:   tableName,
+		},
 		pkIndices: pkIndices,
 	}
 	return tableDiff
 }
 
 func genValidationCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
+	t.Helper()
 	tblDiff := genValidateTableInfo(t, schemaName, tblName, creatSQL)
 	return &Cond{
 		Table:    tblDiff,
@@ -77,9 +79,7 @@ func genValidationCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs 
 }
 
 func TestCondSelectMultiKey(t *testing.T) {
-	var (
-		res *sql.Rows
-	)
+	var res *sql.Rows
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -107,12 +107,14 @@ func TestCondSelectMultiKey(t *testing.T) {
 	require.NoError(t, err)
 	res, err = db.Query(rowsQuery, cond.GetArgs()...)
 	require.NoError(t, err)
+	defer res.Close()
 	var cnt int
 	if res.Next() {
 		err = res.Scan(&cnt)
 	}
 	require.NoError(t, err)
 	require.Equal(t, 3, cnt)
+	require.NoError(t, res.Err())
 }
 
 func TestCondGetWhereArgs(t *testing.T) {

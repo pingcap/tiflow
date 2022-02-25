@@ -21,7 +21,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -41,6 +40,7 @@ import (
 )
 
 func genEventGenerator(t *testing.T) *event.Generator {
+	t.Helper()
 	previousGTIDSetStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"
 	previousGTIDSet, err := gtid.ParserGTID(mysql.MySQLFlavor, previousGTIDSetStr)
 	require.NoError(t, err)
@@ -55,6 +55,7 @@ func genEventGenerator(t *testing.T) *event.Generator {
 }
 
 func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
+	t.Helper()
 	loaderCfg := config.LoaderConfig{
 		Dir: t.TempDir(),
 	}
@@ -87,6 +88,7 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 }
 
 func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBConn {
+	t.Helper()
 	baseDB := conn.NewBaseDB(db, func() {})
 	baseConn, err := baseDB.GetBaseConn(context.Background())
 	require.NoError(t, err)
@@ -132,6 +134,7 @@ func Test_validator_StartStop(t *testing.T) {
 	// normal start & stop
 	validator = NewContinuousDataValidator(cfg, syncerObj)
 	validator.Start(pb.Stage_Running)
+	defer validator.Stop() // in case assert failed before Stop
 	require.Equal(t, pb.Stage_Running, validator.Stage())
 	require.True(t, validator.Started())
 	validator.Stop()
@@ -153,6 +156,7 @@ func Test_validator_fillResult(t *testing.T) {
 
 	validator := NewContinuousDataValidator(cfg, syncerObj)
 	validator.Start(pb.Stage_Running)
+	defer validator.Stop() // in case assert failed before Stop
 	validator.fillResult(errors.New("test error"), false)
 	require.Len(t, validator.result.Errors, 1)
 	validator.fillResult(errors.New("test error"), true)
@@ -173,6 +177,7 @@ func Test_validator_errorProcessRoutine(t *testing.T) {
 
 	validator := NewContinuousDataValidator(cfg, syncerObj)
 	validator.Start(pb.Stage_Running)
+	defer validator.Stop()
 	require.Equal(t, pb.Stage_Running, validator.Stage())
 	validator.errChan <- errors.New("test error")
 	require.True(t, utils.WaitSomething(20, 100*time.Millisecond, func() bool {
@@ -192,9 +197,8 @@ func (c *mockedCheckPointForValidator) FlushedGlobalPoint() binlog.Location {
 	c.cnt++
 	if c.cnt <= 2 {
 		return c.currLoc
-	} else {
-		return c.nextLoc
 	}
+	return c.nextLoc
 }
 
 func Test_validator_waitSyncerSynced(t *testing.T) {
@@ -212,7 +216,7 @@ func Test_validator_waitSyncerSynced(t *testing.T) {
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 
 	// cancelled
-	currLoc.Position = gmysql.Position{
+	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  100,
 	}
@@ -221,7 +225,7 @@ func Test_validator_waitSyncerSynced(t *testing.T) {
 	validator.cancel()
 	require.ErrorIs(t, validator.waitSyncerSynced(currLoc), context.Canceled)
 
-	currLoc.Position = gmysql.Position{
+	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  100,
 	}
@@ -265,14 +269,14 @@ func Test_validator_waitSyncerRunning(t *testing.T) {
 
 func Test_validator_doValidate(t *testing.T) {
 	var (
-		schemaName = "test"
-		tableName  = "tbl"
-		tableName2 = "tbl2"
-		tableName3 = "tbl3"
-		tableName4 = "tbl4"
-		createTableSql = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
-		createTableSql2 = "CREATE TABLE `" + tableName2 + "`(id int primary key)"
-		createTableSql3 = "CREATE TABLE `" + tableName3 + "`(id int, v varchar(100))"
+		schemaName      = "test"
+		tableName       = "tbl"
+		tableName2      = "tbl2"
+		tableName3      = "tbl3"
+		tableName4      = "tbl4"
+		createTableSQL  = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
+		createTableSQL2 = "CREATE TABLE `" + tableName2 + "`(id int primary key)"
+		createTableSQL3 = "CREATE TABLE `" + tableName3 + "`(id int, v varchar(100))"
 	)
 	cfg := genSubtaskConfig(t)
 	_, _, err := conn.InitMockDBFull()
@@ -286,7 +290,7 @@ func Test_validator_doValidate(t *testing.T) {
 	syncerObj.tableRouter, err = router.NewRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
 	currLoc := binlog.NewLocation(cfg.Flavor)
-	currLoc.Position = gmysql.Position{
+	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  3000,
 	}
@@ -297,11 +301,6 @@ func Test_validator_doValidate(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	//mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
-	//	sqlmock.NewRows([]string{"Table", "Create Table"}).
-	//		AddRow(tableName, createTableSql).
-	//		AddRow(tableName2, createTableSql2),
-	//)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
 	)
@@ -309,10 +308,11 @@ func Test_validator_doValidate(t *testing.T) {
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
+	require.NoError(t, err)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSql))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSql2))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSql3))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL2))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL3))
 
 	generator := genEventGenerator(t)
 	rotateEvent, _, err := generator.Rotate("mysql-bin.000001", 0)
@@ -322,7 +322,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    11,
 			Schema:     schemaName,
 			Table:      tableName,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(1), "a"},
 				{int32(2), "b"},
@@ -334,7 +334,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    12,
 			Schema:     schemaName,
 			Table:      tableName2,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(1), "a"},
 				{int32(2), "b"},
@@ -346,7 +346,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    13,
 			Schema:     schemaName,
 			Table:      tableName3,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(1), "a"},
 				{int32(2), "b"},
@@ -358,7 +358,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    13,
 			Schema:     schemaName,
 			Table:      tableName3,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(4), "a"},
 			},
@@ -369,7 +369,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    11,
 			Schema:     schemaName,
 			Table:      tableName,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				// update non-primary column
 				{int32(3), "c"},
@@ -385,7 +385,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    11,
 			Schema:     schemaName,
 			Table:      tableName,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(3), "c"},
 			},
@@ -395,7 +395,7 @@ func Test_validator_doValidate(t *testing.T) {
 			TableID:    14,
 			Schema:     schemaName,
 			Table:      tableName4,
-			ColumnType: []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING},
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
 			Rows: [][]interface{}{
 				{int32(4), "c"},
 			},

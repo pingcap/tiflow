@@ -43,11 +43,8 @@ import (
 )
 
 const (
-	checkInterval        = 5 * time.Second
-	validationInterval   = 10 * time.Second
-	defaultBatchRowCount = 500
-	workerChannelSize    = 1000
-	defaultWorkerCnt     = 4
+	checkInterval      = 5 * time.Second
+	validationInterval = 10 * time.Second
 )
 
 type validateTableInfo struct {
@@ -61,28 +58,27 @@ type validateTableInfo struct {
 type rowChangeType int
 
 const (
-	rowInvalidChange rowChangeType = iota
-	rowInsert
+	rowInsert rowChangeType = iota
 	rowDeleted
 	rowUpdated
 )
 
 // change of table
 // binlog changes are clustered into table changes
-// the validator validates changes of table-grain at a time
+// the validator validates changes of table-grain at a time.
 type tableChange struct {
 	table *validateTableInfo
 	rows  map[string]*rowChange
 }
 
-// change of a row
+// change of a row.
 type rowChange struct {
 	table      *validateTableInfo
 	key        string
 	pkValues   []string
 	data       []interface{}
 	theType    rowChangeType
-	lastMeetTs int64 // the last meet timestamp(in seconds)
+	lastMeetTS int64 // the last meet timestamp(in seconds)
 	failedCnt  int   // failed count
 }
 
@@ -291,10 +287,9 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 			if cmp <= 0 {
 				return nil
-			} else {
-				v.waitSyncerTimer.Reset(checkInterval)
-				fired = false
 			}
+			v.waitSyncerTimer.Reset(checkInterval)
+			fired = false
 		}
 	}
 }
@@ -315,7 +310,7 @@ func (v *DataValidator) waitSyncerRunning() error {
 	}
 }
 
-// doValidate: runs in a separate goroutine
+// doValidate: runs in a separate goroutine.
 func (v *DataValidator) doValidate() {
 	if err := v.waitSyncerRunning(); err != nil {
 		v.errChan <- terror.Annotate(err, "failed to wait syncer running")
@@ -365,8 +360,7 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
-		switch ev := e.Event.(type) {
-		case *replication.RowsEvent:
+		if ev, ok := e.Event.(*replication.RowsEvent); ok {
 			if err = v.processRowsEvent(e.Header, ev); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
 				v.errChan <- terror.Annotate(err, "failed to process event")
@@ -413,16 +407,7 @@ func (v *DataValidator) Stage() pb.Stage {
 func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
-		worker := &validateWorker{
-			cfg:               v.cfg.ValidatorCfg,
-			ctx:               v.ctx,
-			interval:          v.validateInterval,
-			validator:         v,
-			L:                 v.L,
-			conn:              v.toDBConns[i],
-			rowChangeCh:       make(chan *rowChange, workerChannelSize),
-			pendingChangesMap: make(map[string]*tableChange),
-		}
+		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
 		go func() {
 			v.wg.Done()
@@ -535,7 +520,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 					pkValues:   pkValue,
 					data:       row,
 					theType:    rowDeleted,
-					lastMeetTs: int64(header.Timestamp),
+					lastMeetTS: int64(header.Timestamp),
 				})
 				afterRowChangeType = rowInsert
 			}
@@ -545,7 +530,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				pkValues:   afterPkValue,
 				data:       afterRow,
 				theType:    afterRowChangeType,
-				lastMeetTs: int64(header.Timestamp),
+				lastMeetTS: int64(header.Timestamp),
 			})
 		} else {
 			v.dispatchRowChange(key, &rowChange{
@@ -554,14 +539,14 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				pkValues:   pkValue,
 				data:       row,
 				theType:    changeType,
-				lastMeetTs: int64(header.Timestamp),
+				lastMeetTS: int64(header.Timestamp),
 			})
 		}
 	}
 	return nil
 }
 
-// getRowChangeType should be called only when the event type is RowsEvent
+// getRowChangeType should be called only when the event type is RowsEvent.
 func getRowChangeType(t replication.EventType) rowChangeType {
 	switch t {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
