@@ -67,20 +67,25 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL, so
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cfg := verification.Config{
-		// delay the verification in case syncpoint not started immediately
-		CheckInterval: interval + time.Second,
-		UpstreamDSN:   sourceDSNStr,
-		DownStreamDSN: sinkDSNStr,
-		Filter:        filter,
-		DataBaseName:  syncpointDatabaseName,
-		TableName:     syncpointTableName,
-		ChangefeedID:  id,
-	}
-	err = verification.NewVerification(ctx, &cfg)
-	if err != nil {
-		log.Warn("Start verification fail", zap.Error(err))
-		return nil, err
+
+	//TODO; support mysql later
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme == "tidb" || scheme == "tidb+ssl" {
+		cfg := verification.Config{
+			// delay the verification in case syncpoint not started immediately
+			CheckInterval: interval + time.Second,
+			UpstreamDSN:   sourceDSNStr,
+			DownStreamDSN: sinkDSNStr,
+			Filter:        filter,
+			DataBaseName:  syncpointDatabaseName,
+			TableName:     syncpointTableName,
+			ChangefeedID:  id,
+		}
+		err = verification.NewVerification(ctx, &cfg)
+		if err != nil {
+			log.Warn("Start verification fail", zap.Error(err))
+			return nil, err
+		}
 	}
 	log.Info("Start mysql syncpoint sink")
 
@@ -92,6 +97,7 @@ func generateDSNStr(ctx context.Context, id string, uri *url.URL, dsnType string
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return "", errors.New("can create mysql sink with unsupported scheme")
 	}
+
 	params := defaultParams.Clone()
 	s := uri.Query().Get("tidb-txn-mode")
 	if s != "" {
