@@ -37,9 +37,6 @@ import (
 	"go.uber.org/zap"
 )
 
-<<<<<<< HEAD
-const defaultPartitionNum = 3
-=======
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
@@ -47,7 +44,6 @@ const (
 	// flushMetricsInterval specifies the interval of refresh sarama metrics.
 	flushMetricsInterval = 5 * time.Second
 )
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 
 // Config stores user specified Kafka producer configuration
 type Config struct {
@@ -207,14 +203,11 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
-<<<<<<< HEAD
-=======
 
 	role util.Role
 	id   model.ChangeFeedID
 
 	metricsMonitor *saramaMetricsMonitor
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 }
 
 type kafkaProducerClosingFlag = int32
@@ -430,8 +423,6 @@ func topicPreProcess(topic string, config *Config, saramaConfig *sarama.Config) 
 		}
 	}()
 
-<<<<<<< HEAD
-=======
 	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -513,7 +504,6 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 
 func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
 	opts map[string]string) error {
->>>>>>> 8a709d748 (cdc/metrics: Integrate sarama producer metrics (#4520))
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
