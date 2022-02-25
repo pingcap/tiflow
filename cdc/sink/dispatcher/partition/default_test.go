@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package partition
 
 import (
 	"testing"
@@ -25,7 +25,7 @@ func TestDefaultDispatcher(t *testing.T) {
 
 	testCases := []struct {
 		row             *model.RowChangedEvent
-		exceptPartition int32
+		expectPartition int32
 	}{
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -40,7 +40,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 11},
+		}, expectPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -54,7 +54,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 1},
+		}, expectPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -68,7 +68,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 7},
+		}, expectPartition: 7},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -85,7 +85,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 1},
+		}, expectPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -102,7 +102,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 11},
+		}, expectPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -119,7 +119,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 13},
+		}, expectPartition: 13},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -136,7 +136,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}},
-		}, exceptPartition: 13},
+		}, expectPartition: 13},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -155,7 +155,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}, {1}},
-		}, exceptPartition: 3},
+		}, expectPartition: 3},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -173,7 +173,7 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}, {1}},
-		}, exceptPartition: 3},
+		}, expectPartition: 3},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -191,11 +191,11 @@ func TestDefaultDispatcher(t *testing.T) {
 				},
 			},
 			IndexColumns: [][]int{{0}, {1}},
-		}, exceptPartition: 3},
+		}, expectPartition: 3},
 	}
-	p := newDefaultDispatcher(16, false)
+	p := NewDefaultDispatcher(16, false)
 	for _, tc := range testCases {
-		require.Equal(t, tc.exceptPartition, p.Dispatch(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
 	}
 }
 
@@ -221,6 +221,6 @@ func TestDefaultDispatcherWithOldValue(t *testing.T) {
 		IndexColumns: [][]int{{0}, {1}},
 	}
 
-	p := newDefaultDispatcher(16, true)
-	require.Equal(t, int32(3), p.Dispatch(row))
+	p := NewDefaultDispatcher(16, true)
+	require.Equal(t, int32(3), p.DispatchRowChangedEvent(row))
 }
