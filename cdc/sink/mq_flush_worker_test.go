@@ -209,7 +209,7 @@ func TestAsyncSend(t *testing.T) {
 	}
 
 	paritionedEvents := worker.group(events)
-	err := worker.flush(context.Background(), paritionedEvents)
+	err := worker.asyncSend(context.Background(), paritionedEvents)
 	require.NoError(t, err)
 	require.Len(t, producer.mqEvent, 3)
 	require.Len(t, producer.mqEvent[1], 3)
@@ -257,12 +257,12 @@ func TestFlush(t *testing.T) {
 		batch, err := worker.batch(ctx)
 		require.NoError(t, err)
 		require.Len(t, batch, 3)
-		require.True(t, worker.needAsyncFlush)
+		require.True(t, worker.needSyncFlush)
 		paritionedEvents := worker.group(batch)
-		err = worker.flush(ctx, paritionedEvents)
+		err = worker.asyncSend(ctx, paritionedEvents)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
-		require.False(t, worker.needAsyncFlush)
+		require.False(t, worker.needSyncFlush)
 	}()
 
 	for _, event := range events {

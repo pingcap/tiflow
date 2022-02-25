@@ -84,6 +84,11 @@ type kafkaSaramaProducer struct {
 
 type kafkaProducerClosingFlag = int32
 
+// AsyncSendMessage asynchronously sends a message to kafka.
+// Notice: this method is not thread-safe.
+// Do not try to call AsyncSendMessage and Flush functions in different threads,
+// otherwise Flush will not work as expected. It may never finish or flush the wrong message.
+// Because inflight will be modified by mistake.
 func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
@@ -152,6 +157,11 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message 
 	}
 }
 
+// Flush waits for all the messages in the async producer to be sent to Kafka.
+// Notice: this method is not thread-safe.
+// Do not try to call AsyncSendMessage and Flush functions in different threads,
+// otherwise Flush will not work as expected. It may never finish or flush the wrong message.
+// Because inflight will be modified by mistake.
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	down := make(chan struct{}, 1)
 
