@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// writer is a thin shim that batches, translates events into key vaule pairs
+// writer is a thin shim that batches, translates events into key-vaule pairs
 // and writes to leveldb.
 type writer struct {
 	common
@@ -88,7 +88,14 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		}
 	}
 
-	// Notify readers that there is something to read.
+	// Notify reader that there is something to read.
+	//
+	// It's ok to noify reader immediately without waiting writes done,
+	// because reader will see these writes:
+	//   1. reader/writer send tasks to the same leveldb, so tasks are ordered.
+	//   2. ReadTs will trigger reader to take iterator from leveldb,
+	//      it happens after writer send writes to leveldb.
+	//   3. Before leveldb takes iterator, it flushes all buffered writes.
 	msg := actormsg.SorterMessage(message.Task{
 		UID:     w.uid,
 		TableID: w.tableID,

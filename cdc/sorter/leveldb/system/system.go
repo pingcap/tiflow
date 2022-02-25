@@ -66,10 +66,14 @@ type System struct {
 
 // NewSystem returns a system.
 func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
+	// A system polles actors that read and write leveldb.
 	dbSystem, dbRouter := actor.NewSystemBuilder("sorter-db").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that compact leveldb, garbage collection.
 	compactSystem, compactRouter := actor.NewSystemBuilder("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that receive events from Puller and batch send
+	// writes to leveldb.
 	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	compactSched := lsorter.NewCompactScheduler(compactRouter)
