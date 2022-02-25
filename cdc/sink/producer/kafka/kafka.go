@@ -551,7 +551,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		id:   changefeedID,
 		role: role,
 
-		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
+		metricsMonitor: newSaramaMetricsMonitor(cfg.MetricRegistry,
 			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {
