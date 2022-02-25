@@ -5,6 +5,7 @@ package lib
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -51,4 +52,16 @@ func MockBaseWorkerCheckSendMessage(
 	got, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)
 	require.True(t, ok)
 	require.Equal(t, message, got)
+}
+
+func MockBaseWorkerWaitUpdateStatus(
+	t *testing.T,
+	worker *DefaultBaseWorker,
+) {
+	topic := workerStatusUpdatedTopic(worker.masterClient.MasterID(), worker.masterClient.workerID)
+	masterNode := worker.masterClient.MasterNode()
+	require.Eventually(t, func() bool {
+		_, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)
+		return ok
+	}, time.Second, 100*time.Millisecond)
 }

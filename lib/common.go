@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -23,6 +25,7 @@ type (
 // Among these statuses, only WorkerStatusCreated is used by the framework
 // for now. The rest are for the business logic to use.
 // TODO think about whether to manage the transition of the statuses.
+// TODO: need a FSM graph
 const (
 	WorkerStatusNormal = WorkerStatusCode(iota + 1)
 	WorkerStatusCreated
@@ -36,13 +39,17 @@ const (
 	// job master
 	CvsJobMaster
 	FakeJobMaster
-	DmJobMaster
+	DMJobMaster
 	CdcJobMaster
 	// task
 	CvsTask
 	FakeTask
 	DmTask
 	CdcTask
+	// worker
+	WorkerDMDump
+	WorkerDMLoad
+	WorkerDMSync
 )
 
 type TimeoutConfig struct {
@@ -141,3 +148,6 @@ type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
+
+// nolint:revive
+var StopAfterTick = errors.New("stop after tick")

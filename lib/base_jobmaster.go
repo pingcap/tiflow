@@ -45,6 +45,8 @@ type DefaultBaseJobMaster struct {
 
 type JobMasterImpl interface {
 	InitImpl(ctx context.Context) error
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 	CloseImpl(ctx context.Context) error
 

@@ -3,10 +3,8 @@ package dm
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
@@ -24,7 +22,7 @@ func TestLoadWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerWrapped, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dcontext.Background(), WorkerDMLoad, workerID, masterID, mockWorkerConfig())
+		dcontext.Background(), lib.WorkerDMLoad, workerID, masterID, mockWorkerConfig())
 	require.NoError(t, err)
 
 	worker := workerWrapped.(*loadWorker)
@@ -41,13 +39,9 @@ func TestLoadWorker(t *testing.T) {
 	require.NoError(t, err)
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
-	utils.WaitSomething(10, 100*time.Millisecond, func() bool {
-		status := worker.Status()
-		return status.Code == lib.WorkerStatusError || status.Code == lib.WorkerStatusFinished
-	})
+	lib.MockBaseWorkerWaitUpdateStatus(t, worker.BaseWorker.(*lib.DefaultBaseWorker))
+
 	cancel()
-	status := worker.Status()
-	require.Equal(t, lib.WorkerStatusFinished, status.Code)
 	err = worker.Close(context.Background())
 	require.NoError(t, err)
 }

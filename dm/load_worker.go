@@ -5,7 +5,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -30,45 +29,31 @@ func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
 	}
 }
 
-func (d *loadWorker) InitImpl(ctx context.Context) error {
+func (l *loadWorker) InitImpl(ctx context.Context) error {
+	log.L().Info("init load worker")
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.
 	workerName := "dataflow-worker"
-	d.unitHolder = newUnitHolder(loader.NewLightning(d.cfg, nil, workerName))
-	return errors.Trace(d.unitHolder.init(ctx))
+	l.unitHolder = newUnitHolder(loader.NewLightning(l.cfg, nil, workerName))
+	return errors.Trace(l.unitHolder.init(ctx))
 }
 
-func (d *loadWorker) Tick(ctx context.Context) error {
-	d.unitHolder.lazyProcess()
-
-	return nil
+func (l *loadWorker) Tick(ctx context.Context) error {
+	l.unitHolder.lazyProcess()
+	return l.unitHolder.tryUpdateStatus(ctx, l.BaseWorker)
 }
 
-func (d *loadWorker) Status() lib.WorkerStatus {
-	hasResult, result := d.unitHolder.getResult()
-	if !hasResult {
-		return lib.WorkerStatus{Code: lib.WorkerStatusNormal}
-	}
-	if len(result.Errors) > 0 {
-		return lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
-			ErrorMessage: unit.JoinProcessErrors(result.Errors),
-		}
-	}
-	return lib.WorkerStatus{Code: lib.WorkerStatusFinished}
-}
-
-func (d *loadWorker) Workload() model.RescUnit {
+func (l *loadWorker) Workload() model.RescUnit {
 	log.L().Info("loadWorker.Workload")
 	return 0
 }
 
-func (d *loadWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
+func (l *loadWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("loadWorker.OnMasterFailover")
 	return nil
 }
 
-func (d *loadWorker) CloseImpl(ctx context.Context) error {
-	d.unitHolder.close()
+func (l *loadWorker) CloseImpl(ctx context.Context) error {
+	l.unitHolder.close()
 	return nil
 }

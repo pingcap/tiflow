@@ -33,7 +33,8 @@ type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval.
+	// Tick is called on a fixed interval. When an error is returned, the worker
+	// will be stopped.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.

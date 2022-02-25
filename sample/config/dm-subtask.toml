@@ -1,0 +1,76 @@
+is-sharding = false
+shard-mode = ""
+online-ddl = true
+shadow-table-rules = ["^_(.+)_(?:new|gho)$"]
+trash-table-rules = ["^_(.+)_(?:ghc|del|old)$"]
+online-ddl-scheme = ""
+case-sensitive = true
+collation_compatible = "loose"
+name = "df-test"
+mode = "all"
+ignore-checking-items = []
+source-id = "mysql-replica-01"
+server-id = 0
+flavor = ""
+meta-schema = "dmmeta"
+heartbeat-update-interval = 12
+heartbeat-report-interval = 21
+enable-heartbeat = true
+timezone = ""
+relay-dir = ""
+use-relay = false
+mydumper-path = ""
+threads = 16
+chunk-filesize = "64"
+statement-size = 1000000
+rows = 1024
+where = ""
+skip-tz-utc = true
+extra-args = ""
+pool-size = 32
+dir = "/tmp/dumped_data"
+import-mode = "sql"
+on-duplicate = "replace"
+meta-file = ""
+worker-count = 32
+batch = 100
+queue-size = 512
+checkpoint-flush-interval = 15
+compact = false
+multiple-rows = false
+max-retry = 10
+auto-fix-gtid = true
+enable-gtid = true
+disable-detect = false
+safe-mode = true
+enable-ansi-quotes = false
+log-level = ""
+log-file = ""
+log-format = ""
+log-rotate = ""
+pprof-addr = ""
+status-addr = ""
+clean-dump-file = true
+ansi-quotes = true
+
+
+[from]
+  host = "127.0.0.1"
+  port = 3306
+  user = "root"
+  password = "123456"
+
+[to]
+  host = "127.0.0.1"
+  port = 4000
+  user = "root"
+  password = ""
+
+[block-allow-list]
+  do-dbs = ["test"]
+
+[ValidatorCfg]
+  mode = "none"
+
+[experimental]
+  async-checkpoint-flush = true

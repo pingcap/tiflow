@@ -12,11 +12,11 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
+	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/log v0.0.0-20211207084639-71a2e5860834
 	github.com/pingcap/tidb-tools v5.2.3-0.20211105044302-2dabb6641a6e+incompatible
-	github.com/pingcap/tiflow v0.0.0-20220216064339-744a26e0b588
+	github.com/pingcap/tiflow v0.0.0-20220224093943-901ba1d0ff05
 	github.com/prometheus/client_golang v1.12.1
 	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.2.1
