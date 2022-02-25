@@ -39,13 +39,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// defaultPartitionNum specifies the default number of partitions when we create the topic.
-	defaultPartitionNum = 3
-
-	// flushMetricsInterval specifies the interval of refresh sarama metrics.
-	flushMetricsInterval = 5 * time.Second
-)
+const defaultPartitionNum = 3
 
 // Config stores user specified Kafka producer configuration
 type Config struct {
@@ -238,11 +232,8 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
-
-	role util.Role
-	id   model.ChangeFeedID
-
-	metricsMonitor *saramaMetricsMonitor
+	role    util.Role
+	id      model.ChangeFeedID
 }
 
 type kafkaProducerClosingFlag = int32
@@ -425,8 +416,6 @@ func (k *kafkaSaramaProducer) Close() error {
 		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
-
-	k.metricsMonitor.Cleanup()
 	return nil
 }
 
@@ -437,17 +426,12 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.stop()
 	}()
-
-	ticker := time.NewTicker(flushMetricsInterval)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
-		case <-ticker.C:
-			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
@@ -539,12 +523,6 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 		closeCh:         make(chan struct{}),
 		failpointCh:     make(chan error, 1),
 		closing:         kafkaProducerRunning,
-
-		id:   changefeedID,
-		role: role,
-
-		metricsMonitor: NewSaramaMetricsMonitor(cfg.MetricRegistry,
-			util.CaptureAddrFromCtx(ctx), changefeedID),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -553,8 +531,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, o
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err),
-					zap.String("changefeed", k.id), zap.Any("role", role))
+				log.Error("error channel is full", zap.Error(err))
 			}
 		}
 	}()
