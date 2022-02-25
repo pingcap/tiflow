@@ -257,12 +257,12 @@ func TestFlush(t *testing.T) {
 		batch, err := worker.batch(ctx)
 		require.NoError(t, err)
 		require.Len(t, batch, 3)
-		require.True(t, worker.needsFlush)
+		require.True(t, worker.needAsyncFlush)
 		paritionedEvents := worker.group(batch)
 		err = worker.flush(ctx, paritionedEvents)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
-		require.False(t, worker.needsFlush)
+		require.False(t, worker.needAsyncFlush)
 	}()
 
 	for _, event := range events {
