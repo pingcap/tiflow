@@ -43,9 +43,9 @@ type mqEvent struct {
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
-	msgChan    chan mqEvent
-	ticker     *time.Ticker
-	needsFlush bool
+	msgChan        chan mqEvent
+	ticker         *time.Ticker
+	needAsyncFlush bool
 
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
@@ -76,7 +76,7 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 		// When the resolved ts is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.resolvedTs != 0 {
-			w.needsFlush = true
+			w.needAsyncFlush = true
 			return events, nil
 		}
 
@@ -93,7 +93,7 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 			return nil, ctx.Err()
 		case msg := <-w.msgChan:
 			if msg.resolvedTs != 0 {
-				w.needsFlush = true
+				w.needAsyncFlush = true
 				return events, nil
 			}
 
@@ -149,12 +149,14 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 		}
 	}
 
-	if w.needsFlush {
+	if w.needAsyncFlush {
+		start := time.Now()
 		err := w.producer.Flush(ctx)
 		if err != nil {
 			return err
 		}
-		w.needsFlush = false
+		w.needAsyncFlush = false
+		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
 	}
 
 	return nil
