@@ -17,9 +17,11 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 )
 
 // SyncpointStore is an abstraction for anything that a changefeed may emit into.
@@ -35,15 +37,19 @@ type SyncpointStore interface {
 }
 
 // NewSyncpointStore creates a new Spyncpoint sink with the sink-uri
-func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string) (SyncpointStore, error) {
+func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, sourceURIStr string, interval time.Duration, filter *filter.Filter) (SyncpointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
+	sourceURI, err := url.Parse(sourceURIStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSyncpointStore(ctx, changefeedID, sinkURI)
+		return newMySQLSyncpointStore(ctx, changefeedID, sinkURI, sourceURI, interval, filter)
 	default:
 		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

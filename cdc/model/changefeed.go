@@ -113,9 +113,10 @@ type ChangeFeedInfo struct {
 	State  FeedState             `json:"state"`
 	Error  *RunningError         `json:"error"`
 
-	SyncPointEnabled  bool          `json:"sync-point-enabled"`
-	SyncPointInterval time.Duration `json:"sync-point-interval"`
-	CreatorVersion    string        `json:"creator-version"`
+	SyncPointEnabled     bool          `json:"sync-point-enabled"`
+	SyncPointInterval    time.Duration `json:"sync-point-interval"`
+	SyncPointUpstreamDSN string        `json:"sync-point-upstream-dsn"`
+	CreatorVersion       string        `json:"creator-version"`
 }
 
 const changeFeedIDMaxLen = 128

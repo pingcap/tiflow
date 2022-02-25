@@ -57,6 +57,7 @@ type changefeedCommonOptions struct {
 	cyclicSyncDDL          bool
 	syncPointEnabled       bool
 	syncPointInterval      time.Duration
+	syncPointUpstreamDSN   string
 }
 
 // newChangefeedCommonOptions creates new changefeed common options.
@@ -83,6 +84,8 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
+	cmd.PersistentFlags().StringVar(&o.syncPointUpstreamDSN, "sync-point-upstream-dsn", "", "(Expremental) For syncpoint, Upstream TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
+
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 }
 
@@ -316,17 +319,18 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 // getInfo constructs the information for the changefeed.
 func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedInfo {
 	info := &model.ChangeFeedInfo{
-		SinkURI:           o.commonChangefeedOptions.sinkURI,
-		Opts:              make(map[string]string),
-		CreateTime:        time.Now(),
-		StartTs:           o.startTs,
-		TargetTs:          o.commonChangefeedOptions.targetTs,
-		Config:            o.cfg,
-		Engine:            o.commonChangefeedOptions.sortEngine,
-		State:             model.StateNormal,
-		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
-		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		CreatorVersion:    version.ReleaseVersion,
+		SinkURI:              o.commonChangefeedOptions.sinkURI,
+		Opts:                 make(map[string]string),
+		CreateTime:           time.Now(),
+		StartTs:              o.startTs,
+		TargetTs:             o.commonChangefeedOptions.targetTs,
+		Config:               o.cfg,
+		Engine:               o.commonChangefeedOptions.sortEngine,
+		State:                model.StateNormal,
+		SyncPointEnabled:     o.commonChangefeedOptions.syncPointEnabled,
+		SyncPointInterval:    o.commonChangefeedOptions.syncPointInterval,
+		SyncPointUpstreamDSN: o.commonChangefeedOptions.syncPointUpstreamDSN,
+		CreatorVersion:       version.ReleaseVersion,
 	}
 
 	if info.Engine == model.SortInFile {
