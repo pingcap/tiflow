@@ -18,7 +18,9 @@ import (
 
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -70,16 +72,19 @@ var testCaseDDL = &model.DDLEvent{
 	Type:  mm.ActionCreateTable,
 }
 
-func (s *canalFlatSuite) TestSetParams(c *check.C) {
+func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	config := NewConfig(config.ProtocolCanalJSON, timeutil.SystemLocation())
+
+	builder := &canalFlatEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build().(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
 
-	params := make(map[string]string)
-	params["enable-tidb-extension"] = "true"
-	err := encoder.SetParams(params)
-	c.Assert(err, check.IsNil)
+	config.enableTiDBExtension = true
+	builder = &canalFlatEventBatchEncoderBuilder{config: config}
+	encoder, ok = builder.Build().(*CanalFlatEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
 }
 

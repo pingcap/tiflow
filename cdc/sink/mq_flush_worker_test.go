@@ -18,8 +18,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,9 +63,14 @@ func NewMockProducer() *mockProducer {
 }
 
 func newTestWorker() (*flushWorker, *mockProducer) {
-	encoder := codec.NewJSONEventBatchEncoder()
 	// 200 is about the size of a row change.
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "200"})
+	encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).
+		WithMaxMessageBytes(200)
+	builder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, &security.Credential{})
+	if err != nil {
+		panic(err)
+	}
+	encoder := builder.Build()
 	if err != nil {
 		panic(err)
 	}

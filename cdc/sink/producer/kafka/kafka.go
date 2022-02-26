@@ -314,35 +314,23 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	}
 }
 
-var (
-	newSaramaConfigImpl = newSaramaConfig
-	// NewAdminClientImpl specifies the build method for the admin client.
-	NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
-)
+// NewAdminClientImpl specifies the build method for the admin client.
+var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
-	opts map[string]string, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, saramaConfig *sarama.Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.Any("role", role))
 
-	cfg, err := newSaramaConfigImpl(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	admin, err := NewAdminClientImpl(config.BrokerEndpoints, cfg)
+	// this admin mainly used by `metricsMonitor` to fetch broker info.
+	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, cfg)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -374,7 +362,7 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 		id:   changefeedID,
 		role: role,
 
-		metricsMonitor: newSaramaMetricsMonitor(cfg.MetricRegistry,
+		metricsMonitor: newSaramaMetricsMonitor(saramaConfig.MetricRegistry,
 			util.CaptureAddrFromCtx(ctx), changefeedID, admin),
 	}
 	go func() {
@@ -410,8 +398,9 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 	return
 }
 
-func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config *Config, saramaConfig *sarama.Config,
-	opts map[string]string) error {
+// AdjustConfig adjust the `Config` and `sarama.Config` by condition.
+func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
+	saramaConfig *sarama.Config, topic string) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -445,7 +434,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 				zap.Int("max-message-bytes", config.MaxMessageBytes))
 			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 		}
-		opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
 		if config.AutoCreate {
@@ -458,10 +446,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		}
 
 		return nil
-	}
-
-	if !config.AutoCreate {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
 	}
 
 	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
@@ -485,7 +469,6 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 			zap.Int("max-message-bytes", config.MaxMessageBytes))
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
-	opts["max-message-bytes"] = strconv.Itoa(saramaConfig.Producer.MaxMessageBytes)
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
 	if config.PartitionNum == 0 {
@@ -493,10 +476,31 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 		log.Warn("partition-num is not set, use the default partition count",
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
+	return nil
+}
 
-	err = admin.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     config.PartitionNum,
-		ReplicationFactor: config.ReplicationFactor,
+// CreateTopic create the topic by `topicConfig`.
+func CreateTopic(admin kafka.ClusterAdminClient, config *topicConfig) error {
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if _, ok := topics[config.name]; ok {
+		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		if config.autoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic", zap.String("topic", config.name))
+		}
+		return nil
+	}
+
+	if !config.autoCreate {
+		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
+	}
+
+	err = admin.CreateTopic(config.name, &sarama.TopicDetail{
+		NumPartitions:     config.partitionNum,
+		ReplicationFactor: config.replicationFactor,
 	}, false)
 	// TODO identify the cause of "Topic with this name already exists"
 	if err != nil && !strings.Contains(err.Error(), "already exists") {
@@ -504,8 +508,8 @@ func validateAndCreateTopic(admin kafka.ClusterAdminClient, topic string, config
 	}
 
 	log.Info("TiCDC create the topic",
-		zap.Int32("partition-num", config.PartitionNum),
-		zap.Int16("replication-factor", config.ReplicationFactor))
+		zap.Int32("partition-num", config.partitionNum),
+		zap.Int16("replication-factor", config.replicationFactor))
 
 	return nil
 }

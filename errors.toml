@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaCreateTopic"]
+error = '''
+kafka create topic failed
+'''
+
 ["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
@@ -484,6 +489,11 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
+'''
+
+["CDC:ErrMQCodecInvalidConfig"]
+error = '''
+MQ Codec invalid config
 '''
 
 ["CDC:ErrMQSinkUnknownProtocol"]
@@ -734,11 +744,6 @@ pending region cancelled due to stream disconnecting
 ["CDC:ErrPipelineTryAgain"]
 error = '''
 pipeline is full, please try again. Internal use only, report a bug if seen externally
-'''
-
-["CDC:ErrPrepareAvroFailed"]
-error = '''
-prepare avro failed
 '''
 
 ["CDC:ErrPrewriteNotMatch"]
