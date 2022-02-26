@@ -64,7 +64,7 @@ done
 while [ -z "$(curl --cacert $TLS_DIR/ca.pem \
 	--cert $TLS_DIR/client.pem \
 	--key $TLS_DIR/client-key.pem \
-	https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	https://${TLS_PD_HOST}:${TLS_PD_PORT}/pd/api/v1/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
 	sleep 1
 done
 
