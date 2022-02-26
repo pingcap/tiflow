@@ -125,7 +125,7 @@ for idx in $(seq 1 $pd_count); do
 	done
 
 	i=0
-	while [ -z "$(curl http://${!host}:${!port}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+	while [ -z "$(curl http://${!host}:${!port}/pd/api/v1/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
 		i=$((i + 1))
 		if [ "$i" -gt 60 ]; then
 			echo 'Failed to start upstream PD'
@@ -148,7 +148,7 @@ while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/v
 done
 
 i=0
-while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
+while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/health 2>/dev/null | grep 'health' | grep 'true')" ]; do
 	i=$((i + 1))
 	if [ "$i" -gt 60 ]; then
 		echo 'Failed to start downstream PD'
