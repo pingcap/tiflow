@@ -401,6 +401,7 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 			_, err = sb.WriteString(col.Name + " IS NULL")
 			require.Nil(t, err)
 			continue
+		}
 		params = append(params, col.Value)
 		if col.Type == mysql.TypeJSON {
 			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
