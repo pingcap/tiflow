@@ -19,7 +19,6 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -194,11 +193,7 @@ func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagTyp
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeJSON, mysql.TypeNewDecimal:
 		// value type for these mysql types are string
 		return unsafeStringToBytes(value.(string))
-	case mysql.TypeEnum:
-		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(types.Enum).Value)
-	case mysql.TypeSet:
-		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(types.Set).Value)
-	case mysql.TypeBit:
+	case mysql.TypeEnum, mysql.TypeSet, mysql.TypeBit:
 		// value type for these mysql types are uint64
 		return encodeUvarint(allocator.byteSlice(binary.MaxVarintLen64)[:0], value.(uint64))
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,

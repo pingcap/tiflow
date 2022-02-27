@@ -400,6 +400,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		tableInfoVersion = tableInfo.TableInfoVersion
 	}
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -411,6 +413,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
+		ColInfos:            colInfos,
 		Columns:             cols,
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
@@ -467,11 +470,11 @@ func formatColVal(datum types.Datum, tp byte) (
 		v := d.String()
 		return v, sizeOfString(v), "", nil
 	case mysql.TypeEnum:
-		v := datum.GetMysqlEnum()
+		v := datum.GetMysqlEnum().Value
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeSet:
-		v := datum.GetMysqlSet()
+		v := datum.GetMysqlSet().Value
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:

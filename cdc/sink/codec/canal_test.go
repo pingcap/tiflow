@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -444,8 +443,8 @@ var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"}, "time", JavaSQLTypeTIME, "02:20:20"},
 	{&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag}, "year", JavaSQLTypeVARCHAR, "2020"},
 
-	{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: types.Enum{Name: "v", Value: 1}}, "enum", JavaSQLTypeINTEGER, "1"},
-	{&model.Column{Name: "set", Type: mysql.TypeSet, Value: types.Set{Name: "v", Value: 3}}, "set", JavaSQLTypeBIT, "3"},
+	{&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)}, "enum", JavaSQLTypeINTEGER, "1"},
+	{&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)}, "set", JavaSQLTypeBIT, "3"},
 	{&model.Column{Name: "bit", Type: mysql.TypeBit, Value: uint64(65), Flag: model.UnsignedFlag | model.BinaryFlag}, "bit", JavaSQLTypeBIT, "65"},
 	{&model.Column{Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}", Flag: model.BinaryFlag}, "json", JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}"},
 }

@@ -242,10 +242,6 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType)
 			}
 			result = string(decoded)
 		}
-	case types.Enum:
-		result = strconv.FormatUint(v.Value, 10)
-	case types.Set:
-		result = strconv.FormatUint(v.Value, 10)
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
