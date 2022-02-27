@@ -60,40 +60,43 @@ func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
 
 func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	defer testleak.AfterTest(c)()
-	avroCodec, err := goavro.NewCodec(`
-        {
-          "type": "record",
-          "name": "test1",
-          "fields" : [
-            {"name": "id", "type": ["null", "int"], "default": null},
-			{"name": "myint", "type": ["null", "int"], "default": null},
-			{"name": "mybool", "type": ["null", "int"], "default": null},
-			{"name": "myfloat", "type": ["null", "float"], "default": null},
-			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "mystring", "type": ["null", "string"], "default": null},
-			{"name": "myenum", "type": ["null", "string"], "default": null},
-			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
-          ]
-        }`)
-
-	c.Assert(err, check.IsNil)
 
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "TestAvroEncodeOnly",
 	}
 
-	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
+	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
-		{Name: "mybytes", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeBlob},
-		{Name: "mystring", Value: "Hello World", Type: mysql.TypeBlob},
+		{Name: "mybytes1", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeBlob},
+		{Name: "mybytes2", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeMediumBlob},
+		{Name: "mybytes3", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeTinyBlob},
+		{Name: "mybytes4", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeLongBlob},
+		{Name: "mybytes5", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeVarString},
+		{Name: "mybytes6", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeString},
+		{Name: "mybytes7", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeVarchar},
+		{Name: "mystring1", Value: "Hello World", Type: mysql.TypeBlob},
+		{Name: "mystring2", Value: "Hello World", Type: mysql.TypeMediumBlob},
+		{Name: "mystring3", Value: "Hello World", Type: mysql.TypeTinyBlob},
+		{Name: "mystring4", Value: "Hello World", Type: mysql.TypeLongBlob},
+		{Name: "mystring5", Value: "Hello World", Type: mysql.TypeVarString},
+		{Name: "mystring6", Value: "Hello World", Type: mysql.TypeString},
+		{Name: "mystring7", Value: "Hello World", Type: mysql.TypeVarchar},
 		{Name: "myenum", Value: types.Enum{Value: 1, Name: "v"}, Type: mysql.TypeEnum},
+		{Name: "myset", Value: types.Set{Value: 1, Name: "v"}, Type: mysql.TypeSet},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 		{Name: "myjson", Value: "{\"foo\": \"bar\"}", Type: mysql.TypeJSON},
-	}, time.Local)
+	}
+
+	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
+	c.Assert(err, check.IsNil)
+	avroCodec, err := goavro.NewCodec(schema)
+	c.Assert(err, check.IsNil)
+
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, time.Local)
 	c.Assert(err, check.IsNil)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
@@ -110,7 +113,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
-          "name": "test1",
+          "name": "TestAvroTimeZone",
           "fields" : [
             {"name": "id", "type": ["null", "int"], "default": null},
 			{"name": "myint", "type": ["null", "int"], "default": null},
@@ -125,7 +128,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "TestAvroTimeZone",
 	}
 
 	location, err := time.LoadLocation("UTC")
@@ -154,7 +157,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
-          "name": "test2",
+          "name": "TestAvroEnvelope",
           "fields" : [
             {"name": "id", "type": "int", "default": 0}
           ]
