@@ -1413,7 +1413,7 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 			if req.WorkerName != "" {
 				err = s.scheduler.AddSourceCfgWithWorker(cfg, req.WorkerName)
 			} else {
-				err = s.scheduler.AddSourceCfg(cfg)
+				err = s.scheduler.AddSourceCfg(cfg, true)
 			}
 			// return first error and try to revert, so user could copy-paste same start command after error
 			if err != nil {

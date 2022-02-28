@@ -135,7 +135,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(subtaskCfg22.Adjust(true), IsNil)
 
 	// not started scheduler can't do anything.
-	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfg(sourceCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfg(sourceCfg1, true)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfgWithWorker(sourceCfg1, workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSourceCfg(sourceID1)), IsTrue)
@@ -162,8 +162,8 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	// no source config exist before added.
 	t.sourceCfgNotExist(c, s, sourceID1)
 	// add source config1.
-	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
-	c.Assert(terror.ErrSchedulerSourceCfgExist.Equal(s.AddSourceCfg(sourceCfg1)), IsTrue) // can't add multiple times.
+	c.Assert(s.AddSourceCfg(sourceCfg1, true), IsNil)
+	c.Assert(terror.ErrSchedulerSourceCfgExist.Equal(s.AddSourceCfg(sourceCfg1, true)), IsTrue) // can't add multiple times.
 	// the source config added.
 	t.sourceCfgExist(c, s, sourceCfg1)
 
@@ -400,7 +400,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	// source2 not exists before.
 	t.sourceCfgNotExist(c, s, sourceID2)
 	// add source2.
-	c.Assert(s.AddSourceCfg(&sourceCfg2), IsNil)
+	c.Assert(s.AddSourceCfg(&sourceCfg2, true), IsNil)
 	// source2 added.
 	t.sourceCfgExist(c, s, &sourceCfg2)
 	// source2 should bound to worker2.
@@ -816,7 +816,7 @@ func (t *testScheduler) TestRestartScheduler(c *C) {
 	// step 1: start scheduler
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
 	// step 1.1: add sourceCfg and worker
-	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
+	c.Assert(s.AddSourceCfg(sourceCfg1, true), IsNil)
 	t.sourceCfgExist(c, s, sourceCfg1)
 	c.Assert(s.AddWorker(workerName1, workerAddr1), IsNil)
 	t.workerExist(c, s, workerInfo1)
@@ -981,8 +981,8 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	s.etcdCli = etcdTestCli
 
 	// step 2: add two sources and register four workers
-	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
-	c.Assert(s.AddSourceCfg(&sourceCfg2), IsNil)
+	c.Assert(s.AddSourceCfg(sourceCfg1, true), IsNil)
+	c.Assert(s.AddSourceCfg(&sourceCfg2, true), IsNil)
 	c.Assert(s.unbounds, HasLen, 2)
 	c.Assert(s.unbounds, HasKey, sourceID1)
 	c.Assert(s.unbounds, HasKey, sourceID2)

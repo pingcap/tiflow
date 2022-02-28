@@ -296,7 +296,7 @@ func (s *Server) addSourcesV1Import(tctx *tcontext.Context, cfgs map[string]*con
 		err   error
 	)
 	for _, cfg := range cfgs {
-		err = s.scheduler.AddSourceCfg(cfg)
+		err = s.scheduler.AddSourceCfg(cfg, true)
 		if err != nil {
 			if terror.ErrSchedulerSourceCfgExist.Equal(err) {
 				err = nil // reset error

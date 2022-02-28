@@ -56,7 +56,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 
 // nolint:unparam
 func (s *Server) createSource(ctx context.Context, cfg *config.SourceConfig) error {
-	return s.scheduler.AddSourceConfig(cfg)
+	return s.scheduler.AddSourceCfg(cfg, false)
 }
 
 // nolint:unparam,unused
