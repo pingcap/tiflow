@@ -26,7 +26,9 @@ const itemLayout = {
 
 const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
   const [t] = useTranslation()
-  const { data, isFetching } = useDmapiGetSourceListQuery({ withStatus: false })
+  const { data, isFetching } = useDmapiGetSourceListQuery({
+    with_status: false,
+  })
 
   return (
     <Form {...formLayout} name="sourceInfo" initialValues={initialValues}>

@@ -17,7 +17,7 @@ const defaultFormValues = {
     ssl_key_content: '',
   },
 
-  relay: {
+  relay_config: {
     relay_enable: false,
     binlog_name: '',
     binlog_location: '',
@@ -25,7 +25,7 @@ const defaultFormValues = {
 }
 
 const CreateOrUpdateSource: React.FC<{
-  onSubmit?: (values: Partial<Source>) => void
+  onSubmit?: (values: Source) => void
   onCancel?: () => void
   currentSource?: Source | null
 }> = ({ onCancel, onSubmit, currentSource }) => {
@@ -132,22 +132,32 @@ const CreateOrUpdateSource: React.FC<{
               {t('relay config (optional)')}
             </h1>
             <Form.Item
-              name={['relay', 'relay_enable']}
+              name={['relay_config', 'enable_relay']}
               label={t('enable relay')}
               valuePropName="checked"
             >
               <Switch defaultChecked={false} />
             </Form.Item>
 
-            <Form.Item name={['relay', 'binlog_name']} label={t('binlog name')}>
-              <Input placeholder={t('binlog name or gtid')} />
+            <Form.Item
+              name={['relay_config', 'relay_binlog_name']}
+              label={t('binlog name')}
+            >
+              <Input placeholder={t('binlog name')} />
             </Form.Item>
 
             <Form.Item
-              name={['relay', 'binlog_location']}
+              name={['relay_config', 'relay_dir']}
               label={t('binlog location')}
             >
               <Input placeholder="/location" />
+            </Form.Item>
+
+            <Form.Item
+              name={['relay_config', 'relay_binlog_gtid']}
+              label={t('gtid')}
+            >
+              <Input placeholder="gtid" />
             </Form.Item>
           </section>
         </Col>

@@ -29,7 +29,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
   const [currentSource, setCurrentSource] = useState('')
   const [cascaderValue, setCascaderValue] = useState<string[][]>([])
   const [form] = Form.useForm()
-  const { data } = useDmapiGetSourceListQuery({ withStatus: false })
+  const { data } = useDmapiGetSourceListQuery({ with_status: false })
   const [getSourceTable] = useDmapiGetSourceTableListMutation()
   const { data: schemas, isFetching } = useDmapiGetSourceSchemaListQuery(
     { sourceName: currentSource },
@@ -260,7 +260,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
           {t('previous')}
         </Button>
         <Button type="primary" htmlType="submit">
-          {t('create')}
+          {t('save')}
         </Button>
       </Form.Item>
     </Form>

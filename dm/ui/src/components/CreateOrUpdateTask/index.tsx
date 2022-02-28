@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { merge } from 'lodash'
+import { merge, omit } from 'lodash'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 import { Card, Form, Steps, message } from '~/uikit'
@@ -9,7 +9,8 @@ import {
   Task,
   TaskFormData,
   TaskMode,
-  useDmapiStartTaskMutation,
+  useDmapiCreateTaskMutation,
+  useDmapiUpdateTaskMutation,
 } from '~/models/task'
 import BasicInfo from '~/components/CreateOrUpdateTask/BasicInfo'
 import SourceInfo from '~/components/CreateOrUpdateTask/SourceInfo'
@@ -48,14 +49,16 @@ const stepComponents = [
 
 const CreateTaskConfig: React.FC<{
   data?: Task | null
-}> = ({ data }) => {
+  className?: string
+}> = ({ data, className }) => {
   const [t] = useTranslation()
   const loc = useLocation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(0)
   const [taskData, setTaskData] = useState<TaskFormData>(defaultValue)
-  const [startTask] = useDmapiStartTaskMutation()
+  const [createTask] = useDmapiCreateTaskMutation()
+  const [updateTask] = useDmapiUpdateTaskMutation()
   const desciptions = [
     t('create task basic info desc'),
     t('create task source info desc'),
@@ -71,33 +74,29 @@ const CreateTaskConfig: React.FC<{
     setCurrentStep(c => c - 1)
   }, [])
 
-  const handleSubmit = useCallback(
-    taskData => {
-      const key = 'createTaskConfig-' + Date.now()
-      message.loading({ content: t('saving'), key })
-      const payload = { ...taskData }
-      delete payload.binlog_filter_rule_array
-      if (
-        Object.values(payload.target_config.security).filter(Boolean).length ===
-        0
-      ) {
-        delete payload.target_config.security
-      }
-      startTask({
-        task: payload as Task,
-        remove_meta: true,
+  const handleSubmit = (taskData: TaskFormData) => {
+    const isEditing = Boolean(data)
+    const key = 'createTask-' + Date.now()
+    message.loading({ content: t('requesting'), key })
+    const payload = { ...taskData }
+    delete payload.binlog_filter_rule_array
+    if (
+      Object.values(payload.target_config.security ?? {}).filter(Boolean)
+        .length === 0
+    ) {
+      delete payload.target_config.security
+    }
+    const handler = isEditing ? updateTask : createTask
+    handler({ task: payload as Task })
+      .unwrap()
+      .then(() => {
+        message.success({ content: t('request success'), key })
+        navigate('#')
       })
-        .unwrap()
-        .then(() => {
-          message.success({ content: t('saved'), key })
-          navigate('#')
-        })
-        .catch(() => {
-          message.destroy(key)
-        })
-    },
-    [taskData]
-  )
+      .catch(() => {
+        message.destroy(key)
+      })
+  }
 
   const getStepComponent = () => {
     const Comp = stepComponents[currentStep]
@@ -112,7 +111,7 @@ const CreateTaskConfig: React.FC<{
   useEffect(() => {
     if (data) {
       setTaskData(
-        merge({}, defaultValue, data, {
+        merge({}, defaultValue, omit(data, 'status_list'), {
           binlog_filter_rule_array: Object.entries(
             data?.binlog_filter_rule ?? {}
           ).map(([name, value]) => ({ name, ...value })),
@@ -124,9 +123,12 @@ const CreateTaskConfig: React.FC<{
 
   if (loc.hash === '#configFile') {
     return (
-      <Card className="!m-4" loading={loading}>
-        <CreateTaskEditorMode initialValues={taskData} />
-      </Card>
+      <div className={className}>
+        <CreateTaskEditorMode
+          initialValues={taskData}
+          onSubmit={data => handleSubmit(data)}
+        />
+      </div>
     )
   }
 

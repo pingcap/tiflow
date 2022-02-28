@@ -41,8 +41,8 @@ import {
   Task,
   useDmapiGetTaskListQuery,
   useDmapiDeleteTaskMutation,
-  useDmapiPauseTaskMutation,
-  useDmapiResumeTaskMutation,
+  useDmapiStopTaskMutation,
+  useDmapiStartTaskMutation,
   useDmapiGetTaskStatusQuery,
   calculateTaskStatus,
   TaskStage,
@@ -71,7 +71,6 @@ const TaskList: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
   const selectedTask = useAppSelector(state => state.globals.preloadedTask)
-
   const navigate = useNavigate()
 
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
@@ -82,8 +81,8 @@ const TaskList: React.FC = () => {
     { skip: !currentTask }
   )
 
-  const [pauseTask] = useDmapiPauseTaskMutation()
-  const [resumeTask] = useDmapiResumeTaskMutation()
+  const [stopTask] = useDmapiStopTaskMutation()
+  const [startTask] = useDmapiStartTaskMutation()
   const [deleteTask] = useDmapiDeleteTaskMutation()
 
   const rowSelection = {
@@ -101,36 +100,38 @@ const TaskList: React.FC = () => {
         onOk() {
           message.loading({ content: t('requesting'), key })
           Promise.all(
-            selectedSources.map(name => handler({ taskName: name }).unwrap())
-          )
-            .then(() => message.success({ content: t('request success'), key }))
-            .catch(() => {
+            selectedSources.map(name => handler({ taskName: name }))
+          ).then(res => {
+            if (res.some(r => r?.error)) {
               message.destroy(key)
-            })
+            } else {
+              message.success({ content: t('request success'), key })
+            }
+          })
         },
       })
     },
     [selectedSources]
   )
 
-  const handlePauseTask = useCallback(() => {
+  const handleStopTask = useCallback(() => {
     if (!selectedSources.length) {
       return
     }
     handleRequest({
-      title: t('confirm to pause task?'),
-      key: 'pauseTask-' + Date.now(),
-      handler: pauseTask,
+      title: t('confirm to stop task?'),
+      key: 'stopTask-' + Date.now(),
+      handler: stopTask,
     })
   }, [selectedSources, handleRequest])
-  const handleResumeTask = useCallback(() => {
+  const handleStartTask = useCallback(() => {
     if (!selectedSources.length) {
       return
     }
     handleRequest({
-      title: t('confirm to resume task?'),
-      key: 'resumeTask-' + Date.now(),
-      handler: resumeTask,
+      title: t('confirm to start task?'),
+      key: 'startTask-' + Date.now(),
+      handler: startTask,
     })
   }, [selectedSources, handleRequest])
   const handleDeleteTask = useCallback(() => {
@@ -251,17 +252,20 @@ const TaskList: React.FC = () => {
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
+
             <Dropdown
               overlay={
                 <Menu>
                   <Menu.Item
-                    icon={<PlayCircleOutlined />}
-                    onClick={handleResumeTask}
+                    icon={<PauseCircleOutlined />}
+                    key="stop"
+                    onClick={handleStopTask}
                   >
-                    {t('resume')}
+                    {t('stop')}
                   </Menu.Item>
                   <Menu.Item
                     icon={<CloseCircleOutlined />}
+                    key="delete"
                     onClick={handleDeleteTask}
                   >
                     {t('delete')}
@@ -269,9 +273,9 @@ const TaskList: React.FC = () => {
                 </Menu>
               }
             >
-              <Button onClick={handlePauseTask}>
-                <PauseCircleOutlined />
-                {t('pause')} <DownOutlined />
+              <Button onClick={handleStartTask}>
+                <PlayCircleOutlined />
+                {t('start')} <DownOutlined />
               </Button>
             </Dropdown>
           </Space>

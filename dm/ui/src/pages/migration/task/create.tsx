@@ -8,7 +8,7 @@ const CreateTask: React.FC = () => {
   const [t] = useTranslation()
 
   return (
-    <div>
+    <div className="flex flex-col h-full">
       <div className="px-4 pt-4">
         <Breadcrumb>
           <Breadcrumb.Item>{t('migration')}</Breadcrumb.Item>
@@ -17,7 +17,7 @@ const CreateTask: React.FC = () => {
         </Breadcrumb>
       </div>
 
-      <CreateTaskConfig />
+      <CreateTaskConfig className="flex-1" />
     </div>
   )
 }

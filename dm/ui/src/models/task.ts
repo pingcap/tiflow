@@ -2,14 +2,7 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
-    dmapiStartTask: build.mutation<
-      Task,
-      {
-        remove_meta: boolean
-        task: Task
-        source_name_list?: string[]
-      }
-    >({
+    dmapiCreateTask: build.mutation<Task, { task: Task }>({
       query: queryArg => ({
         url: `/tasks`,
         method: 'POST',
@@ -17,24 +10,60 @@ const injectedRtkApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Task'],
     }),
-    dmapiGetTaskList: build.query<ListResponse<Task>, { withStatus: boolean }>({
+    dmapiGetTaskList: build.query<
+      ListResponse<Task>,
+      {
+        withStatus?: boolean
+        stage?: TaskStage
+        sourceNameList?: string[]
+      }
+    >({
       query: queryArg => ({
         url: `/tasks`,
-        params: { with_status: queryArg.withStatus },
+        params: {
+          with_status: queryArg.withStatus,
+          stage: queryArg.stage,
+          source_name_list: queryArg.sourceNameList,
+        },
       }),
       providesTags: ['Task'],
     }),
-    dmapiDeleteTask: build.mutation<void, TaskWithSourceList>({
+    dmapiDeleteTask: build.mutation<
+      void,
+      {
+        taskName: string
+        force?: boolean
+      }
+    >({
       query: queryArg => ({
         url: `/tasks/${queryArg.taskName}`,
         method: 'DELETE',
-        params: { source_name_list: queryArg.sourceNameList },
+        params: { force: queryArg.force },
+      }),
+      invalidatesTags: ['Task'],
+    }),
+    dmapiGetTask: build.query<Task, { taskName: string; withStatus?: boolean }>(
+      {
+        query: queryArg => ({
+          url: `/tasks/${queryArg.taskName}`,
+          params: { with_status: queryArg.withStatus },
+        }),
+      }
+    ),
+    dmapiUpdateTask: build.mutation<Task, { task: Task }>({
+      query: queryArg => ({
+        url: `/tasks/${queryArg.task.name}`,
+        method: 'PUT',
+        body: queryArg,
       }),
       invalidatesTags: ['Task'],
     }),
     dmapiGetTaskStatus: build.query<
       ListResponse<SubTaskStatus>,
-      TaskWithSourceList
+      {
+        taskName: string
+        sourceNameList?: string[]
+      }
     >({
       query: queryArg => ({
         url: `/tasks/${queryArg.taskName}/status`,
@@ -43,19 +72,29 @@ const injectedRtkApi = api.injectEndpoints({
           : undefined,
       }),
     }),
-    dmapiPauseTask: build.mutation<void, TaskWithSourceList>({
+    dmapiStopTask: build.mutation<
+      void,
+      {
+        taskName: string
+        source_name_list?: string[]
+        timeout_duration?: any
+      }
+    >({
       query: queryArg => ({
-        url: `/tasks/${queryArg.taskName}/pause`,
+        url: `/tasks/${queryArg.taskName}/stop`,
         method: 'POST',
-        body: queryArg.sourceNameList,
+        body: {
+          source_name_list: queryArg.source_name_list,
+          timeout_duration: queryArg.timeout_duration,
+        },
       }),
       invalidatesTags: ['Task'],
     }),
-    dmapiResumeTask: build.mutation<void, TaskWithSourceList>({
+    dmapiStartTask: build.mutation<void, DmapiStartTaskApiArg>({
       query: queryArg => ({
-        url: `/tasks/${queryArg.taskName}/resume`,
+        url: `/tasks/${queryArg.taskName}/start`,
         method: 'POST',
-        body: queryArg.sourceNameList,
+        body: queryArg.startTaskRequest,
       }),
       invalidatesTags: ['Task'],
     }),
@@ -85,9 +124,14 @@ const injectedRtkApi = api.injectEndpoints({
   }),
 })
 
-export type TaskWithSourceList = {
+export type DmapiStartTaskApiArg = {
   taskName: string
-  sourceNameList?: string[]
+  startTaskRequest: {
+    remove_meta?: boolean
+    safe_mode_time_duration?: any
+    source_name_list?: string[]
+    start_time?: string
+  }
 }
 
 export type Security = {
@@ -252,8 +296,10 @@ export const {
   useDmapiGetTaskListQuery,
   useDmapiDeleteTaskMutation,
   useDmapiGetTaskStatusQuery,
-  useDmapiPauseTaskMutation,
-  useDmapiResumeTaskMutation,
+  useDmapiCreateTaskMutation,
+  useDmapiGetTaskQuery,
+  useDmapiStopTaskMutation,
+  useDmapiUpdateTaskMutation,
   useDmapiGetSchemaListByTaskAndSourceQuery,
   useDmapiGetTableListByTaskAndSourceQuery,
 } = injectedRtkApi

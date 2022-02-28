@@ -2,9 +2,18 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '~/i18n'
-import { Input, Row, Col, Button, Space, Table, Breadcrumb } from '~/uikit'
+import {
+  Input,
+  Row,
+  Col,
+  Button,
+  Space,
+  Table,
+  Breadcrumb,
+  TableColumnsType,
+} from '~/uikit'
 import { RedoOutlined, SearchOutlined } from '~/uikit/icons'
-import { useDmapiGetTaskListQuery } from '~/models/task'
+import { Task, useDmapiGetTaskListQuery } from '~/models/task'
 import { useFuseSearch } from '~/utils/search'
 
 const ReplicationDetail: React.FC = () => {
@@ -17,10 +26,22 @@ const ReplicationDetail: React.FC = () => {
   const { result, setKeyword } = useFuseSearch(dataSource, {
     keys: ['name'],
   })
-  const columns = [
+  const columns: TableColumnsType<Task> = [
     {
       title: t('task name'),
       dataIndex: 'name',
+    },
+    {
+      title: t('source info'),
+      dataIndex: 'source_config',
+      render(sourceConfig) {
+        return sourceConfig.source_conf?.length > 0
+          ? t('{{val}} and {{count}} others', {
+              val: `${sourceConfig.source_conf[0].source_name}`,
+              count: sourceConfig.source_conf.length,
+            })
+          : '-'
+      },
     },
   ]
   return (
