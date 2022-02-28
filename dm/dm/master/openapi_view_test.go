@@ -836,9 +836,9 @@ func setupTestServer(ctx context.Context, t *testing.T) *Server {
 	s1 := NewServer(cfg1)
 	require.Nil(t, s1.Start(ctx))
 	// wait the first one become the leader
-	require.Equal(t, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.True(t, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s1.election.IsLeader() && s1.scheduler.Started()
-	}), true)
+	}))
 	return s1
 }
 
