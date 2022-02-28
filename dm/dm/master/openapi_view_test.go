@@ -888,26 +888,6 @@ func mockTaskQueryStatus(
 				{
 					Stage: pb.Stage_Running,
 					Name:  taskName,
-					Status: &pb.SubTaskStatus_Sync{
-						Sync: &pb.SyncStatus{
-							TotalEvents:         0,
-							TotalTps:            0,
-							RecentTps:           0,
-							MasterBinlog:        "",
-							MasterBinlogGtid:    "",
-							SyncerBinlog:        "",
-							SyncerBinlogGtid:    "",
-							BlockingDDLs:        nil,
-							UnresolvedGroups:    nil,
-							Synced:              false,
-							BinlogType:          "",
-							SecondsBehindMaster: 0,
-						},
-					},
-				},
-				{
-					Stage: pb.Stage_Running,
-					Name:  taskName,
 					Status: &pb.SubTaskStatus_Dump{
 						Dump: &pb.DumpStatus{
 							CompletedTables:   0.0,
