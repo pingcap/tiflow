@@ -106,10 +106,9 @@ func startStopValidation(op string) func(*cobra.Command, []string) error {
 				ctx,
 				"StartValidation",
 				&pb.StartValidationRequest{
-					IsAllTask: isAllTask,
-					TaskName:  taskName,
-					Sources:   sources,
-					Mode:      mode,
+					TaskName: taskName,
+					Sources:  sources,
+					Mode:     mode,
 				},
 				&resp,
 			)
@@ -123,9 +122,8 @@ func startStopValidation(op string) func(*cobra.Command, []string) error {
 				ctx,
 				"StopValidation",
 				&pb.StopValidationRequest{
-					IsAllTask: isAllTask,
-					TaskName:  taskName,
-					Sources:   sources,
+					TaskName: taskName,
+					Sources:  sources,
 				},
 				&resp,
 			)

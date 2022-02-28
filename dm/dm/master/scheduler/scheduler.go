@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -2688,28 +2687,20 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
 			}
 			if v, ok := stageM[cfg.Name]; ok && v.Expect == expectStage {
-				warnInfo := fmt.Sprintf("subtask validator is already %s\n", expectStage.String())
 				s.logger.Info(
-					warnInfo,
+					"validator stage is already in expected stage",
+					zap.String("expectStage", expectStage.String()),
 					zap.String("taskName", cfg.Name),
 					zap.String("source", cfg.SourceID),
 				)
 			} else {
 				if expectStage == pb.Stage_Running {
 					// don't need to update config if stopping the validator task
-					v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
-					m := v.(map[string]config.SubTaskConfig)
-					m[cfg.SourceID] = cfg
 					newCfgs = append(newCfgs, cfg)
 				}
 				validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
 			}
 		}
-	}
-	for _, stage := range validatorStages {
-		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
-		m := v.(map[string]ha.Stage)
-		m[stage.Source] = stage
 	}
 	// 2. setting subtask stage in etcd
 	if len(newCfgs) > 0 || len(validatorStages) > 0 {
@@ -2717,7 +2708,19 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 		if err != nil {
 			return terror.Annotate(err, "fail to set new validator stage")
 		}
-		return err
+	}
+	// 3. cache validator stage
+	for _, stage := range validatorStages {
+		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
+		m := v.(map[string]ha.Stage)
+		m[stage.Source] = stage
+	}
+	if expectStage == pb.Stage_Running {
+		for _, cfg := range newCfgs {
+			v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+			m := v.(map[string]config.SubTaskConfig)
+			m[cfg.SourceID] = cfg
+		}
 	}
 	return nil
 }

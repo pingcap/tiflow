@@ -2305,7 +2305,6 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 
 	// 4.1 stop all tasks
 	validatorStopReq.TaskName = ""
-	validatorStopReq.IsAllTask = true
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsTrue)
@@ -2314,23 +2313,9 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 
 	// 4.2 start all tasks
 	validatorStartReq.TaskName = ""
-	validatorStartReq.IsAllTask = true
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsTrue)
-
-	// 5.1 conflict args
-	validatorStopReq.TaskName = taskName
-	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, "either .* should be set")
-
-	validatorStartReq.TaskName = taskName
-	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, "either .* should be set")
 }
 
 func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {

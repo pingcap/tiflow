@@ -2041,4 +2041,11 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
 	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
 	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+
+	// CASE 4: set the mode of a running task, not succeed
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
 }
