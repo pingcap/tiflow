@@ -66,6 +66,16 @@ var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
 	workerHeartbeatInterval:          time.Second * 3,
 	workerReportStatusInterval:       time.Second * 3,
 	masterHeartbeatCheckLoopInterval: time.Second * 1,
+}.Adjust()
+
+// Adjust validates the TimeoutConfig and adjusts it
+func (config TimeoutConfig) Adjust() TimeoutConfig {
+	var tc TimeoutConfig = config
+	// worker timeout duration must be 2 times larger than worker heartbeat interval
+	if tc.workerTimeoutDuration < 2*tc.workerHeartbeatInterval+time.Second*3 {
+		tc.workerTimeoutDuration = 2*tc.workerHeartbeatInterval + time.Second*3
+	}
+	return tc
 }
 
 type WorkerStatus struct {

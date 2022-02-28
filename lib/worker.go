@@ -335,7 +335,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if !isNormal {
-			return derror.ErrWorkerSuicide.GenWithStackByArgs()
+			return derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
 		}
 	}
 }
@@ -425,7 +425,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 	return m.masterID
 }
 
-func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
+func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
 	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -435,7 +435,13 @@ func (m *masterClient) refreshMasterInfo(ctx context.Context) error {
 	m.mu.Lock()
 	m.masterNode = masterMeta.NodeID
 	if m.masterEpoch < masterMeta.Epoch {
+		log.L().Info("refresh master info", zap.String("masterID", m.masterID),
+			zap.Int64("oldEpoch", m.masterEpoch), zap.Int64("newEpoch", masterMeta.Epoch),
+		)
 		m.masterEpoch = masterMeta.Epoch
+		// if worker finds master is transferred, reset the master last ack time
+		// to now in case of a false positive detection of master timeout.
+		m.lastMasterAckedPingTime = clock.Mono()
 		m.mu.Unlock()
 		if err := m.onMasterFailOver(); err != nil {
 			return errors.Trace(err)
@@ -498,7 +504,7 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	if sinceLastAcked > 2*m.timeoutConfig.workerHeartbeatInterval &&
 		sinceLastAcked < m.timeoutConfig.workerTimeoutDuration {
 
-		if err := m.refreshMasterInfo(ctx); err != nil {
+		if err := m.refreshMasterInfo(ctx, clock); err != nil {
 			return false, errors.Trace(err)
 		}
 		return true, nil
@@ -530,4 +536,11 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}
 	return nil
+}
+
+// used in unit test only
+func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.lastMasterAckedPingTime
 }
