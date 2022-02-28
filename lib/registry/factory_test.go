@@ -36,7 +36,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 }
 
 func TestNewSimpleWorkerFactory(t *testing.T) {
-	dummyConstructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.Worker {
+	dummyConstructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.WorkerImpl {
 		return fake.NewDummyWorker(ctx, id, masterID, config)
 	}
 	fac := NewSimpleWorkerFactory(dummyConstructor, &dummyConfig{})
@@ -45,7 +45,7 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	require.Equal(t, &dummyConfig{Val: 1}, config)
 
 	ctx := makeCtxWithMockDeps(t)
-	newWorker, err := fac.NewWorker(ctx, "my-worker", "my-master", &dummyConfig{Val: 1})
+	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &dummyConfig{Val: 1})
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, newWorker)
 }

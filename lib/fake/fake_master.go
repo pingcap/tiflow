@@ -162,12 +162,5 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		pendingWorkerSet: make(map[lib.WorkerID]int),
 		config:           config.(*Config),
 	}
-	base := lib.NewBaseJobMaster(
-		ctx,
-		ret,
-		masterID,
-		workerID,
-	)
-	ret.BaseJobMaster = base
 	return ret
 }

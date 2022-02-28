@@ -21,11 +21,10 @@ type loadWorker struct {
 	unitHolder *unitHolder
 }
 
-func newLoadWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
+func newLoadWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &loadWorker{
-		BaseWorker: base,
-		cfg:        subtaskCfg,
+		cfg: subtaskCfg,
 	}
 }
 

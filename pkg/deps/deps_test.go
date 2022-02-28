@@ -24,6 +24,8 @@ type params struct {
 }
 
 func TestDepsBasics(t *testing.T) {
+	t.Parallel()
+
 	deps := NewDeps()
 	err := deps.Provide(func() *a {
 		return &a{val: 1}

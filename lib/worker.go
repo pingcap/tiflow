@@ -29,6 +29,9 @@ type Worker interface {
 	runtime.Closer
 }
 
+// WorkerImpl is the implementation of a worker of dataflow engine.
+// the implementation struct must embed the lib.BaseWorker interface, this
+// interface will be initialized by the framework.
 type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error

@@ -21,11 +21,10 @@ type dumpWorker struct {
 	unitHolder *unitHolder
 }
 
-func newDumpWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
+func newDumpWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &dumpWorker{
-		BaseWorker: base,
-		cfg:        subtaskCfg,
+		cfg: subtaskCfg,
 	}
 }
 

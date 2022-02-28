@@ -29,13 +29,11 @@ type SubTaskMaster struct {
 }
 
 func newSubTaskMaster(
-	base lib.BaseJobMaster,
 	cfg lib.WorkerConfig,
 ) *SubTaskMaster {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &SubTaskMaster{
-		BaseJobMaster: base,
-		cfg:           subtaskCfg,
+		cfg: subtaskCfg,
 	}
 }
 
@@ -173,4 +171,9 @@ func (s *SubTaskMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) er
 
 func (s *SubTaskMaster) IsJobMasterImpl() {
 	log.L().Info("is job master impl")
+}
+
+func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
+	log.L().Info("on master failover")
+	return nil
 }

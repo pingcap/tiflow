@@ -20,22 +20,19 @@ func init() {
 	r.MustRegisterWorkerType(lib.DMJobMaster, jobMasterFactory{})
 }
 
-type workerConstructor func(lib.BaseWorker, lib.WorkerConfig) lib.WorkerImpl
+type workerConstructor func(lib.WorkerConfig) lib.WorkerImpl
 
 type unitWorkerFactory struct {
 	constructor workerConstructor
 }
 
-func (u unitWorkerFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
-	base := lib.NewBaseWorker(
-		ctx,
-		nil,
-		workerID,
-		masterID,
-	)
-	worker := u.constructor(base, config)
-	base.(*lib.DefaultBaseWorker).Impl = worker
-	return worker.(lib.Worker), nil
+func (u unitWorkerFactory) NewWorkerImpl(
+	ctx *context.Context,
+	workerID lib.WorkerID,
+	masterID lib.MasterID,
+	config registry.WorkerConfig,
+) (lib.WorkerImpl, error) {
+	return u.constructor(config), nil
 }
 
 func (u unitWorkerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {
@@ -46,17 +43,13 @@ func (u unitWorkerFactory) DeserializeConfig(configBytes []byte) (registry.Worke
 
 type jobMasterFactory struct{}
 
-func (j jobMasterFactory) NewWorker(ctx *context.Context, workerID lib.WorkerID, masterID lib.MasterID, config registry.WorkerConfig) (lib.Worker, error) {
-	ret := newSubTaskMaster(nil, config)
-
-	base := lib.NewBaseJobMaster(
-		ctx,
-		ret,
-		masterID,
-		workerID,
-	)
-	ret.BaseJobMaster = base
-	return ret, nil
+func (j jobMasterFactory) NewWorkerImpl(
+	ctx *context.Context,
+	workerID lib.WorkerID,
+	masterID lib.MasterID,
+	config registry.WorkerConfig,
+) (lib.WorkerImpl, error) {
+	return newSubTaskMaster(config), nil
 }
 
 func (j jobMasterFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {

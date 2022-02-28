@@ -21,11 +21,10 @@ type syncWorker struct {
 	unitHolder *unitHolder
 }
 
-func newSyncWorker(base lib.BaseWorker, cfg lib.WorkerConfig) lib.WorkerImpl {
+func newSyncWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 	subtaskCfg := cfg.(*config.SubTaskConfig)
 	return &syncWorker{
-		BaseWorker: base,
-		cfg:        subtaskCfg,
+		cfg: subtaskCfg,
 	}
 }
 

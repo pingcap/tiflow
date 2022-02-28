@@ -43,6 +43,9 @@ type DefaultBaseJobMaster struct {
 	impl   JobMasterImpl
 }
 
+// JobMasterImpl is the implementation of a job master of dataflow engine.
+// the implementation struct must embed the lib.BaseJobMaster interface, this
+// interface will be initialized by the framework.
 type JobMasterImpl interface {
 	InitImpl(ctx context.Context) error
 	// Tick is called on a fixed interval. When an error is returned, the worker

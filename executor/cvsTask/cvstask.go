@@ -6,16 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -52,7 +53,7 @@ type cvsTask struct {
 }
 
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.Worker {
+	constructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewCvsTask(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
@@ -70,13 +71,6 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		buffer:            make(chan strPair, BUFFERSIZE),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 	}
-	base := lib.NewBaseWorker(
-		ctx,
-		task,
-		_workerID,
-		masterID,
-	)
-	task.BaseWorker = base
 	return task
 }
 
