@@ -175,16 +175,10 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, sourceNameL
 			subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
 			continue
 		}
-		// find right task name
-		var subTaskStatus *pb.SubTaskStatus
-		for _, cfg := range workerStatus.SubTaskStatus {
-			if cfg.Name == taskName {
-				subTaskStatus = cfg
-			}
-		}
+		subTaskStatus := workerStatus.SubTaskStatus[0]
 		if subTaskStatus == nil {
-			// not find
-			continue
+			// this should not happen unless the rpc in the worker server has been modified
+			return nil, terror.ErrOpenAPICommonError.New("worker's query-status response is nil")
 		}
 		openapiSubTaskStatus.Stage = subTaskStatus.GetStage().String()
 		openapiSubTaskStatus.Unit = subTaskStatus.GetUnit().String()
@@ -250,7 +244,7 @@ func (s *Server) listTask(ctx context.Context, req interface{}) []openapi.Task {
 }
 
 // nolint:unparam,unused
-func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList []string, remoteMeta bool, req interface{}) error {
+func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList []string, removeMeta bool, req interface{}) error {
 	// TODO(ehco) merge start-task req
 	subTaskConfigM := s.scheduler.GetSubTaskCfgsByTask(taskName)
 	needStartSubTaskList := make([]*config.SubTaskConfig, 0, len(subTaskConfigM))
@@ -264,7 +258,7 @@ func (s *Server) startTask(ctx context.Context, taskName string, sourceNameList 
 	if len(needStartSubTaskList) == 0 {
 		return nil
 	}
-	if remoteMeta {
+	if removeMeta {
 		// use same latch for remove-meta and start-task
 		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
 		if err != nil {
