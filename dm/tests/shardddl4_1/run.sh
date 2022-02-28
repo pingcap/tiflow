@@ -911,7 +911,7 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5,5);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6,6);"
 
-	run_sql_source1 "alter table ${shardddl1}.${tb1} change d d varchar(11);"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change d f int;"
 	random_restart 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7,7);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8,8);"
@@ -929,7 +929,7 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,14,14);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,15,15);"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb1} change d d varchar(11);"
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change d f int;"
 	random_restart 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(16,16,16,16);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(17,17,17);"
@@ -947,7 +947,7 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23,23,23);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24,24);"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb2} change d d varchar(11);"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
 	random_restart 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25,25);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(26,26,26,26);"
@@ -959,7 +959,15 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30,30);"
 
-	sleep 20
+	# sleep 10 seconds to make sure both dm-workers have reached their final event
+	# then insert some dmls to avoid dm-worker get blocked at getting heart event which may cause 30s
+	# this part is used to handle case like:
+	# worker1 receives skip and wait redirect, and finishes all the events and start waiting to for heartbeat event
+	# worker2 resolves this lock, and finishes all its dmls, but worker1 is blocked at receiving heartbeat event(because there is no new data written)
+	sleep 10
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(31,31,31,31);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(32,32,32,32);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(33,33,33,33);"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }

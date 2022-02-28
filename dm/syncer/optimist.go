@@ -257,14 +257,15 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 				for tableID, location := range group {
 					s.saveTablePoint(utils.UnpackTableID(tableID), location)
 				}
-				// TODO: should try flush checkpoint?
-				// s.flushCheckPoints()
-				*ec.shardingReSyncCh <- &ShardingReSync{
+				resync := &ShardingReSync{
 					currLocation:   redirectLocation,
 					latestLocation: ec.currentLocation.Clone(),
 					targetTable:    targetTable,
 					allResolved:    true,
 				}
+				s.osgk.tctx.L().Info("sending resync operation in optimistic shard mode",
+					zap.Stringer("shardingResync", resync))
+				*ec.shardingReSyncCh <- resync
 			}
 		}
 	} else {
