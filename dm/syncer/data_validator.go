@@ -160,7 +160,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) doValidate() {
 	tctx := tcontext.NewContext(v.ctx, v.L)
-	err := v.streamerController.Start(tctx, lastLocation)
+	err := v.streamerController.Start(tctx, lastLocationForTest)
 	if err != nil {
 		v.fillResult(terror.Annotate(err, "fail to restart streamer controller"), true)
 		return

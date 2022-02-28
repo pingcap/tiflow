@@ -88,7 +88,7 @@ function run() {
 	rm -rf $WORK_DIR/worker2/log/dm-worker.log # clean up the old log
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(2)"
-		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(2)" # test lag metric >= 2 beacuse we inject BlockExecuteSQLs to sleep(2) although skip lag is 0 (locally), but we use that lag of all dml/skip lag, so lag still >= 2
+		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(2)" # test lag metric >= 2 because we inject BlockExecuteSQLs to sleep(2) although skip lag is 0 (locally), but we use that lag of all dml/skip lag, so lag still >= 2
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -106,6 +106,10 @@ function run() {
 	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker2/log/dm-worker.log
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# this updated will blocked for 10s by failpoints(BlockExecuteSQLs), but during this time, dm_syncer_replication_lag_sum will continue increasing
+	run_sql_source1 'UPDATE metrics.t1 SET name="ehco" WHERE id = 1001'
+	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 2 999
 	echo "check dml/skip lag done!"
 
 	# check new metric: dm_syncer_replication_lag_sum,dm_syncer_replication_lag_gauge,
@@ -113,8 +117,8 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 -1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 -1 999
 
-	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
-	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
+	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 -1 999
+	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 -1 999
 
 	check_metric $WORKER1_PORT 'dm_syncer_finished_transaction_total{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 99999
 	check_metric $WORKER2_PORT 'dm_syncer_finished_transaction_total{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 99999

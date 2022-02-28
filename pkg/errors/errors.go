@@ -19,6 +19,9 @@ import (
 
 // errors
 var (
+	// general errors
+	ErrUnimplemented = errors.Normalize("unimplemented %s", errors.RFCCodeText("CDC:ErrUnimplemented"))
+
 	// kv related errors
 	ErrWriteTsConflict         = errors.Normalize("write ts conflict", errors.RFCCodeText("CDC:ErrWriteTsConflict"))
 	ErrChangeFeedNotExists     = errors.Normalize("changefeed not exists, %s", errors.RFCCodeText("CDC:ErrChangeFeedNotExists"))
@@ -78,6 +81,7 @@ var (
 	ErrKafkaInvalidClientID        = errors.Normalize("invalid kafka client ID '%s'", errors.RFCCodeText("CDC:ErrKafkaInvalidClientID"))
 	ErrKafkaInvalidVersion         = errors.Normalize("invalid kafka version", errors.RFCCodeText("CDC:ErrKafkaInvalidVersion"))
 	ErrKafkaInvalidConfig          = errors.Normalize("kafka config invalid", errors.RFCCodeText("CDC:ErrKafkaInvalidConfig"))
+	ErrKafkaCreateTopic            = errors.Normalize("kafka create topic failed", errors.RFCCodeText("CDC:ErrKafkaCreateTopic"))
 	ErrKafkaInvalidTopicExpression = errors.Normalize("invalid topic expression", errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"))
 	ErrPulsarNewProducer           = errors.Normalize("new pulsar producer", errors.RFCCodeText("CDC:ErrPulsarNewProducer"))
 	ErrPulsarSendMessage           = errors.Normalize("pulsar send message failed", errors.RFCCodeText("CDC:ErrPulsarSendMessage"))
@@ -90,7 +94,7 @@ var (
 	ErrFileSizeExceed              = errors.Normalize("rawData size %d exceeds maximum file size %d", errors.RFCCodeText("CDC:ErrFileSizeExceed"))
 	ErrS3StorageAPI                = errors.Normalize("s3 storage api", errors.RFCCodeText("CDC:ErrS3StorageAPI"))
 	ErrS3StorageInitialize         = errors.Normalize("new s3 storage for redo log", errors.RFCCodeText("CDC:ErrS3StorageInitialize"))
-	ErrPrepareAvroFailed           = errors.Normalize("prepare avro failed", errors.RFCCodeText("CDC:ErrPrepareAvroFailed"))
+	ErrMQCodecInvalidConfig        = errors.Normalize("MQ Codec invalid config", errors.RFCCodeText("CDC:ErrMQCodecInvalidConfig"))
 	ErrAsyncBroadcastNotSupport    = errors.Normalize("Async broadcasts not supported", errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"))
 	ErrSinkURIInvalid              = errors.Normalize("sink uri invalid", errors.RFCCodeText("CDC:ErrSinkURIInvalid"))
 	ErrMQSinkUnknownProtocol       = errors.Normalize("unknown '%s' protocol for Message Queue sink", errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"))

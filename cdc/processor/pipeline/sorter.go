@@ -55,9 +55,7 @@ type sorterNode struct {
 	eg     *errgroup.Group
 	cancel context.CancelFunc
 
-	cleanID     actor.ID
-	cleanTask   message.Message
-	cleanRouter *actor.Router
+	cleanup func(context.Context) error
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
@@ -110,15 +108,13 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.Router()
+			actorID := ctx.GlobalVars().SorterSystem.DBActorID(uint64(n.tableID))
+			router := ctx.GlobalVars().SorterSystem.DBRouter
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter := leveldb.NewSorter(
 				ctx, n.tableID, startTs, router, actorID, compactScheduler,
 				config.GetGlobalServerConfig().Debug.DB)
-			n.cleanID = actorID
-			n.cleanTask = levelSorter.CleanupTask()
-			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
+			n.cleanup = levelSorter.CleanupFunc()
 			eventSorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
@@ -301,9 +297,9 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 
 func (n *sorterNode) releaseResource(ctx context.Context, changefeedID, captureAddr string) {
 	defer tableMemoryHistogram.DeleteLabelValues(changefeedID, captureAddr)
-	if n.cleanRouter != nil {
+	if n.cleanup != nil {
 		// Clean up data when the table sorter is canceled.
-		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
+		err := n.cleanup(ctx)
 		if err != nil {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}

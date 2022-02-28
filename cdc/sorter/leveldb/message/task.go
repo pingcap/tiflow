@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/db"
 	"golang.org/x/sync/semaphore"
@@ -27,15 +28,34 @@ type Task struct {
 	UID     uint32
 	TableID uint64
 
-	// encoded key -> serde.marshal(event)
-	// If a value is empty, it deletes the key/value entry in db.
-	Events map[Key][]byte
+	// Input unsorted event for writers.
+	// Sorter.AddEntry -> writer.
+	InputEvent *model.PolymorphicEvent
+	// Latest resolved ts / commit ts for readers.
+	// writer -> reader
+	ReadTs ReadTs
+	// A batch of events (bytes encoded) need to be wrote.
+	// writer -> leveldb
+	WriteReq map[Key][]byte
 	// Requests an iterator when it is not nil.
+	// reader -> leveldb
 	IterReq *IterRequest
+	// Deletes all of the key-values in the range.
+	// reader -> leveldb and leveldb -> compactor
+	DeleteReq *DeleteRequest
+}
 
-	// For clean-up table task.
-	Cleanup            bool
-	CleanupRatelimited bool
+// DeleteRequest a request to delete range.
+type DeleteRequest struct {
+	Range [2][]byte
+	// Approximately key value pairs in the range.
+	Count int
+}
+
+// ReadTs wraps the latest resolved ts and commit ts.
+type ReadTs struct {
+	MaxCommitTs   uint64
+	MaxResolvedTs uint64
 }
 
 // IterRequest contains parameters that necessary to build an iterator.
@@ -73,13 +93,4 @@ type LimitedIterator struct {
 func (s *LimitedIterator) Release() error {
 	s.Sema.Release(1)
 	return errors.Trace(s.Iterator.Release())
-}
-
-// NewCleanupTask returns a clean up task to clean up table data.
-func NewCleanupTask(uid uint32, tableID uint64) Task {
-	return Task{
-		TableID: tableID,
-		UID:     uid,
-		Cleanup: true,
-	}
 }
