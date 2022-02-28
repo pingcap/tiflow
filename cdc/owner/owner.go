@@ -340,11 +340,8 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 			// from the scheduler.
 			infoProvider := cf.GetInfoProvider()
 			if infoProvider == nil {
-				// This can only happen if the changefeed object actually
-				// uses the old scheduler, which is impossible unless there
-				// is a serious bug.
-				log.Panic("info provider is nil unexpectedly",
-					zap.String("changefeedID", cfID))
+				// The scheduler has not been initialized yet.
+				continue
 			}
 
 			totalCounts := infoProvider.GetTotalTableCounts()

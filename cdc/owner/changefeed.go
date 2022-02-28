@@ -592,6 +592,7 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	changefeedCloseDuration.Observe(costTime.Seconds())
 }
 
+// GetInfoProvider returns an InfoProvider if one is available.
 func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
 	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
 		return provider
