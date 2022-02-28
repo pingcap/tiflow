@@ -336,6 +336,10 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// and the old scheduler is removed.
 	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
 		for cfID, cf := range o.changefeeds {
+			if cf.state != nil && cf.state.Info != nil {
+				changefeedStatusGauge.WithLabelValues(cfID).Set(float64(cf.state.Info.State.ToInt()))
+			}
+
 			// The InfoProvider is a proxy object returning information
 			// from the scheduler.
 			infoProvider := cf.GetInfoProvider()
