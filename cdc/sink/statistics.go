@@ -69,7 +69,6 @@ func NewStatistics(ctx context.Context, name string) *Statistics {
 // Statistics maintains some status and metrics of the Sink
 type Statistics struct {
 	name             string
-	captureAddr      string
 	changefeedID     string
 	totalRows        uint64
 	totalFlushedRows uint64
