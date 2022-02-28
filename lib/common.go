@@ -134,11 +134,21 @@ type (
 		NodeID      p2p.NodeID `json:"node-id"`
 		Epoch       Epoch      `json:"epoch"`
 		Initialized bool       `json:"initialized"`
+		Tp          WorkerType `json:"type"`
 
-		// Ext holds business-specific data
-		MasterMetaExt *MasterMetaExt `json:"meta-ext"`
+		// Config holds business-specific data
+		Config []byte `json:"config"`
+		// TODO: add master status and checkpoint data
 	}
 )
+
+func (m *MasterMetaKVData) Marshal() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *MasterMetaKVData) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, m)
+}
 
 type WorkerMetaKVData struct {
 	MasterID   Master           `json:"id"`

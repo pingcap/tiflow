@@ -64,7 +64,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		id  lib.WorkerID
 		err error
 	)
-	job := &lib.MasterMetaExt{
+	meta := &lib.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:     jm.uuidGen.NewString(),
@@ -80,31 +80,35 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			resp.Err = errors.ToPBError(err)
 			return resp
 		}
-		job.Tp = lib.CvsJobMaster
-		job.Config = req.Config
+		meta.Tp = lib.CvsJobMaster
 	case pb.JobType_DM:
-		job.Tp = lib.DMJobMaster
+		meta.Tp = lib.DMJobMaster
 	case pb.JobType_FakeJob:
-		job.Tp = lib.FakeJobMaster
+		meta.Tp = lib.FakeJobMaster
 	default:
 		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
 
-	// TODO: data persistence for masterConfig
+	// Store job master meta data before creating it
+	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
+	if err != nil {
+		resp.Err = errors.ToPBError(err)
+		return resp
+	}
 
 	// CreateWorker here is to create job master actually
-	// TODO: use correct worker type and worker cost
+	// TODO: use correct worker cost
 	id, err = jm.BaseMaster.CreateWorker(
-		job.Tp, job, defaultJobMasterCost)
+		meta.Tp, meta, defaultJobMasterCost)
 
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = errors.ToPBError(err)
 		return resp
 	}
-	jm.JobFsm.JobDispatched(job)
+	jm.JobFsm.JobDispatched(meta)
 
 	resp.JobIdStr = id
 	return resp
@@ -133,6 +137,10 @@ func NewJobManagerImplV2(
 		id,
 	)
 
+	err = lib.StoreMasterMeta(dctx.Context(), impl.MetaKVClient(), impl.MasterMeta())
+	if err != nil {
+		return nil, err
+	}
 	err = impl.BaseMaster.Init(dctx.Context())
 	if err != nil {
 		return nil, err
@@ -148,7 +156,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return jm.JobFsm.IterPendingJobs(
-		func(job *lib.MasterMetaExt) (string, error) {
+		func(job *lib.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -161,7 +169,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
-		jm.JobFsm.JobDispatched(job.MasterMetaExt)
+		jm.JobFsm.JobDispatched(job)
 		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
 			return err
 		}

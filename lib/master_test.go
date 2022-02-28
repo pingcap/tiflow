@@ -265,7 +265,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &MasterMetaExt{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{

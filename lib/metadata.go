@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
@@ -77,7 +79,7 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMet
 		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
 			return nil, errors.Trace(err)
 		}
-		if masterMeta.MasterMetaExt.Tp != JobManager {
+		if masterMeta.Tp != JobManager {
 			meta = append(meta, masterMeta)
 		}
 	}
@@ -148,4 +150,29 @@ func (c *WorkerMetadataClient) MasterID() MasterID {
 
 func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
 	return adapter.WorkerKeyAdapter.Encode(c.masterID, id)
+}
+
+// StoreMasterMeta is exposed to job manager for job master meta persistence
+func StoreMasterMeta(
+	ctx context.Context,
+	metaKVClient metadata.MetaKV,
+	meta *MasterMetaKVData,
+) error {
+	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
+	masterMeta, err := metaClient.Load(ctx)
+	if err != nil {
+		if !derror.ErrMasterNotFound.Equal(err) {
+			return err
+		}
+	} else {
+		log.L().Warn("master meta exits, will be overwritten", zap.Any("meta", masterMeta))
+	}
+
+	epoch, err := metaClient.GenerateEpoch(ctx)
+	if err != nil {
+		return err
+	}
+	meta.Epoch = epoch
+
+	return metaClient.Store(ctx, meta)
 }

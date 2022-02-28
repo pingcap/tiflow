@@ -540,15 +540,15 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
-	masterMetaExt := &lib.MasterMetaExt{
+	masterMeta := &lib.MasterMetaKVData{
 		ID: lib.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
-	masterMetaExtBytes, err := masterMetaExt.Marshal()
+	masterMetaBytes, err := masterMeta.Marshal()
 	if err != nil {
 		return
 	}
-	dctx.Environ.MasterMetaExt = masterMetaExtBytes
+	dctx.Environ.MasterMetaBytes = masterMetaBytes
 
 	dp := deps.NewDeps()
 	if err := dp.Provide(func() metadata.MetaKV {

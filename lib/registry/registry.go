@@ -92,8 +92,8 @@ func (r *registryImpl) CreateWorker(
 		base := lib.NewBaseJobMaster(
 			ctx,
 			impl.(lib.JobMasterImpl),
-			workerID,
 			masterID,
+			workerID,
 		)
 		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil

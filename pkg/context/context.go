@@ -112,7 +112,7 @@ type RuntimeDependencies struct {
 }
 
 type Environment struct {
-	NodeID        p2p.NodeID
-	Addr          string
-	MasterMetaExt []byte
+	NodeID          p2p.NodeID
+	Addr            string
+	MasterMetaBytes []byte
 }

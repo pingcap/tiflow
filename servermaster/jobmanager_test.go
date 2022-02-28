@@ -63,21 +63,15 @@ func TestJobManagerRecover(t *testing.T) {
 	meta := []*lib.MasterMetaKVData{
 		{
 			ID: "master-1",
-			MasterMetaExt: &lib.MasterMetaExt{
-				ID: "master-1",
-				Tp: lib.FakeJobMaster,
-			},
+			Tp: lib.FakeJobMaster,
 		},
 		{
 			ID: "master-2",
-			MasterMetaExt: &lib.MasterMetaExt{
-				ID: "master-2",
-				Tp: lib.FakeJobMaster,
-			},
+			Tp: lib.FakeJobMaster,
 		},
 	}
 	for _, data := range meta {
-		cli := lib.NewMasterMetadataClient(data.MasterMetaExt.ID, metaKVClient)
+		cli := lib.NewMasterMetadataClient(data.ID, metaKVClient)
 		err := cli.Store(ctx, data)
 		require.Nil(t, err)
 	}

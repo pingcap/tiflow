@@ -193,7 +193,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
-	masterMeta := &lib.MasterMetaExt{
+	masterMeta := &lib.MasterMetaKVData{
 		// GetWorkerId here returns id of current unit
 		ID:     req.GetWorkerId(),
 		Tp:     lib.WorkerType(req.GetTaskTypeId()),
@@ -203,7 +203,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	if err != nil {
 		return nil, err
 	}
-	dctx.Environ.MasterMetaExt = metaBytes
+	dctx.Environ.MasterMetaBytes = metaBytes
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,

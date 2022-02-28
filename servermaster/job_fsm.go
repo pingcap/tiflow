@@ -12,7 +12,7 @@ import (
 
 type jobHolder struct {
 	lib.WorkerHandle
-	*lib.MasterMetaExt
+	*lib.MasterMetaKVData
 }
 
 // JobFsm manages state of all job masters, job master state forms a finite-state
@@ -49,8 +49,8 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[lib.MasterID]*lib.MasterMetaExt
-	waitAckJobs map[lib.MasterID]*lib.MasterMetaExt
+	pendingJobs map[lib.MasterID]*lib.MasterMetaKVData
+	waitAckJobs map[lib.MasterID]*lib.MasterMetaKVData
 	onlineJobs  map[lib.MasterID]*jobHolder
 }
 
@@ -61,8 +61,8 @@ type JobStats interface {
 
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaExt),
-		waitAckJobs: make(map[lib.MasterID]*lib.MasterMetaExt),
+		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaKVData),
+		waitAckJobs: make(map[lib.MasterID]*lib.MasterMetaKVData),
 		onlineJobs:  make(map[lib.MasterID]*jobHolder),
 	}
 }
@@ -122,13 +122,13 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	return resp
 }
 
-func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaExt) {
+func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = job
 }
 
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaExt) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -155,8 +155,8 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 		return errors.ErrWorkerNotFound.GenWithStackByArgs(worker.ID())
 	}
 	fsm.onlineJobs[worker.ID()] = &jobHolder{
-		WorkerHandle:  worker,
-		MasterMetaExt: job,
+		WorkerHandle:     worker,
+		MasterMetaKVData: job,
 	}
 	delete(fsm.waitAckJobs, worker.ID())
 	return nil
@@ -171,7 +171,7 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle) {
 		log.L().Warn("non-online worker offline, ignore it", zap.String("id", worker.ID()))
 		return
 	}
-	fsm.pendingJobs[worker.ID()] = job.MasterMetaExt
+	fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
 	delete(fsm.onlineJobs, worker.ID())
 }
 
