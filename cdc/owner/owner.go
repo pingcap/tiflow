@@ -357,6 +357,7 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
 			}
 		}
+		return
 	}
 
 	for changefeedID, changefeedState := range state.Changefeeds {
