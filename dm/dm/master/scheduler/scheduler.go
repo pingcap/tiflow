@@ -330,7 +330,7 @@ func (s *Scheduler) CloseAllWorkers() {
 
 // AddSourceCfg adds the upstream source config to the cluster, and try to bound source to worker
 // NOTE: please verify the config before call this.
-func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig, tryBound bool) error {
+func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -343,12 +343,20 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig, tryBound bool) error 
 		return err
 	}
 
-	if tryBound {
-		// try to bound it to a Free worker.
-		_, err = s.tryBoundForSource(cfg.SourceID)
-		return err
+	// try to bound it to a Free worker.
+	_, err = s.tryBoundForSource(cfg.SourceID)
+	return err
+}
+
+// AddSourceCfg only adds the upstream source config to the cluster.
+func (s *Scheduler) AddSourceConfig(cfg *config.SourceConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
 	}
-	return nil
+	return s.addSource(cfg)
 }
 
 // AddSourceCfgWithWorker adds the upstream source config to the cluster, and try to bound source to specify worker
