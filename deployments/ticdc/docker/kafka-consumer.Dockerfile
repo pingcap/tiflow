@@ -6,4 +6,5 @@ RUN make kafka_consumer
 
 FROM alpine:3.11
 COPY --from=builder  /go/src/github.com/pingcap/tiflow/bin/cdc_kafka_consumer /cdc_kafka_consumer
-CMD [ "/cdc_kafka_consumer" ]
+
+ENTRYPOINT ["tail", "-f", "/dev/null"]
