@@ -242,7 +242,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 }
 
 func (v *DataValidator) errorProcessRoutine() {
-	v.errProcessWg.Done()
+	defer v.errProcessWg.Done()
 	for {
 		select {
 		case err := <-v.errChan:
