@@ -1132,6 +1132,18 @@ description = ""
 workaround = "Please check the `--start-time` is expected or try again later."
 tags = ["internal", "high"]
 
+[error.DM-config-20058]
+message = "loader's dir %s is invalid"
+description = ""
+workaround = "Please check the `dir` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20059]
+message = "loader's dir %s is s3 dir, but s3 is not supported"
+description = ""
+workaround = "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

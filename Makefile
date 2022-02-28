@@ -355,6 +355,7 @@ check_third_party_binary_for_dm:
 	@which bin/tidb-server
 	@which bin/sync_diff_inspector
 	@which mysql
+	@which bin/minio
 
 dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test

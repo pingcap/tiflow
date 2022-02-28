@@ -17,13 +17,17 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/util/timeutil"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
@@ -34,12 +38,12 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	ctx := context.Background()
 	config := NewConfig()
 	config.Version = "invalid"
-	_, err := newSaramaConfigImpl(ctx, config)
+	_, err := NewSaramaConfig(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
-	_, err = newSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfig(ctx, config)
 	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
 
 	config.ClientID = "test-kafka-client"
@@ -56,7 +60,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	for _, cc := range compressionCases {
 		config.Compression = cc.algorithm
-		cfg, err := newSaramaConfigImpl(ctx, config)
+		cfg, err := NewSaramaConfig(ctx, config)
 		c.Assert(err, check.IsNil)
 		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
 	}
@@ -64,7 +68,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
 	}
-	_, err = newSaramaConfigImpl(ctx, config)
+	_, err = NewSaramaConfig(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 
 	saslConfig := NewConfig()
@@ -76,7 +80,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := newSaramaConfigImpl(ctx, saslConfig)
+	cfg, err := NewSaramaConfig(ctx, saslConfig)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.NotNil)
 	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
@@ -92,7 +96,7 @@ func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
 	c.Assert(cfg.ReadTimeout, check.Equals, 10*time.Second)
 	c.Assert(cfg.WriteTimeout, check.Equals, 10*time.Second)
 
-	saramaConfig, err := newSaramaConfig(context.Background(), cfg)
+	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, cfg.DialTimeout)
 	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, cfg.WriteTimeout)
@@ -102,15 +106,15 @@ func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
 		"&write-timeout=2m"
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
-	opts := make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+
+	err = cfg.Apply(sinkURI)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.DialTimeout, check.Equals, 5*time.Second)
 	c.Assert(cfg.ReadTimeout, check.Equals, 1000*time.Millisecond)
 	c.Assert(cfg.WriteTimeout, check.Equals, 2*time.Minute)
 
-	saramaConfig, err = newSaramaConfig(context.Background(), cfg)
+	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, 5*time.Second)
 	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, 1000*time.Millisecond)
@@ -129,27 +133,29 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 	sinkURI, err := url.Parse(uri)
 	c.Assert(err, check.IsNil)
-	opts := make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+
+	err = cfg.Apply(sinkURI)
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
 	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
 	c.Assert(cfg.Version, check.Equals, "2.6.0")
 	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
-	expectedOpts := map[string]string{
-		"max-message-bytes": maxMessageSize,
-		"max-batch-size":    "5",
-	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
-	}
+
+	// multiple kafka broker endpoints
+	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
+	sinkURI, err = url.Parse(uri)
+	c.Assert(err, check.IsNil)
+	cfg = NewConfig()
+	err = cfg.Apply(sinkURI)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(cfg.BrokerEndpoints), check.Equals, 3)
 
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.Apply(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal max-message-bytes.
@@ -157,15 +163,7 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
-
-	// Illegal enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=a&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.Apply(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Illegal partition-num.
@@ -173,7 +171,7 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.Apply(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
 
 	// Out of range partition-num.
@@ -181,31 +179,8 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	sinkURI, err = url.Parse(uri)
 	c.Assert(err, check.IsNil)
 	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
+	err = cfg.Apply(sinkURI)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
-
-	// Use enable-tidb-extension on other protocols.
-	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=1&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*enable-tidb-extension only support canal-json protocol.*")
-
-	// Test enable-tidb-extension.
-	uri = "kafka://127.0.0.1:9092/abc?enable-tidb-extension=true&protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
-	cfg = NewConfig()
-	opts = make(map[string]string)
-	err = CompleteConfigsAndOpts(sinkURI, cfg, config.GetDefaultReplicaConfig(), opts)
-	c.Assert(err, check.IsNil)
-	expectedOpts = map[string]string{
-		"enable-tidb-extension": "true",
-	}
-	for k, v := range opts {
-		c.Assert(v, check.Equals, expectedOpts[k])
-	}
 }
 
 func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
@@ -223,4 +198,233 @@ func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
 	cfg.PartitionNum = 3
 	err = cfg.setPartitionNum(2)
 	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
+}
+
+func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	NewAdminClientImpl = kafka.NewMockAdminClient
+	defer func() {
+		NewAdminClientImpl = kafka.NewSaramaAdminClient
+	}()
+
+	combinations := []struct {
+		uriTemplate             string
+		uriParams               []interface{}
+		brokerMessageMaxBytes   string
+		topicMaxMessageBytes    string
+		expectedMaxMessageBytes string
+	}{
+		// topic not created,
+		// `max-message-bytes` not set, `message.max.bytes` < `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `message.max.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{"not-exist-topic"},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+		},
+		// topic not created,
+		// `max-message-bytes` not set, `message.max.bytes` = `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{"not-exist-topic"},
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+		// topic not created,
+		// `max-message-bytes` not set, broker `message.max.bytes` > `max-message-bytes`
+		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{"no-params"},
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+
+		// topic not created
+		// user set `max-message-bytes` < `message.max.bytes` < default `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(1024*1024 - 1),
+		},
+		// topic not created
+		// user set `max-message-bytes` < default `max-message-bytes` < `message.max.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
+		},
+		// topic not created
+		// `message.max.bytes` < user set `max-message-bytes` < default `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+		},
+		// topic not created
+		// `message.max.bytes` < default `max-message-bytes` < user set `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.BrokerMessageMaxBytes,
+		},
+		// topic not created
+		// default `max-message-bytes` < user set `max-message-bytes` < `message.max.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+		},
+		// topic not created
+		// default `max-message-bytes` < `message.max.bytes` < user set `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+		},
+
+		// topic created,
+		// `max-message-bytes` not set, topic's `max.message.bytes` < `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max.message.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
+		},
+		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` = `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` > `max-message-bytes`
+		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s",
+			[]interface{}{kafka.DefaultMockTopicName},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			strconv.Itoa(config.DefaultMaxMessageBytes),
+		},
+
+		// topic created
+		// user set `max-message-bytes` < `max.message.bytes` < default `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			strconv.Itoa(1024*1024 - 1),
+		},
+		// topic created
+		// user set `max-message-bytes` < default `max-message-bytes` < `max.message.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
+		},
+		// topic created
+		// `max.message.bytes` < user set `max-message-bytes` < default `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
+		},
+		// topic created
+		// `max.message.bytes` < default `max-message-bytes` < user set `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			kafka.BrokerMessageMaxBytes,
+			kafka.TopicMaxMessageBytes,
+			kafka.TopicMaxMessageBytes,
+		},
+		// topic created
+		// default `max-message-bytes` < user set `max-message-bytes` < `max.message.bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+		},
+		// topic created
+		// default `max-message-bytes` < `max.message.bytes` < user set `max-message-bytes`
+		{
+			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
+			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
+			kafka.BrokerMessageMaxBytes,
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+		},
+	}
+
+	for _, a := range combinations {
+		kafka.BrokerMessageMaxBytes = a.brokerMessageMaxBytes
+		kafka.TopicMaxMessageBytes = a.topicMaxMessageBytes
+
+		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
+		sinkURI, err := url.Parse(uri)
+		c.Assert(err, check.IsNil)
+
+		baseConfig := NewConfig()
+		err = baseConfig.Apply(sinkURI)
+		c.Assert(err, check.IsNil)
+
+		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
+		c.Assert(err, check.IsNil)
+
+		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
+		c.Assert(err, check.IsNil)
+
+		topic, ok := a.uriParams[0].(string)
+		c.Assert(ok, check.IsTrue)
+		c.Assert(topic, check.Not(check.Equals), "")
+		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
+		c.Assert(err, check.IsNil)
+
+		encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
+		err = encoderConfig.Apply(sinkURI, map[string]string{})
+		c.Assert(err, check.IsNil)
+		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+
+		err = encoderConfig.Validate()
+		c.Assert(err, check.IsNil)
+
+		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
+		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, encoderConfig.MaxMessageBytes())
+
+		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
+		c.Assert(err, check.IsNil)
+		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expected)
+
+		_ = adminClient.Close()
+	}
 }
