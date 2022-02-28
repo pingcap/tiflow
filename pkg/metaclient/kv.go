@@ -1,6 +1,8 @@
 package metaclient
 
-import "context"
+import (
+	"context"
+)
 
 // Txn doesn't support nested txn
 type Txn interface {
@@ -11,7 +13,7 @@ type Txn interface {
 
 	// Commit tries to commit the transaction.
 	// Any Op fail will cause entire txn rollback and return error
-	Commit() (*TxnResponse, error)
+	Commit() (*TxnResponse, Error)
 }
 
 type KV interface {
@@ -20,7 +22,7 @@ type KV interface {
 	// an immutable representation of that bytes array.
 	// To get a string of bytes, do string([]byte{0x10, 0x20}).
 	// or do nothing on vice verse.
-	Put(ctx context.Context, key, val string) (*PutResponse, error)
+	Put(ctx context.Context, key, val string) (*PutResponse, Error)
 
 	// Get retrieves keys with newest revision.
 	// By default, Get will return the value for "key", if any.
@@ -28,12 +30,18 @@ type KV interface {
 	// When WithFromKey() is passed, Get returns keys greater than or equal to key.
 	// When WithPrefix() is passed, Get returns keys with prefix.
 	// WARN: WithRange(), WithFromKey(), WithPrefix() can't be used at the same time
-	Get(ctx context.Context, key string, opts ...OpOption) (*GetResponse, error)
+	Get(ctx context.Context, key string, opts ...OpOption) (*GetResponse, Error)
 
 	// Delete deletes a key, or optionally using WithRange(end), [key, end).
 	// WARN: WithRange(end), WithFromKey(), WithPrefix() can't be used at the same time
-	Delete(ctx context.Context, key string, opts ...OpOption) (*DeleteResponse, error)
+	Delete(ctx context.Context, key string, opts ...OpOption) (*DeleteResponse, Error)
 
 	// Txn creates a transaction.
 	Txn(ctx context.Context) Txn
+}
+
+type Error interface {
+	error
+	// IsRetryable returns true if this error may be gone if retried.
+	IsRetryable() bool
 }

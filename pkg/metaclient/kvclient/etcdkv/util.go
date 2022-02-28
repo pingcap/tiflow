@@ -3,9 +3,12 @@ package etcdkv
 import (
 	"strconv"
 
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
+
+	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/metaclient"
 )
 
 func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
@@ -82,5 +85,30 @@ func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
 			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 		Responses: rsps,
+	}
+}
+
+// etcdError wraps IsRetryable to etcd error.
+type etcdError struct {
+	displayed error
+	cause     error
+}
+
+func (e *etcdError) IsRetryable() bool {
+	if e.cause != nil {
+		return errorutil.IsRetryableEtcdError(e.cause)
+	}
+	// currently all retryable errors are etcd errors
+	return false
+}
+
+func (e *etcdError) Error() string {
+	return e.displayed.Error()
+}
+
+func etcdErrorFromOpFail(err error) *etcdError {
+	return &etcdError{
+		cause:     err,
+		displayed: cerrors.ErrMetaOpFail.GenWithStackByArgs(err),
 	}
 }

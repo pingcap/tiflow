@@ -4,9 +4,10 @@ import (
 	"context"
 	"sync"
 
+	"go.etcd.io/etcd/clientv3"
+
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	"go.etcd.io/etcd/clientv3"
 )
 
 // We will make follow abstracts and implement for KVClient
@@ -96,41 +97,45 @@ func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
 	panic("unknown op type")
 }
 
-func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, error) {
+func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, metaclient.Error) {
 	op := metaclient.OpPut(key, val)
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
+		return nil, etcdErrorFromOpFail(err)
 	}
 
 	putRsp := etcdResp.Put()
 	return makePutResp(putRsp), nil
 }
 
-func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, error) {
+func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	op := metaclient.OpGet(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
-		return nil, cerrors.ErrMetaOptionInvalid.Wrap(err)
+		return nil, &etcdError{
+			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+		}
 	}
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
+		return nil, etcdErrorFromOpFail(err)
 	}
 
 	getRsp := etcdResp.Get()
 	return makeGetResp(getRsp), nil
 }
 
-func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, error) {
+func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	op := metaclient.OpDelete(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
-		return nil, cerrors.ErrMetaOptionInvalid.Wrap(err)
+		return nil, &etcdError{
+			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+		}
 	}
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
+		return nil, etcdErrorFromOpFail(err)
 	}
 
 	delRsp := etcdResp.Del()
@@ -176,7 +181,7 @@ type etcdTxn struct {
 	kv  *etcdImpl
 	ops []clientv3.Op
 	// cache error to make chain operation work
-	Err       error
+	Err       *etcdError
 	committed bool
 }
 
@@ -208,14 +213,18 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 		return t
 	}
 	if t.committed {
-		t.Err = cerrors.ErrMetaCommittedTxn.GenWithStackByArgs()
+		t.Err = &etcdError{
+			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs(),
+		}
 		return t
 	}
 
 	etcdOps := make([]clientv3.Op, 0, len(ops))
 	for _, op := range ops {
 		if op.IsTxn() {
-			t.Err = cerrors.ErrMetaNestedTxn.GenWithStackByArgs()
+			t.Err = &etcdError{
+				displayed: cerrors.ErrMetaNestedTxn.GenWithStackByArgs(),
+			}
 			return t
 		}
 		etcdOps = append(etcdOps, t.kv.getEtcdOp(op))
@@ -225,14 +234,16 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	return t
 }
 
-func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
+func (t *etcdTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	t.mu.Lock()
 	if t.Err != nil {
 		t.mu.Unlock()
 		return nil, t.Err
 	}
 	if t.committed {
-		t.Err = cerrors.ErrMetaCommittedTxn.GenWithStackByArgs()
+		t.Err = &etcdError{
+			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs(),
+		}
 		t.mu.Unlock()
 		return nil, t.Err
 	}
@@ -242,7 +253,7 @@ func (t *etcdTxn) Commit() (*metaclient.TxnResponse, error) {
 	t.Txn.Then(t.ops...)
 	etcdResp, err := t.Txn.Commit()
 	if err != nil {
-		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
+		return nil, etcdErrorFromOpFail(err)
 	}
 
 	return makeTxnResp(etcdResp), nil

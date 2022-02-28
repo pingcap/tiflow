@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+
 	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
 )
 
 // Backend KV store data:
