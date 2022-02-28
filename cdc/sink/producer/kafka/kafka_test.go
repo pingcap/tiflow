@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -73,7 +74,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	prodSuccess := new(sarama.ProduceResponse)
@@ -108,6 +109,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	}()
 
 	opts := make(map[string]string)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
@@ -336,6 +338,7 @@ func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 	opts := make(map[string]string)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	_, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 }
@@ -352,7 +355,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
@@ -384,6 +387,7 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
@@ -434,7 +438,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	leader.Returns(metadataResponse)
+	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
 	config := NewConfig()
@@ -453,6 +457,7 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 
 	errCh := make(chan error, 1)
 	opts := make(map[string]string)
+	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	producer, err := NewKafkaSaramaProducer(ctx, topic, config, opts, errCh)
 	c.Assert(opts, check.HasKey, "max-message-bytes")
 	defer func() {
