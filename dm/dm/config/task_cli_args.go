@@ -28,7 +28,9 @@ const (
 // TaskCliArgs is the task command line arguments, these arguments have higher priority than the config file and
 // downstream checkpoint, but may need to be removed after the first time they take effect.
 type TaskCliArgs struct {
-	StartTime string `toml:"start-time" json:"start_time"`
+	StartTime        string `toml:"start-time" json:"start_time"`
+	SafeModeDuration string `toml:"safe-mode-duration" json:"safe_mode_duration"`
+	WaitTimeOnStop   string `toml:"wait-time-on-stop" json:"wait_time_on_stop"`
 }
 
 // ToJSON returns json marshal result.
@@ -48,13 +50,27 @@ func (t *TaskCliArgs) Decode(data []byte) error {
 
 // Verify checks if all fields are legal.
 func (t *TaskCliArgs) Verify() error {
-	if t.StartTime == "" {
-		return nil
+	if t.StartTime != "" {
+		if _, err := time.Parse(StartTimeFormat, t.StartTime); err != nil {
+			_, err = time.Parse(StartTimeFormat2, t.StartTime)
+			if err != nil {
+				return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'")
+			}
+		}
 	}
-	_, err := time.Parse(StartTimeFormat, t.StartTime)
-	if err == nil {
-		return nil
+
+	if t.SafeModeDuration != "" {
+		_, err := time.ParseDuration(t.SafeModeDuration)
+		if err != nil {
+			return terror.Annotate(err, "error while parse safe-mode-duration, expected in the format like '1s' or '1h'")
+		}
 	}
-	_, err = time.Parse(StartTimeFormat2, t.StartTime)
-	return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'")
+
+	if t.WaitTimeOnStop != "" {
+		_, err := time.ParseDuration(t.WaitTimeOnStop)
+		if err != nil {
+			return terror.Annotate(err, "error while parse stop_wait_timeout_duration, expected in the format like '1s' or '1h'")
+		}
+	}
+	return nil
 }
