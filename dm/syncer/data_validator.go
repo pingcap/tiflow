@@ -211,10 +211,30 @@ func (v *DataValidator) Start(expect pb.Stage) {
 		v.doValidate()
 	}()
 
+	v.wg.Add(1)
+	go v.printStatusRoutine()
+
 	v.errProcessWg.Add(1)
 	go v.errorProcessRoutine()
 
 	v.stage = pb.Stage_Running
+}
+
+func (v *DataValidator) printStatusRoutine() {
+	defer v.wg.Done()
+	for {
+		select {
+		case <-v.ctx.Done():
+			return
+		case <-time.After(checkInterval):
+			// todo: status about pending row changes
+			v.L.Info("processed event status",
+				zap.Int64("insert", v.changeEventCount[rowInsert].Load()),
+				zap.Int64("update", v.changeEventCount[rowUpdated].Load()),
+				zap.Int64("delete", v.changeEventCount[rowDeleted].Load()),
+			)
+		}
+	}
 }
 
 func (v *DataValidator) fillResult(err error, needLock bool) {
