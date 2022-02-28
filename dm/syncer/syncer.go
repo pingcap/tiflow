@@ -236,7 +236,7 @@ type Syncer struct {
 	lastCheckpointFlushedTime time.Time
 
 	firstMeetBinlogTS *int64
-	exitSafeModeTS    *atomic.Int64 // TS(in binlog header) need to exit safe mode.
+	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
 	locations *locationRecorder
 
@@ -2195,13 +2195,13 @@ func (s *Syncer) checkAndSetSafeModeByBinlogTS(firstBinlogTS int64) error {
 	}
 	s.firstMeetBinlogTS = &firstBinlogTS
 	exitTS := firstBinlogTS + int64(duration.Seconds())
-	s.exitSafeModeTS = atomic.NewInt64(exitTS)
+	s.exitSafeModeTS = &exitTS
 	s.tctx.L().Info("safe-mode will disable by task cli args", zap.Int64("ts", exitTS))
 	return nil
 }
 
 func (s *Syncer) checkAndExitSafeModeByBinlogTS(ctx *tcontext.Context, ts int64) error {
-	if s.exitSafeModeTS != nil && ts > s.exitSafeModeTS.Load() {
+	if s.exitSafeModeTS != nil && ts > *s.exitSafeModeTS {
 		if err := s.safeMode.Add(ctx, -1); err != nil {
 			return err
 		}

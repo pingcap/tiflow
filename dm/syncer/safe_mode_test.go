@@ -63,16 +63,16 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	firstBinlogTS := int64(1)
 	require.NoError(t, s.checkAndSetSafeModeByBinlogTS(firstBinlogTS))
 	require.NotNil(t, s.exitSafeModeTS) // not meet the first binlog
-	require.Equal(t, s.exitSafeModeTS.Load(), int64(3))
-	require.Equal(t, *s.firstMeetBinlogTS, firstBinlogTS)
+	require.Equal(t, int64(3), *s.exitSafeModeTS)
+	require.Equal(t, firstBinlogTS, *s.firstMeetBinlogTS)
 	s.Unlock()
-	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, s.exitSafeModeTS.Load())) // not exit when binlog TS == exit TS
+	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, *s.exitSafeModeTS)) // not exit when binlog TS == exit TS
 	require.True(t, s.safeMode.Enable())
-	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, s.exitSafeModeTS.Load()+int64(1))) // exit when binlog TS > exit TS
+	require.NoError(t, s.checkAndExitSafeModeByBinlogTS(s.tctx, *s.exitSafeModeTS+int64(1))) // exit when binlog TS > exit TS
 	require.False(t, s.safeMode.Enable())
 	s.Lock()
 	require.Nil(t, s.exitSafeModeTS)
-	require.Equal(t, s.cliArgs.SafeModeDuration, "")
+	require.Equal(t, "", s.cliArgs.SafeModeDuration)
 	s.Unlock()
 
 	// test enable by config
