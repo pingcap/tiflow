@@ -238,7 +238,10 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 		TableID: ls.tableID,
 		ReadTs:  message.ReadTs{},
 	})
-	ls.readerRouter.Send(ls.readerActorID, msg)
+	// It's ok to ignore error, as reader is either channel full or stopped.
+	// If it's channel full, it has been notified by others, and caller will
+	// receive new resolved events eventually.
+	_ = ls.readerRouter.Send(ls.readerActorID, msg)
 	return ls.outputCh
 }
 
