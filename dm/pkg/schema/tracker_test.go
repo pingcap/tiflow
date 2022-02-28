@@ -740,7 +740,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	delete(tracker.dsTracker.tableInfos, tableID)
 }
 
-func (s *trackerSuite) TestGetAvailableDownStreanUKIndexInfo(c *C) {
+func (s *trackerSuite) TestGetAvailableDownStreamUKIIndexInfo(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 
 	// origin table info
@@ -926,5 +926,41 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	_, ok = tracker.dsTracker.tableInfos[tableID]
+	c.Assert(ok, IsTrue)
+}
+
+func (s *trackerSuite) TestVarchar20000(c *C) {
+	log.SetLevel(zapcore.ErrorLevel)
+
+	// origin table info
+	p := parser.New()
+	node, err := p.ParseOneStmt("create table t(c varchar(20000)) charset=utf8", "", "")
+	c.Assert(err, IsNil)
+	oriTi, err := ddl.BuildTableInfoFromAST(node.(*ast.CreateTableStmt))
+	c.Assert(err, IsNil)
+
+	// tracker and sqlmock
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	defer db.Close()
+	con, err := db.Conn(context.Background())
+	c.Assert(err, IsNil)
+	baseConn := conn.NewBaseConn(con, nil)
+	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	c.Assert(err, IsNil)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableID := "`test`.`test`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("test", "create table t(c varchar(20000)) charset=utf8"))
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
+	c.Assert(err, IsNil)
+	_, ok := tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
 }
