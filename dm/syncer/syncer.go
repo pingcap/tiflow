@@ -1194,7 +1194,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
 		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
 	} else {
-		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
+		s.tctx.L().Info("after sync flushed checkpoint, gc all causality keys")
 		s.dmlJobCh <- newGCJob(math.MaxInt64)
 	}
 
