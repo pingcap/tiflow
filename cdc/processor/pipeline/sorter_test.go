@@ -31,11 +31,10 @@ import (
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	dir := t.TempDir()
-	captureAddr := "0.0.0.0:0"
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0)
 	require.Nil(t, err)
 
 	unified.ResetGlobalPoolWithoutCleanup()
