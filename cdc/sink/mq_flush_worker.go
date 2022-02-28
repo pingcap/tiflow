@@ -43,21 +43,23 @@ type mqEvent struct {
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
-	msgChan    chan mqEvent
+	msgChan       chan mqEvent
+	ticker        *time.Ticker
+	needSyncFlush bool
+
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
 	statistics *Statistics
-	ticker     *time.Ticker
 }
 
 // newFlushWorker creates a new flush worker.
 func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer, statistics *Statistics) *flushWorker {
 	w := &flushWorker{
 		msgChan:    make(chan mqEvent),
+		ticker:     time.NewTicker(flushInterval),
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,
-		ticker:     time.NewTicker(flushInterval),
 	}
 	return w
 }
@@ -74,6 +76,7 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 		// When the resolved ts is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.resolvedTs != 0 {
+			w.needSyncFlush = true
 			return events, nil
 		}
 
@@ -90,6 +93,7 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 			return nil, ctx.Err()
 		case msg := <-w.msgChan:
 			if msg.resolvedTs != 0 {
+				w.needSyncFlush = true
 				return events, nil
 			}
 
@@ -118,8 +122,8 @@ func (w *flushWorker) group(events []mqEvent) map[int32][]mqEvent {
 	return paritionedEvents
 }
 
-// flush is responsible for sending messages to the Kafka producer.
-func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mqEvent) error {
+// asyncSend is responsible for sending messages to the Kafka producer.
+func (w *flushWorker) asyncSend(ctx context.Context, paritionedEvents map[int32][]mqEvent) error {
 	for partition, events := range paritionedEvents {
 		for _, event := range events {
 			err := w.encoder.AppendRowChangedEvent(event.row)
@@ -145,6 +149,16 @@ func (w *flushWorker) flush(ctx context.Context, paritionedEvents map[int32][]mq
 		}
 	}
 
+	if w.needSyncFlush {
+		start := time.Now()
+		err := w.producer.Flush(ctx)
+		if err != nil {
+			return err
+		}
+		w.needSyncFlush = false
+		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
+	}
+
 	return nil
 }
 
@@ -158,7 +172,7 @@ func (w *flushWorker) run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		paritionedEvents := w.group(events)
-		err = w.flush(ctx, paritionedEvents)
+		err = w.asyncSend(ctx, paritionedEvents)
 		if err != nil {
 			return errors.Trace(err)
 		}

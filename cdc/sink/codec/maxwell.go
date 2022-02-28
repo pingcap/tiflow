@@ -15,7 +15,6 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"encoding/json"
 
@@ -28,22 +27,15 @@ import (
 	"github.com/tikv/pd/pkg/tsoutil"
 )
 
-type maxwellEventBatchEncoderBuilder struct {
-	opts map[string]string
+type maxwellEventBatchEncoderBuilder struct{}
+
+func newMaxwellEventBatchEncoderBuilder() EncoderBuilder {
+	return &maxwellEventBatchEncoderBuilder{}
 }
 
 // Build a `MaxwellEventBatchEncoder`
-func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewMaxwellEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
-}
-
-func newMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &maxwellEventBatchEncoderBuilder{opts: opts}
+func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
+	return NewMaxwellEventBatchEncoder()
 }
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
@@ -179,11 +171,6 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	}
 	d.valueBuf.Write(value)
 	d.batchSize++
-	return nil
-}
-
-// SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
