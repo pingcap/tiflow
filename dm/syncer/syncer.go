@@ -2085,7 +2085,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// set exitSafeModeTS when meet first binlog
 		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
-			if checkErr := s.checkAndSetSafeModeByBinlogTS(int64(e.Header.Timestamp)); checkErr != nil {
+			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
 		}
@@ -2187,7 +2187,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 }
 
-func (s *Syncer) checkAndSetSafeModeByBinlogTS(firstBinlogTS int64) error {
+func (s *Syncer) initSafeModeExitTS(firstBinlogTS int64) error {
 	// see more in https://github.com/pingcap/tiflow/pull/4601#discussion_r814446628
 	duration, err := time.ParseDuration(s.cliArgs.SafeModeDuration)
 	if err != nil {

@@ -61,7 +61,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	s.Lock()
 	require.Nil(t, s.exitSafeModeTS) // not meet the first binlog
 	firstBinlogTS := int64(1)
-	require.NoError(t, s.checkAndSetSafeModeByBinlogTS(firstBinlogTS))
+	require.NoError(t, s.initSafeModeExitTS(firstBinlogTS))
 	require.NotNil(t, s.exitSafeModeTS) // not meet the first binlog
 	require.Equal(t, int64(3), *s.exitSafeModeTS)
 	require.Equal(t, firstBinlogTS, *s.firstMeetBinlogTS)
