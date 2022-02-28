@@ -637,6 +637,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		w.l.Info("resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
+		// TODO(ehco) change to auto_restart
 		w.l.Info("auto_resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	default:
