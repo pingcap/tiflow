@@ -11,6 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-dup=$(cat metrics/grafana/ticdc.json| grep -oE '"id": [0-9]+' | sort | uniq -d)
+dup=$(grep -oE '"id": [0-9]+' metrics/grafana/ticdc.json | sort | uniq -d)
 [[ -n $dup ]] || exit 0
 echo "Please choose a unique id for $dup in metrics/grafana/ticdc.json"
