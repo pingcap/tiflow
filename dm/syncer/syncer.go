@@ -858,6 +858,7 @@ func (s *Syncer) updateReplicationLagMetric() {
 	if minTS != int64(0) {
 		lag = s.calcReplicationLag(minTS)
 	}
+
 	metrics.ReplicationLagHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Observe(float64(lag))
 	metrics.ReplicationLagGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(lag))
 	s.secondsBehindMaster.Store(lag)
@@ -872,11 +873,6 @@ func (s *Syncer) updateReplicationLagMetric() {
 	// reset skip job TS in case of skip job TS is never updated
 	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
 		s.workerJobTSArray[skipJobIdx].Store(0)
-	}
-
-	// reset ddl job TS in case of ddl job TS is never updated
-	if minTS == s.workerJobTSArray[ddlJobIdx].Load() {
-		s.workerJobTSArray[ddlJobIdx].Store(0)
 	}
 }
 
@@ -1054,9 +1050,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 			// nolint:nilerr
 			return
 		}
-
-		s.updateReplicationJobTS(job, ddlJobIdx)
-
+		s.updateReplicationJobTS(nil, ddlJobIdx) // clear ddl job ts because this ddl is already done.
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
 			utils.OsExit(1)
@@ -1286,6 +1280,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		if !ok {
 			return
 		}
+		// add this ddl ts beacause we start to exec this ddl.
+		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
 		failpoint.Inject("BlockDDLJob", func(v failpoint.Value) {
 			t := v.(int) // sleep time

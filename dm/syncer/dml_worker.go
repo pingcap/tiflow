@@ -14,6 +14,7 @@
 package syncer
 
 import (
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -223,12 +224,6 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	if len(jobs) == 0 {
 		return
 	}
-	failpoint.Inject("BlockExecuteSQLs", func(v failpoint.Value) {
-		t := v.(int) // sleep time
-		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
-		time.Sleep(time.Second * time.Duration(t))
-	})
-
 	failpoint.Inject("failSecondJob", func() {
 		if failExecuteSQL && failOnce.CAS(false, true) {
 			w.logger.Info("trigger failSecondJob")
@@ -238,6 +233,17 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	})
 
 	queries, args = w.genSQLs(jobs)
+	failpoint.Inject("BlockExecuteSQLs", func(v failpoint.Value) {
+		t := v.(int) // sleep time
+		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
+		for _, query := range queries {
+			if strings.Contains(query, "UPDATE") && strings.Contains(query, "metrics") {
+				t = 10
+				w.logger.Info("BlockExecuteSQLs block for update sleep 10s for metrics it test", zap.Any("query", query))
+			}
+		}
+		time.Sleep(time.Second * time.Duration(t))
+	})
 	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
