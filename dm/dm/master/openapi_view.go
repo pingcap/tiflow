@@ -180,12 +180,8 @@ func (s *Server) DMAPICreateSource(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if err := s.createSource(ctx, cfg); err != nil {
-		_ = c.Error(err)
-		return
-	}
 	// TODO support specify worker name
-	if err := s.enableSource(ctx, createSourceReq.SourceName, ""); err != nil && !terror.ErrWorkerNoStart.Equal(err) {
+	if err := s.createSource(ctx, cfg); err != nil {
 		_ = c.Error(err)
 		return
 	}

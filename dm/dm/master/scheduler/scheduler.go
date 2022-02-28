@@ -348,17 +348,6 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 	return err
 }
 
-// AddSourceCfg only adds the upstream source config to the cluster.
-func (s *Scheduler) AddSourceConfig(cfg *config.SourceConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.started.Load() {
-		return terror.ErrSchedulerNotStarted.Generate()
-	}
-	return s.addSource(cfg)
-}
-
 // AddSourceCfgWithWorker adds the upstream source config to the cluster, and try to bound source to specify worker
 // NOTE: please verify the config before call this.
 func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName string) error {
@@ -682,7 +671,6 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 
 // TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
 // If fails halfway, the old worker should try recover.
-// if input worker is empty means try transfer this source to a free worker.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
@@ -693,25 +681,15 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.mu.RUnlock()
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
-
-	oldWorker, hasOldWorker := s.bounds[source]
-	if hasOldWorker && oldWorker.BaseInfo().Name == worker {
-		s.mu.RUnlock()
-		return nil
-	}
-	// for a new added source
-	if worker == "" {
-		s.mu.RUnlock()
-		s.mu.Lock()
-		_, err := s.tryBoundForSource(source)
-		s.mu.Unlock()
-		return err
-	}
-
 	w, ok := s.workers[worker]
 	if !ok {
 		s.mu.RUnlock()
 		return terror.ErrSchedulerWorkerNotExist.Generate(worker)
+	}
+	oldWorker, hasOldWorker := s.bounds[source]
+	if hasOldWorker && oldWorker.BaseInfo().Name == worker {
+		s.mu.RUnlock()
+		return nil
 	}
 	s.mu.RUnlock()
 

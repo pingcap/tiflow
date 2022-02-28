@@ -56,7 +56,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 
 // nolint:unparam
 func (s *Server) createSource(ctx context.Context, cfg *config.SourceConfig) error {
-	return s.scheduler.AddSourceConfig(cfg)
+	return s.scheduler.AddSourceCfg(cfg)
 }
 
 // nolint:unparam,unused
@@ -102,10 +102,8 @@ func (s *Server) listSource(ctx context.Context, req interface{}) []openapi.Sour
 	return openapiSourceList
 }
 
+// nolint:unparam,unused
 func (s *Server) enableSource(ctx context.Context, sourceName, workerName string) error {
-	if err := s.transferSource(ctx, sourceName, workerName); err != nil {
-		return err
-	}
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		return terror.ErrWorkerNoStart
