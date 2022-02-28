@@ -172,10 +172,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	// int value of pb.Stage, stage diagram:
-	// new --> running --> stopped --> finished
-	//     |-> finished
-	stage atomic.Int32
+	closed  atomic.Bool
+	running atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -260,7 +258,8 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.jobsClosed.Store(true) // not open yet
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
-	syncer.stage.Store(int32(pb.Stage_New))
+	syncer.closed.Store(false)
+	syncer.running.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -694,8 +693,8 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		<-newCtx.Done() // ctx or newCtx
 	}()
 
-	s.stage.Store(int32(pb.Stage_Running))
-	defer s.stage.Store(int32(pb.Stage_Stopped))
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	err := s.Run(newCtx)
 	if err != nil {
@@ -3475,11 +3474,11 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 }
 
 func (s *Syncer) IsRunning() bool {
-	return s.stage.Load() == int32(pb.Stage_Running)
+	return s.running.Load()
 }
 
 func (s *Syncer) isClosed() bool {
-	return s.stage.Load() == int32(pb.Stage_Finished)
+	return s.closed.Load()
 }
 
 // Close closes syncer.
@@ -3505,7 +3504,7 @@ func (s *Syncer) Close() {
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
 
 	s.runWg.Wait()
-	s.stage.Store(int32(pb.Stage_Finished))
+	s.closed.Store(true)
 }
 
 // Kill kill syncer without graceful.

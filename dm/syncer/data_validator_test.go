@@ -256,15 +256,15 @@ func Test_validator_waitSyncerRunning(t *testing.T) {
 
 	validator = NewContinuousDataValidator(cfg, syncerObj)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.stage.Store(int32(pb.Stage_Running))
+	syncerObj.running.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.stage.Store(int32(pb.Stage_Stopped))
+	syncerObj.running.Store(false)
 	go func() {
 		time.Sleep(3 * time.Second)
-		syncerObj.stage.Store(int32(pb.Stage_Running))
+		syncerObj.running.Store(true)
 	}()
 	require.NoError(t, validator.waitSyncerRunning())
 }
@@ -288,7 +288,7 @@ func Test_validator_doValidate(t *testing.T) {
 	}()
 
 	syncerObj := NewSyncer(cfg, nil, nil)
-	syncerObj.stage.Store(int32(pb.Stage_Running))
+	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = router.NewRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
 	currLoc := binlog.NewLocation(cfg.Flavor)
