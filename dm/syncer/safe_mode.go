@@ -23,8 +23,20 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 
+func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
+	//nolint:errcheck
+	s.safeMode.Add(tctx, 1)
+	s.tctx.L().Info("enable safe-mode because of task cli args")
+}
+
 func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	s.safeMode.Reset(tctx) // in initialization phase, reset first
+
+	// cliArgs has higher priority than config
+	if s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+		s.enableSafeModeByTaskCliArgs(tctx)
+		return
+	}
 
 	if s.cfg.SafeMode {
 		//nolint:errcheck
@@ -49,9 +61,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 					s.tctx.L().Info("disable safe-mode after task initialization finished")
 				}
 			}()
-
 			initPhaseSeconds := s.cfg.CheckpointFlushInterval * 2
-
 			failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
 				seconds, _ := val.(int)
 				initPhaseSeconds = seconds

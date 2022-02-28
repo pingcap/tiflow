@@ -1798,14 +1798,28 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NotNil(t, syncer.runCancel)
 
 	// test syncer wait time not more than maxPauseOrStopWaitTime
-	oldMaxPauseOrStopWaitTime := maxPauseOrStopWaitTime
-	maxPauseOrStopWaitTime = time.Second
+	oldMaxPauseOrStopWaitTime := defaultMaxPauseOrStopWaitTime
+	defaultMaxPauseOrStopWaitTime = time.Second
 	ctx2, cancel := context.WithCancel(context.Background())
 	cancel()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.isTransactionEnd = false
 	syncer.runWg.Add(1)
 	syncer.waitBeforeRunExit(ctx2)
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
-	maxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
+	defaultMaxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
+
+	// test use cliArgs
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime", "return()"))
+	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStop: "2s"}
+	ctx3, cancel := context.WithCancel(context.Background())
+	cancel()
+	runCtx, runCancel = context.WithCancel(context.Background())
+	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.runWg.Add(1)
+	syncer.waitBeforeRunExit(ctx3)
+	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
+	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
+	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
 }
