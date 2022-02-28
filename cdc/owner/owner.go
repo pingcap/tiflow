@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -328,6 +330,36 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 
 	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
+
+	conf := config.GetGlobalServerConfig()
+
+	// TODO refactor this piece of code when the new scheduler is stabilized,
+	// and the old scheduler is removed.
+	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
+		for cfID, cf := range o.changefeeds {
+			// The InfoProvider is a proxy object returning information
+			// from the scheduler.
+			infoProvider := cf.GetInfoProvider()
+			if infoProvider == nil {
+				// This can only happen if the changefeed object actually
+				// uses the old scheduler, which is impossible unless there
+				// is a serious bug.
+				log.Panic("info provider is nil unexpectedly",
+					zap.String("changefeedID", cfID))
+			}
+
+			totalCounts := infoProvider.GetTotalTableCounts()
+			pendingCounts := infoProvider.GetPendingTableCounts()
+
+			for captureID, info := range o.captures {
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+			}
+		}
+	}
+
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
