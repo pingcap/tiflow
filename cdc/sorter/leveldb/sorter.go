@@ -183,11 +183,15 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		err = ctx.Err()
 	case err = <-ls.errCh:
 	}
+	// TODO caller should pass context.
+	deadline := time.Now().Add(1 * time.Second)
+	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
+	defer cancel()
 	atomic.StoreInt32(&ls.closed, 1)
-	ls.writerRouter.SendB(
-		context.TODO(), ls.writerActorID, actormsg.StopMessage())
-	ls.readerRouter.SendB(
-		context.TODO(), ls.readerActorID, actormsg.StopMessage())
+	_ = ls.writerRouter.SendB(
+		ctx, ls.writerActorID, actormsg.StopMessage())
+	_ = ls.readerRouter.SendB(
+		ctx, ls.readerActorID, actormsg.StopMessage())
 	return errors.Trace(err)
 }
 
