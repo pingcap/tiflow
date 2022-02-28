@@ -143,7 +143,7 @@ type Scheduler struct {
 	// - when bounded the source to a worker, in updateStatusToBound.
 	unbounds map[string]struct{}
 
-	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
+	// a mirror of bounds whose element is not deleted when worker unbound. worker -> source -> SourceBound
 	lastBound map[string]map[string]ha.SourceBound
 
 	// TODO: seems this memory status is useless.
@@ -202,7 +202,7 @@ func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
 		workers:           make(map[string]*Worker),
 		bounds:            make(map[string]*Worker),
 		unbounds:          make(map[string]struct{}),
-		lastBound:         make(map[string]map[string]ha.SourceBound),
+		lastBound:         make(map[string]map[string]ha.SourceBound), // workerName -> sourceName -> SourceBound
 		expectRelayStages: make(map[string]ha.Stage),
 		relayWorkers:      make(map[string]map[string]struct{}),
 		loadTasks:         make(map[string]map[string]string),

@@ -128,9 +128,9 @@ func ReplaceSourceBound(cli *clientv3.Client, source, oldWorker, newWorker strin
 
 // GetSourceBound gets the source bound relationship for the specified DM-worker.
 // if the bound relationship for the worker name not exist, return with `err == nil`.
-// if source
-// if the worker name is "", it will return all bound relationships as a map{worker-name: bound}.
-// if the worker name is given, it will return a map{worker-name: bound} whose length is 1.
+// if the source name and the worker are "", it will return all bound relationships as a map{worker-name:map{source-name:bound}.
+// if the worker name is given, it will return a map{worker-name:map{source-name:bound} whose length is 1 but contains all this worker's bounds.
+// if the source name and the worker name are given", it will return a map{worker-name:map{source-name:bound} which contains 1 or 0 bound.
 func GetSourceBound(cli *clientv3.Client, worker, source string) (map[string]map[string]SourceBound, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
