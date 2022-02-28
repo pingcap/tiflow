@@ -47,7 +47,6 @@ require (
 	github.com/mattn/go-colorable v0.1.11 // indirect
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
-	github.com/maxshuang/mysql-tester v0.0.2 // indirect
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/philhofer/fwd v1.0.0 // indirect
