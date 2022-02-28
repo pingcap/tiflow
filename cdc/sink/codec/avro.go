@@ -294,7 +294,7 @@ func getAvroDataTypeFallback(v interface{}) (string, error) {
 var unsignedLongAvroType = avroLogicalType{
 	Type:        "bytes",
 	LogicalType: decimalType,
-	Precision:   64,
+	Precision:   64, // enough to hold all values and is the default precision of confluent schema registry
 	Scale:       0,
 }
 
