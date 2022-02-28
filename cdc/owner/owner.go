@@ -329,13 +329,13 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
 	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID, captureInfo := range state.Captures {
+		for captureID := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
 			if !exist {
 				continue
 			}
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
+			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
 			if changefeedState.Info != nil {
 				changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
 			}

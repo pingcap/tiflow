@@ -33,25 +33,24 @@ const (
 func NewStatistics(ctx context.Context, name string) *Statistics {
 	statistics := &Statistics{
 		name:                name,
-		captureAddr:         util.CaptureAddrFromCtx(ctx),
 		changefeedID:        util.ChangefeedIDFromCtx(ctx),
 		lastPrintStatusTime: time.Now(),
 	}
-	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
-	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.changefeedID)
+	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.changefeedID)
+	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.changefeedID)
+	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
-	captureAddr, changefeedID := statistics.captureAddr, statistics.changefeedID
+	changefeedID := statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
 	go func() {
 		defer ticker.Stop()
-		metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
-		metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+		metricTotalRows := totalRowsCountGauge.WithLabelValues(changefeedID)
+		metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(changefeedID)
 		defer func() {
-			totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
-			totalFlushedRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+			totalRowsCountGauge.DeleteLabelValues(changefeedID)
+			totalFlushedRowsCountGauge.DeleteLabelValues(changefeedID)
 		}()
 		for {
 			select {

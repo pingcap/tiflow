@@ -80,7 +80,7 @@ var _ actor.Actor = (*CompactActor)(nil)
 
 // NewCompactActor returns a compactor actor.
 func NewCompactActor(
-	id int, db db.DB, wg *sync.WaitGroup, cfg *config.DBConfig, captureAddr string,
+	id int, db db.DB, wg *sync.WaitGroup, cfg *config.DBConfig,
 ) (*CompactActor, actor.Mailbox, error) {
 	wg.Add(1)
 	idTag := strconv.Itoa(id)
@@ -95,7 +95,7 @@ func NewCompactActor(
 			period:         time.Duration(cfg.CompactionPeriod * int(time.Second)),
 		},
 
-		metricCompactDuration: sorterCompactDurationHistogram.WithLabelValues(captureAddr, idTag),
+		metricCompactDuration: sorterCompactDurationHistogram.WithLabelValues(idTag),
 	}, mb, nil
 }
 

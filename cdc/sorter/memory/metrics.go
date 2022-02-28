@@ -30,21 +30,21 @@ var (
 			Subsystem: "puller",
 			Name:      "entry_sorter_resolved_chan_size",
 			Help:      "Puller entry sorter resolved channel size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"changefeed", "table"})
 	entrySorterOutputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "entry_sorter_output_chan_size",
 			Help:      "Puller entry sorter output channel size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"changefeed", "table"})
 	entrySorterUnsortedSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "entry_sorter_unsorted_size",
 			Help:      "Puller entry sorter unsorted items size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"changefeed", "table"})
 	entrySorterSortDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -52,7 +52,7 @@ var (
 			Name:      "entry_sorter_sort",
 			Help:      "Bucketed histogram of processing time (s) of sort in entry sorter.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"changefeed", "table"})
 	entrySorterMergeDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -60,7 +60,7 @@ var (
 			Name:      "entry_sorter_merge",
 			Help:      "Bucketed histogram of processing time (s) of merge in entry sorter.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in this file
