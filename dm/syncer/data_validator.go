@@ -286,6 +286,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 			if cmp <= 0 {
 				return nil
 			}
+			v.L.Info("wait syncer synced", zap.Reflect("loc", currLoc))
 			v.waitSyncerTimer.Reset(checkInterval)
 			fired = false
 		}
