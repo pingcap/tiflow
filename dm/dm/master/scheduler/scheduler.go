@@ -691,6 +691,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.mu.RUnlock()
 		return nil
 	}
+	// for a new added source
 	if worker == "" {
 		s.mu.RUnlock()
 		s.mu.Lock()
