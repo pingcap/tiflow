@@ -13,7 +13,7 @@ check-struct-only = false
 
     target-instance = "mysql1"
 
-    target-check-tables = ["alter_table.?*", "bigint.?*"]
+    target-check-tables = ["alter_table.?*", "bigint.?*", "composite_index.?*", "concurrent_ddl.?*", "date_formats.?*", "drop.?*", "mysql_replace.?*"]
 
 [data-sources]
 [data-sources.tidb0]
