@@ -129,7 +129,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 		syncer: syncerObj,
 		stage:  pb.Stage_Stopped,
 		// todo: many place may put into this channel, choose a proper channel size or enhance error handling
-		errChan: make(chan error, 1),
+		errChan: make(chan error, 100),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
