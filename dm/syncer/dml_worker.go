@@ -237,9 +237,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		t := v.(int) // sleep time
 		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
 		for _, query := range queries {
-			if strings.Contains(query, "UPDATE") {
+			if strings.Contains(query, "UPDATE") && strings.Contains(query, "metrics") {
 				t = 10
-				w.logger.Info("BlockExecuteSQLs block for update sleep 10s", zap.Any("query", query))
+				w.logger.Info("BlockExecuteSQLs block for update sleep 10s for metrics it test", zap.Any("query", query))
 			}
 		}
 		time.Sleep(time.Second * time.Duration(t))
