@@ -128,8 +128,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 		cfg:    cfg,
 		syncer: syncerObj,
 		stage:  pb.Stage_Stopped,
-		// todo: many place may put into this channel, choose a proper channel size or enhance error handling
-		errChan: make(chan error, 100),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -147,6 +145,8 @@ func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.result.Reset()
+	// todo: many place may put into this channel, choose a proper channel size or enhance error handling
+	v.errChan = make(chan error, 10)
 
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
 	defer cancelFunc()
@@ -243,17 +243,12 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) errorProcessRoutine() {
 	defer v.errProcessWg.Done()
-	for {
-		select {
-		case err := <-v.errChan:
-			v.fillResult(err, true)
+	for err := range v.errChan {
+		v.fillResult(err, true)
 
-			if errors.Cause(err) != context.Canceled {
-				// todo: need a better way to handle err(auto resuming on some error, etc.)
-				v.stopInner()
-			}
-		case <-v.ctx.Done():
-			return
+		if errors.Cause(err) != context.Canceled {
+			// todo: need a better way to handle err(auto resuming on some error, etc.)
+			v.stopInner()
 		}
 	}
 }
@@ -388,6 +383,8 @@ func (v *DataValidator) stopInner() {
 	v.toDB.Close()
 
 	v.wg.Wait()
+	close(v.errChan) // close error chan after all possible sender goroutines stopped
+
 	v.stage = pb.Stage_Stopped
 }
 
