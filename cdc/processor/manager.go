@@ -67,7 +67,7 @@ func NewManager() *Manager {
 		commandQueue:                 make(chan *command, 4),
 		newProcessor:                 newProcessor,
 		enableNewScheduler:           conf.Debug.EnableNewScheduler,
-		metricProcessorCloseDuration: processorCloseDuration.WithLabelValues(conf.AdvertiseAddr),
+		metricProcessorCloseDuration: processorCloseDuration,
 	}
 }
 

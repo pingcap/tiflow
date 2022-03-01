@@ -54,7 +54,7 @@ func TestCollectMetrics(t *testing.T) {
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	collectMetrics(sys.dbs, "")
+	collectMetrics(sys.dbs)
 	require.Nil(t, sys.Stop())
 }
 

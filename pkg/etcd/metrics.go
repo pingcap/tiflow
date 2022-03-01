@@ -21,7 +21,7 @@ var etcdRequestCounter = prometheus.NewCounterVec(
 		Subsystem: "etcd",
 		Name:      "request_count",
 		Help:      "request counter of etcd operation",
-	}, []string{"type", "capture"})
+	}, []string{"type"})
 
 // InitMetrics registers the etcd request counter.
 func InitMetrics(registry *prometheus.Registry) {
