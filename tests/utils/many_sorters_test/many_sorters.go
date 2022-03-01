@@ -81,10 +81,7 @@ func main() {
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
 		sorters[i], err = unified.NewUnifiedSorter(*sorterDir,
-			"test-cf",
-			fmt.Sprintf("test-%d", i),
-			model.TableID(i),
-			"0.0.0.0:0")
+			"test-cf", fmt.Sprintf("test-%d", i), model.TableID(i))
 		if err != nil {
 			log.Panic("many_sorters", zap.Error(err))
 		}

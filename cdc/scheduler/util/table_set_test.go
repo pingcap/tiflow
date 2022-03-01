@@ -44,6 +44,9 @@ func TestTableSetBasics(t *testing.T) {
 		CaptureID: "capture-1",
 		Status:    AddingTable,
 	}, record)
+	require.Equal(t, 1, ts.CountTableByStatus(AddingTable))
+	require.Equal(t, 1, ts.CountTableByCaptureIDAndStatus("capture-1", AddingTable))
+	require.Equal(t, 0, ts.CountTableByCaptureIDAndStatus("capture-2", AddingTable))
 
 	ok = ts.RemoveTableRecord(1)
 	require.True(t, ok)
@@ -93,6 +96,10 @@ func TestTableSetCaptures(t *testing.T) {
 	require.Equal(t, 2, ts.CountTableByCaptureID("capture-2"))
 	require.Equal(t, 1, ts.CountTableByCaptureID("capture-3"))
 
+	require.Equal(t, 2, ts.CountTableByCaptureIDAndStatus("capture-1", AddingTable))
+	require.Equal(t, 2, ts.CountTableByCaptureIDAndStatus("capture-2", AddingTable))
+	require.Equal(t, 1, ts.CountTableByCaptureIDAndStatus("capture-3", AddingTable))
+
 	ok = ts.AddTableRecord(&TableRecord{
 		TableID:   6,
 		CaptureID: "capture-3",
@@ -100,6 +107,7 @@ func TestTableSetCaptures(t *testing.T) {
 	})
 	require.True(t, ok)
 	require.Equal(t, 2, ts.CountTableByCaptureID("capture-3"))
+	require.Equal(t, 2, ts.CountTableByCaptureIDAndStatus("capture-3", AddingTable))
 
 	captures := ts.GetDistinctCaptures()
 	require.Len(t, captures, 3)
@@ -111,6 +119,8 @@ func TestTableSetCaptures(t *testing.T) {
 	require.True(t, ok)
 	ok = ts.RemoveTableRecord(4)
 	require.True(t, ok)
+
+	require.Equal(t, 0, ts.CountTableByCaptureIDAndStatus("capture-2", AddingTable))
 
 	captures = ts.GetDistinctCaptures()
 	require.Len(t, captures, 2)
@@ -226,6 +236,7 @@ func TestCountTableByStatus(t *testing.T) {
 	require.Equal(t, 2, ts.CountTableByStatus(AddingTable))
 	require.Equal(t, 2, ts.CountTableByStatus(RunningTable))
 	require.Equal(t, 1, ts.CountTableByStatus(RemovingTable))
+	require.Equal(t, 1, ts.CountTableByCaptureIDAndStatus("capture-3", RunningTable))
 }
 
 func TestUpdateTableRecord(t *testing.T) {
@@ -243,6 +254,7 @@ func TestUpdateTableRecord(t *testing.T) {
 		Status:    AddingTable,
 	})
 	require.True(t, ok)
+	require.Equal(t, 0, ts.CountTableByCaptureIDAndStatus("capture-3", RunningTable))
 
 	ok = ts.UpdateTableRecord(&TableRecord{
 		TableID:   5,
@@ -255,6 +267,7 @@ func TestUpdateTableRecord(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, RunningTable, rec.Status)
 	require.Equal(t, RunningTable, ts.GetAllTablesGroupedByCaptures()["capture-3"][5].Status)
+	require.Equal(t, 1, ts.CountTableByCaptureIDAndStatus("capture-3", RunningTable))
 
 	ok = ts.UpdateTableRecord(&TableRecord{
 		TableID:   4,
@@ -267,4 +280,6 @@ func TestUpdateTableRecord(t *testing.T) {
 	require.Equal(t, RunningTable, rec.Status)
 	require.Equal(t, "capture-3", rec.CaptureID)
 	require.Equal(t, RunningTable, ts.GetAllTablesGroupedByCaptures()["capture-3"][4].Status)
+	require.Equal(t, 2, ts.CountTableByCaptureIDAndStatus("capture-3", RunningTable))
+	require.Equal(t, 0, ts.CountTableByCaptureIDAndStatus("capture-3", AddingTable))
 }

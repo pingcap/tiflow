@@ -47,11 +47,17 @@ type PDClock struct {
 }
 
 // NewClock return a new PDClock
-func NewClock(pdClient pd.Client) *PDClock {
-	return &PDClock{
+func NewClock(ctx context.Context, pdClient pd.Client) (*PDClock, error) {
+	ret := &PDClock{
 		pdClient: pdClient,
 		stopCh:   make(chan struct{}, 1),
 	}
+	physical, _, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	ret.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+	return ret, nil
 }
 
 // Run will get time from pd periodically to cache in timeCache

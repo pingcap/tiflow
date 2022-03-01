@@ -58,9 +58,9 @@ func TestWriterWrite(t *testing.T) {
 		},
 		uint64buf:              make([]byte, 8),
 		running:                *atomic.NewBool(true),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test-cf"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test-cf"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test-cf"),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test-cf"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test-cf"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test-cf"),
 	}
 
 	w.eventCommitTS.Store(1)
@@ -113,9 +113,9 @@ func TestWriterWrite(t *testing.T) {
 		},
 		uint64buf:              make([]byte, 8),
 		running:                *atomic.NewBool(true),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test-cf11"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test-cf11"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test-cf11"),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test-cf11"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test-cf11"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test-cf11"),
 	}
 
 	w1.eventCommitTS.Store(1)
@@ -173,9 +173,9 @@ func TestWriterGC(t *testing.T) {
 		cfg:                    cfg,
 		uint64buf:              make([]byte, 8),
 		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)
@@ -265,9 +265,9 @@ func TestNewWriter(t *testing.T) {
 		},
 		uint64buf:              make([]byte, 8),
 		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("cp", "test"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("cp", "test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("cp", "test"),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test"),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test"),
 	}
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
