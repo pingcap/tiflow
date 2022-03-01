@@ -173,6 +173,10 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, sourceNameL
 			subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
 			continue
 		}
+		if len(workerStatus.SubTaskStatus) == 0 {
+			// this should not happen unless the rpc in the worker server has been modified
+			return nil, terror.ErrOpenAPICommonError.New("worker's query-status response is nil")
+		}
 		subTaskStatus := workerStatus.SubTaskStatus[0]
 		if subTaskStatus == nil {
 			// this should not happen unless the rpc in the worker server has been modified
