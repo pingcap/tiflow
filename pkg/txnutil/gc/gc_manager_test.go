@@ -96,7 +96,9 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	clock := pdtime.NewClock(mockPDClient)
+	clock, err := pdtime.NewClock(context.Background(), mockPDClient)
+	c.Assert(err, check.IsNil)
+
 	go clock.Run(ctx)
 	time.Sleep(1 * time.Second)
 	defer clock.Stop()
@@ -105,7 +107,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 		PDClock: clock,
 	})
 
-	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 

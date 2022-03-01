@@ -105,11 +105,11 @@ func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initStat
 	}, nil
 }
 
-func (worker *EtcdWorker) initMetrics(captureAddr string) {
+func (worker *EtcdWorker) initMetrics() {
 	metrics := &etcdWorkerMetrics{}
-	metrics.metricEtcdTxnSize = etcdTxnSize.WithLabelValues(captureAddr)
-	metrics.metricEtcdTxnDuration = etcdTxnExecDuration.WithLabelValues(captureAddr)
-	metrics.metricEtcdWorkerTickDuration = etcdWorkerTickDuration.WithLabelValues(captureAddr)
+	metrics.metricEtcdTxnSize = etcdTxnSize
+	metrics.metricEtcdTxnDuration = etcdTxnExecDuration
+	metrics.metricEtcdWorkerTickDuration = etcdWorkerTickDuration
 	worker.metrics = metrics
 }
 
@@ -117,9 +117,9 @@ func (worker *EtcdWorker) initMetrics(captureAddr string) {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string, role string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
-	worker.initMetrics(captureAddr)
+	worker.initMetrics()
 
 	err := worker.syncRawState(ctx)
 	if err != nil {

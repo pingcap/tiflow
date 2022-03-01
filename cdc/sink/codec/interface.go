@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"encoding/binary"
 	"time"
 
@@ -39,8 +38,6 @@ type EventBatchEncoder interface {
 	Build() []*MQMessage
 	// Size returns the size of the batch(bytes)
 	Size() int
-	// SetParams provides the encoder with more info on the sink
-	SetParams(params map[string]string) error
 }
 
 // MQMessage represents an MQ message to the mqSink
@@ -149,26 +146,26 @@ const (
 
 // EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
-	Build(ctx context.Context) (EventBatchEncoder, error)
+	Build() EventBatchEncoder
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
-	switch p {
+func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
+	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(opts), nil
+		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, opts)
+		return newAvroEventBatchEncoderBuilder(credential, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(opts), nil
+		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(opts), nil
+		return newCanalFlatEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(opts), nil
+		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocolValue", int(p)))
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
+		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

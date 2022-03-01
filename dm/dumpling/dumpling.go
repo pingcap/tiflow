@@ -15,7 +15,6 @@ package dumpling
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -102,7 +102,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := os.RemoveAll(m.cfg.Dir)
+	err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 	if err != nil {
 		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
 		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
