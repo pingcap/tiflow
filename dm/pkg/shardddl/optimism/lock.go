@@ -519,7 +519,7 @@ func (l *Lock) HasTables() bool {
 	return false
 }
 
-// UpdateTableAfterUnlock updates table's schema info after unlock exec action
+// UpdateTableAfterUnlock updates table's schema info after unlock exec action.
 func (l *Lock) UpdateTableAfterUnlock(info Info) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
