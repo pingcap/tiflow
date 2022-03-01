@@ -834,7 +834,7 @@ func setupTestServer(ctx context.Context, t *testing.T) *Server {
 	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
-	require.Nil(t, s1.Start(ctx))
+	require.NoError(t, s1.Start(ctx))
 	// wait the first one become the leader
 	require.True(t, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s1.election.IsLeader() && s1.scheduler.Started()

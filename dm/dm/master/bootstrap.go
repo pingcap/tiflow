@@ -378,18 +378,12 @@ outerLoop:
 				continue
 			}
 			// create and update subtasks one by one (this should be quick enough because only updating etcd).
-			err = s.scheduler.AddSubTasks(false, pb.Stage_Running, *cfg2)
+			err = s.scheduler.AddSubTasks(false, pb.Stage_Paused, *cfg2)
 			if err != nil {
 				if terror.ErrSchedulerSubTaskExist.Equal(err) {
 					err = nil // reset error
 					tctx.Logger.Warn("subtask already exists", zap.String("task", taskName), zap.String("source", sourceID))
 				} else {
-					break outerLoop
-				}
-			}
-			if stage == pb.Stage_Paused { // no more operation needed for `Running`.
-				err = s.scheduler.UpdateExpectSubTaskStage(stage, taskName, sourceID)
-				if err != nil {
 					break outerLoop
 				}
 			}
