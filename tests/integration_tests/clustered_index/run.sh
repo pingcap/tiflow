@@ -45,9 +45,12 @@ function run() {
 }
 
 # kafka is not supported yet.
-if [ "$SINK_TYPE" != "kafka" ]; then
-	trap stop_tidb_cluster EXIT
-	run $*
-	check_logs $WORK_DIR
-	echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+# ref to issue: https://github.com/pingcap/tiflow/issues/3421
+if [ "$SINK_TYPE" = "kafka" ]; then
+	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
+	exit 0
 fi
+trap stop_tidb_cluster EXIT
+run $*
+check_logs $WORK_DIR
+echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
