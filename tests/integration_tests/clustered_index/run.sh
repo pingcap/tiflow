@@ -44,7 +44,10 @@ function run() {
 	cleanup_process $CDC_BINARY
 }
 
-trap stop_tidb_cluster EXIT
-run $*
-check_logs $WORK_DIR
-echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+# kafka is not supported yet.
+if [ "$SINK_TYPE" != "kafka" ]; then
+	trap stop_tidb_cluster EXIT
+	run $*
+	check_logs $WORK_DIR
+	echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+fi
