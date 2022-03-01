@@ -352,8 +352,7 @@ func (tr *Tracker) Reset() error {
 func (tr *Tracker) Close() error {
 	tr.se.Close()
 	tr.dom.Close()
-	err := tr.store.Close()
-	if err != nil {
+	if err := tr.store.Close(); err != nil {
 		return err
 	}
 	return os.RemoveAll(tr.storePath)
