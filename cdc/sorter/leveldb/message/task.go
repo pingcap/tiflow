@@ -32,6 +32,7 @@ type Task struct {
 	// Sorter.AddEntry -> writer.
 	InputEvent *model.PolymorphicEvent
 	// Latest resolved ts / commit ts for readers.
+	// An empty ReadTs works like a tick.
 	// writer -> reader
 	ReadTs ReadTs
 	// A batch of events (bytes encoded) need to be wrote.

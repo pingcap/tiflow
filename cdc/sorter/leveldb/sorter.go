@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -241,6 +241,9 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// It's ok to ignore error, as reader is either channel full or stopped.
 	// If it's channel full, it has been notified by others, and caller will
 	// receive new resolved events eventually.
+	//
+	// TODO: Consider if we are sending too many msgs here.
+	//       It may waste CPU and be a bottleneck.
 	_ = ls.readerRouter.Send(ls.readerActorID, msg)
 	return ls.outputCh
 }

@@ -33,5 +33,17 @@ type EventSorter interface {
 	//
 	// Callers must not caching the returned channel, as sorter may not output
 	// any resolved events if callers skip calling `Output`.
+	//
+	//  func caller(ctx context.Context, sorter EventSorter) {
+	//  	for {
+	//  		output := sorter.Output()
+	//  		select {
+	//  		case <-ctx.Done():
+	//  			return
+	//  		case ev := <-output:
+	//  			// Do something with ev.
+	//  		}
+	//  	}
+	//  }
 	Output() <-chan *model.PolymorphicEvent
 }
