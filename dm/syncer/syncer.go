@@ -1700,12 +1700,21 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			err2            error
 			exitSafeModeLoc = currentLocation.Clone()
 		)
-		if binlog.CompareLocation(savedGlobalLastLocation, exitSafeModeLoc, s.cfg.EnableGTID) > 0 {
-			exitSafeModeLoc = savedGlobalLastLocation.Clone()
+		saveExitSafeModeLoc := func(loc binlog.Location) {
+			if binlog.CompareLocation(loc, exitSafeModeLoc, s.cfg.EnableGTID) > 0 {
+				exitSafeModeLoc = loc.Clone()
+			}
 		}
-		if shardingReSync != nil && s.cfg.ShardMode == config.ShardOptimistic &&
-			binlog.CompareLocation(shardingReSync.latestLocation, exitSafeModeLoc, s.cfg.EnableGTID) > 0 {
-			exitSafeModeLoc = shardingReSync.latestLocation.Clone()
+		saveExitSafeModeLoc(savedGlobalLastLocation)
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			if shardingReSync != nil {
+				saveExitSafeModeLoc(shardingReSync.latestLocation)
+			}
+			for _, shardResync := range shardingReSyncUnfinished {
+				if shardResync != nil {
+					saveExitSafeModeLoc(shardResync.latestLocation)
+				}
+			}
 		}
 		s.checkpoint.SaveSafeModeExitPoint(&exitSafeModeLoc)
 
