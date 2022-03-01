@@ -46,11 +46,23 @@ type TimeAcquirerImpl struct {
 	err       error
 }
 
+<<<<<<< HEAD:pkg/pdtime/acquirer.go
 // NewTimeAcquirer return a new TimeAcquirer
 func NewTimeAcquirer(pdClient pd.Client) TimeAcquirer {
 	return &TimeAcquirerImpl{
+=======
+// NewClock return a new PDClock
+func NewClock(ctx context.Context, pdClient pd.Client) (*PDClock, error) {
+	ret := &PDClock{
+>>>>>>> d141ee67f (owner(cdc): fix two metrics problems (#4703)):pkg/pdtime/clock.go
 		pdClient: pdClient,
 	}
+	physical, _, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	ret.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+	return ret, nil
 }
 
 // Run will get time from pd periodically to cache in pdPhysicalTimeCache

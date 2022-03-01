@@ -96,8 +96,15 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
+<<<<<<< HEAD
 	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
 	go TimeAcquirer.Run(ctx)
+=======
+	clock, err := pdtime.NewClock(context.Background(), mockPDClient)
+	c.Assert(err, check.IsNil)
+
+	go clock.Run(ctx)
+>>>>>>> d141ee67f (owner(cdc): fix two metrics problems (#4703))
 	time.Sleep(1 * time.Second)
 	defer TimeAcquirer.Stop()
 
@@ -105,7 +112,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 		TimeAcquirer: TimeAcquirer,
 	})
 
-	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 

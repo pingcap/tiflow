@@ -140,7 +140,15 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
+<<<<<<< HEAD
 	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+=======
+
+	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+>>>>>>> d141ee67f (owner(cdc): fix two metrics problems (#4703))
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
