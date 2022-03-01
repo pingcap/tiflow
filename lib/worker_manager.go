@@ -26,6 +26,7 @@ type workerManager interface {
 	Tick(ctx context.Context, sender p2p.MessageSender) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
 	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
 	OnWorkerCreated(ctx context.Context, id WorkerID, exeuctorNodeID p2p.NodeID) error
+	OnWorkerOffline(ctx context.Context, id WorkerID) error
 	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
 	PutWorkerInfo(info *WorkerInfo) bool
 	MessageSender() p2p.MessageSender
@@ -322,6 +323,19 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (m *workerManagerImpl) OnWorkerOffline(ctx context.Context, id WorkerID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.statusReceivers[id]
+	if !ok {
+		log.L().Warn("worker not found in status receivers", zap.String("workerID", id))
+		return nil
+	}
+	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
+	_, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
+	return err
 }
 
 func (m *workerManagerImpl) MessageSender() p2p.MessageSender {

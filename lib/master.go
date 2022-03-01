@@ -384,7 +384,7 @@ func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, worker
 		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
 	}
 
-	return nil
+	return m.workerManager.OnWorkerOffline(ctx, workerID)
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {
