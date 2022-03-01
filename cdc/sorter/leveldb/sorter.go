@@ -92,12 +92,11 @@ func NewSorter(
 	readerSystem *actor.System, readerRouter *actor.Router,
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": captureAddr, "id": changefeedID})
-	metricTotalEventsKV := sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "kv")
-	metricTotalEventsResolvedTs := sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "resolved")
+		prometheus.Labels{"id": changefeedID})
+	metricTotalEventsKV := sorter.EventCount.WithLabelValues(changefeedID, "kv")
+	metricTotalEventsResolvedTs := sorter.EventCount.WithLabelValues(changefeedID, "resolved")
 
 	// TODO: test capture the same table multiple times.
 	uid := allocID()

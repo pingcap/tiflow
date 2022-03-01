@@ -50,7 +50,7 @@ func TestMaybeWrite(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Empty batch
@@ -99,7 +99,7 @@ func TestCompact(t *testing.T) {
 	compactMB := actor.NewMailbox(actor.ID(id), 1)
 	compactRouter.InsertMailbox4Test(compactMB.ID(), compactMB)
 	compact := NewCompactScheduler(compactRouter)
-	ldb, _, err := NewDBActor(id, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(id, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Empty task must not trigger compact.
@@ -168,7 +168,7 @@ func TestPutReadDelete(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Put only.
@@ -238,7 +238,7 @@ func TestAcquireIterators(t *testing.T) {
 	// Set max iterator count to 1.
 	cfg.Concurrency = 1
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Poll two tasks.
@@ -323,7 +323,7 @@ func TestModelChecking(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	minKey := message.Key("")
@@ -411,7 +411,7 @@ func TestContextCancel(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	cancel()

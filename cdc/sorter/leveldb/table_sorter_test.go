@@ -35,7 +35,7 @@ import (
 
 func newTestReader() *reader {
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": "test", "id": "test"})
+		prometheus.Labels{"id": "test"})
 	return &reader{
 		common: common{
 			dbActorID: 1,
@@ -805,7 +805,7 @@ func TestReaderPoll(t *testing.T) {
 	}
 
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+		prometheus.Labels{"id": t.Name()})
 	for i, css := range cases {
 		r.state = css[0].state
 		r.state.readerRouter = router

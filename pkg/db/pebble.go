@@ -167,7 +167,7 @@ func (p *pebbleDB) Close() error {
 
 // TODO: Update metrics once we switch to pebble,
 //       as some metrics are not applicable to pebble.
-func (p *pebbleDB) CollectMetrics(captureAddr string, i int) {
+func (p *pebbleDB) CollectMetrics(i int) {
 	db := p.db
 	stats := db.Metrics()
 	id := strconv.Itoa(i)
@@ -176,30 +176,30 @@ func (p *pebbleDB) CollectMetrics(captureAddr string, i int) {
 		sum += int(stats.Levels[i].Size)
 	}
 	sorter.OnDiskDataSizeGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.DiskSpaceUsage()))
+		WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
 	sorter.InMemoryDataSizeGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.BlockCache.Size))
+		WithLabelValues(id).Set(float64(stats.BlockCache.Size))
 	dbIteratorGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.TableIters))
+		WithLabelValues(id).Set(float64(stats.TableIters))
 	dbWriteDelayCount.
-		WithLabelValues(captureAddr, id).
+		WithLabelValues(id).
 		Set(float64(atomic.LoadInt64(&p.metricWriteStall.counter)))
 	stallDuration := p.metricWriteStall.duration.Load()
 	if stallDuration != nil && stallDuration.(time.Duration) != time.Duration(0) {
 		p.metricWriteStall.duration.Store(time.Duration(0))
 		dbWriteDelayDuration.
-			WithLabelValues(captureAddr, id).
+			WithLabelValues(id).
 			Set(stallDuration.(time.Duration).Seconds())
 	}
 	metricLevelCount := dbLevelCount.
-		MustCurryWith(map[string]string{"capture": captureAddr, "id": id})
+		MustCurryWith(map[string]string{"id": id})
 	for level, metric := range stats.Levels {
 		metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
 	}
 	dbBlockCacheAccess.
-		WithLabelValues(captureAddr, id, "hit").Set(float64(stats.BlockCache.Hits))
+		WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
 	dbBlockCacheAccess.
-		WithLabelValues(captureAddr, id, "miss").Set(float64(stats.BlockCache.Misses))
+		WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
 }
 
 type pebbleBatch struct {

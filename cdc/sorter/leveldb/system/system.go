@@ -144,7 +144,6 @@ func (s *System) Start(ctx context.Context) error {
 	s.dbSystem.Start(ctx)
 	s.WriterSystem.Start(ctx)
 	s.ReaderSystem.Start(ctx)
-	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
 	totalMemory, err := memory.MemTotal()
 	if err != nil {
 		return errors.Trace(err)
@@ -159,7 +158,7 @@ func (s *System) Start(ctx context.Context) error {
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
 		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg, captureAddr)
+			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -169,7 +168,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		// Create and spawn db actor.
 		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg, captureAddr)
+			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -190,7 +189,7 @@ func (s *System) Start(ctx context.Context) error {
 			case <-s.closedCh:
 				return
 			case <-metricsTimer.C:
-				collectMetrics(s.dbs, captureAddr)
+				collectMetrics(s.dbs)
 				metricsTimer.Reset(defaultMetricInterval)
 			}
 		}
@@ -254,9 +253,9 @@ func (s *System) Stop() error {
 	return nil
 }
 
-func collectMetrics(dbs []db.DB, captureAddr string) {
+func collectMetrics(dbs []db.DB) {
 	for i := range dbs {
 		db := dbs[i]
-		db.CollectMetrics(captureAddr, i)
+		db.CollectMetrics(i)
 	}
 }

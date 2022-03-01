@@ -173,7 +173,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 		receiver, err := notifier.NewReceiver(-1)
 		require.Nil(t, err)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
-			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+			bucketSizeCounter.WithLabelValues("changefeed", "1"),
 			receiver,
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
@@ -253,7 +253,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	receiver, err := notifier.NewReceiver(-1)
 	require.Nil(t, err)
 	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
-		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		bucketSizeCounter.WithLabelValues("changefeed", "1"),
 		receiver,
 		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 			return errExecFailed
@@ -325,7 +325,7 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	receiver, err := notifier.NewReceiver(-1)
 	require.Nil(t, err)
 	w := newMySQLSinkWorker(maxTxnRow, 1, /*bucket*/
-		bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+		bucketSizeCounter.WithLabelValues("changefeed", "1"),
 		receiver,
 		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 			return errExecFailed
