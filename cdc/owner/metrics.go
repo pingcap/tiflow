@@ -61,7 +61,7 @@ var (
 			Subsystem: "owner",
 			Name:      "maintain_table_num",
 			Help:      "number of replicated tables maintained in owner",
-		}, []string{"changefeed", "capture", "type"})
+		}, []string{"changefeed", "type"})
 	changefeedStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

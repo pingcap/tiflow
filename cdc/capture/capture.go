@@ -143,7 +143,11 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.pdClock != nil {
 		c.pdClock.Stop()
 	}
-	c.pdClock = pdtime.NewClock(c.PDClient)
+
+	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -457,8 +461,7 @@ func (c *Capture) runEtcdWorker(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	captureAddr := c.info.AdvertiseAddr
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as

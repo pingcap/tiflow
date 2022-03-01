@@ -116,9 +116,8 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(changefeedID)
 
 	flushMetricsInterval := 15 * time.Second
 	timer := time.NewTimer(flushMetricsInterval)
@@ -140,13 +139,12 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
-	metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(changefeedID)
+	metricTotalRows := totalRowsCountGauge.WithLabelValues(changefeedID)
 	defer func() {
-		mountDuration.DeleteLabelValues(captureAddr, changefeedID)
-		totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+		mountDuration.DeleteLabelValues(changefeedID)
+		totalRowsCountGauge.DeleteLabelValues(changefeedID)
 	}()
 
 	for {

@@ -49,7 +49,7 @@ func TestCompactorPoll(t *testing.T) {
 	closedWg := new(sync.WaitGroup)
 	cfg.CompactionDeletionThreshold = 2
 	cfg.CompactionPeriod = 1
-	compactor, _, err := NewCompactActor(1, &mockDB, closedWg, cfg, "")
+	compactor, _, err := NewCompactActor(1, &mockDB, closedWg, cfg)
 	require.Nil(t, err)
 
 	// Must not trigger compact.
@@ -100,7 +100,7 @@ func TestComactorContextCancel(t *testing.T) {
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
-	ldb, _, err := NewCompactActor(0, db, closedWg, cfg, "")
+	ldb, _, err := NewCompactActor(0, db, closedWg, cfg)
 	require.Nil(t, err)
 
 	cancel()
