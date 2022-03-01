@@ -82,6 +82,15 @@ func (t *testForEtcd) TestSourceBoundEtcd(c *C) {
 	c.Assert(sbm2[worker1], HasLen, 1)
 	c.Assert(sbm2[worker1][bound1.Source], DeepEquals, bound1)
 
+	// get bound2 back with source.
+	sbm2, rev4, err = GetSourceBound(etcdTestCli, worker2, bound2.Source)
+	c.Assert(err, IsNil)
+	c.Assert(rev4, Equals, rev3)
+	c.Assert(sbm2, HasLen, 1)
+	c.Assert(sbm2[worker2], HasLen, 1)
+	bound2.Revision = rev3
+	c.Assert(sbm2[worker2][bound2.Source], DeepEquals, bound2)
+
 	// get bound1 and bound2 back.
 	sbm2, rev4, err = GetSourceBound(etcdTestCli, "", "")
 	c.Assert(err, IsNil)
@@ -89,7 +98,6 @@ func (t *testForEtcd) TestSourceBoundEtcd(c *C) {
 	c.Assert(sbm2, HasLen, 2)
 	c.Assert(sbm2[worker1], HasLen, 1)
 	c.Assert(sbm2[worker1][bound1.Source], DeepEquals, bound1)
-	bound2.Revision = rev3
 	c.Assert(sbm2[worker2], HasLen, 1)
 	c.Assert(sbm2[worker2][bound2.Source], DeepEquals, bound2)
 
@@ -160,4 +168,11 @@ func (t *testForEtcd) TestGetSourceBoundConfigEtcd(c *C) {
 	bound.Revision = rev2
 	c.Assert(bound2, DeepEquals, bound)
 	c.Assert(cfg2, DeepEquals, cfg)
+	// get source bound and config with a source
+	bound3, cfg3, rev5, err := GetSourceBoundConfig(etcdTestCli, worker, source)
+	c.Assert(err, IsNil)
+	c.Assert(rev5, Equals, rev4)
+	bound.Revision = rev2
+	c.Assert(bound3, DeepEquals, bound2)
+	c.Assert(cfg3, DeepEquals, cfg2)
 }
