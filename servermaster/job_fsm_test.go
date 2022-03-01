@@ -18,7 +18,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 		ID:     id,
 		Config: []byte("simple config"),
 	}
-	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal})
+	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal}, nil)
 
 	// create new job, enter into WaitAckack job queue
 	fsm.JobDispatched(job)

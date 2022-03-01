@@ -32,6 +32,11 @@ type BaseJobMaster interface {
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
 
+	// IsMasterReady returns whether the master has received heartbeats for all
+	// workers after a fail-over. If this is the first time the JobMaster started up,
+	// the return value is always true.
+	IsMasterReady() bool
+
 	// IsBaseJobMaster is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsBaseJobMaster()
@@ -192,6 +197,10 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
 	// master will use WorkerHandle to send message
 	return d.worker.SendMessage(ctx, topic, message)
+}
+
+func (d *DefaultBaseJobMaster) IsMasterReady() bool {
+	return d.master.IsMasterReady()
 }
 
 type jobMasterImplAsWorkerImpl struct {

@@ -28,7 +28,7 @@ import (
 // * go context
 // * logger.
 type Context struct {
-	Ctx          context.Context
+	context.Context
 	Logger       log.Logger
 	Dependencies RuntimeDependencies // Deprecated
 	Environ      Environment
@@ -39,53 +39,48 @@ type Context struct {
 // Background return a nop context.
 func Background() *Context {
 	return &Context{
-		Ctx:    context.Background(),
-		Logger: log.L(),
+		Context: context.Background(),
+		Logger:  log.L(),
 	}
 }
 
 // NewContext return a new Context.
 func NewContext(ctx context.Context, logger log.Logger) *Context {
 	return &Context{
-		Ctx:    ctx,
-		Logger: logger,
+		Context: ctx,
+		Logger:  logger,
 	}
 }
 
 // WithContext set go context.
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
-		Ctx:    ctx,
-		Logger: c.Logger,
+		Context: ctx,
+		Logger:  c.Logger,
 	}
 }
 
 // WithTimeout sets a timeout associated context.
 func (c *Context) WithTimeout(timeout time.Duration) (*Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(c.Ctx, timeout)
+	ctx, cancel := context.WithTimeout(c, timeout)
 	return &Context{
-		Ctx:    ctx,
-		Logger: c.Logger,
+		Context: ctx,
+		Logger:  c.Logger,
 	}, cancel
-}
-
-// Context returns real context.
-func (c *Context) Context() context.Context {
-	return c.Ctx
 }
 
 // WithLogger set logger.
 func (c *Context) WithLogger(logger log.Logger) *Context {
 	return &Context{
-		Ctx:    c.Ctx,
-		Logger: logger,
+		Context: c.Context,
+		Logger:  logger,
 	}
 }
 
 // WithDeps puts a built dependency container into the context.
 func (c *Context) WithDeps(deps *deps.Deps) *Context {
 	return &Context{
-		Ctx:          c.Ctx,
+		Context:      c.Context,
 		Logger:       c.Logger,
 		Dependencies: c.Dependencies,
 		Environ:      c.Environ,

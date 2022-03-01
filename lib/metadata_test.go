@@ -72,3 +72,53 @@ func TestStoreMasterMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, addr2, loadMeta().Addr)
 }
+
+func TestLoadAllWorkers(t *testing.T) {
+	t.Parallel()
+
+	metaKVClient := metadata.NewMetaMock()
+	workerMetaClient := NewWorkerMetadataClient("master-1", metaKVClient)
+
+	// Using context.Background() since there is no risk that
+	// the mock KV might time out.
+	err := workerMetaClient.Store(context.Background(), "worker-1", &WorkerStatus{
+		Code:         WorkerStatusInit,
+		ErrorMessage: "test-1",
+		ExtBytes:     []byte("ext-bytes-1"),
+	})
+	require.NoError(t, err)
+
+	err = workerMetaClient.Store(context.Background(), "worker-2", &WorkerStatus{
+		Code:         WorkerStatusNormal,
+		ErrorMessage: "test-2",
+		ExtBytes:     []byte("ext-bytes-2"),
+	})
+	require.NoError(t, err)
+
+	err = workerMetaClient.Store(context.Background(), "worker-3", &WorkerStatus{
+		Code:         WorkerStatusFinished,
+		ErrorMessage: "test-3",
+		ExtBytes:     []byte("ext-bytes-3"),
+	})
+	require.NoError(t, err)
+
+	workerStatuses, err := workerMetaClient.LoadAllWorkers(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, map[WorkerID]*WorkerStatus{
+		"worker-1": {
+			Code:         WorkerStatusInit,
+			ErrorMessage: "test-1",
+			ExtBytes:     []byte("ext-bytes-1"),
+		},
+		"worker-2": {
+			Code:         WorkerStatusNormal,
+			ErrorMessage: "test-2",
+			ExtBytes:     []byte("ext-bytes-2"),
+		},
+		"worker-3": {
+			Code:         WorkerStatusFinished,
+			ErrorMessage: "test-3",
+			ExtBytes:     []byte("ext-bytes-3"),
+		},
+	}, workerStatuses)
+}

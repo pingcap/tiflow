@@ -10,11 +10,13 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
+	"go.uber.org/dig"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -22,8 +24,9 @@ import (
 
 // workerManager is for private use by BaseMaster.
 type workerManager interface {
-	IsInitialized(ctx context.Context) (bool, error)
-	Tick(ctx context.Context, sender p2p.MessageSender) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
+	IsInitialized() bool
+	CheckError() error
+	Tick(ctx context.Context) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
 	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
 	OnWorkerCreated(ctx context.Context, id WorkerID, exeuctorNodeID p2p.NodeID) error
 	OnWorkerOffline(ctx context.Context, id WorkerID) error
@@ -36,6 +39,16 @@ type workerManager interface {
 	CheckStatusUpdate(ctx context.Context) error
 }
 
+type workerManagerFsmState = int32
+
+const (
+	workerManagerCreated = workerManagerFsmState(iota + 1)
+	workerManagerLoadingAllWorkers
+	workerManagerWaitingHeartbeats
+	workerManagerNormal
+	workerManagerFailed
+)
+
 type workerManagerImpl struct {
 	mu              sync.Mutex
 	initialized     bool
@@ -43,6 +56,9 @@ type workerManagerImpl struct {
 	workerInfos     map[WorkerID]*WorkerInfo
 	tombstones      map[WorkerID]*WorkerStatus
 	statusReceivers map[WorkerID]*StatusReceiver
+
+	fsmState atomic.Int32
+	errCh    chan error
 
 	// read-only
 	masterEpoch   Epoch
@@ -58,21 +74,42 @@ type workerManagerImpl struct {
 	pool                 workerpool.AsyncPool
 }
 
+type workerManagerParams struct {
+	dig.In
+
+	MessageSender        p2p.MessageSender
+	MessageHandleManager p2p.MessageHandlerManager
+	MetaClient           metadata.MetaKV
+	Pool                 workerpool.AsyncPool
+}
+
 func newWorkerManager(
+	ctx *dcontext.Context,
 	id MasterID,
 	needWait bool,
 	curEpoch Epoch,
-	messageSender p2p.MessageSender,
-	messageHandleManager p2p.MessageHandlerManager,
-	metaClient metadata.MetaKV,
-	pool workerpool.AsyncPool,
 	timeoutConfig *TimeoutConfig,
 ) workerManager {
+	var params workerManagerParams
+	if err := ctx.Deps().Fill(&params); err != nil {
+		log.L().Panic("failed to inject dependencies for WorkerManager",
+			zap.Error(err),
+			zap.String("master-id", id))
+	}
+
+	initFsmState := workerManagerCreated
+	if !needWait {
+		initFsmState = workerManagerNormal
+	}
+
 	return &workerManagerImpl{
 		initialized:     !needWait,
 		workerInfos:     make(map[WorkerID]*WorkerInfo),
 		tombstones:      make(map[WorkerID]*WorkerStatus),
 		statusReceivers: make(map[WorkerID]*StatusReceiver),
+
+		fsmState: *atomic.NewInt32(initFsmState),
+		errCh:    make(chan error, 1),
 
 		masterEpoch:   curEpoch,
 		masterID:      id,
@@ -80,19 +117,20 @@ func newWorkerManager(
 
 		clock: clock.New(),
 
-		messageSender:        messageSender,
-		messageHandleManager: messageHandleManager,
-		metaClient:           metaClient,
-		pool:                 pool,
+		messageSender:        params.MessageSender,
+		messageHandleManager: params.MessageHandleManager,
+		metaClient:           params.MetaClient,
+		pool:                 params.Pool,
 	}
 }
 
-func (m *workerManagerImpl) IsInitialized(ctx context.Context) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *workerManagerImpl) IsInitialized() bool {
+	return m.fsmState.Load() == workerManagerNormal
+}
 
-	if m.initialized {
-		return true, nil
+func (m *workerManagerImpl) checkGracefulPeriodFinished() {
+	if st := m.fsmState.Load(); st != workerManagerWaitingHeartbeats {
+		log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", st))
 	}
 
 	if m.initStartTime.IsZero() {
@@ -100,11 +138,85 @@ func (m *workerManagerImpl) IsInitialized(ctx context.Context) (bool, error) {
 	}
 
 	thresholdDuration := m.timeoutConfig.workerTimeoutDuration + m.timeoutConfig.workerTimeoutGracefulDuration
-	if m.clock.Since(m.initStartTime) > thresholdDuration {
-		m.initialized = true
-		return true, nil
+	duration := m.clock.Since(m.initStartTime)
+	if duration > thresholdDuration {
+		if old := m.fsmState.Swap(workerManagerNormal); old != workerManagerWaitingHeartbeats {
+			log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", old))
+		}
 	}
-	return false, nil
+}
+
+func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
+	if old := m.fsmState.Swap(workerManagerLoadingAllWorkers); old != workerManagerCreated {
+		log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", old))
+	}
+
+	err := m.pool.Go(ctx, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		workerStatuses, err := workerMetaClient.LoadAllWorkers(ctx)
+		if err != nil {
+			select {
+			case m.errCh <- errors.Trace(err):
+			default:
+			}
+			m.fsmState.Store(workerManagerFailed)
+			return
+		}
+
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for workerID, workerStatus := range workerStatuses {
+			// Inserts the persisted WorkerStatus into the tombstone list.
+			// If the worker is proven alive, it will be removed from the
+			// tombstone list.
+			m.tombstones[workerID] = workerStatus
+		}
+		if old := m.fsmState.Swap(workerManagerWaitingHeartbeats); old != workerManagerLoadingAllWorkers {
+			log.L().Panic("unexpected workerManager FSM state", zap.Int32("state", old))
+		}
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.tombstones[id]; !exists {
+		return nil
+	}
+
+	err := m.pool.Go(ctx, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		ok, err := workerMetaClient.Remove(ctx, id)
+		if err != nil {
+			select {
+			case m.errCh <- errors.Trace(err):
+			default:
+			}
+			m.fsmState.Store(workerManagerFailed)
+			return
+		}
+		if !ok {
+			log.L().Warn("Could not remove tombstone state for worker",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", id))
+			return
+		}
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (m *workerManagerImpl) CheckStatusUpdate(ctx context.Context) error {
@@ -121,8 +233,25 @@ func (m *workerManagerImpl) CheckStatusUpdate(ctx context.Context) error {
 
 func (m *workerManagerImpl) Tick(
 	ctx context.Context,
-	sender p2p.MessageSender,
 ) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo) {
+	switch m.fsmState.Load() {
+	case workerManagerCreated:
+		if err := m.asyncLoadAllWorkers(ctx); err != nil {
+			// TODO handle error gracefully.
+			log.L().Panic("Failed to load all workers", zap.Error(err))
+		}
+		return
+	case workerManagerLoadingAllWorkers:
+		return
+	case workerManagerWaitingHeartbeats:
+		m.checkGracefulPeriodFinished()
+
+		fallthrough
+	case workerManagerNormal:
+	default:
+		log.L().Panic("unreachable")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -160,7 +289,7 @@ func (m *workerManagerImpl) Tick(
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
-		ok, err := sender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID, workerID), reply)
+		ok, err := m.messageSender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID, workerID), reply)
 		if err != nil {
 			log.L().Error("Failed to send heartbeat", zap.Error(err))
 		}
@@ -257,6 +386,14 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 			zap.String("worker-id", id))
 	}
 
+	if _, exists := m.tombstones[id]; exists {
+		if m.fsmState.Load() != workerManagerWaitingHeartbeats {
+			log.L().Panic("Discovered a worker whose status is not persisted",
+				zap.String("worker-id", id), zap.String("executor-id", executorNodeID))
+		}
+		delete(m.tombstones, id)
+	}
+
 	m.workerInfos[id] = &WorkerInfo{
 		ID:                       id,
 		NodeID:                   executorNodeID,
@@ -343,10 +480,15 @@ func (m *workerManagerImpl) MessageSender() p2p.MessageSender {
 }
 
 func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
-	return &workerHandleImpl{
-		manager: m,
-		id:      id,
+	if _, exists := m.workerInfos[id]; exists {
+		return &workerHandleImpl{
+			manager: m,
+			id:      id,
+		}
+	} else if status, exists := m.tombstones[id]; exists {
+		return NewTombstoneWorkerHandle(id, *status, m)
 	}
+	return nil
 }
 
 // GetWorkers returns a map from WorkerID to WorkerHandle for all known workers.
@@ -363,9 +505,18 @@ func (m *workerManagerImpl) GetWorkers() map[WorkerID]WorkerHandle {
 	}
 
 	for workerID, status := range m.tombstones {
-		ret[workerID] = NewTombstoneWorkerHandle(workerID, *status)
+		ret[workerID] = NewTombstoneWorkerHandle(workerID, *status, m)
 	}
 	return ret
+}
+
+func (m *workerManagerImpl) CheckError() error {
+	select {
+	case err := <-m.errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 type WorkerInfo struct {
@@ -401,6 +552,12 @@ type WorkerHandle interface {
 	ID() WorkerID
 	IsTombStone() bool
 	ToPB() (*pb.WorkerInfo, error)
+
+	// DeleteTombStone attempts to remove the persisted status
+	// if the WorkerHandler is a tombstone.
+	// If the handle does not represent a deletable tombstone,
+	// a call to DeleteTombStone will return false.
+	DeleteTombStone(ctx context.Context) (bool, error)
 }
 
 type workerHandleImpl struct {
@@ -470,15 +627,21 @@ func (w *workerHandleImpl) IsTombStone() bool {
 	return false
 }
 
-type tombstoneWorkerHandleImpl struct {
-	id     WorkerID
-	status WorkerStatus
+func (w *workerHandleImpl) DeleteTombStone(_ context.Context) (bool, error) {
+	return false, nil
 }
 
-func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus) WorkerHandle {
+type tombstoneWorkerHandleImpl struct {
+	id      WorkerID
+	status  WorkerStatus
+	manager workerManager
+}
+
+func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus, manager workerManager) WorkerHandle {
 	return &tombstoneWorkerHandleImpl{
-		id:     id,
-		status: status,
+		id:      id,
+		status:  status,
+		manager: manager,
 	}
 }
 
@@ -505,4 +668,19 @@ func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
 
 func (h *tombstoneWorkerHandleImpl) IsTombStone() bool {
 	return true
+}
+
+func (h *tombstoneWorkerHandleImpl) DeleteTombStone(ctx context.Context) (bool, error) {
+	if h.manager == nil {
+		return false, nil
+	}
+	managerImpl, ok := h.manager.(*workerManagerImpl)
+	if !ok {
+		return false, nil
+	}
+
+	if err := managerImpl.asyncDeleteTombstone(ctx, h.id); err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
 }

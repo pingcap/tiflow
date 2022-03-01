@@ -142,11 +142,11 @@ func NewJobManagerImplV2(
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.Initialized = true
-	err = lib.StoreMasterMeta(dctx.Context(), impl.MetaKVClient(), meta)
+	err = lib.StoreMasterMeta(dctx, impl.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
 	}
-	err = impl.BaseMaster.Init(dctx.Context())
+	err = impl.BaseMaster.Init(dctx)
 	if err != nil {
 		return nil, err
 	}
