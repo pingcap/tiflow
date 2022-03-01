@@ -13,7 +13,13 @@ check-struct-only = false
 
     target-instance = "mysql1"
 
-    target-check-tables = ["alter_table.?*", "bigint.?*", "composite_index.?*", "concurrent_ddl.?*", "date_formats.?*", "drop.?*", "mysql_replace.?*"]
+    target-check-tables = ["bigint.?*", "composite_index.?*", "date_formats.?*", "update.?*",
+        "datetime_insert.?*", "datetime_update.?*", "drop.?*", "mysql_replace.?*",
+        "gcol_alter_table.?*", "insert_select.?*", "insert_update.?*", "json.?*",
+        "partition_bug18198.?*", "partition_list.?*", "partition_range.?*", "single_delete_update.?*",
+        "time.?*", "timestamp_insert.?*", "timestamp_update.?*", "transaction_isolation_func.?*",
+        "type_decimal.?*", "type_time.?*", "type_timestamp.?*", "type_uint.?*",
+        "update_stmt.?*", "concurrent_ddl.?*"]
 
 [data-sources]
 [data-sources.tidb0]

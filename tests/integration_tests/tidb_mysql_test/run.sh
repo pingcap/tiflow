@@ -9,12 +9,12 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function prepare() {
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	stop_tidb_cluster
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
-
-	cd $WORK_DIR
+	
+    cd $WORK_DIR
 
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
@@ -43,14 +43,38 @@ if [ "$SINK_TYPE" = "kafka" ]; then
 fi
 
 # mysql test may suffer from duplicate DML for no pk/uk
-# [TODO] need add pk or move from integration test
 trap stop_tidb_cluster EXIT
+
+# setup cluster
+echo -e "start upstream and downstream cluster"
 prepare $*
-cd "$(dirname "$0")"
+
+cp -f $CUR/converter2.sh $CUR/mysql_test/
+cp -f $CUR/build.sh $CUR/mysql_test/
+cd $CUR/mysql_test
+
+# convert test case
+cases="bigint composite_index date_formats datetime_insert \
+    datetime_update drop mysql_replace gcol_alter_table \
+    insert_select insert_update json partition_bug18198 \
+    partition_list partition_range single_delete_update time \
+    timestamp_insert timestamp_update transaction_isolation_func type_decimal \
+    type_time type_timestamp type_uint update \
+    update_stmt concurrent_ddl"
+
+./converter2.sh "$cases"
 # run mysql-test cases
-./test.sh
+echo -e "mysql_test start\n"
+TEST_BIN_PATH=./mysql_test
+./build.sh
+echo "run mysql test cases:${cases}"
+"$TEST_BIN_PATH" --host=${UP_TIDB_HOST} --port=${UP_TIDB_PORT} --log-level=error --reserve-schema=true ${cases}
+echo "mysqltest end"
+cd ../
+
 mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "create table test.finish_mark(id int primary key)"
-check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+# all tests will take too much time, how to optimize it?
+check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 2000
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
 check_logs $WORK_DIR
