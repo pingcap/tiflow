@@ -25,7 +25,7 @@ var (
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	execTxnHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -33,7 +33,7 @@ var (
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	execDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -41,14 +41,14 @@ var (
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "execution_error",
 			Help:      "total count of execution errors",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	conflictDetectDurationHis = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -56,28 +56,28 @@ var (
 			Name:      "conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	bucketSizeCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "bucket_size",
 			Help:      "size of the DML bucket",
-		}, []string{"capture", "changefeed", "bucket"})
+		}, []string{"changefeed", "bucket"})
 	totalRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_rows_count",
 			Help:      "The total count of rows that are processed by sink",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	totalFlushedRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_flushed_rows_count",
 			Help:      "The total count of rows that are flushed by sink",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	flushRowChangedDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -85,7 +85,7 @@ var (
 			Name:      "flush_event_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
-		}, []string{"capture", "changefeed", "type"})
+		}, []string{"changefeed", "type"})
 
 	tableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -93,7 +93,7 @@ var (
 			Subsystem: "sink",
 			Name:      "table_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by table sink",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 
 	bufferSinkTotalRowsCountCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -101,7 +101,7 @@ var (
 			Subsystem: "sink",
 			Name:      "buffer_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by buffer sink",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 )
 
 // InitMetrics registers all metrics in this file

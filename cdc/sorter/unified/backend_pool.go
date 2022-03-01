@@ -67,7 +67,7 @@ type backEndPool struct {
 	isTerminating bool
 }
 
-func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
+func newBackEndPool(dir string) (*backEndPool, error) {
 	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
@@ -95,9 +95,9 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		defer ticker.Stop()
 
 		id := "0" // A placeholder for ID label in metrics.
-		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(captureAddr, id)
+		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(id)
+		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(id)
+		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(id)
 
 		// TODO: The underlaying implementation only recognizes cgroups set by
 		// containers, we need to support cgroups set by systemd or manually.
