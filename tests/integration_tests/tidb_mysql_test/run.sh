@@ -34,15 +34,22 @@ function prepare() {
 	fi
 }
 
+# kafka test is not supported yet.
+# Because:(1) most cases has no pk/uk, consumer will receive more than one same DML  
+#         (2) kafka consumer need support force_replicate
+if [ "$SINK_TYPE" = "kafka" ]; then
+	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
+	exit 0
+fi
+
+# mysql test may suffer from duplicate DML for no pk/uk
+# [TODO] need add pk or move from integration test
 trap stop_tidb_cluster EXIT
 prepare $*
-
 cd "$(dirname "$0")"
-
 # run mysql-test cases
 ./test.sh
 mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "create table test.finish_mark(id int primary key)"
-
 check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
