@@ -350,12 +350,6 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 }
 
 // createSubtaskV1Import tries to create subtasks with the specified stage.
-// NOTE: now we only have two different APIs to:
-//   - create a new (running) subtask.
-//   - update the subtask to the specified stage.
-// in other words, if we want to create a `Paused` task,
-// we need to create a `Running` one first and then `Pause` it.
-// this is not a big problem now, but if needed we can refine it later.
 // NOTE: we do not stopping previous subtasks if any later one failed (because some side effects may have taken),
 // and let the user to check & fix the problem.
 // TODO(csuzhangxc): merge subtask configs to support `get-task-config`.
@@ -377,8 +371,7 @@ outerLoop:
 				tctx.Logger.Warn("skip to create subtask because only support to create subtasks with Running/Paused stage now", zap.Stringer("stage", stage))
 				continue
 			}
-			// create and update subtasks one by one (this should be quick enough because only updating etcd).
-			err = s.scheduler.AddSubTasks(false, pb.Stage_Paused, *cfg2)
+			err = s.scheduler.AddSubTasks(false, stage, *cfg2)
 			if err != nil {
 				if terror.ErrSchedulerSubTaskExist.Equal(err) {
 					err = nil // reset error
