@@ -39,7 +39,6 @@ type Manager struct {
 
 	drawbackChan chan drawbackMsg
 
-	captureAddr               string
 	changefeedID              model.ChangeFeedID
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -57,9 +56,8 @@ func NewManager(
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
-		captureAddr:               captureAddr,
 		changefeedID:              changefeedID,
-		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
+		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 }
 
@@ -84,7 +82,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 func (m *Manager) Close(ctx context.Context) error {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
-	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
 	if m.bufSink != nil {
 		log.Info("sinkManager try close bufSink",
 			zap.String("changefeed", m.changefeedID))

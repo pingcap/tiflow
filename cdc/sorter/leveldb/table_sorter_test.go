@@ -699,7 +699,7 @@ func TestStateIterator(t *testing.T) {
 	db := prepareTxnData(t, ls, 1, 1)
 	sema := semaphore.NewWeighted(1)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+		prometheus.Labels{"id": t.Name()})
 	mb := actor.NewMailbox(1, 1)
 	router := actor.NewRouter(t.Name())
 	router.InsertMailbox4Test(mb.ID(), mb)
@@ -1014,7 +1014,7 @@ func TestPoll(t *testing.T) {
 	}
 
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+		prometheus.Labels{"id": t.Name()})
 	for i, css := range cases {
 		state := css[0].state
 		state.iterFirstSlowDuration = 100 * time.Second

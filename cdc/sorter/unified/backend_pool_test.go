@@ -57,7 +57,7 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
-	backEndPool, err := newBackEndPool(sortDir, "")
+	backEndPool, err := newBackEndPool(sortDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -125,7 +125,7 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	conf.Sorter.SortDir = sortDir
 	conf.Sorter.MaxMemoryPercentage = 0 // force using files
 
-	backEndPool, err := newBackEndPool(sortDir, "")
+	backEndPool, err := newBackEndPool(sortDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -165,7 +165,7 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
 
-	backEndPool, err := newBackEndPool(sorterDir, "")
+	backEndPool, err := newBackEndPool(sorterDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 
@@ -276,7 +276,7 @@ func (s *backendPoolSuite) TestCleanUpStaleBasic(c *check.C) {
 	mockP.unlock(c)
 	mockP.assertFilesExist(c)
 
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -290,12 +290,12 @@ func (s *backendPoolSuite) TestFileLockConflict(c *check.C) {
 	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 
-	backEndPool1, err := newBackEndPool(dir, "")
+	backEndPool1, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool1, check.NotNil)
 	defer backEndPool1.terminate()
 
-	backEndPool2, err := newBackEndPool(dir, "")
+	backEndPool2, err := newBackEndPool(dir)
 	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
 	c.Assert(backEndPool2, check.IsNil)
 }
@@ -313,7 +313,7 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 	// set a bad permission
 	mockP.changeLockPermission(c, 0o000)
 
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.ErrorMatches, ".*permission denied.*")
 	c.Assert(backEndPool, check.IsNil)
 
@@ -333,7 +333,7 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	memory.MemTotal = func() (uint64, error) { return 0, nil }
 
 	dir := c.MkDir()
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()

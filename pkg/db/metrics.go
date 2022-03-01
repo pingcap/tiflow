@@ -23,56 +23,56 @@ var (
 		Subsystem: "db",
 		Name:      "write_bytes_total",
 		Help:      "The total number of write bytes by the leveldb",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbReadBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "read_bytes_total",
 		Help:      "The total number of read bytes by the leveldb",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbSnapshotGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "snapshot_count_gauge",
 		Help:      "The number of snapshot by the db",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbIteratorGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "iterator_count_gauge",
 		Help:      "The number of iterator by the db",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbLevelCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "level_count",
 		Help:      "The number of files in each level by the db",
-	}, []string{"capture", "level", "id"})
+	}, []string{"level", "id"})
 
 	dbWriteDelayDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "write_delay_seconds",
 		Help:      "The duration of leveldb write delay seconds",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbWriteDelayCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "write_delay_total",
 		Help:      "The total number of leveldb delay",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	dbBlockCacheAccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "block_cache_access_total",
 		Help:      "The total number of leveldb block cache access",
-	}, []string{"capture", "id", "type"})
+	}, []string{"id", "type"})
 )
 
 // InitMetrics registers all metrics in this file
