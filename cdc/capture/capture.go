@@ -143,7 +143,11 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.pdClock != nil {
 		c.pdClock.Stop()
 	}
-	c.pdClock = pdtime.NewClock(c.PDClient)
+
+	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()

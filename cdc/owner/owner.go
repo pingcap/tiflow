@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -328,6 +329,38 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 
 	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
+
+	conf := config.GetGlobalServerConfig()
+
+	// TODO refactor this piece of code when the new scheduler is stabilized,
+	// and the old scheduler is removed.
+	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
+		for cfID, cf := range o.changefeeds {
+			if cf.state != nil && cf.state.Info != nil {
+				changefeedStatusGauge.WithLabelValues(cfID).Set(float64(cf.state.Info.State.ToInt()))
+			}
+
+			// The InfoProvider is a proxy object returning information
+			// from the scheduler.
+			infoProvider := cf.GetInfoProvider()
+			if infoProvider == nil {
+				// The scheduler has not been initialized yet.
+				continue
+			}
+
+			totalCounts := infoProvider.GetTotalTableCounts()
+			pendingCounts := infoProvider.GetPendingTableCounts()
+
+			for captureID, info := range o.captures {
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+			}
+		}
+		return
+	}
+
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
