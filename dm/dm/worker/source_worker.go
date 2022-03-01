@@ -542,6 +542,7 @@ func (w *SourceWorker) fetchSubTasksAndAdjust() (map[string]ha.Stage, map[string
 }
 
 // StartSubTask creates a subtask and run it.
+// TODO(ehco) rename this func.
 func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, validatorStage pb.Stage, needLock bool) error {
 	if needLock {
 		w.Lock()
@@ -808,7 +809,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 	// for new added subtask
 	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 		switch stage.Expect {
-		case pb.Stage_Running, pb.Stage_Stopped:
+		case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
 			log.L().Info("start to create subtask in operateSubTaskStage", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 			expectValidatorStage, err := getExpectValidatorStage(subTaskCfg.ValidatorCfg, w.etcdClient, stage.Source, stage.Task, stage.Revision)
 			if err != nil {
