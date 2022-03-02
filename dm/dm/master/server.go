@@ -616,14 +616,13 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	case pb.TaskOp_Resume:
 		expect = pb.Stage_Running
 	case pb.TaskOp_Delete:
-		// op_delete means delete this running subtask, we not have stage_null now, so use invalid stage instead
-		expect = pb.Stage_InvalidStage
+		// op_delete means delete this running subtask, we not have the expected stage now
 	default:
 		resp.Msg = terror.ErrMasterInvalidOperateOp.Generate(req.Op.String(), "task").Error()
 		return resp, nil
 	}
 	var err error
-	if expect == pb.Stage_InvalidStage {
+	if req.Op == pb.TaskOp_Delete {
 		err = s.scheduler.RemoveSubTasks(req.Name, sources...)
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
@@ -637,7 +636,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	resp.Result = true
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
 
-	if expect == pb.Stage_Stopped {
+	if req.Op == pb.TaskOp_Delete {
 		// delete meta data for optimist
 		if len(req.Sources) == 0 {
 			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
@@ -1806,7 +1805,7 @@ func (s *Server) waitOperationOk(
 					}
 				}
 			case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
-				if expect == pb.Stage_InvalidStage && len(queryResp.SubTaskStatus) == 0 {
+				if opTaskReq, ok := masterReq.(*pb.OperateTaskRequest); ok && opTaskReq.Op == pb.TaskOp_Delete && len(queryResp.SubTaskStatus) == 0 {
 					return true, "", queryResp, nil
 				}
 				if len(queryResp.SubTaskStatus) == 1 {
@@ -1821,8 +1820,8 @@ func (s *Server) waitOperationOk(
 						if expect == pb.Stage_Running {
 							finished = pb.Stage_Finished
 						}
-						if expect == pb.Stage_Stopped {
-							if st, ok2 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok2 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
+						if opTaskReq, ok2 := masterReq.(*pb.OperateTaskRequest); ok2 && opTaskReq.Op == pb.TaskOp_Delete {
+							if st, ok3 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok3 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
 								ok = true
 							} else {
 								// make sure there is no subtask
