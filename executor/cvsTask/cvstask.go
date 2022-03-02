@@ -171,7 +171,6 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 		case task.buffer <- strPair{firstStr: strs[0], secondStr: strs[1]}:
 		}
 		// waiting longer time to read lines slowly
-		time.Sleep(time.Millisecond * 10)
 	}
 	return nil
 }

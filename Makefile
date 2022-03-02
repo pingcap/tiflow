@@ -3,7 +3,7 @@ PARALLEL=3
 GOTEST := CGO_ENABLED=1 go test -p $(PARALLEL) --race
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
-PACKAGE_LIST := go list ./... | grep -vE 'proto|pb'
+PACKAGE_LIST := go list ./... | grep -vE 'proto|pb' | grep -v 'e2e'
 PACKAGES := $$($(PACKAGE_LIST))
 GOFILES := $$(find . -name '*.go' -type f | grep -vE 'proto|pb\.go')
 

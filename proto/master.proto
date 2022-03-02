@@ -104,10 +104,11 @@ message QueryJobResponse {
         dispatched = 3;
         finished = 4;
     }
-    bytes config = 1;
-    JobStatus status = 2;
-    WorkerInfo job_master_info = 3;
-    Error err = 4;
+    int64   tp = 1;
+    bytes config = 2;
+    JobStatus status = 3;
+    WorkerInfo job_master_info = 4;
+    Error err = 5;
 }
 
 message CancelJobRequest {

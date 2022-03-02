@@ -2,10 +2,13 @@ package ctl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 
+	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -39,8 +42,27 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 		JobId: id,
 	})
 	if err != nil {
-		log.L().Error("failed to submit job", zap.Error(err))
+		log.L().Error("failed to query job", zap.Error(err))
 		os.Exit(1)
+	}
+	switch resp.Tp {
+	case int64(lib.CvsJobMaster):
+		if resp.Status == pb.QueryJobResponse_online && resp.JobMasterInfo != nil {
+			statusBytes := resp.JobMasterInfo.Status
+			status := &lib.WorkerStatus{}
+			err = json.Unmarshal(statusBytes, status)
+			if err != nil {
+				log.L().Error("failed to query job", zap.Error(err))
+				os.Exit(1)
+			}
+			ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
+			if err != nil {
+				log.L().Error("failed to query job", zap.Error(err))
+				os.Exit(1)
+			}
+			log.L().Info("status ext info", zap.Int64("ext", ext))
+		}
+	default:
 	}
 	log.L().Info("query result", zap.String("resp", resp.String()))
 	return nil

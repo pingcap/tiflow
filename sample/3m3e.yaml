@@ -2,6 +2,8 @@ version: "2.3"
 services:
         server-master-0:
                 image: dataflow:test
+                ports:
+                        - "10245:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
                         - /tmp/df0:/tmp/df
@@ -23,6 +25,8 @@ services:
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
         server-master-1:
                 image: dataflow:test
+                ports:
+                        - "10246:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
                         - /tmp/df1:/tmp/df
@@ -44,6 +48,8 @@ services:
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
         server-master-2:
                 image: dataflow:test
+                ports:
+                        - "10247:10240"
                 volumes:
                         - ./config/master.toml:/config.toml
                         - /tmp/df2:/tmp/df

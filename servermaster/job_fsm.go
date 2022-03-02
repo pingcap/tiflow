@@ -73,12 +73,14 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	resp := &pb.QueryJobResponse{}
 	meta, ok := fsm.pendingJobs[jobID]
 	if ok {
+		resp.Tp = int64(meta.Tp)
 		resp.Config = meta.Config
 		resp.Status = pb.QueryJobResponse_pending
 		return resp
 	}
 	meta, ok = fsm.waitAckJobs[jobID]
 	if ok {
+		resp.Tp = int64(meta.Tp)
 		resp.Config = meta.Config
 		resp.Status = pb.QueryJobResponse_dispatched
 		return resp
@@ -86,6 +88,7 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	job, ok := fsm.onlineJobs[jobID]
 	resp.Status = pb.QueryJobResponse_online
 	if ok {
+		resp.Tp = int64(job.Tp)
 		resp.Config = job.Config
 		jobInfo, err := job.ToPB()
 		// TODO (zixiong) ToPB should handle the tombstone situation gracefully.

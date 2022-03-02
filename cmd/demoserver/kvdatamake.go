@@ -132,7 +132,7 @@ func generateData(folderName string, recorders int) int {
 			shouldFlush = true
 		}
 		index := k % fileNum
-		_, err2 := fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value \r\n")
+		_, err2 := fileWriterMap[index].WriteString(strconv.Itoa(k) + "," + "value\n")
 		if err2 != nil {
 			continue
 		}
@@ -232,6 +232,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 }
 
 func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
+	log.L().Info("compare two files", zap.String("p1", path1), zap.String("p2", path2))
 	str1, err := openFileAndReadString(path1)
 	if err != nil {
 		return err
@@ -243,8 +244,10 @@ func (s *DataRWServer) compareTwoFiles(path1, path2 string) error {
 	dmp := diffmatchpatch.New()
 
 	diffs := dmp.DiffMain(string(str1), string(str2), false)
-	if len(diffs) != 0 {
-		return errors.New(dmp.DiffPrettyText(diffs))
+	for i, diff := range diffs {
+		if diff.Type != diffmatchpatch.DiffEqual {
+			return errors.New(dmp.DiffPrettyText(diffs[i:]))
+		}
 	}
 	return nil
 }
@@ -281,6 +284,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 		case <-s.ctx.Done():
 			return nil
 		default:
+			time.Sleep(time.Millisecond * 5)
 			reply, err := reader.ReadString('\n')
 			if err == io.EOF {
 				log.L().Info("reach the end of the file")
@@ -343,17 +347,21 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 								err = os.Mkdir(folder, os.ModePerm)
 							}
 							if err != nil {
-								return &ErrorInfo{info: "create the folder " + folder + " failed"}
+								log.L().Warn("create folder failed", zap.String("folder", folder), zap.Error(err))
+								// may be folder has been created
+								time.Sleep(10 * time.Millisecond)
+							} else {
+								log.L().Info("create the folder ",
+									zap.String("folder  ", folder))
 							}
-							log.L().Error("create the folder ",
-								zap.String("folder  ", folder))
 						}
 						// create the file
 						file, err = os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0o666)
 					}
 					defer file.Close()
 					if err != nil {
-						return &ErrorInfo{info: "create file " + fileName + " failed"}
+						log.L().Error("create file failed", zap.String("file", fileName), zap.Error(err))
+						return err
 					}
 					writer = bufio.NewWriter(file)
 					defer writer.Flush()
