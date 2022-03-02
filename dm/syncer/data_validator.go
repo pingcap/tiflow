@@ -296,7 +296,8 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	// todo: syncer may change replication location(start from timestamp, sharding resync), how validator react?
+	// todo: if validator starts on task start, we need to make sure the location we got is the init location of syncer
+	// todo: right now, there's change they have a gap
 	location := v.syncer.checkpoint.FlushedGlobalPoint()
 	if v.streamerController.IsClosed() {
 		err := v.streamerController.Start(v.tctx, location)
