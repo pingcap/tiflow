@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/shopspring/decimal"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -52,7 +51,7 @@ type validateTableInfo struct {
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	Target     *filter.Table // target table after route
-	pkIndices  []int
+	pkIndices  []int         // TODO: can we use offset of in indexColumn? may remove this field in that case
 }
 
 type rowChangeType int
@@ -73,6 +72,8 @@ type tableChange struct {
 }
 
 // change of a row.
+// todo: this struct and some logic on it may reuse RowChange in pkg/sqlmodel
+// todo: maybe we can use reuse it later.
 type rowChange struct {
 	table      *validateTableInfo
 	key        string
@@ -423,6 +424,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			primaryIdx = idx
 		}
 	}
+	// todo: PKIsHandle = true when table has primary key like "id int primary key CLUSTERED", since schema-tracker(we get from it)
+	// todo: only use downstream DDL when the task is incremental only, will support this case later.
 	if primaryIdx == nil {
 		// todo: for table without primary index, need to record in the failed table, will add it later together with checkpoint
 		v.unsupportedTable[fullTableName] = "without primary key"
@@ -478,7 +481,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			}
 			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {
-				// convert to delete and insert
+				// TODO: may reuse IsIdentityUpdated/SplitUpdate of RowChange in pkg/sqlmodel
 				v.dispatchRowChange(key, &rowChange{
 					table:      table,
 					key:        key,
@@ -534,8 +537,6 @@ func genColData(v interface{}) []byte {
 		return dv
 	case string:
 		return []byte(dv)
-	case decimal.Decimal:
-		return []byte(dv.String())
 	}
 	s := fmt.Sprintf("%v", v)
 	return []byte(s)

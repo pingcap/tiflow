@@ -100,7 +100,7 @@ func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBCo
 	}
 }
 
-func Test_validator_StartStop(t *testing.T) {
+func TestValidatorStartStop(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 
@@ -147,7 +147,7 @@ func Test_validator_StartStop(t *testing.T) {
 	validator.Stop()
 }
 
-func Test_validator_fillResult(t *testing.T) {
+func TestValidatorFillResult(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -168,7 +168,7 @@ func Test_validator_fillResult(t *testing.T) {
 	require.Len(t, validator.result.Errors, 2)
 }
 
-func Test_validator_errorProcessRoutine(t *testing.T) {
+func TestValidatorErrorProcessRoutine(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -203,7 +203,7 @@ func (c *mockedCheckPointForValidator) FlushedGlobalPoint() binlog.Location {
 	return c.nextLoc
 }
 
-func Test_validator_waitSyncerSynced(t *testing.T) {
+func TestValidatorWaitSyncerSynced(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -240,7 +240,7 @@ func Test_validator_waitSyncerSynced(t *testing.T) {
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 }
 
-func Test_validator_waitSyncerRunning(t *testing.T) {
+func TestValidatorWaitSyncerRunning(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -269,7 +269,7 @@ func Test_validator_waitSyncerRunning(t *testing.T) {
 	require.NoError(t, validator.waitSyncerRunning())
 }
 
-func Test_validator_doValidate(t *testing.T) {
+func TestValidatorDoValidate(t *testing.T) {
 	var (
 		schemaName      = "test"
 		tableName       = "tbl"
@@ -434,7 +434,7 @@ func Test_validator_doValidate(t *testing.T) {
 	require.Contains(t, validator.unsupportedTable, ft.String())
 }
 
-func Test_validator_getRowChangeType(t *testing.T) {
+func TestValidatorGetRowChangeType(t *testing.T) {
 	require.Equal(t, rowInsert, getRowChangeType(replication.WRITE_ROWS_EVENTv0))
 	require.Equal(t, rowInsert, getRowChangeType(replication.WRITE_ROWS_EVENTv1))
 	require.Equal(t, rowInsert, getRowChangeType(replication.WRITE_ROWS_EVENTv2))
@@ -446,7 +446,7 @@ func Test_validator_getRowChangeType(t *testing.T) {
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv2))
 }
 
-func Test_validator_genColData(t *testing.T) {
+func TestValidatorGenColData(t *testing.T) {
 	res := genColData(1)
 	require.Equal(t, "1", string(res))
 	res = genColData(1.2)
