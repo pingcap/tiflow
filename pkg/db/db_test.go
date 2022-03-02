@@ -53,7 +53,7 @@ func testDB(t *testing.T, db DB) {
 	require.Nil(t, err)
 
 	// Collect metrics
-	db.CollectMetrics("", 0)
+	db.CollectMetrics(0)
 
 	// Batch
 	lbatch := leveldb.MakeBatch(0)
@@ -134,7 +134,7 @@ func TestPebbleMetrics(t *testing.T) {
 	}
 
 	// Collect empty metrics.
-	pdb.CollectMetrics("", id)
+	pdb.CollectMetrics(id)
 
 	// Write stall.
 	option.EventListener.WriteStallBegin(pebble.WriteStallBeginInfo{})
@@ -144,7 +144,7 @@ func TestPebbleMetrics(t *testing.T) {
 	require.Less(t, time.Duration(0), ws.duration.Load().(time.Duration))
 
 	// Collect write stall metrics.
-	pdb.CollectMetrics("", id)
+	pdb.CollectMetrics(id)
 	require.EqualValues(t, 1, ws.counter)
 	require.Equal(t, time.Duration(0), ws.duration.Load().(time.Duration))
 
