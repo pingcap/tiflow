@@ -35,7 +35,7 @@ import (
 )
 
 // split into 3 cases, since it may be unstable when put together.
-func Test_ValidatorWorker_run_insert_update(t *testing.T) {
+func TestValidatorWorkerRun_insert_update(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
 		"create table tbl1(a int primary key, b varchar(100))")
@@ -64,7 +64,7 @@ func Test_ValidatorWorker_run_insert_update(t *testing.T) {
 		key:        "1",
 		pkValues:   []string{"1"},
 		data:       []interface{}{1, "a"},
-		theType:    rowInsert,
+		tp:         rowInsert,
 		lastMeetTS: time.Now().Unix(),
 	}
 	worker.rowChangeCh <- &rowChange{
@@ -72,7 +72,7 @@ func Test_ValidatorWorker_run_insert_update(t *testing.T) {
 		key:        "1",
 		pkValues:   []string{"1"},
 		data:       []interface{}{1, "b"},
-		theType:    rowUpdated,
+		tp:         rowUpdated,
 		lastMeetTS: time.Now().Unix(),
 	}
 	worker.rowChangeCh <- &rowChange{
@@ -80,7 +80,7 @@ func Test_ValidatorWorker_run_insert_update(t *testing.T) {
 		key:        "2",
 		pkValues:   []string{"2"},
 		data:       []interface{}{2, "2b"},
-		theType:    rowInsert,
+		tp:         rowInsert,
 		lastMeetTS: time.Now().Unix(),
 	}
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -99,14 +99,14 @@ func Test_ValidatorWorker_run_insert_update(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
 	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 2)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "1")
-	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].theType)
+	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].tp)
 	require.Equal(t, int(worker.validationCount.Load()), worker.pendingChangesMap[tbl1.String()].rows["1"].failedCnt)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "2")
-	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].theType)
+	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].tp)
 	require.Equal(t, int(worker.validationCount.Load()), worker.pendingChangesMap[tbl1.String()].rows["2"].failedCnt)
 }
 
-func Test_ValidatorWorker_run_all_validated(t *testing.T) {
+func TestValidatorWorkerRun_all_validated(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
 		"create table tbl1(a int primary key, b varchar(100))")
@@ -135,7 +135,7 @@ func Test_ValidatorWorker_run_all_validated(t *testing.T) {
 		key:        "1",
 		pkValues:   []string{"1"},
 		data:       []interface{}{1, "a"},
-		theType:    rowInsert,
+		tp:         rowInsert,
 		lastMeetTS: time.Now().Unix(),
 	}
 	worker.rowChangeCh <- &rowChange{
@@ -143,7 +143,7 @@ func Test_ValidatorWorker_run_all_validated(t *testing.T) {
 		key:        "1",
 		pkValues:   []string{"1"},
 		data:       []interface{}{1, "b"},
-		theType:    rowUpdated,
+		tp:         rowUpdated,
 		lastMeetTS: time.Now().Unix(),
 	}
 	worker.rowChangeCh <- &rowChange{
@@ -151,7 +151,7 @@ func Test_ValidatorWorker_run_all_validated(t *testing.T) {
 		key:        "2",
 		pkValues:   []string{"2"},
 		data:       []interface{}{2, "2b"},
-		theType:    rowInsert,
+		tp:         rowInsert,
 		lastMeetTS: time.Now().Unix(),
 	}
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -169,7 +169,7 @@ func Test_ValidatorWorker_run_all_validated(t *testing.T) {
 	require.Len(t, worker.pendingChangesMap, 0)
 }
 
-func Test_ValidatorWorker_run_delete(t *testing.T) {
+func TestValidatorWorkerRun_delete(t *testing.T) {
 	tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
 	tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
 	tableInfo2 := genValidateTableInfo(t, tbl2.Schema, tbl2.Name,
@@ -200,7 +200,7 @@ func Test_ValidatorWorker_run_delete(t *testing.T) {
 		key:        "a",
 		pkValues:   []string{"a"},
 		data:       []interface{}{"a", "b"},
-		theType:    rowDeleted,
+		tp:         rowDeleted,
 		lastMeetTS: time.Now().Unix(),
 	}
 	worker.rowChangeCh <- &rowChange{
@@ -208,7 +208,7 @@ func Test_ValidatorWorker_run_delete(t *testing.T) {
 		key:        "aa",
 		pkValues:   []string{"aa"},
 		data:       []interface{}{"aa", "b"},
-		theType:    rowDeleted,
+		tp:         rowDeleted,
 		lastMeetTS: time.Now().Unix(),
 	}
 	mock.ExpectQuery("SELECT .* FROM .*tbl2.* WHERE .*").WillReturnRows(
@@ -232,10 +232,10 @@ func Test_ValidatorWorker_run_delete(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl3.String())
 	require.Len(t, worker.pendingChangesMap[tbl3.String()].rows, 1)
 	require.Contains(t, worker.pendingChangesMap[tbl3.String()].rows, "aa")
-	require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].theType)
+	require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].tp)
 }
 
-func Test_ValidatorWorker_compareData(t *testing.T) {
+func TestValidatorWorkerCompareData(t *testing.T) {
 	worker := validateWorker{}
 	eq, err := worker.compareData([]*dbutil.ColumnData{{Data: []byte("1")}},
 		[]*dbutil.ColumnData{{IsNull: true}},
@@ -279,7 +279,7 @@ func Test_ValidatorWorker_compareData(t *testing.T) {
 	require.True(t, eq)
 }
 
-func Test_ValidatorWorker_getTargetRows(t *testing.T) {
+func TestValidatorWorkerGetTargetRows(t *testing.T) {
 	type testCase struct {
 		schemaName string
 		tblName    string
@@ -393,7 +393,7 @@ func Test_ValidatorWorker_getTargetRows(t *testing.T) {
 	require.EqualError(t, errors.Cause(err), "query")
 }
 
-func Test_ValidatorWorker_getSourceRowsForCompare(t *testing.T) {
+func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	rows := getSourceRowsForCompare([]*rowChange{
 		{
 			key: "a",

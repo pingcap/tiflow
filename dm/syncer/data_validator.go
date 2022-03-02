@@ -311,6 +311,11 @@ func (v *DataValidator) doValidate() {
 
 	v.L.Info("start continuous validation")
 	v.startValidateWorkers()
+	defer func() {
+		for _, worker := range v.workers {
+			worker.close()
+		}
+	}()
 
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
 	for {

@@ -72,20 +72,21 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 }
 
 func (vw *validateWorker) run() {
+outer:
 	for {
 		select {
-		case change := <-vw.rowChangeCh:
+		case change, ok := <-vw.rowChangeCh:
+			if !ok {
+				break outer
+			}
 			// todo: limit number of pending rows
 			vw.updateRowChange(change)
 			vw.receivedRowCount.Inc()
-		case <-vw.ctx.Done():
-			return
 		case <-time.After(vw.interval):
 			err := vw.validateTableChange()
 			if err != nil {
 				// todo: better error handling
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
-				return
 			}
 			vw.validationCount.Inc()
 		}
@@ -106,7 +107,7 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 	}
 	if val, ok := change.rows[row.key]; ok {
 		val.data = row.data
-		val.theType = row.theType
+		val.tp = row.tp
 		val.lastMeetTS = row.lastMeetTS
 		val.failedCnt = 0 // clear failed count
 	} else {
@@ -121,7 +122,7 @@ func (vw *validateWorker) validateTableChange() error {
 	for k, val := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
 		for _, r := range val.rows {
-			if r.theType == rowDeleted {
+			if r.tp == rowDeleted {
 				deleteChanges = append(deleteChanges, r)
 			} else {
 				insertUpdateChanges = append(insertUpdateChanges, r)
@@ -296,6 +297,10 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.Column
 		result[pk] = rowData
 	}
 	return result, rows.Err()
+}
+
+func (vw *validateWorker) close() {
+	close(vw.rowChangeCh)
 }
 
 func scanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
