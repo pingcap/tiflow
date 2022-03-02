@@ -43,7 +43,7 @@ type etcdImpl struct {
 	closeMu sync.Mutex
 }
 
-func NewEtcdImpl(config *metaclient.Config) (metaclient.KVClient, error) {
+func NewEtcdImpl(config *metaclient.Config) (*etcdImpl, error) {
 	conf := config.Clone()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: conf.Endpoints,
@@ -142,14 +142,16 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.Op
 	return makeDeleteResp(delRsp), nil
 }
 
-func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, error) {
+func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	if err := op.CheckValidOp(); err != nil {
-		return metaclient.OpResponse{}, err
+		return metaclient.OpResponse{}, &etcdError{
+			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+		}
 	}
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return metaclient.OpResponse{}, cerrors.ErrMetaOpFail.GenWithStackByArgs(err)
+		return metaclient.OpResponse{}, etcdErrorFromOpFail(err)
 	}
 
 	switch {

@@ -97,6 +97,16 @@ func NewOp() *Op {
 	return &Op{key: []byte("")}
 }
 
+// IsOptsWithRange returns true if WithRange option is called in the given opts.
+func IsOptsWithRange(opts []OpOption) bool {
+	op := NewOp()
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	return op.isOptsWithRange
+}
+
 // IsOptsWithPrefix returns true if WithPrefix option is called in the given opts.
 func IsOptsWithPrefix(opts []OpOption) bool {
 	op := NewOp()

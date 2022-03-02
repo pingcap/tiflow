@@ -1,4 +1,4 @@
-package metaclient
+package kvclient
 
 import (
 	"context"
