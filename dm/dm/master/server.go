@@ -616,13 +616,14 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	case pb.TaskOp_Resume:
 		expect = pb.Stage_Running
 	case pb.TaskOp_Delete:
-		expect = pb.Stage_Stopped
+		// op_delete means delete this running subtask, we not have stage_null now, so use invalid stage instead
+		expect = pb.Stage_InvalidStage
 	default:
 		resp.Msg = terror.ErrMasterInvalidOperateOp.Generate(req.Op.String(), "task").Error()
 		return resp, nil
 	}
 	var err error
-	if expect == pb.Stage_Stopped {
+	if expect == pb.Stage_InvalidStage {
 		err = s.scheduler.RemoveSubTasks(req.Name, sources...)
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
@@ -1721,7 +1722,7 @@ func (s *Server) waitOperationOk(
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
 		case pb.TaskOp_Delete:
-			expect = pb.Stage_Stopped
+			expect = pb.Stage_InvalidStage
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
@@ -1805,7 +1806,7 @@ func (s *Server) waitOperationOk(
 					}
 				}
 			case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
-				if expect == pb.Stage_Stopped && len(queryResp.SubTaskStatus) == 0 {
+				if expect == pb.Stage_InvalidStage && len(queryResp.SubTaskStatus) == 0 {
 					return true, "", queryResp, nil
 				}
 				if len(queryResp.SubTaskStatus) == 1 {

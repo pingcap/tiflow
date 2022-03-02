@@ -245,7 +245,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
 		case pb.TaskOp_Delete:
-			expect = pb.Stage_Stopped
+			expect = pb.Stage_InvalidStage
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
