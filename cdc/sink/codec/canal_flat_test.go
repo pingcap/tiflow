@@ -113,6 +113,12 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 			continue
 		}
 
+		// for `Column.Value` is nil, which mean's it is nullable, set the value to `""`
+		if obtainedValue == nil {
+			c.Assert(item.expectedValue, check.Equals, "")
+			continue
+		}
+
 		if bytes, ok := item.column.Value.([]byte); ok {
 			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
 			c.Assert(err, check.IsNil)
@@ -194,8 +200,12 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			for _, col := range consumed.Columns {
 				expected, ok := expectedDecodedValues[col.Name]
 				c.Assert(ok, check.IsTrue)
+				if col.Value == nil {
+					c.Assert(expected, check.Equals, "")
+				} else {
+					c.Assert(col.Value, check.Equals, expected)
+				}
 
-				c.Assert(col.Value, check.Equals, expected)
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
 						c.Assert(col.Type, check.Equals, item.Type)
