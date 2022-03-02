@@ -26,6 +26,7 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
@@ -42,6 +43,26 @@ func newTestSorter(
 	compact := NewCompactScheduler(nil)
 	ls := NewSorter(ctx, 1, 1, router, id, compact, cfg)
 	return ls, mb
+}
+
+func TestRunAndReportError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, _ := newTestSorter(ctx, 2)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		s.common.reportError(
+			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	}()
+	require.Error(t, s.Run(ctx))
+
+	// Must be nonblock.
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 }
 
 func TestInputOutOfOrder(t *testing.T) {
@@ -471,15 +492,6 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 	}
 }
 
-func newTestEvent(crts, startTs uint64, key int) *model.PolymorphicEvent {
-	return model.NewPolymorphicEvent(&model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     []byte{byte(key)},
-		StartTs: startTs,
-		CRTs:    crts,
-	})
-}
-
 func prepareTxnData(
 	t *testing.T, ls *Sorter, txnCount, txnSize int,
 ) db.DB {
@@ -499,22 +511,6 @@ func prepareTxnData(
 	}
 	require.Nil(t, wb.Commit())
 	return db
-}
-
-func receiveOutputEvents(
-	outputCh chan *model.PolymorphicEvent,
-) []*model.PolymorphicEvent {
-	outputEvents := []*model.PolymorphicEvent{}
-RECV:
-	for {
-		select {
-		case ev := <-outputCh:
-			outputEvents = append(outputEvents, ev)
-		default:
-			break RECV
-		}
-	}
-	return outputEvents
 }
 
 func TestOutputIterEvents(t *testing.T) {
@@ -703,7 +699,7 @@ func TestStateIterator(t *testing.T) {
 	db := prepareTxnData(t, ls, 1, 1)
 	sema := semaphore.NewWeighted(1)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+		prometheus.Labels{"id": t.Name()})
 	mb := actor.NewMailbox(1, 1)
 	router := actor.NewRouter(t.Name())
 	router.InsertMailbox4Test(mb.ID(), mb)
@@ -1018,7 +1014,7 @@ func TestPoll(t *testing.T) {
 	}
 
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": t.Name(), "id": t.Name()})
+		prometheus.Labels{"id": t.Name()})
 	for i, css := range cases {
 		state := css[0].state
 		state.iterFirstSlowDuration = 100 * time.Second

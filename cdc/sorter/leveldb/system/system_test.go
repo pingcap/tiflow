@@ -54,7 +54,7 @@ func TestCollectMetrics(t *testing.T) {
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	collectMetrics(sys.dbs, "")
+	collectMetrics(sys.dbs)
 	require.Nil(t, sys.Stop())
 }
 
@@ -66,8 +66,8 @@ func TestDBActorID(t *testing.T) {
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	id1 := sys.ActorID(1)
-	id2 := sys.ActorID(1)
+	id1 := sys.DBActorID(1)
+	id2 := sys.DBActorID(1)
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
 	require.Nil(t, sys.Stop())

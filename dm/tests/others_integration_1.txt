@@ -10,3 +10,4 @@ checkpoint_transaction
 lightning_mode
 slow_relay_writer
 sync_collation
+s3_dumpling_lighting

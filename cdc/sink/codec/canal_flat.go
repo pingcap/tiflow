@@ -14,10 +14,8 @@
 package codec
 
 import (
-	"context"
 	"encoding/json"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -52,21 +50,19 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 }
 
 type canalFlatEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a `CanalFlatEventBatchEncoder`
-func (b *canalFlatEventBatchEncoderBuilder) Build(_ context.Context) (EventBatchEncoder, error) {
+func (b *canalFlatEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCanalFlatEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerrors.WrapError(cerrors.ErrKafkaInvalidConfig, err)
-	}
+	encoder.(*CanalFlatEventBatchEncoder).enableTiDBExtension = b.config.enableTiDBExtension
 
-	return encoder, nil
+	return encoder
 }
 
-func newCanalFlatEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &canalFlatEventBatchEncoderBuilder{opts: opts}
+func newCanalFlatEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &canalFlatEventBatchEncoderBuilder{config: config}
 }
 
 // The TiCDC Canal-JSON implementation extend the official format with a TiDB extension field.
@@ -357,18 +353,6 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 // Size implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
-}
-
-// SetParams sets the encoding parameters for the canal flat protocol.
-func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
-	if s, ok := params["enable-tidb-extension"]; ok {
-		a, err := strconv.ParseBool(s)
-		if err != nil {
-			return cerrors.WrapError(cerrors.ErrSinkInvalidConfig, err)
-		}
-		c.enableTiDBExtension = a
-	}
-	return nil
 }
 
 // CanalFlatEventBatchDecoder decodes the byte into the original message.

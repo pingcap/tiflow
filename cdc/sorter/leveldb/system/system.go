@@ -49,6 +49,8 @@ type System struct {
 	dbs           []db.DB
 	dbSystem      *actor.System
 	DBRouter      *actor.Router
+	WriterSystem  *actor.System
+	WriterRouter  *actor.Router
 	compactSystem *actor.System
 	compactRouter *actor.Router
 	compactSched  *lsorter.CompactScheduler
@@ -64,14 +66,22 @@ type System struct {
 
 // NewSystem returns a system.
 func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
+	// A system polles actors that read and write leveldb.
 	dbSystem, dbRouter := actor.NewSystemBuilder("sorter-db").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that compact leveldb, garbage collection.
 	compactSystem, compactRouter := actor.NewSystemBuilder("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that receive events from Puller and batch send
+	// writes to leveldb.
+	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	compactSched := lsorter.NewCompactScheduler(compactRouter)
 	return &System{
 		dbSystem:      dbSystem,
 		DBRouter:      dbRouter,
+		WriterSystem:  writerSystem,
+		WriterRouter:  writerRouter,
 		compactSystem: compactSystem,
 		compactRouter: compactRouter,
 		compactSched:  compactSched,
@@ -85,18 +95,13 @@ func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System 
 	}
 }
 
-// ActorID returns an ActorID correspond with tableID.
-func (s *System) ActorID(tableID uint64) actor.ID {
+// DBActorID returns an DBActorID correspond with tableID.
+func (s *System) DBActorID(tableID uint64) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], tableID)
 	h.Write(b[:])
 	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
-}
-
-// Router returns db actors router.
-func (s *System) Router() *actor.Router {
-	return s.DBRouter
 }
 
 // CompactScheduler returns compaction scheduler.
@@ -131,7 +136,7 @@ func (s *System) Start(ctx context.Context) error {
 
 	s.compactSystem.Start(ctx)
 	s.dbSystem.Start(ctx)
-	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
+	s.WriterSystem.Start(ctx)
 	totalMemory, err := memory.MemTotal()
 	if err != nil {
 		return errors.Trace(err)
@@ -146,7 +151,7 @@ func (s *System) Start(ctx context.Context) error {
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
 		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg, captureAddr)
+			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -156,7 +161,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		// Create and spawn db actor.
 		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg, captureAddr)
+			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -177,7 +182,7 @@ func (s *System) Start(ctx context.Context) error {
 			case <-s.closedCh:
 				return
 			case <-metricsTimer.C:
-				collectMetrics(s.dbs, captureAddr)
+				collectMetrics(s.dbs)
 				metricsTimer.Reset(defaultMetricInterval)
 			}
 		}
@@ -205,6 +210,7 @@ func (s *System) Stop() error {
 	defer cancel()
 	// Close actors
 	s.broadcast(ctx, s.DBRouter, message.StopMessage())
+	s.broadcast(ctx, s.WriterRouter, message.StopMessage())
 	s.broadcast(ctx, s.compactRouter, message.StopMessage())
 	// Close metrics goroutine.
 	close(s.closedCh)
@@ -213,6 +219,10 @@ func (s *System) Stop() error {
 
 	// Stop systems.
 	err := s.dbSystem.Stop()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.WriterSystem.Stop()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -231,9 +241,9 @@ func (s *System) Stop() error {
 	return nil
 }
 
-func collectMetrics(dbs []db.DB, captureAddr string) {
+func collectMetrics(dbs []db.DB) {
 	for i := range dbs {
 		db := dbs[i]
-		db.CollectMetrics(captureAddr, i)
+		db.CollectMetrics(i)
 	}
 }

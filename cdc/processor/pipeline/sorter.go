@@ -108,8 +108,8 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.Router()
+			actorID := ctx.GlobalVars().SorterSystem.DBActorID(uint64(n.tableID))
+			router := ctx.GlobalVars().SorterSystem.DBRouter
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter := leveldb.NewSorter(
 				ctx, n.tableID, startTs, router, actorID, compactScheduler,
@@ -121,7 +121,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 			var err error
-			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -141,7 +141,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -295,8 +295,8 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(ctx context.Context, changefeedID, captureAddr string) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID, captureAddr)
+func (n *sorterNode) releaseResource(ctx context.Context, changefeedID string) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
 	if n.cleanup != nil {
 		// Clean up data when the table sorter is canceled.
 		err := n.cleanup(ctx)
@@ -312,7 +312,7 @@ func (n *sorterNode) releaseResource(ctx context.Context, changefeedID, captureA
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
-	n.releaseResource(ctx, ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	n.releaseResource(ctx, ctx.ChangefeedVars().ID)
 	return n.eg.Wait()
 }
 
