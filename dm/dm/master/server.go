@@ -1721,7 +1721,6 @@ func (s *Server) waitOperationOk(
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
 		case pb.TaskOp_Delete:
-			expect = pb.Stage_InvalidStage
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
