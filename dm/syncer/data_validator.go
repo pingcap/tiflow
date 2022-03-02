@@ -78,7 +78,7 @@ type rowChange struct {
 	key        string
 	pkValues   []string
 	data       []interface{}
-	theType    rowChangeType
+	tp         rowChangeType
 	lastMeetTS int64 // the last meet timestamp(in seconds)
 	//nolint
 	failedCnt int // failed count
@@ -132,7 +132,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
-	v.changeEventCount = make([]atomic.Int64, 4)
+	v.changeEventCount = make([]atomic.Int64, 3)
 	v.validateInterval = validationInterval
 
 	v.unsupportedTable = make(map[string]string)
@@ -498,7 +498,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 					key:        key,
 					pkValues:   pkValue,
 					data:       row,
-					theType:    rowDeleted,
+					tp:         rowDeleted,
 					lastMeetTS: int64(header.Timestamp),
 				})
 				afterRowChangeType = rowInsert
@@ -508,7 +508,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				key:        afterKey,
 				pkValues:   afterPkValue,
 				data:       afterRow,
-				theType:    afterRowChangeType,
+				tp:         afterRowChangeType,
 				lastMeetTS: int64(header.Timestamp),
 			})
 		} else {
@@ -517,7 +517,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				key:        key,
 				pkValues:   pkValue,
 				data:       row,
-				theType:    changeType,
+				tp:         changeType,
 				lastMeetTS: int64(header.Timestamp),
 			})
 		}
