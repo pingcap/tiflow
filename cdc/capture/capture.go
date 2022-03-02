@@ -259,13 +259,13 @@ func (c *Capture) Run(ctx context.Context) error {
 		select {
 		case <-c.session.Done():
 			log.Warn("capture encountered error while session is gone. Retrying later.",
-				zap.String("capture-id", c.info.ID),
+				zap.String("captureID", c.info.ID),
 				zap.Error(err))
 			continue
 		default:
 		}
 		log.Warn("capture encountered error. Exiting.",
-			zap.String("capture-id", c.info.ID),
+			zap.String("captureID", c.info.ID),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
