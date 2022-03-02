@@ -120,7 +120,6 @@ type DataValidator struct {
 
 	// such as table without primary key
 	unsupportedTable map[string]string
-	waitSyncerTimer  *time.Timer
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -136,7 +135,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.validateInterval = validationInterval
 
 	v.unsupportedTable = make(map[string]string)
-	v.waitSyncerTimer = utils.NewStoppedTimer()
 
 	return v
 }
@@ -260,30 +258,17 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 		return nil
 	}
 
-	fired := false
-	v.waitSyncerTimer.Reset(checkInterval)
-	defer func() {
-		if !fired {
-			if !v.waitSyncerTimer.Stop() {
-				<-v.waitSyncerTimer.C
-			}
-		}
-	}()
-
 	for {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
-		case <-v.waitSyncerTimer.C:
-			fired = true
+		case <-time.After(checkInterval):
 			syncLoc = v.syncer.checkpoint.FlushedGlobalPoint()
 			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 			if cmp <= 0 {
 				return nil
 			}
 			v.L.Info("wait syncer synced", zap.Reflect("loc", currLoc))
-			v.waitSyncerTimer.Reset(checkInterval)
-			fired = false
 		}
 	}
 }
