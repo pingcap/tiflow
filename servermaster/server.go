@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 
@@ -70,6 +71,9 @@ type Server struct {
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
+	// id contains etcd name plus an uuid, each server master has a unique id
+	// and the id changes after it restarts.
+	id string
 
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
@@ -109,6 +113,10 @@ func newServerMasterMetric() *serverMasterMetric {
 	}
 }
 
+func genServerMasterUUID(etcdName string) string {
+	return etcdName + "-" + uuid.New().String()
+}
+
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
@@ -122,14 +130,16 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		masterAddrs = append(masterAddrs, u.Host)
 	}
 
+	id := genServerMasterUUID(cfg.Etcd.Name)
 	info := &model.NodeInfo{
 		Type: model.NodeTypeServerMaster,
-		ID:   model.DeployNodeID(cfg.Etcd.Name),
+		ID:   model.DeployNodeID(id),
 		Addr: cfg.AdvertiseAddr,
 	}
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
+		id:              id,
 		cfg:             cfg,
 		info:            info,
 		executorManager: executorManager,
@@ -485,7 +495,7 @@ func (s *Server) member() string {
 
 // name is a shortcut to etcd name
 func (s *Server) name() string {
-	return s.cfg.Etcd.Name
+	return s.id
 }
 
 func (s *Server) reset(ctx context.Context) error {

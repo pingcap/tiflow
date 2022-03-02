@@ -22,8 +22,9 @@ func init() {
 func TestMembershipIface(t *testing.T) {
 	t.Parallel()
 
-	name := "membership-test1"
-	addr, etcd, client, cleanFn := test.PrepareEtcd(t, name)
+	etcdName := "membership-test1"
+	id := genServerMasterUUID(etcdName)
+	addr, etcd, client, cleanFn := test.PrepareEtcd(t, etcdName)
 	defer cleanFn()
 
 	testCases := []struct {
@@ -31,7 +32,7 @@ func TestMembershipIface(t *testing.T) {
 		addr string
 		tp   model.NodeType
 	}{
-		{name, addr, model.NodeTypeServerMaster},
+		{id, addr, model.NodeTypeServerMaster},
 		{"membership-executor-test1", "127.0.0.1:10000", model.NodeTypeExecutor},
 	}
 
@@ -51,19 +52,20 @@ func TestMembershipIface(t *testing.T) {
 	// test Membership.GetMembers
 	membership := &EtcdMembership{etcdCli: client}
 	etcdLeaderID := etcd.Server.Lead()
-	leader := &Member{Name: name}
+	leader := &Member{Name: id}
 	members, err := membership.GetMembers(ctx, leader, etcdLeaderID)
 	require.Nil(t, err)
 	require.Len(t, members, 1)
-	require.Equal(t, name, members[0].Name)
+	require.Equal(t, id, members[0].Name)
 }
 
 func TestUpdateServerMembers(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	name := "membership-test2"
-	addr, etcd, etcdCli, cleanFn := test.PrepareEtcd(t, name)
+	etcdName := "membership-test2"
+	id := genServerMasterUUID(etcdName)
+	addr, etcd, etcdCli, cleanFn := test.PrepareEtcd(t, etcdName)
 	defer cleanFn()
 
 	testCases := []struct {
@@ -71,7 +73,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		addr string
 		tp   model.NodeType
 	}{
-		{name, addr, model.NodeTypeServerMaster},
+		{id, addr, model.NodeTypeServerMaster},
 		{"membership-executor-test1", "127.0.0.1:10000", model.NodeTypeExecutor},
 	}
 
@@ -88,7 +90,7 @@ func TestUpdateServerMembers(t *testing.T) {
 	}
 
 	cfg := NewConfig()
-	cfg.Etcd.Name = name
+	cfg.Etcd.Name = etcdName
 	cfg.AdvertiseAddr = addr
 
 	s := &Server{
@@ -101,7 +103,7 @@ func TestUpdateServerMembers(t *testing.T) {
 	require.False(t, exists)
 
 	member := &Member{
-		Name:          name,
+		Name:          id,
 		IsServLeader:  true,
 		IsEtcdLeader:  true,
 		AdvertiseAddr: addr,

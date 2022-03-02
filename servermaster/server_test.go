@@ -153,7 +153,8 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 	cfg := NewConfig()
 	etcdName := "test-check-leader-and-need-forward"
 	cfg.Etcd.Name = etcdName
-	s := &Server{cfg: cfg}
+	id := genServerMasterUUID(etcdName)
+	s := &Server{id: id, cfg: cfg}
 	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
 	require.False(t, isLeader)
 	require.False(t, needForward)
@@ -184,7 +185,7 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 	s.leaderClient.Lock()
 	s.leaderClient.cli = &client.MasterClientImpl{}
 	s.leaderClient.Unlock()
-	s.leader.Store(&Member{Name: etcdName})
+	s.leader.Store(&Member{Name: id})
 	wg.Wait()
 }
 

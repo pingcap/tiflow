@@ -12,6 +12,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// uuid length = 36, plus one "-" symbol
+const idSuffixLen = 37
+
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
@@ -54,7 +57,11 @@ func (em *EtcdMembership) getMasterNodes(ctx context.Context) (map[string]*model
 			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err)
 		}
 		if info.Type == model.NodeTypeServerMaster {
-			nodes[string(info.ID)] = info
+			id := string(info.ID)
+			if len(id) < idSuffixLen {
+				return nil, errors.ErrInvalidServerMasterID.GenWithStackByArgs(id)
+			}
+			nodes[id[:len(id)-idSuffixLen]] = info
 		}
 	}
 	return nodes, nil
@@ -77,10 +84,10 @@ func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLe
 		if !ok {
 			continue
 		}
-		isServLeader := leader != nil && m.Name == leader.Name
+		isServLeader := leader != nil && string(server.ID) == leader.Name
 		isEtcdLeader := m.ID == etcdLeaderID
 		members = append(members, &Member{
-			Name:          m.Name,
+			Name:          string(server.ID),
 			AdvertiseAddr: server.Addr,
 			IsEtcdLeader:  isEtcdLeader,
 			IsServLeader:  isServLeader,

@@ -44,9 +44,12 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 				time.Sleep(retryInterval)
 				continue
 			}
-			if leader.Name == s.name() {
-				// this server is already a leader, which indicates there is some
-				// stale information, just delete the leadership and campaign again.
+			if leader.Name == s.name() || leader.AdvertiseAddr == s.cfg.AdvertiseAddr {
+				// - leader.Name == s.name() means this server should be leader
+				// - leader.AdvertiseAddr == s.cfg.AdvertiseAddr means the old leader
+				//   has the same advertise addr as current server
+				// Both of these two conditions indicate the existing information
+				// of leader campaign is stale, just delete it and campaign again.
 				log.L().Warn("found stale leader key, delete it and campaign later",
 					zap.ByteString("key", key), zap.ByteString("val", data))
 				_, err := s.etcdClient.Delete(ctx, string(key))
