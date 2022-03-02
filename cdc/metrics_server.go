@@ -29,7 +29,7 @@ var (
 			Name:      "etcd_health_check_duration",
 			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
 			Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1ms */, 2, 18),
-		}, []string{"capture", "pd"})
+		}, []string{"pd"})
 
 	goGC = prometheus.NewGauge(
 		prometheus.GaugeOpts{

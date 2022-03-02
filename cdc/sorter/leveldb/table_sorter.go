@@ -100,10 +100,9 @@ func NewSorter(
 	router *actor.Router, actorID actor.ID, compact *CompactScheduler,
 	cfg *config.DBConfig,
 ) *Sorter {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": captureAddr, "id": changefeedID})
+		prometheus.Labels{"id": changefeedID})
 	return &Sorter{
 		common: common{
 			dbActorID: actorID,
@@ -122,8 +121,8 @@ func NewSorter(
 		inputCh:  make(chan *model.PolymorphicEvent, sorterInputCap),
 		outputCh: make(chan *model.PolymorphicEvent, sorterOutputCap),
 
-		metricTotalEventsKV:         sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "kv"),
-		metricTotalEventsResolvedTs: sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "resolved"),
+		metricTotalEventsKV:         sorter.EventCount.WithLabelValues(changefeedID, "kv"),
+		metricTotalEventsResolvedTs: sorter.EventCount.WithLabelValues(changefeedID, "resolved"),
 		metricIterDuration:          metricIterDuration,
 		metricIterReadDuration:      metricIterDuration.WithLabelValues("read"),
 		metricIterNextDuration:      metricIterDuration.WithLabelValues("next"),

@@ -26,9 +26,20 @@ type InfoProvider interface {
 
 	// GetTaskPositions returns the task positions.
 	GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error)
+
+	// GetTotalTableCounts returns the number of tables associated
+	// with each capture.
+	GetTotalTableCounts() map[model.CaptureID]int
+
+	// GetPendingTableCounts returns the number of tables in a non-ready
+	// status (Adding & Removing) associated with each capture.
+	GetPendingTableCounts() map[model.CaptureID]int
 }
 
 // GetTaskStatuses implements InfoProvider for BaseScheduleDispatcher.
+// Complexity Note: This function has O(#tables) cost. USE WITH CARE.
+// Functions with cost O(#tables) are NOT recommended for regular metrics
+// collection.
 func (s *BaseScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -67,6 +78,7 @@ func (s *BaseScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.T
 }
 
 // GetTaskPositions implements InfoProvider for BaseScheduleDispatcher.
+// Complexity Note: This function has O(#captures) cost.
 func (s *BaseScheduleDispatcher) GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,4 +92,32 @@ func (s *BaseScheduleDispatcher) GetTaskPositions() (map[model.CaptureID]*model.
 	}
 
 	return ret, nil
+}
+
+// GetTotalTableCounts implements InfoProvider for BaseScheduleDispatcher.
+// Complexity Note: This function has O(#captures) cost.
+func (s *BaseScheduleDispatcher) GetTotalTableCounts() map[model.CaptureID]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ret := make(map[model.CaptureID]int, len(s.captureStatus))
+	for captureID := range s.captureStatus {
+		ret[captureID] = s.tables.CountTableByCaptureID(captureID)
+	}
+	return ret
+}
+
+// GetPendingTableCounts implements InfoProvider for BaseScheduleDispatcher.
+// Complexity Note: This function has O(#captures) cost.
+func (s *BaseScheduleDispatcher) GetPendingTableCounts() map[model.CaptureID]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ret := make(map[model.CaptureID]int, len(s.captureStatus))
+	for captureID := range s.captureStatus {
+		addCount := s.tables.CountTableByCaptureIDAndStatus(captureID, util.AddingTable)
+		removeCount := s.tables.CountTableByCaptureIDAndStatus(captureID, util.RemovingTable)
+		ret[captureID] = addCount + removeCount
+	}
+	return ret
 }

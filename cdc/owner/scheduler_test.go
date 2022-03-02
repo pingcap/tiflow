@@ -261,6 +261,12 @@ func TestSchedulerNoPeer(t *testing.T) {
 	mockCluster.Close()
 }
 
+func TestInfoProvider(t *testing.T) {
+	sched := scheduler(new(schedulerV2))
+	_, ok := sched.(pscheduler.InfoProvider)
+	require.True(t, ok)
+}
+
 func receiveToChannels(
 	ctx context.Context,
 	t *testing.T,
