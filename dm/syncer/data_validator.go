@@ -42,8 +42,9 @@ import (
 )
 
 const (
-	checkInterval      = 5 * time.Second
-	validationInterval = 10 * time.Second
+	checkInterval           = 5 * time.Second
+	validationInterval      = 10 * time.Second
+	checkpointFlushInterval = 1 * time.Minute
 )
 
 type validateTableInfo struct {
@@ -60,6 +61,7 @@ const (
 	rowInsert rowChangeType = iota
 	rowDeleted
 	rowUpdated
+	flushCheckpoint
 )
 
 // change of table
@@ -79,8 +81,16 @@ type rowChange struct {
 	pkValues   []string // todo: might be removed in later pr
 	data       []interface{}
 	tp         rowChangeType
+	wg         *sync.WaitGroup
 	lastMeetTS int64 // the last meet timestamp(in seconds)
 	failedCnt  int   // failed count
+}
+
+type tableValidateStatus struct {
+	source  filter.Table
+	target  filter.Table
+	stage   pb.Stage // either Running or Stopped
+	message string
 }
 
 // DataValidator
@@ -111,6 +121,7 @@ type DataValidator struct {
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
+	checkpointHelper   *validatorCheckpointHelper
 
 	result           pb.ProcessResult
 	validateInterval time.Duration
@@ -118,8 +129,7 @@ type DataValidator struct {
 	changeEventCount []atomic.Int64
 	workerCnt        int
 
-	// such as table without primary key
-	unsupportedTable map[string]string
+	tableStatus     map[string]*tableValidateStatus
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -134,8 +144,8 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.changeEventCount = make([]atomic.Int64, 3)
 	v.workers = make([]*validateWorker, v.workerCnt)
 	v.validateInterval = validationInterval
-
-	v.unsupportedTable = make(map[string]string)
+	v.checkpointHelper = newValidatorCheckpointHelper(v)
+	v.tableStatus = make(map[string]*tableValidateStatus)
 
 	return v
 }
@@ -180,6 +190,10 @@ func (v *DataValidator) initialize() error {
 
 	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone)
 	if err != nil {
+		return err
+	}
+
+	if err = v.checkpointHelper.init(); err != nil {
 		return err
 	}
 
@@ -337,6 +351,7 @@ func (v *DataValidator) doValidate() {
 	}()
 
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
+	lastFlushCheckpointTime := time.Now()
 	for {
 		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
@@ -366,11 +381,21 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
-		if ev, ok := e.Event.(*replication.RowsEvent); ok {
+		switch ev := e.Event.(type) {
+		case *replication.RowsEvent:
 			if err = v.processRowsEvent(e.Header, ev); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
 				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
+			}
+		case *replication.XIDEvent:
+			if time.Since(lastFlushCheckpointTime) > checkpointFlushInterval {
+				lastFlushCheckpointTime = time.Now()
+				if err = v.flushCheckpoint(currLoc); err != nil {
+					v.L.Warn("failed to flush checkpoint: ", zap.Reflect("error", err))
+					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
+					return
+				}
 			}
 		}
 	}
@@ -435,7 +460,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		Name:   string(ev.Table.Table),
 	}
 	fullTableName := sourceTable.String()
-	if _, ok := v.unsupportedTable[fullTableName]; ok {
+	if state, ok := v.tableStatus[fullTableName]; ok && state.stage == pb.Stage_Stopped {
 		return nil
 	}
 
@@ -460,7 +485,12 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	if len(tableInfo.Columns) < int(ev.ColumnCount) {
-		v.unsupportedTable[fullTableName] = "binlog has more columns than current table"
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source:  *sourceTable,
+			target:  *targetTable,
+			stage:   pb.Stage_Stopped,
+			message: "binlog has more columns than current table",
+		}
 		return nil
 	}
 
@@ -474,8 +504,20 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	// todo: only use downstream DDL when the task is incremental only, will support this case later.
 	if primaryIdx == nil {
 		// todo: for table without primary index, need to record in the failed table, will add it later together with checkpoint
-		v.unsupportedTable[fullTableName] = "without primary key"
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source:  *sourceTable,
+			target:  *targetTable,
+			stage:   pb.Stage_Stopped,
+			message: "no primary key",
+		}
 		return nil
+	}
+	if _, ok := v.tableStatus[fullTableName]; !ok {
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source: *sourceTable,
+			target: *targetTable,
+			stage:  pb.Stage_Running,
+		}
 	}
 
 	table := &validateTableInfo{
@@ -556,6 +598,25 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				lastMeetTS: int64(header.Timestamp),
 			})
 		}
+	}
+	return nil
+}
+
+func (v *DataValidator) flushCheckpoint(loc binlog.Location) error {
+	var wg sync.WaitGroup
+	wg.Add(v.workerCnt)
+	flushJob := &rowChange{
+		tp: flushCheckpoint,
+		wg:      &wg,
+	}
+	for _, worker := range v.workers {
+		worker.rowChangeCh <- flushJob
+	}
+	wg.Wait()
+
+	err := v.checkpointHelper.flush(loc)
+	if err != nil {
+		return err
 	}
 	return nil
 }

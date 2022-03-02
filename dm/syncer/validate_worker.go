@@ -93,6 +93,10 @@ outer:
 			if !ok {
 				break outer
 			}
+			if change.tp == flushCheckpoint {
+				change.wg.Done()
+				break
+			}
 			// todo: limit number of pending rows.
 			// todo: trigger validation when pending rows count reaches a threshold, but we don't want trigger it too often
 			// todo: since it may not reduce the number of pending row changes as the downstream may have changed again,
@@ -110,6 +114,8 @@ outer:
 }
 
 func (vw *validateWorker) updateRowChange(row *rowChange) {
+	vw.Lock()
+	defer vw.Unlock()
 	// cluster using target table
 	fullTableName := row.table.Target.String()
 	change := vw.pendingChangesMap[fullTableName]
@@ -133,6 +139,9 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 }
 
 func (vw *validateWorker) validateTableChange() error {
+	vw.Lock()
+	defer vw.Unlock()
+
 	failedChanges := make(map[string]*tableChange)
 	var failedRowCnt int64
 	for k, tblChange := range vw.pendingChangesMap {
@@ -197,6 +206,12 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 		}
 	}
 	return res, nil
+}
+
+func (vw *validateWorker) getPendingChangesMap() map[string]*tableChange {
+	vw.Lock()
+	defer vw.Unlock()
+	return vw.pendingChangesMap
 }
 
 func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
