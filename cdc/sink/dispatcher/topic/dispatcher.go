@@ -21,6 +21,7 @@ import (
 type Dispatcher interface {
 	DispatchRowChangedEvent(row *model.RowChangedEvent) string
 	DispatchDDLEvent(ddl *model.DDLEvent) string
+	Substitute(schema, table string) string
 }
 
 // StaticTopicDispatcher is a topic dispatcher which dispatches rows and ddls to the default topic.
@@ -42,6 +43,11 @@ func (s *StaticTopicDispatcher) DispatchRowChangedEvent(row *model.RowChangedEve
 
 // DispatchDDLEvent returns the target topic to which a ddl should be dispatched.
 func (s *StaticTopicDispatcher) DispatchDDLEvent(ddl *model.DDLEvent) string {
+	return s.defaultTopic
+}
+
+// Substitute converts schema/table name in a topic expression to kafka topic name.
+func (s *StaticTopicDispatcher) Substitute(schema, table string) string {
 	return s.defaultTopic
 }
 
@@ -73,4 +79,9 @@ func (d *DynamicTopicDispatcher) DispatchDDLEvent(ddl *model.DDLEvent) string {
 		return d.defaultTopic
 	}
 	return d.expression.Substitute(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+}
+
+// Substitute converts schema/table name in a topic expression to kafka topic name.
+func (d *DynamicTopicDispatcher) Substitute(schema, table string) string {
+	return d.expression.Substitute(schema, table)
 }

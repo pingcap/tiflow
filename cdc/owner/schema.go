@@ -34,6 +34,7 @@ type schemaWrap4Owner struct {
 	config         *config.ReplicaConfig
 
 	allPhysicalTablesCache []model.TableID
+	allTableNamesCache     []model.TableName
 	ddlHandledTs           model.Ts
 }
 
@@ -85,11 +86,31 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
+// AllTableNames returns the table names of all tables.
+func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
+	if s.allTableNamesCache != nil {
+		return s.allTableNamesCache
+	}
+
+	tables := s.schemaSnapshot.Tables()
+	s.allTableNamesCache = make([]model.TableName, 0, len(tables))
+	for _, tblInfo := range tables {
+		if s.shouldIgnoreTable(tblInfo) {
+			continue
+		}
+
+		s.allTableNamesCache = append(s.allTableNamesCache, tblInfo.TableName)
+	}
+
+	return s.allTableNamesCache
+}
+
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
+	s.allTableNamesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
 		return errors.Trace(err)

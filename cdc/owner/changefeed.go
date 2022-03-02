@@ -189,7 +189,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.emitCheckpointTs(ctx, checkpointTs)
+	c.sink.emitCheckpointTs(checkpointTs, c.schema.AllTableNames())
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
