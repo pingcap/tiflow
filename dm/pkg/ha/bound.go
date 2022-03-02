@@ -166,17 +166,17 @@ func GetSourceBound(cli *clientv3.Client, worker, source string) (map[string]map
 
 // GetLastSourceBounds gets all last source bound relationship. Different with GetSourceBound, "last source bound" will
 // not be deleted when worker offline.
-func GetLastSourceBounds(cli *clientv3.Client) (map[string]map[string]SourceBound, int64, error) {
+func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	sbm := make(map[string]map[string]SourceBound)
+	sbm := make(map[string]SourceBound)
 	resp, err := cli.Get(ctx, common.UpstreamLastBoundWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return sbm, 0, err
 	}
 
-	sbm, err = sourceBoundFromResp(resp)
+	sbm, err = lastSourceBoundFromResp(resp)
 	if err != nil {
 		return sbm, 0, err
 	}
@@ -353,6 +353,23 @@ func sourceBoundFromResp(resp *clientv3.GetResponse) (map[string]map[string]Sour
 			sbm[bound.Worker] = make(map[string]SourceBound)
 		}
 		sbm[bound.Worker][bound.Source] = bound
+	}
+	return sbm, nil
+}
+
+func lastSourceBoundFromResp(resp *clientv3.GetResponse) (map[string]SourceBound, error) {
+	sbm := make(map[string]SourceBound)
+	if resp.Count == 0 {
+		return sbm, nil
+	}
+
+	for _, kvs := range resp.Kvs {
+		bound, err := sourceBoundFromJSON(string(kvs.Value))
+		if err != nil {
+			return sbm, err
+		}
+		bound.Revision = kvs.ModRevision
+		sbm[bound.Source] = bound
 	}
 	return sbm, nil
 }

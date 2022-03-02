@@ -143,8 +143,8 @@ type Scheduler struct {
 	// - when bounded the source to a worker, in updateStatusToBound.
 	unbounds map[string]struct{}
 
-	// a mirror of bounds whose element is not deleted when worker unbound. worker -> source -> SourceBound
-	lastBound map[string]map[string]ha.SourceBound
+	// a mirror of bounds whose element is not deleted when worker unbound. source -> SourceBound
+	lastBound map[string]ha.SourceBound
 
 	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
@@ -202,7 +202,7 @@ func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
 		workers:           make(map[string]*Worker),
 		bounds:            make(map[string]*Worker),
 		unbounds:          make(map[string]struct{}),
-		lastBound:         make(map[string]map[string]ha.SourceBound), // workerName -> sourceName -> SourceBound
+		lastBound:         make(map[string]ha.SourceBound), // sourceName -> SourceBound
 		expectRelayStages: make(map[string]ha.Stage),
 		relayWorkers:      make(map[string]map[string]struct{}),
 		loadTasks:         make(map[string]map[string]string),
@@ -2124,9 +2124,16 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	// check if last bound is still available.
 	// NOTE: if worker isn't in lastBound, we'll get "zero" SourceBound and it's OK, because "zero" string is not in
 	// unbounds
-	source := ha.GetSourceBoundFromMap(s.lastBound[w.baseInfo.Name]).Source
-	if _, ok := s.unbounds[source]; !ok {
-		source = ""
+	source := ""
+	for _, lastBound := range s.lastBound {
+		if lastBound.Worker == w.BaseInfo().Name {
+			if _, ok := s.unbounds[lastBound.Source]; ok {
+				s.logger.Info("found last bound source when worker bound",
+					zap.String("worker", w.BaseInfo().Name),
+					zap.String("source", lastBound.Source))
+				source = lastBound.Source
+			}
+		}
 	}
 
 	if source != "" {
@@ -2205,8 +2212,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	relayWorkers := s.relayWorkers[source]
 	// 1. try to find a history worker in relay workers...
 	if len(relayWorkers) > 0 {
-		for workerName, boundMap := range s.lastBound {
-			bound := ha.GetSourceBoundFromMap(boundMap)
+		for _, bound := range s.lastBound {
+			workerName := bound.Worker
 			if bound.Source == source {
 				w, ok := s.workers[workerName]
 				if !ok {
@@ -2245,8 +2252,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	}
 	// then a history worker for this source...
 	if worker == nil {
-		for workerName, boundMap := range s.lastBound {
-			bound := ha.GetSourceBoundFromMap(boundMap)
+		for _, bound := range s.lastBound {
+			workerName := bound.Worker
 			if bound.Source == source {
 				w, ok := s.workers[workerName]
 				if !ok {
@@ -2355,10 +2362,7 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 		return err
 	}
 	s.bounds[b.Source] = w
-	if _, ok := s.lastBound[b.Worker]; !ok {
-		s.lastBound[b.Worker] = make(map[string]ha.SourceBound)
-	}
-	s.lastBound[b.Worker][b.Source] = b
+	s.lastBound[b.Source] = b
 	delete(s.unbounds, b.Source)
 	return nil
 }
