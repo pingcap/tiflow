@@ -243,7 +243,7 @@ type CheckPoint interface {
 	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
 	SaveGlobalPointForcibly(location binlog.Location)
 
-	// Snapshot make a snapshot of current checkpoint
+	// Snapshot make a snapshot of current checkpoint. If returns nil, it means we can skip this flush.
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushPointsExcept flushes the global checkpoint and tables'
@@ -373,6 +373,15 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	cp.RLock()
 	defer cp.RUnlock()
 
+	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
+
+	// When there's a big transaction in GTID-based replication, after the checkpoint-flush-interval every row change
+	// will trigger a check thus call Snapshot, the Snapshot should be light-weighted. We only check the global point to
+	// return quickly.
+	if !flushGlobalPoint {
+		return nil
+	}
+
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
@@ -388,13 +397,6 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		if len(tableCpSnapshots) > 0 {
 			tableCheckPoints[s] = tableCpSnapshots
 		}
-	}
-
-	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
-
-	// if there is no change on both table points and global point, just return an empty snapshot
-	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
-		return nil
 	}
 
 	snapshot := &remoteCheckpointSnapshot{
