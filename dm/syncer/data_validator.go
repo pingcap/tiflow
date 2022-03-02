@@ -72,6 +72,10 @@ type tableChange struct {
 	rows  map[string]*rowChange
 }
 
+func newTableChange(table *validateTableInfo) *tableChange {
+	return &tableChange{table: table, rows: make(map[string]*rowChange)}
+}
+
 // change of a row.
 // todo: this struct and some logic on it may reuse RowChange in pkg/sqlmodel
 // todo: maybe we can use reuse it later.
@@ -121,7 +125,7 @@ type DataValidator struct {
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
-	checkpointHelper   *validatorCheckpointHelper
+	persistHelper      *validatorPersistHelper
 
 	result           pb.ProcessResult
 	validateInterval time.Duration
@@ -129,7 +133,9 @@ type DataValidator struct {
 	changeEventCount []atomic.Int64
 	workerCnt        int
 
-	tableStatus     map[string]*tableValidateStatus
+	tableStatus          map[string]*tableValidateStatus
+	location             *binlog.Location
+	loadedPendingChanges map[string]*tableChange
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -144,7 +150,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.changeEventCount = make([]atomic.Int64, 3)
 	v.workers = make([]*validateWorker, v.workerCnt)
 	v.validateInterval = validationInterval
-	v.checkpointHelper = newValidatorCheckpointHelper(v)
+	v.persistHelper = newValidatorCheckpointHelper(v)
 	v.tableStatus = make(map[string]*tableValidateStatus)
 
 	return v
@@ -193,7 +199,11 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	if err = v.checkpointHelper.init(); err != nil {
+	if err = v.persistHelper.init(); err != nil {
+		return err
+	}
+
+	if err = v.loadPersistedData(tctx); err != nil {
 		return err
 	}
 
@@ -332,7 +342,12 @@ func (v *DataValidator) doValidate() {
 
 	// todo: if validator starts on task start, we need to make sure the location we got is the init location of syncer
 	// todo: right now, there's change they have a gap
-	location := v.syncer.checkpoint.FlushedGlobalPoint()
+	var location binlog.Location
+	if v.location != nil {
+		location = *v.location
+	} else {
+		location = v.syncer.checkpoint.FlushedGlobalPoint()
+	}
 	// it's for test, some fields in streamerController is mocked, cannot call Start
 	if v.streamerController.IsClosed() {
 		err := v.streamerController.Start(v.tctx, location)
@@ -418,6 +433,7 @@ func (v *DataValidator) stopInner() {
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
+	v.persistHelper.close()
 
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
@@ -446,6 +462,12 @@ func (v *DataValidator) startValidateWorkers() {
 			v.wg.Done()
 			worker.run()
 		}()
+	}
+
+	for _, tblChange := range v.loadedPendingChanges {
+		for key, row := range tblChange.rows {
+			v.dispatchRowChange(key, row)
+		}
 	}
 }
 
@@ -607,14 +629,35 @@ func (v *DataValidator) flushCheckpoint(loc binlog.Location) error {
 	wg.Add(v.workerCnt)
 	flushJob := &rowChange{
 		tp: flushCheckpoint,
-		wg:      &wg,
+		wg: &wg,
 	}
 	for _, worker := range v.workers {
 		worker.rowChangeCh <- flushJob
 	}
 	wg.Wait()
 
-	err := v.checkpointHelper.flush(loc)
+	err := v.persistHelper.flush(loc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
+	var err error
+	v.location, err = v.persistHelper.loadCheckpoint(tctx)
+	if err != nil {
+		return err
+	}
+
+	var rev int64
+	v.loadedPendingChanges, rev, err = v.persistHelper.loadPendingChange(tctx)
+	if err != nil {
+		return err
+	}
+	v.persistHelper.setRevision(rev)
+
+	v.tableStatus, err = v.persistHelper.loadTableStatus(tctx)
 	if err != nil {
 		return err
 	}

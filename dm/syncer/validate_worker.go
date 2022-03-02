@@ -121,10 +121,7 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 	change := vw.pendingChangesMap[fullTableName]
 	if change == nil {
 		// no change of this table
-		change = &tableChange{
-			table: row.table,
-			rows:  make(map[string]*rowChange),
-		}
+		change = newTableChange(row.table)
 		vw.pendingChangesMap[fullTableName] = change
 	}
 	if val, ok := change.rows[row.key]; ok {
