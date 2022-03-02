@@ -258,7 +258,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		}
 		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
-		if resolvedTs > n.barrierTs &&
+		if resolvedTs > n.BarrierTs() &&
 			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 			// Do not send resolved ts events that is larger than
 			// barrier ts.
@@ -269,7 +269,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			// resolved ts, conflicts to this change.
 			// TODO: Remove redolog check once redolog decouples for global
 			//       resolved ts.
-			event = model.NewResolvedPolymorphicEvent(0, n.barrierTs)
+			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
 	}
 	n.sorter.AddEntry(ctx, event)
@@ -290,7 +290,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 }
 
 func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
-	if barrierTs > atomic.LoadUint64(&n.barrierTs) {
+	if barrierTs > n.BarrierTs() {
 		atomic.StoreUint64(&n.barrierTs, barrierTs)
 	}
 }
@@ -318,4 +318,9 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 
 func (n *sorterNode) ResolvedTs() model.Ts {
 	return atomic.LoadUint64(&n.resolvedTs)
+}
+
+// BarrierTs returns the sorter barrierTs
+func (n *sorterNode) BarrierTs() model.Ts {
+	return atomic.LoadUint64(&n.barrierTs)
 }
