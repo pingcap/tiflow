@@ -447,13 +447,13 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 
 func TestValidatorGenColData(t *testing.T) {
 	res := genColData(1)
-	require.Equal(t, "1", string(res))
+	require.Equal(t, "1", res)
 	res = genColData(1.2)
-	require.Equal(t, "1.2", string(res))
+	require.Equal(t, "1.2", res)
 	res = genColData("abc")
-	require.Equal(t, "abc", string(res))
+	require.Equal(t, "abc", res)
 	res = genColData([]byte{'\x01', '\x02', '\x03'})
-	require.Equal(t, "\x01\x02\x03", string(res))
+	require.Equal(t, "\x01\x02\x03", res)
 	res = genColData(decimal.NewFromInt(222123123))
-	require.Equal(t, "222123123", string(res))
+	require.Equal(t, "222123123", res)
 }
