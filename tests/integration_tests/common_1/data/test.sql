@@ -131,8 +131,6 @@ CREATE TABLE binlog_insert_bit
     b BIT(64)
 );
 
-INSERT INTO binlog_insert_bit() VALUES ();
-
 INSERT INTO binlog_insert_bit
 VALUES (0x01, 0xffffffff);
 
