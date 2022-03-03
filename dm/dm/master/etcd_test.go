@@ -178,7 +178,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
 	err = prepareJoinEtcd(cfgAfter2)
 	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: there is a member that has not joined successfully, continue the join or remove it.*")
+	c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 
 	// start the joining etcd
 	cfgAfterEtcd := genEmbedEtcdConfigWithLogger("info")

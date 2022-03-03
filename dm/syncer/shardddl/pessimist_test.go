@@ -40,6 +40,7 @@ func TestShardDDL(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	integration.BeforeTest(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 

@@ -187,6 +187,7 @@ func TestMaster(t *testing.T) {
 }
 
 func (t *testMaster) SetUpSuite(c *check.C) {
+	integration.BeforeTest(t.testT)
 	err := log.InitLogger(&log.Config{})
 	c.Assert(err, check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)

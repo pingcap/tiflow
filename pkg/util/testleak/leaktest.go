@@ -48,7 +48,7 @@ func interestingGoroutines() (gs []string) {
 		// false positive leak failures
 		"google.golang.org/grpc.(*addrConn).resetTransport",
 		"google.golang.org/grpc.(*ccBalancerWrapper).watcher",
-		"go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop",
+		"go.etcd.io/etcd/client/pkg/v3/logutil.(*MergeLogger).outputLoop",
 		"go.etcd.io/etcd/v3/pkg/logutil.(*MergeLogger).outputLoop",
 		// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
 		"github.com/rcrowley/go-metrics.(*meterArbiter).tick",

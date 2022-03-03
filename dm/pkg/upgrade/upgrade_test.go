@@ -31,6 +31,7 @@ var (
 )
 
 func TestUpgrade(t *testing.T) {
+	integration.BeforeTest(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 
