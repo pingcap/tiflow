@@ -108,12 +108,17 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.DBActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.DBRouter
+			ssystem := ctx.GlobalVars().SorterSystem
+			dbActorID := ssystem.DBActorID(uint64(n.tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter := leveldb.NewSorter(
-				ctx, n.tableID, startTs, router, actorID, compactScheduler,
-				config.GetGlobalServerConfig().Debug.DB)
+			levelSorter, err := leveldb.NewSorter(
+				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
+				ssystem.WriterSystem, ssystem.WriterRouter,
+				ssystem.ReaderSystem, ssystem.ReaderRouter,
+				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			n.cleanup = levelSorter.CleanupFunc()
 			eventSorter = levelSorter
 		} else {
@@ -146,12 +151,16 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 		defer metricsTicker.Stop()
 
 		for {
+			// We must call `sorter.Output` before receiving resolved events.
+			// Skip calling `sorter.Output` and caching output channel may fail
+			// to receive any events.
+			output := eventSorter.Output()
 			select {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg, ok := <-eventSorter.Output():
+			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
 					return nil
