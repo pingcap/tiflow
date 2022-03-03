@@ -1794,6 +1794,7 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 		DDLs2 = []string{"ALTER TABLE bar DROP COLUMN b"}
 		DDLs3 = []string{"ALTER TABLE bar ADD COLUMN b INT"}
 		DDLs4 = []string{"ALTER TABLE bar ADD COLUMN c INT"}
+		DDLs5 = []string{"ALTER TABLE bar DROP COLUMN c", "ALTER TABLE bar ADD COLUMN c INT"}
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
@@ -1917,6 +1918,9 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 	c.Assert(l.IsResolved(), IsFalse)
+
+	_, _, err = l.TrySync(newInfoWithVersion(task, source, db, tbls[0], downSchema, downTable, DDLs5, ti0, []*model.TableInfo{ti1, ti0}, vers), tts)
+	c.Assert(err, ErrorMatches, ".*add column c that wasn't fully dropped in downstream.*")
 }
 
 func (t *testLock) trySyncForAllTablesLarger(c *C, l *Lock,
@@ -2144,17 +2148,17 @@ func (t *testLock) TestCheckAddDropColumns(c *C) {
 	l.tables[source][db][tbls[0]] = schemacmp.Encode(ti0)
 	l.tables[source][db][tbls[1]] = schemacmp.Encode(ti1)
 
-	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1))
+	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1), nil)
 	c.Assert(err, IsNil)
 	c.Assert(len(col), Equals, 0)
 
 	l.tables[source][db][tbls[0]] = schemacmp.Encode(ti1)
-	col, err = l.checkAddDropColumn(source, db, tbls[1], DDLs2, schemacmp.Encode(ti0), schemacmp.Encode(ti2))
+	col, err = l.checkAddDropColumn(source, db, tbls[1], DDLs2, schemacmp.Encode(ti0), schemacmp.Encode(ti2), nil)
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*add columns with different field lengths.*")
 	c.Assert(len(col), Equals, 0)
 
-	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs3, schemacmp.Encode(ti2), schemacmp.Encode(ti3))
+	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs3, schemacmp.Encode(ti2), schemacmp.Encode(ti3), nil)
 	c.Assert(err, IsNil)
 	c.Assert(col, Equals, "col")
 
@@ -2166,7 +2170,7 @@ func (t *testLock) TestCheckAddDropColumns(c *C) {
 		},
 	}
 
-	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs4, schemacmp.Encode(ti3), schemacmp.Encode(ti2))
+	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs4, schemacmp.Encode(ti3), schemacmp.Encode(ti2), nil)
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*add column .* that wasn't fully dropped in downstream.*")
 	c.Assert(len(col), Equals, 0)
@@ -2600,6 +2604,25 @@ func (t *testLock) TestAllTableSmallerLarger(c *C) {
 	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
 }
 
+func checkRedirectOp(c *C, task, source, schema, table string) bool {
+	ops, _, err := GetAllOperations(etcdTestCli)
+	c.Assert(err, IsNil)
+	if _, ok := ops[task]; !ok {
+		return false
+	}
+	if _, ok := ops[task][source]; !ok {
+		return false
+	}
+	if _, ok := ops[task][source][schema]; !ok {
+		return false
+	}
+	op, ok := ops[task][source][schema][table]
+	if !ok {
+		return false
+	}
+	return op.ConflictStage == ConflictResolved
+}
+
 func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	var (
 		ID               = "test-`foo`.`bar`"
@@ -2673,6 +2696,8 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t4, t5)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
+	// table1 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table1), IsTrue)
 
 	// check one table modify column
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t5, t6)
@@ -2688,6 +2713,8 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t7, t6)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
+	// table2 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table2), IsTrue)
 
 	// check add column not null no default
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
@@ -2701,6 +2728,8 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)
+	// table1 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table2), IsTrue)
 	// check idempotent.
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
 	c.Assert(schemaChanged, IsTrue)
