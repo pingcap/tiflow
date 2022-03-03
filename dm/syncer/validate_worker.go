@@ -89,6 +89,7 @@ outer:
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
 			}
 			vw.validationCount.Inc()
+			// todo: if a row failed too many times, add it to failed changes
 		}
 	}
 }

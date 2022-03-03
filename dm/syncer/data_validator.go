@@ -144,7 +144,7 @@ func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.result.Reset()
-	// todo: many place may put into this channel, choose a proper channel size or enhance error handling
+	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
 
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
