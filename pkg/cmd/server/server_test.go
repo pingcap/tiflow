@@ -158,7 +158,7 @@ func TestParseCfg(t *testing.T) {
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    80,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
 			SortDir:                config.DefaultSortDir,
@@ -176,7 +176,10 @@ func TestParseCfg(t *testing.T) {
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -189,10 +192,10 @@ func TestParseCfg(t *testing.T) {
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
-				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -253,9 +256,9 @@ compression = "none"
 target-file-size-base = 10
 compaction-l0-trigger = 11
 compaction-deletion-threshold = 15
+compaction-period = 16
 write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
-cleanup-speed-limit = 14
 
 [debug.messages]
 client-max-batch-interval = "500ms"
@@ -301,7 +304,7 @@ server-worker-pool-size = 16
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         10000000,
-			MaxMemoryPressure:      3,
+			MaxMemoryPercentage:    3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
@@ -315,7 +318,10 @@ server-worker-pool-size = 16
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -328,10 +334,10 @@ server-worker-pool-size = 16
 				CompactionL0Trigger:         11,
 				WriteL0SlowdownTrigger:      12,
 				WriteL0PauseTrigger:         13,
-				CleanupSpeedLimit:           14,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
 				CompactionDeletionThreshold: 15,
+				CompactionPeriod:            16,
 			},
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
@@ -434,7 +440,7 @@ cert-allowed-cn = ["dd","ee"]
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    3,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
@@ -452,7 +458,10 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
-			EnableDBSorter:   false,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -465,10 +474,10 @@ cert-allowed-cn = ["dd","ee"]
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
 				IteratorMaxAliveDuration:    10000,
 				IteratorSlowReadDuration:    256,
-				CleanupSpeedLimit:           10000,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -508,7 +517,10 @@ unknown3 = 3
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
 		EnableTableActor: false,
-		EnableDBSorter:   false,
+		TableActor: &config.TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableDBSorter: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
@@ -521,10 +533,10 @@ unknown3 = 3
 			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 160000,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
 			IteratorMaxAliveDuration:    10000,
 			IteratorSlowReadDuration:    256,
-			CleanupSpeedLimit:           10000,
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{

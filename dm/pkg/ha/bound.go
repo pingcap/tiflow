@@ -206,16 +206,16 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBo
 		cfg      *config.SourceConfig
 		ok       bool
 		retryNum = defaultGetSourceBoundConfigRetry
+		sbm      map[string]SourceBound
 	)
-	sbm, rev, err := GetSourceBound(cli, worker, source)
+	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
 		return bound, cfg, 0, err
 	}
-	if boundMp, ok := sbm[worker]; !ok {
+	if sbm, ok = wbm[worker]; !ok {
 		return bound, cfg, rev, nil
-	} else {
-		bound = GetSourceBoundFromMap(boundMp)
 	}
+	bound = GetSourceBoundFromMap(sbm)
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
 		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
@@ -419,10 +419,10 @@ func putSourceBoundOp(bound SourceBound) ([]clientv3.Op, error) {
 }
 
 // GetSourceBoundFromMap is a temporary function to get source bound,
-// need to be removed after all functions of supporting worker bound to multi sources are implemented
+// need to be removed after all functions of supporting worker bound to multi sources are implemented.
 func GetSourceBoundFromMap(sbm map[string]SourceBound) SourceBound {
 	for _, bound := range sbm {
 		return bound
 	}
-	return SourceBound{}
+	return NewSourceBound("", "")
 }

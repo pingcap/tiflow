@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -30,6 +31,7 @@ type Factory interface {
 	ClientGetter
 	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
+	KvStorage() (kv.Storage, error)
 }
 
 // ClientGetter defines the client getter.

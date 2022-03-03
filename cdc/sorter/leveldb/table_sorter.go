@@ -47,14 +47,34 @@ func allocID() uint32 {
 	return atomic.AddUint32(&levelDBSorterIDAlloc, 1)
 }
 
-// Sorter accepts out-of-order raw kv entries and output sorted entries
-type Sorter struct {
-	actorID actor.ID
-	router  *actor.Router
-	compact *CompactScheduler
+type common struct {
+	dbActorID actor.ID
+	dbRouter  *actor.Router
+
 	uid     uint32
 	tableID uint64
 	serde   *encoding.MsgPackGenSerde
+	errCh   chan error
+}
+
+// reportError notifies Sorter to return an error and close.
+func (c *common) reportError(msg string, err error) {
+	if errors.Cause(err) != context.Canceled {
+		log.L().WithOptions(zap.AddCallerSkip(1)).
+			Warn(msg, zap.Uint64("tableID", c.tableID), zap.Error(err))
+	}
+	select {
+	case c.errCh <- err:
+	default:
+		// It means there is an error already.
+	}
+}
+
+// Sorter accepts out-of-order raw kv entries and output sorted entries
+type Sorter struct {
+	common
+
+	compact *CompactScheduler
 
 	iterMaxAliveDuration  time.Duration
 	iterFirstSlowDuration time.Duration
@@ -80,18 +100,20 @@ func NewSorter(
 	router *actor.Router, actorID actor.ID, compact *CompactScheduler,
 	cfg *config.DBConfig,
 ) *Sorter {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"capture": captureAddr, "id": changefeedID})
+		prometheus.Labels{"id": changefeedID})
 	return &Sorter{
-		actorID:            actorID,
-		router:             router,
+		common: common{
+			dbActorID: actorID,
+			dbRouter:  router,
+			uid:       allocID(),
+			tableID:   uint64(tableID),
+			serde:     &encoding.MsgPackGenSerde{},
+			errCh:     make(chan error, 1),
+		},
 		compact:            compact,
-		uid:                allocID(),
-		tableID:            uint64(tableID),
 		lastSentResolvedTs: startTs,
-		serde:              &encoding.MsgPackGenSerde{},
 
 		iterMaxAliveDuration:  time.Duration(cfg.IteratorMaxAliveDuration) * time.Millisecond,
 		iterFirstSlowDuration: time.Duration(cfg.IteratorSlowReadDuration) * time.Millisecond,
@@ -99,8 +121,8 @@ func NewSorter(
 		inputCh:  make(chan *model.PolymorphicEvent, sorterInputCap),
 		outputCh: make(chan *model.PolymorphicEvent, sorterOutputCap),
 
-		metricTotalEventsKV:         sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "kv"),
-		metricTotalEventsResolvedTs: sorter.EventCount.WithLabelValues(captureAddr, changefeedID, "resolved"),
+		metricTotalEventsKV:         sorter.EventCount.WithLabelValues(changefeedID, "kv"),
+		metricTotalEventsResolvedTs: sorter.EventCount.WithLabelValues(changefeedID, "resolved"),
 		metricIterDuration:          metricIterDuration,
 		metricIterReadDuration:      metricIterDuration.WithLabelValues("read"),
 		metricIterNextDuration:      metricIterDuration.WithLabelValues("next"),
@@ -111,6 +133,8 @@ func (ls *Sorter) waitInput(ctx context.Context) (*model.PolymorphicEvent, error
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
+	case err := <-ls.errCh:
+		return nil, errors.Trace(err)
 	case ev := <-ls.inputCh:
 		return ev, nil
 	}
@@ -129,6 +153,8 @@ func (ls *Sorter) waitInputOutput(
 		select {
 		case <-ctx.Done():
 			return nil, errors.Trace(ctx.Err())
+		case err := <-ls.errCh:
+			return nil, errors.Trace(err)
 		case ev := <-ls.inputCh:
 			return ev, nil
 		case ls.outputCh <- dummyEvent:
@@ -187,7 +213,7 @@ func (ls *Sorter) wait(
 		if err != nil {
 			atomic.StoreInt32(&ls.closed, 1)
 			close(ls.outputCh)
-			return 0, 0, 0, errors.Trace(ctx.Err())
+			return 0, 0, 0, errors.Trace(err)
 		}
 		if ev == nil {
 			// No input event and output is available.
@@ -200,7 +226,7 @@ func (ls *Sorter) wait(
 		if err != nil {
 			atomic.StoreInt32(&ls.closed, 1)
 			close(ls.outputCh)
-			return 0, 0, 0, errors.Trace(ctx.Err())
+			return 0, 0, 0, errors.Trace(err)
 		}
 		appendInputEvent(ev)
 	}
@@ -252,9 +278,9 @@ func (ls *Sorter) buildTask(
 	}
 
 	return message.Task{
-		UID:     ls.uid,
-		TableID: ls.tableID,
-		Events:  writes,
+		UID:      ls.uid,
+		TableID:  ls.tableID,
+		WriteReq: writes,
 	}, nil
 }
 
@@ -542,12 +568,12 @@ func (state *pollState) tryGetIterator(
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false
-		state.iter.First()
+		state.iter.Seek([]byte(""))
 		duration := time.Since(start)
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
 			// Force trigger a compaction if Iterator.Fisrt is too slow.
-			state.compact.maybeCompact(state.actorID, int(math.MaxInt32))
+			state.compact.tryScheduleCompact(state.actorID, int(math.MaxInt32))
 		}
 		return nil, true
 	default:
@@ -629,13 +655,13 @@ func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
 			return errors.Trace(err)
 		}
 		// Send write task to leveldb.
-		return ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
+		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
 	}
 
 	var hasIter bool
 	task.IterReq, hasIter = state.tryGetIterator(ls.uid, ls.tableID)
 	// Send write/read task to leveldb.
-	err = ls.router.SendB(ctx, ls.actorID, actormsg.SorterMessage(task))
+	err = ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
 	if err != nil {
 		// Skip read iterator if send fails.
 		return errors.Trace(err)
@@ -668,7 +694,7 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		maxResolvedTs:       uint64(0),
 		exhaustedResolvedTs: uint64(0),
 
-		actorID:               ls.actorID,
+		actorID:               ls.dbActorID,
 		compact:               ls.compact,
 		iterFirstSlowDuration: ls.iterFirstSlowDuration,
 		iterMaxAliveDuration:  ls.iterMaxAliveDuration,
@@ -717,7 +743,18 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return ls.outputCh
 }
 
-// CleanupTask returns a clean up task that delete sorter's data.
-func (ls *Sorter) CleanupTask() actormsg.Message {
-	return actormsg.SorterMessage(message.NewCleanupTask(ls.uid, ls.tableID))
+// CleanupFunc returns a function that cleans up sorter's data.
+func (ls *Sorter) CleanupFunc() func(context.Context) error {
+	return func(ctx context.Context) error {
+		task := message.Task{UID: ls.uid, TableID: ls.tableID}
+		task.DeleteReq = &message.DeleteRequest{
+			// We do not set task.Delete.Count, because we don't know
+			// how many key-value pairs in the range.
+			Range: [2][]byte{
+				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+			},
+		}
+		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+	}
 }

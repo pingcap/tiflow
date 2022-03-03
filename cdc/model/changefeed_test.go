@@ -149,8 +149,8 @@ func TestFillV1(t *testing.T) {
 			},
 			Sink: &config.SinkConfig{
 				DispatchRules: []*config.DispatchRule{
-					{Matcher: []string{"test.tbl3"}, Dispatcher: "ts"},
-					{Matcher: []string{"test.tbl4"}, Dispatcher: "rowid"},
+					{Matcher: []string{"test.tbl3"}, PartitionRule: "ts"},
+					{Matcher: []string{"test.tbl4"}, PartitionRule: "rowid"},
 				},
 			},
 			Cyclic: &config.CyclicConfig{
