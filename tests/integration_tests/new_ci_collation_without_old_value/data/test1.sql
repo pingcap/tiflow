@@ -43,8 +43,8 @@ insert into t3 (a) values ('a'),('a '),('a   '),(' a'),('a\t'),('a\t ');
 insert into t3 (a) values ('B'),('B '),('B   '),(' B'),('B\t'),('B\t ');
 insert into t3 (a) values ('b'),('b '),('b   '),(' b'),('b\t'),('b\t ');
 
-insert into t4(a, d) values(1, "a");
 insert into t4 values (1,'A','A','1'),(2,'a\t','a\t','2'),(3,'ab','ab','3'),(4,'abc','abc','4');
+insert into t4(a, d) values(5, "a");
 
 insert into t5 (a) values ('😉');
 insert into t5 (a) values ('a'),('A'),(' a'),(' A'),('a\t'),('ab'),('Ab');
