@@ -21,9 +21,9 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"go.etcd.io/etcd/clientv3"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.etcd.io/etcd/integration"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"

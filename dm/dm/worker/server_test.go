@@ -26,9 +26,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

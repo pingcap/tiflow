@@ -20,6 +20,10 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -28,9 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 const (

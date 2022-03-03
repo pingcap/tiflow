@@ -17,13 +17,14 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/client/v3/concurrency"
+
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 // capture holds capture information.

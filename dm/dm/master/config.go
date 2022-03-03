@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

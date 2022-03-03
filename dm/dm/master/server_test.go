@@ -40,8 +40,8 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	tidbmock "github.com/pingcap/tidb/util/mock"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/checker"
