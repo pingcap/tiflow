@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -346,6 +347,14 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 			Name: "mysql-bin.000008",
 			Pos:  456,
 		}
+		globalPos1 = mysql.Position{
+			Name: "mysql-bin.000003",
+			Pos:  2044,
+		}
+		globalPos2 = mysql.Position{
+			Name: "mysql-bin.000005",
+			Pos:  2052,
+		}
 		err error
 	)
 
@@ -370,8 +379,11 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 
 	// flush + rollback
 	s.mock.ExpectBegin()
+	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", globalPos1.Name, globalPos1.Pos, "", globalPos2.Name, globalPos2.Pos, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectExec("(284)?"+flushCheckPointSQL).WithArgs(cpid, table.Schema, table.Name, pos2.Name, pos2.Pos, "", "", 0, "", sqlmock.AnyArg(), false).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
+	// mark global checkpoint need flush
+	cp.(*RemoteCheckPoint).globalPointSaveTime = time.Time{}
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
@@ -422,13 +434,13 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	cp.SaveTablePoint(table, binlog.Location{Position: pos1}, ti)
 	tiBytes, _ := json.Marshal(ti)
 	s.mock.ExpectBegin()
+	s.mock.ExpectExec("(202)?"+flushCheckPointSQL).WithArgs(cpid, "", "", globalPos1.Name, globalPos1.Pos, "", globalPos2.Name, globalPos2.Pos, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectExec(flushCheckPointSQL).WithArgs(cpid, schemaName, tableName, pos1.Name, pos1.Pos, "", "", 0, "", string(tiBytes), false).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	lastGlobalPoint := cp.GlobalPoint()
-	lastGlobalPointSavedTime := cp.GlobalPointSaveTime()
+	// mark global checkpoint need flush
+	cp.(*RemoteCheckPoint).globalPointSaveTime = time.Time{}
 	c.Assert(cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil), IsNil)
-	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
-	c.Assert(cp.GlobalPointSaveTime(), Equals, lastGlobalPointSavedTime)
+	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), time.Time{})
 	err = s.tracker.Exec(ctx, schemaName, "alter table "+tableName+" add c2 int;")
 	c.Assert(err, IsNil)
 	ti2, err := s.tracker.GetTableInfo(table)
@@ -463,13 +475,11 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(320)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos2.Name, pos2.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	lastGlobalPoint = cp.GlobalPoint()
-	lastGlobalPointSavedTime = cp.GlobalPointSaveTime()
+	// mark global checkpoint need flush
+	cp.(*RemoteCheckPoint).globalPointSaveTime = time.Time{}
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, []*filter.Table{table}, nil, nil)
-	fmt.Println(cp.GlobalPoint(), lastGlobalPoint)
-	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
-	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), lastGlobalPointSavedTime)
 	c.Assert(err, IsNil)
+	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), time.Time{})
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
 	c.Assert(older, IsFalse)

@@ -408,10 +408,8 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		location: cp.globalPoint.savedPoint.location.Clone(),
 		ti:       cp.globalPoint.savedPoint.ti,
 	}
-	if flushGlobalPoint {
-		snapshot.globalPoint = globalPoint
-		snapshot.globalPointSaveTime = time.Now()
-	}
+	snapshot.globalPoint = globalPoint
+	snapshot.globalPointSaveTime = time.Now()
 
 	cp.snapshots = append(cp.snapshots, snapshot)
 	cp.lastSnapshotCreationTime = time.Now()
