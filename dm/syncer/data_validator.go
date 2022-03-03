@@ -413,6 +413,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	targetTable := v.syncer.route(sourceTable)
+	// todo: syncer will change schema in schemaTracker, will there be data race?
+	// todo: what if table is dropped while validator falls behind?
 	tableInfo, err := v.syncer.schemaTracker.GetTableInfo(sourceTable)
 	if err != nil {
 		if schema.IsTableNotExists(err) {
