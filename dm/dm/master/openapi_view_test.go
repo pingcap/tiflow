@@ -27,6 +27,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -165,7 +166,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := setupServer(ctx, c)
+	s := setupTestServer(ctx, t.testT)
 	defer func() {
 		cancel()
 		s.Close()
@@ -274,7 +275,7 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 
 func (t *openAPISuite) TestRelayAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := setupServer(ctx, c)
+	s := setupTestServer(ctx, t.testT)
 	ctrl := gomock.NewController(c)
 	defer func() {
 		cancel()
@@ -434,7 +435,7 @@ func (t *openAPISuite) TestRelayAPI(c *check.C) {
 
 func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := setupServer(ctx, c)
+	s := setupTestServer(ctx, t.testT)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	ctrl := gomock.NewController(c)
@@ -536,7 +537,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	pauseTaskURL := fmt.Sprintf("%s/%s/pause", taskURL, task.Name)
 	result = testutil.NewRequest().Post(pauseTaskURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Paused)
+	c.Assert(s.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Stopped)
 
 	resumeTaskURL := fmt.Sprintf("%s/%s/resume", taskURL, task.Name)
 	result = testutil.NewRequest().Post(resumeTaskURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -618,7 +619,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 
 func (t *openAPISuite) TestClusterAPI(c *check.C) {
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	s1 := setupServer(ctx1, c)
+	s1 := setupTestServer(ctx1, t.testT)
 	defer func() {
 		cancel1()
 		s1.Close()
@@ -714,7 +715,7 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 
 func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := setupServer(ctx, c)
+	s := setupTestServer(ctx, t.testT)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	defer func() {
@@ -818,12 +819,13 @@ func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
 	c.Assert(resultTaskList.Total, check.Equals, 0)
 }
 
-func setupServer(ctx context.Context, c *check.C) *Server {
+func setupTestServer(ctx context.Context, t *testing.T) *Server {
+	t.Helper()
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	require.Nil(t, cfg1.Parse([]string{"-config=./dm-master.toml"}))
 	cfg1.Name = "dm-master-1"
-	cfg1.DataDir = c.MkDir()
+	cfg1.DataDir = t.TempDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
@@ -832,11 +834,11 @@ func setupServer(ctx context.Context, c *check.C) *Server {
 	cfg1.OpenAPI = true
 
 	s1 := NewServer(cfg1)
-	c.Assert(s1.Start(ctx), check.IsNil)
+	require.NoError(t, s1.Start(ctx))
 	// wait the first one become the leader
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.True(t, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s1.election.IsLeader() && s1.scheduler.Started()
-	}), check.IsTrue)
+	}))
 	return s1
 }
 
@@ -883,26 +885,6 @@ func mockTaskQueryStatus(
 				Source: sourceName,
 			},
 			SubTaskStatus: []*pb.SubTaskStatus{
-				{
-					Stage: pb.Stage_Running,
-					Name:  taskName,
-					Status: &pb.SubTaskStatus_Sync{
-						Sync: &pb.SyncStatus{
-							TotalEvents:         0,
-							TotalTps:            0,
-							RecentTps:           0,
-							MasterBinlog:        "",
-							MasterBinlogGtid:    "",
-							SyncerBinlog:        "",
-							SyncerBinlogGtid:    "",
-							BlockingDDLs:        nil,
-							UnresolvedGroups:    nil,
-							Synced:              false,
-							BinlogType:          "",
-							SecondsBehindMaster: 0,
-						},
-					},
-				},
 				{
 					Stage: pb.Stage_Running,
 					Name:  taskName,

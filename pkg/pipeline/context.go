@@ -55,6 +55,11 @@ type messageContext struct {
 }
 
 func withMessage(ctx NodeContext, msg Message) NodeContext {
+	// Optimize for `nodeContext` to save one allocation.
+	if ctx, ok := ctx.(*nodeContext); ok {
+		ctx.msg = msg
+		return ctx
+	}
 	return messageContext{
 		NodeContext: ctx,
 		message:     msg,
