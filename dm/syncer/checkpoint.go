@@ -243,7 +243,7 @@ type CheckPoint interface {
 	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
 	SaveGlobalPointForcibly(location binlog.Location)
 
-	// Snapshot make a snapshot of current checkpoint. If returns nil, it means we can skip this flush.
+	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushPointsExcept flushes the global checkpoint and tables'
@@ -373,18 +373,10 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	cp.RLock()
 	defer cp.RUnlock()
 
-	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
-
-	// When there's a big transaction in GTID-based replication, after the checkpoint-flush-interval every row change
-	// will trigger a check thus call Snapshot, the Snapshot should be light-weighted. We only check the global point to
-	// return quickly.
-	if !flushGlobalPoint {
-		return nil
-	}
-
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
+	cp.lastSnapshotCreationTime = time.Now()
 
 	tableCheckPoints := make(map[string]map[string]tablePoint, len(cp.points))
 	for s, tableCps := range cp.points {
@@ -399,6 +391,13 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		}
 	}
 
+	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
+
+	// if there is no change on both table points and global point, just return an empty snapshot
+	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
+		return nil
+	}
+
 	snapshot := &remoteCheckpointSnapshot{
 		id:     id,
 		points: tableCheckPoints,
@@ -408,11 +407,12 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		location: cp.globalPoint.savedPoint.location.Clone(),
 		ti:       cp.globalPoint.savedPoint.ti,
 	}
-	snapshot.globalPoint = globalPoint
-	snapshot.globalPointSaveTime = time.Now()
+	if flushGlobalPoint {
+		snapshot.globalPoint = globalPoint
+		snapshot.globalPointSaveTime = time.Now()
+	}
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	cp.lastSnapshotCreationTime = time.Now()
 	return &SnapshotInfo{
 		id:        id,
 		globalPos: globalPoint.location,
