@@ -613,12 +613,22 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		return err
 	}
 
+	needUpdateLastUnbounds := make([]ha.SourceBound, 0, len(boundWorkers))
 	// update unbound sources
 	for _, sourceID := range inputSources {
 		if sourceID != "" {
+			if w, ok := s.bounds[sourceID]; ok {
+				needUpdateLastUnbounds = append(needUpdateLastUnbounds, ha.NewSourceBound(sourceID, w.baseInfo.Name))
+			}
 			s.updateStatusToUnbound(sourceID)
 		}
 	}
+	defer func() {
+		// renew last bounds after we finish this round of operation
+		for _, bound := range needUpdateLastUnbounds {
+			s.lastBound[bound.Source] = bound
+		}
+	}()
 
 	// put new bound relations.
 	// TODO: move this and above DeleteSourceBound in one txn.
@@ -2128,6 +2138,10 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 
 	// 5. unbound for the source.
 	s.updateStatusToUnbound(bound.Source)
+	defer func() {
+		// renew last bounds after we finish this round of operation
+		s.lastBound[bound.Source] = bound
+	}()
 
 	// 6. change the stage (from Free) to Offline.
 	w.ToOffline()
@@ -2398,8 +2412,10 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 	if err := w.ToBound(b); err != nil {
 		return err
 	}
+	if lastW, ok := s.bounds[b.Source]; ok {
+		s.lastBound[b.Source] = ha.NewSourceBound(b.Source, lastW.BaseInfo().Name)
+	}
 	s.bounds[b.Source] = w
-	s.lastBound[b.Source] = b
 	delete(s.unbounds, b.Source)
 	return nil
 }

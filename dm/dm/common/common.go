@@ -217,7 +217,7 @@ var (
 	// k/v: Encode(source-id) -> the running stage of the relay.
 	StageRelayKeyAdapterV1 KeyAdapter = keyEncoderDecoder("/dm-master/stage/relay/")
 	// TODO: support rolling upgrade from lower versions for UpstreamBoundWorkerKeyAdapterV1, UpstreamLastBoundWorkerKeyAdapterV1, UpstreamRelayWorkerKeyAdapterV1
-	// we should also avoid tasks conflict writing during upgrade
+	// we should also avoid tasks conflict writing during upgrade.
 
 	// UpstreamBoundWorkerKeyAdapterV1 is used to store address of worker in which MySQL-tasks which are running.
 	// k/v: Encode(worker-name) -> the bound relationship.
