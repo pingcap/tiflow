@@ -45,9 +45,7 @@ import (
 
 // do not forget to update this path if the file removed/renamed.
 const (
-	sourceSampleFile  = "./source.yaml"
-	subtaskSampleFile = "./subtask.toml"
-	mydumperPath      = "../../bin/mydumper"
+	mydumperPath = "../../bin/mydumper"
 )
 
 var etcdErrCompacted = v3rpc.ErrCompacted
@@ -165,7 +163,7 @@ func (t *testServer) TestServer(c *C) {
 
 	// start task
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
@@ -637,7 +635,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg

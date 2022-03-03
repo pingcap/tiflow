@@ -56,16 +56,10 @@ func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
 
 func (t *testConfigSuite) TestConfig(c *check.C) {
 	var (
-		err               error
-		cfg               = &Config{}
-		masterAddr        = ":8261"
-		advertiseAddr     = "127.0.0.1:8261"
-		name              = "dm-master"
-		dataDir           = "default.dm-master"
-		peerURLs          = "http://127.0.0.1:8291"
-		advertisePeerURLs = "http://127.0.0.1:8291"
-		initialCluster    = "dm-master=http://127.0.0.1:8291"
-		cases             = []struct {
+		err        error
+		cfg        = &Config{}
+		masterAddr = ":8261"
+		cases      = []struct {
 			args     []string
 			hasError bool
 			errorReg string
@@ -85,11 +79,6 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 				true,
 				".*'invalid' is an invalid flag.*",
 			},
-			{
-				[]string{"--config=./dm-master.toml"},
-				false,
-				"",
-			},
 		}
 	)
 
@@ -103,19 +92,6 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 		err = cfg.Parse(tc.args)
 		if tc.hasError {
 			c.Assert(err, check.ErrorMatches, tc.errorReg)
-		} else {
-			c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-			c.Assert(cfg.AdvertiseAddr, check.Equals, advertiseAddr)
-			c.Assert(cfg.Name, check.Equals, name)
-			c.Assert(cfg.DataDir, check.Equals, dataDir)
-			c.Assert(cfg.PeerUrls, check.Equals, peerURLs)
-			c.Assert(cfg.AdvertisePeerUrls, check.Equals, advertisePeerURLs)
-			c.Assert(cfg.InitialCluster, check.Equals, initialCluster)
-			c.Assert(cfg.InitialClusterState, check.Equals, embed.ClusterStateFlagNew)
-			c.Assert(cfg.Join, check.Equals, "")
-			c.Assert(cfg.String(), check.Matches, fmt.Sprintf("{.*master-addr\":\"%s\".*}", masterAddr))
-			c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
-			c.Assert(cfg.OpenAPI, check.Equals, false)
 		}
 	}
 }

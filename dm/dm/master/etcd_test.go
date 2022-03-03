@@ -227,7 +227,7 @@ func (t *testEtcdSuite) TestIsDirExist(c *check.C) {
 
 func (t *testEtcdSuite) TestEtcdAutoCompaction(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]

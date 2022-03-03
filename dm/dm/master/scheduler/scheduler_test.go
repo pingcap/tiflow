@@ -36,13 +36,6 @@ import (
 )
 
 const (
-	// do not forget to update this path if the file removed/renamed.
-	sourceSampleFile = "../../worker/source.yaml"
-	// do not forget to update this path if the file removed/renamed.
-	subTaskSampleFile = "../../worker/subtask.toml"
-)
-
-const (
 	noRestart          = iota // do nothing in rebuildPessimist, just keep testing
 	restartOnly               // restart without building new instance. mock leader role transfer
 	restartNewInstance        // restart with build a new instance. mock progress restore from failure
@@ -117,13 +110,13 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 			}
 		}
 	)
-	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
 	sourceCfg2.SourceID = sourceID2
 
-	c.Assert(subtaskCfg1.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(subtaskCfg1.Decode(config.SampleSubtaskConfig, true), IsNil)
 	subtaskCfg1.SourceID = sourceID1
 	subtaskCfg1.Name = taskName1
 	c.Assert(subtaskCfg1.Adjust(true), IsNil)
@@ -814,7 +807,7 @@ func (t *testScheduler) TestRestartScheduler(c *C) {
 		wg           sync.WaitGroup
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 
@@ -975,7 +968,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 		workerAddr4  = "127.0.0.1:18462"
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
@@ -1115,7 +1108,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 		workerName4 = "dm-worker-4"
 	)
 
-	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1188,7 +1181,7 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 		workerName1 = "dm-worker-1"
 	)
 
-	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1871,7 +1864,7 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -1930,7 +1923,7 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -1987,7 +1980,7 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 		keepAlive   = int64(2)
 		subtaskCfg  config.SubTaskConfig
 	)
-	c.Assert(subtaskCfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(subtaskCfg.Decode(config.SampleSubtaskConfig, true), IsNil)
 	subtaskCfg.SourceID = sourceID1
 	subtaskCfg.Name = taskName
 	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
@@ -1998,7 +1991,7 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 		Source: sourceID1,
 		Worker: workerName1,
 	}
-	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	s.etcdCli = etcdTestCli
 	sourceCfg.SourceID = sourceID1

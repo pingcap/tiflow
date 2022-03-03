@@ -48,9 +48,9 @@ const (
 	quotaBackendBytesLowerBound    = 500 * 1024 * 1024      // 500MB
 )
 
-// SampleConfigFile is sample config file of dm-master.
+// SampleConfig is sample config of dm-master.
 //go:embed dm-master.toml
-var SampleConfigFile string
+var SampleConfig string
 
 // NewConfig creates a config for dm-master.
 func NewConfig() *Config {
@@ -178,7 +178,7 @@ func (c *Config) Parse(arguments []string) error {
 	}
 
 	if c.printSampleConfig {
-		fmt.Println(SampleConfigFile)
+		fmt.Println(SampleConfig)
 		return flag.ErrHelp
 	}
 
@@ -206,6 +206,23 @@ func (c *Config) Parse(arguments []string) error {
 // configFromFile loads config from file.
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
+	if err != nil {
+		return terror.ErrMasterConfigTomlTransform.Delegate(err)
+	}
+	undecoded := metaData.Undecoded()
+	if len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
+		}
+		return terror.ErrMasterConfigUnknownItem.Generate(strings.Join(undecodedItems, ","))
+	}
+	return nil
+}
+
+// FromContent loads config from TOML format content.
+func (c *Config) FromContent(content string) error {
+	metaData, err := toml.Decode(content, c)
 	if err != nil {
 		return terror.ErrMasterConfigTomlTransform.Delegate(err)
 	}

@@ -34,7 +34,7 @@ func TestGetExpectValidatorStage(t *testing.T) {
 		require.Nil(t, ha.ClearTestInfoOperation(etcdTestCli))
 	}()
 	cfg := config.SubTaskConfig{}
-	require.Nil(t, cfg.DecodeFile("subtask.toml", true))
+	require.Nil(t, cfg.Decode(config.SampleSubtaskConfig, true))
 	source := cfg.SourceID
 	task := cfg.Name
 	stage := ha.NewSubTaskStage(pb.Stage_Running, source, task)

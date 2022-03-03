@@ -47,11 +47,11 @@ const (
 
 var getAllServerIDFunc = utils.GetAllServerID
 
-// SampleConfigFile is sample config file of source.
+// SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
 // can only match regular files in the current directory and subdirectories.
 //go:embed source.yaml
-var SampleConfigFile string
+var SampleSourceConfig string
 
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {

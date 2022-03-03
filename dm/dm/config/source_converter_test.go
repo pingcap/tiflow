@@ -15,11 +15,12 @@ package config
 
 import (
 	"github.com/pingcap/check"
+
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 )
 
 func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 
 	// 1. test user create source from dmctl, after convert to openapi.Source then convert back to source config
