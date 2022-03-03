@@ -24,7 +24,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "event_count",
 		Help:      "The number of events output by the sorter",
-	}, []string{"capture", "changefeed", "type"})
+	}, []string{"changefeed", "type"})
 
 	// ResolvedTsGauge is the metric that records sorter resolved ts.
 	ResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -32,7 +32,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "resolved_ts_gauge",
 		Help:      "the resolved ts of the sorter",
-	}, []string{"capture", "changefeed"})
+	}, []string{"changefeed"})
 
 	// InMemoryDataSizeGauge is the metric that records sorter memory usage.
 	InMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -40,7 +40,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "in_memory_data_size_gauge",
 		Help:      "The amount of pending data stored in-memory by the sorter",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	// OnDiskDataSizeGauge is the metric that records sorter disk usage.
 	OnDiskDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -48,7 +48,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "on_disk_data_size_gauge",
 		Help:      "The amount of pending data stored on-disk by the sorter",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 
 	// OpenFileCountGauge is the metric that records sorter open files.
 	OpenFileCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -56,7 +56,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "open_file_count_gauge",
 		Help:      "The number of open file descriptors held by the sorter",
-	}, []string{"capture", "id"})
+	}, []string{"id"})
 )
 
 // InitMetrics registers all metrics in this file

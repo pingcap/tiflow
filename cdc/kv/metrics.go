@@ -35,14 +35,14 @@ var (
 			Name:      "event_feed_count",
 			Help:      "The number of event feed running",
 		})
-	scanRegionsDuration = prometheus.NewHistogramVec(
+	scanRegionsDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "scan_regions_duration_seconds",
 			Help:      "The time it took to finish a scanRegions call.",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 18),
-		}, []string{"capture"})
+		})
 	eventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -50,21 +50,21 @@ var (
 			Name:      "event_size_bytes",
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
-		}, []string{"capture", "type"})
+		}, []string{"type"})
 	pullEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "pull_event_count",
 			Help:      "event count received by this puller",
-		}, []string{"type", "capture", "changefeed"})
+		}, []string{"type", "changefeed"})
 	sendEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "send_event_count",
 			Help:      "event count sent to event channel by this puller",
-		}, []string{"type", "capture", "changefeed"})
+		}, []string{"type", "changefeed"})
 	clientChannelSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -78,14 +78,14 @@ var (
 			Subsystem: "kvclient",
 			Name:      "region_token",
 			Help:      "size of region token in kv client",
-		}, []string{"store", "changefeed", "capture"})
+		}, []string{"store", "changefeed"})
 	cachedRegionSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "cached_region",
 			Help:      "cached region that has not requested to TiKV in kv client",
-		}, []string{"store", "changefeed", "capture"})
+		}, []string{"store", "changefeed"})
 	batchResolvedEventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -93,7 +93,7 @@ var (
 			Name:      "batch_resolved_event_size",
 			Help:      "The number of region in one batch resolved ts event",
 			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	grpcPoolStreamGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

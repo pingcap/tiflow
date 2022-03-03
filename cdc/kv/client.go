@@ -918,9 +918,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 ) error {
 	limit := 20
-
 	nextSpan := span
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 
 	for {
 		var (
@@ -931,7 +929,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			scanT0 := time.Now()
 			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-			scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
+			scanRegionsDuration.Observe(time.Since(scanT0).Seconds())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
 			}
@@ -1148,11 +1146,10 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 	}()
 
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(captureAddr, changefeedID)
+	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(changefeedID)
 
-	// always create a new region worker, because `receiveFromStreamV2` is ensured
+	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, addr)
 

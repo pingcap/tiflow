@@ -16,6 +16,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 
@@ -121,8 +122,8 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 	for _, dispatch := range v1.Sink.DispatchRules {
 		c.Sink.DispatchRules = append(c.Sink.DispatchRules, &DispatchRule{
-			Matcher:    []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
-			Dispatcher: dispatch.Rule,
+			Matcher:       []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
+			PartitionRule: dispatch.Rule,
 		})
 	}
 }
@@ -136,6 +137,15 @@ func (c *ReplicaConfig) Validate() error {
 		}
 	}
 	return nil
+}
+
+// ApplyProtocol sinkURI to fill the `ReplicaConfig`
+func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
+	params := sinkURI.Query()
+	if s := params.Get(ProtocolKey); s != "" {
+		c.Sink.Protocol = s
+	}
+	return c
 }
 
 // GetDefaultReplicaConfig returns the default replica config.

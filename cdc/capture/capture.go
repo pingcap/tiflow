@@ -143,7 +143,11 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.pdClock != nil {
 		c.pdClock.Stop()
 	}
-	c.pdClock = pdtime.NewClock(c.PDClient)
+
+	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -170,7 +174,9 @@ func (c *Capture) reset(ctx context.Context) error {
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
+		memPercentage :=
+			float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
+		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
 			return errors.Annotate(
@@ -455,8 +461,7 @@ func (c *Capture) runEtcdWorker(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	captureAddr := c.info.AdvertiseAddr
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
