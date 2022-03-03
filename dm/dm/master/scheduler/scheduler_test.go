@@ -2016,7 +2016,7 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
 	// CASE 1: start subtask without starting validation
-	c.Assert(s.AddSubTasks(false, subtaskCfg), IsNil) // create new subtask without validation
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg), IsNil) // create new subtask without validation
 	t.subTaskCfgExist(c, s, subtaskCfg)
 	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
 	stCfgs := make(map[string]map[string]config.SubTaskConfig)
