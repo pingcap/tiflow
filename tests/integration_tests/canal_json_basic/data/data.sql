@@ -43,6 +43,9 @@ CREATE TABLE multi_data_type
     PRIMARY KEY (id)
 );
 
+-- test for `nullable`
+INSERT INTO multi_data_type() VALUES ();
+
 INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smallint_unsigned, t_mediumint
                            , t_mediumint_unsigned, t_int, t_int_unsigned, t_bigint, t_bigint_unsigned
                            , t_boolean, t_float, t_double, t_decimal
