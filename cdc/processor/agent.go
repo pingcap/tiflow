@@ -158,30 +158,30 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (a *agentImpl) FinishTableOperation(
-	ctx context.Context,
-	tableID model.TableID,
-) (bool, error) {
+func (a *agentImpl) FinishTableOperation(ctx context.Context, tableID model.TableID, epoch model.ProcessorEpoch) (bool, error) {
 	done, err := a.trySendMessage(
 		ctx, a.ownerCaptureID,
 		model.DispatchTableResponseTopic(a.changeFeed),
-		&model.DispatchTableResponseMessage{ID: tableID})
+		&model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	return done, nil
 }
 
-func (a *agentImpl) SyncTaskStatuses(
-	ctx context.Context,
-	running, adding, removing []model.TableID,
-) (bool, error) {
+func (a *agentImpl) SyncTaskStatuses(ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (bool, error) {
+	if !a.Barrier(ctx) {
+		// The Sync message needs to be strongly ordered w.r.t. other messages.
+		return false, nil
+	}
+
 	done, err := a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
 		model.SyncTopic(a.changeFeed),
 		&model.SyncMessage{
 			ProcessorVersion: version.ReleaseSemver(),
+			Epoch:            epoch,
 			Running:          running,
 			Adding:           adding,
 			Removing:         removing,
@@ -339,7 +339,8 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 				ownerCapture,
 				message.OwnerRev,
 				message.ID,
-				message.IsDelete)
+				message.IsDelete,
+				message.Epoch)
 			return nil
 		})
 	if err != nil {

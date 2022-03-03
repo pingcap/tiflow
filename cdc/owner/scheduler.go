@@ -127,12 +127,14 @@ func (s *schedulerV2) DispatchTable(
 	tableID model.TableID,
 	captureID model.CaptureID,
 	isDelete bool,
+	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
 	topic := model.DispatchTableTopic(changeFeedID)
 	message := &model.DispatchTableMessage{
 		OwnerRev: ctx.GlobalVars().OwnerRevision,
 		ID:       tableID,
 		IsDelete: isDelete,
+		Epoch:    epoch,
 	}
 
 	ok, err := s.trySendMessage(ctx, captureID, topic, message)
@@ -239,7 +241,7 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 		func(sender string, messageI interface{}) error {
 			message := messageI.(*model.DispatchTableResponseMessage)
 			s.stats.RecordDispatchResponse()
-			s.OnAgentFinishedTableOperation(sender, message.ID)
+			s.OnAgentFinishedTableOperation(sender, message.ID, message.Epoch)
 			return nil
 		})
 	if err != nil {
@@ -256,6 +258,7 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 			s.stats.RecordSync()
 			s.OnAgentSyncTaskStatuses(
 				sender,
+				message.Epoch,
 				message.Running,
 				message.Adding,
 				message.Removing)
