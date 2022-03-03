@@ -1323,7 +1323,11 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 		}
 		s.expectRelayStages[source] = stage
 	}
-	if _, err := ha.PutRelayConfig(s.etcdCli, source, workers...); err != nil {
+	bounds := make([]ha.SourceBound, len(workers))
+	for i, worker := range workers {
+		bounds[i] = ha.NewSourceBound(source, worker)
+	}
+	if _, err := ha.PutRelayConfig(s.etcdCli, bounds...); err != nil {
 		return err
 	}
 	for _, workerName := range workers {
@@ -1995,8 +1999,16 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 	// 2. check whether is bound.
 	if w.Stage() == WorkerBound {
 		// also put identical relay config for this worker
-		if source := w.RelaySourceID(); source != "" {
-			_, err := ha.PutRelayConfig(s.etcdCli, source, w.BaseInfo().Name)
+		relaySources := w.RelaySources()
+		bounds := make([]ha.SourceBound, 0, len(relaySources))
+		for source := range relaySources {
+			bounds = append(bounds, ha.SourceBound{
+				Source: source,
+				Worker: w.baseInfo.Name,
+			})
+		}
+		if len(bounds) > 0 {
+			_, err := ha.PutRelayConfig(s.etcdCli, bounds...)
 			if err != nil {
 				return err
 			}
@@ -2005,27 +2017,37 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 		// After keepalive is restored, this dm-worker should continue to run the previously bound source
 		// So we PutSourceBound here to trigger dm-worker to get this event and start source again.
 		// If this worker still start a source, it doesn't matter. dm-worker will omit same source and reject source with different name
-		s.logger.Warn("worker already bound", zap.Stringer("bound", w.Bound()))
-		_, err := ha.PutSourceBound(s.etcdCli, w.Bound())
+		workerBounds := w.Bounds()
+		sourcesBound := make([]string, 0, len(workerBounds))
+		bounds = make([]ha.SourceBound, 0, len(workerBounds))
+		for _, bound := range workerBounds {
+			bounds = append(bounds, bound)
+		}
+		s.logger.Warn("worker already bound", zap.Stringer("worker", w.BaseInfo()), zap.Strings("sources", sourcesBound))
+
+		_, err := ha.PutSourceBound(s.etcdCli, bounds...)
 		return err
 	}
 
 	// 3. change the stage (from Offline) to Free or Relay.
-	lastRelaySource := w.RelaySourceID()
-	if lastRelaySource == "" {
+	lastRelaySource := w.RelaySources()
+	unboundRelaySources := make([]string, 0)
+	if len(lastRelaySource) == 0 {
 		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
 		// of course nothing, so we find the relay source from a better place
 		for source, workerM := range s.relayWorkers {
-			if _, ok2 := workerM[w.BaseInfo().Name]; ok2 {
-				lastRelaySource = source
-				break
+			if _, ok2 := workerM[w.BaseInfo().Name]; !ok2 {
+				continue
+			}
+			if _, ok3 := lastRelaySource[source]; !ok3 {
+				unboundRelaySources = append(unboundRelaySources, source)
 			}
 		}
 	}
 	w.ToFree()
 	// TODO: rename ToFree to Online and move below logic inside it
-	if lastRelaySource != "" {
-		if err := w.StartRelay(lastRelaySource); err != nil {
+	if len(unboundRelaySources) > 0 {
+		if err := w.StartRelay(unboundRelaySources...); err != nil {
 			s.logger.DPanic("", zap.Error(err))
 		}
 	}

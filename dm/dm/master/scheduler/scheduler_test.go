@@ -717,9 +717,10 @@ func (t *testScheduler) sourceBounds(c *C, s *Scheduler, expectBounds, expectUnb
 	c.Assert(wToB, HasLen, len(expectBounds))
 
 	sToB := make(map[string]ha.SourceBound, len(wToB))
-	for _, b := range wToB {
-		bd := ha.GetSourceBoundFromMap(b)
-		sToB[bd.Source] = bd
+	for _, bm := range wToB {
+		for _, bd := range bm {
+			sToB[bd.Source] = bd
+		}
 	}
 	for _, source := range expectBounds {
 		c.Assert(sToB[source], NotNil)

@@ -53,7 +53,7 @@ func PutRelayStageRelayConfigSourceBound(cli *clientv3.Client, stage Stage, boun
 	if err != nil {
 		return 0, err
 	}
-	op3 := putRelayConfigOp(bound.Worker, bound.Source)
+	op3 := putRelayConfigOp(bound)
 	ops := make([]clientv3.Op, 0, len(ops1)+len(op2)+1)
 	ops = append(ops, ops1...)
 	ops = append(ops, op2...)

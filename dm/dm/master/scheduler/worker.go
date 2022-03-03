@@ -88,6 +88,8 @@ type Worker struct {
 
 	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
 	relaySource string
+	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
+	relaySources map[string]struct{}
 }
 
 // NewWorker creates a new Worker instance with Offline stage.
@@ -132,9 +134,8 @@ func (w *Worker) ToFree() {
 	defer w.mu.Unlock()
 	w.stage = WorkerFree
 	w.reportMetrics()
-	w.bound = nullBound
 	w.bounds = make(map[string]ha.SourceBound)
-	w.relaySource = ""
+	w.relaySources = make(map[string]struct{})
 }
 
 // ToBound transforms to Bound.
@@ -168,23 +169,13 @@ func (w *Worker) Unbound(source string) error {
 }
 
 // StartRelay adds relay source information to a bound worker and calculates the stage.
-func (w *Worker) StartRelay(sourceID string) error {
+func (w *Worker) StartRelay(sources ...string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	switch w.stage {
-	case WorkerOffline, WorkerRelay:
-	case WorkerFree:
-		w.stage = WorkerRelay
-		w.reportMetrics()
-	case WorkerBound:
-		if w.bound.Source != sourceID {
-			return terror.ErrSchedulerRelayWorkersWrongBound.Generatef(
-				"can't turn on relay of source %s for worker %s, because the worker is bound to source %s",
-				sourceID, w.BaseInfo().Name, w.bound.Source)
-		}
+	for _, sourceID := range sources {
+		w.relaySources[sourceID] = struct{}{}
 	}
-	w.relaySource = sourceID
 
 	return nil
 }
@@ -240,6 +231,14 @@ func (w *Worker) RelaySourceID() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.relaySource
+}
+
+// RelaySources returns the sources from which this worker is pulling relay log,
+// returns empty string if not started relay.
+func (w *Worker) RelaySources() map[string]struct{} {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.relaySources
 }
 
 // SendRequest sends request to the DM-worker instance.
