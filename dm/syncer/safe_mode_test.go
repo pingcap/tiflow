@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/tests/v3/integration"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
