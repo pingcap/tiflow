@@ -821,7 +821,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 			return op.String(), w.OperateSubTask(stage.Task, op)
 		}
 	}
-	// todo(ehco) remove  pause and resume after using openapi to impl dmctl
+	// todo(ehco) remove pause and resume after using openapi to impl dmctl
 	switch stage.Expect {
 	case pb.Stage_Stopped, pb.Stage_Paused:
 		op = pb.TaskOp_Pause
