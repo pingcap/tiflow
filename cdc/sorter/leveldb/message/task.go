@@ -32,6 +32,7 @@ type Task struct {
 	// Sorter.AddEntry -> writer.
 	InputEvent *model.PolymorphicEvent
 	// Latest resolved ts / commit ts for readers.
+	// An empty ReadTs works like a tick.
 	// writer -> reader
 	ReadTs ReadTs
 	// A batch of events (bytes encoded) need to be wrote.
@@ -66,8 +67,9 @@ type IterRequest struct {
 	ResolvedTs uint64
 	// Range of a requested iterator.
 	Range [2][]byte
-	// Must be buffered channel to avoid blocking.
-	IterCh chan *LimitedIterator `json:"-"` // Make Task JSON printable.
+	// IterCallback is callback to send iterator back.
+	// It must be buffered channel to avoid blocking.
+	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
 }
 
 // Key is the key that is written to db.
