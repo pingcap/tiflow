@@ -120,6 +120,8 @@ type DataValidator struct {
 
 	// such as table without primary key
 	unsupportedTable map[string]string
+	waitSyncerTimer  *time.Timer
+	mode             string
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -136,6 +138,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.validateInterval = validationInterval
 
 	v.unsupportedTable = make(map[string]string)
+	v.waitSyncerTimer = utils.NewStoppedTimer()
 
 	return v
 }
@@ -415,7 +418,7 @@ func (v *DataValidator) Stage() pb.Stage {
 func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
-		worker := newValidateWorker(v, i)
+		worker := newValidateWorker(v, i, v.mode)
 		v.workers[i] = worker
 		go func() {
 			v.wg.Done()

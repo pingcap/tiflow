@@ -68,9 +68,11 @@ type validateWorker struct {
 	pendingRowCount   atomic.Int64
 	batchSize         int
 	sync.Mutex
+
+	mode string
 }
 
-func newValidateWorker(v *DataValidator, id int) *validateWorker {
+func newValidateWorker(v *DataValidator, id int, mode string) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
 	return &validateWorker{
 		cfg:               v.cfg.ValidatorCfg,
@@ -82,6 +84,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		rowChangeCh:       make(chan *rowChange, workerChannelSize),
 		pendingChangesMap: make(map[string]*tableChange),
 		batchSize:         maxBatchSize,
+		mode:              mode,
 	}
 }
 
@@ -257,13 +260,15 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 			failedRows[key] = &validateFailedRow{tp: rowNotExist}
 			continue
 		}
-
-		eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
-		if err != nil {
-			return nil, err
-		}
-		if !eq {
-			failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
+		if vw.mode == config.ValidationFull {
+			// only compare the whole row in full mode
+			eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
+			if err != nil {
+				return nil, err
+			}
+			if !eq {
+				failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
+			}
 		}
 	}
 	return failedRows, nil
