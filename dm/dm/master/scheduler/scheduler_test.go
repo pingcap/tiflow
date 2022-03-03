@@ -60,7 +60,7 @@ func TestScheduler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	integration.BeforeTest(t)
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 

@@ -40,7 +40,7 @@ type testLock struct{}
 var _ = Suite(&testLock{})
 
 func TestLock(t *testing.T) {
-	integration.BeforeTest(t)
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 

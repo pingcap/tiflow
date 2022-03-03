@@ -175,7 +175,7 @@ func TestMaster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	integration.BeforeTest(t)
+	integration.BeforeTestExternal(t)
 	// inject *testing.T to testMaster
 	s := testSuite.(*testMaster)
 	s.testT = t

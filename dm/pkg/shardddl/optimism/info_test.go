@@ -37,7 +37,7 @@ import (
 var etcdTestCli *clientv3.Client
 
 func TestInfo(t *testing.T) {
-	integration.BeforeTest(t)
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 

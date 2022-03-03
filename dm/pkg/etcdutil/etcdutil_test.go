@@ -50,7 +50,7 @@ func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 }
 
 func TestSuite(t *testing.T) {
-	integration.BeforeTest(t)
+	integration.BeforeTestExternal(t)
 	// inject *testing.T to suite
 	s := etcdTestSuite.(*testEtcdUtilSuite)
 	s.testT = t
