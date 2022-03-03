@@ -30,7 +30,20 @@ type EventSorter interface {
 	// Returns error if the sorter is closed or context is done
 	TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error)
 	// Output sorted events, orderd by commit ts.
-	// It may output a dummy event, a zero resolved ts event, to detect whether
-	// output is available.
+	//
+	// Callers must not caching the returned channel, as sorter may not output
+	// any resolved events if callers skip calling `Output`.
+	//
+	//  func caller(ctx context.Context, sorter EventSorter) {
+	//  	for {
+	//  		output := sorter.Output()
+	//  		select {
+	//  		case <-ctx.Done():
+	//  			return
+	//  		case ev := <-output:
+	//  			// Do something with ev.
+	//  		}
+	//  	}
+	//  }
 	Output() <-chan *model.PolymorphicEvent
 }
