@@ -27,7 +27,6 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
@@ -51,32 +50,6 @@ func newTestReader() *reader {
 		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
 		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
 	}
-}
-
-func TestRunAndReportError(t *testing.T) {
-	t.Parallel()
-
-	s, mb := newTestSorter(t.Name(), 2)
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		s.common.reportError(
-			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
-	}()
-	require.Error(t, s.Run(context.Background()))
-
-	// Stop writer and reader.
-	msg, ok := mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t, actormsg.StopMessage(), msg)
-	msg, ok = mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t, actormsg.StopMessage(), msg)
-
-	// Must be nonblock.
-	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
-	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 }
 
 func TestReaderSetTaskDelete(t *testing.T) {
@@ -890,26 +863,4 @@ func newEmptyIterator(
 			Sema:     sema,
 		}
 	}
-}
-
-func TestTryAddEntry(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s, mb := newTestSorter(t.Name(), 1)
-
-	event := model.NewResolvedPolymorphicEvent(0, 1)
-	sent, err := s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	task, ok := mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t, event, task.SorterTask.InputEvent)
-
-	sent, err = s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	sent, err = s.TryAddEntry(ctx, event)
-	require.False(t, sent)
-	require.Nil(t, err)
 }
