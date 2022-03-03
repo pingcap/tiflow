@@ -639,14 +639,13 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 		return terror.ErrWorkerUpdateTaskStage.Generate(st.Stage().String())
 	}
 
-	// update all units' configuration, if SubTask itself has configuration need to update, do it later
 	for _, u := range st.units {
 		err := u.Update(ctx, cfg)
 		if err != nil {
 			return err
 		}
 	}
-
+	st.cfg = cfg
 	return nil
 }
 

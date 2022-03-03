@@ -340,9 +340,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.downstreamMetaExist(c, s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
 	t.downstreamMetaNotExist(c, s, taskName2)
 
-	// update source config when task already started will failed
-	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
-
 	// try start a task with two sources, some sources not bound.
 	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)), IsTrue)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)

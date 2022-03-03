@@ -15,8 +15,7 @@ enable-relay: false
 # relay-binlog-gtid: ''
 # relay-dir: ./relay_log
 
-# whether this source is enabled (if a source not in enabled status it can not serve subtasks)
-# the source cfg can only be updated if enable = false.
+# source only can be updated if enable = false.
 enable: true
 
 #enable gtid in relay log unit
