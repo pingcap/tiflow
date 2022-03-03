@@ -85,7 +85,7 @@ var defaultServerConfig = &ServerConfig{
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryPercentage:    30,                      // 30% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
@@ -98,7 +98,10 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor:   false,
+		EnableTableActor: false,
+		TableActor: &TableActorConfig{
+			EventBatchSize: 32,
+		},
 		EnableNewScheduler: false,
 		// Default leveldb sorter config
 		EnableDBSorter: false,
@@ -116,10 +119,10 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 160000,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
 			IteratorMaxAliveDuration:    10000,
 			IteratorSlowReadDuration:    256,
-			CleanupSpeedLimit:           10000,
 		},
 		Messages: defaultMessageConfig.Clone(),
 	},

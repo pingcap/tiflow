@@ -26,11 +26,24 @@ const (
 	defaultMockControllerID = 1
 )
 
-var (
-	// defaultMaxMessageBytes specifies the default max message bytes.
-	defaultMaxMessageBytes = "10485760"
-	// defaultMaxMessageBytes specifies the default min insync replicas for broker and default topic.
+const (
+	// defaultMaxMessageBytes specifies the default max message bytes,
+	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
+	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
+	defaultMaxMessageBytes = "1048576"
+
+	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
 	defaultMinInsyncReplicas = "1"
+)
+
+var (
+	// BrokerMessageMaxBytes is the broker's `message.max.bytes`
+	BrokerMessageMaxBytes = defaultMaxMessageBytes
+	// TopicMaxMessageBytes is the topic's `max.message.bytes`
+	TopicMaxMessageBytes = defaultMaxMessageBytes
+	// MinInSyncReplicas is the `min.insync.replicas`
+	MinInSyncReplicas = defaultMinInsyncReplicas
 )
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
@@ -45,8 +58,8 @@ type ClusterAdminClientMockImpl struct {
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
-	configEntries[MinInsyncReplicasConfigName] = &defaultMinInsyncReplicas
+	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes
+	configEntries[MinInsyncReplicasConfigName] = &MinInSyncReplicas
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
@@ -55,11 +68,11 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	brokerConfigs := []sarama.ConfigEntry{
 		{
 			Name:  BrokerMessageMaxBytesConfigName,
-			Value: defaultMaxMessageBytes,
+			Value: BrokerMessageMaxBytes,
 		},
 		{
 			Name:  MinInsyncReplicasConfigName,
-			Value: defaultMinInsyncReplicas,
+			Value: MinInSyncReplicas,
 		},
 	}
 
@@ -120,8 +133,14 @@ func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-// GetDefaultMaxMessageBytes returns defaultMaxMessageBytes as a number.
-func (c *ClusterAdminClientMockImpl) GetDefaultMaxMessageBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(defaultMaxMessageBytes)
-	return topicMaxMessage
+// GetBrokerMessageMaxBytes returns broker's `message.max.bytes`
+func (c *ClusterAdminClientMockImpl) GetBrokerMessageMaxBytes() int {
+	messageMaxBytes, _ := strconv.Atoi(BrokerMessageMaxBytes)
+	return messageMaxBytes
+}
+
+// GetTopicMaxMessageBytes returns topic's `max.message.bytes`
+func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
+	maxMessageBytes, _ := strconv.Atoi(TopicMaxMessageBytes)
+	return maxMessageBytes
 }

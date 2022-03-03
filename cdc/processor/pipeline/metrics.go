@@ -24,7 +24,7 @@ var (
 			Subsystem: "processor",
 			Name:      "txn_count",
 			Help:      "txn count received/executed by this processor",
-		}, []string{"type", "changefeed", "capture"})
+		}, []string{"type", "changefeed"})
 	tableMemoryHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -32,7 +32,7 @@ var (
 			Name:      "table_memory_consumption",
 			Help:      "estimated memory consumption for a table after the sorter",
 			Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
-		}, []string{"changefeed", "capture"})
+		}, []string{"changefeed"})
 )
 
 // InitMetrics registers all metrics used in processor
