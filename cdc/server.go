@@ -246,7 +246,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	defer httpCli.CloseIdleConnections()
 	metrics := make(map[string]prometheus.Observer)
 	for _, pdEndpoint := range s.pdEndpoints {
-		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(conf.AdvertiseAddr, pdEndpoint)
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
 	}
 
 	for {
@@ -258,7 +258,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
 				if err != nil {
 					log.Warn("etcd health check failed", zap.Error(err))
 					cancel()

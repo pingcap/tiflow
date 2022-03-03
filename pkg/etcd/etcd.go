@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -88,14 +87,13 @@ type CDCEtcdClient struct {
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	metrics := map[string]prometheus.Counter{
-		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut, captureAddr),
-		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet, captureAddr),
-		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel, captureAddr),
-		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn, captureAddr),
-		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant, captureAddr),
-		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke, captureAddr),
+		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
+		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
+		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel),
+		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn),
+		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
+		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
 	return CDCEtcdClient{Client: Wrap(cli, metrics)}
 }
@@ -514,7 +512,7 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 	opsElse := []clientv3.Op{
 		clientv3.OpPut(key, data),
 	}
-	resp, err := c.Client.Txn(ctx, cmps, TxnEmptyOpsThen, opsElse)
+	resp, err := c.Client.Txn(ctx, cmps, txnEmptyOpsThen, opsElse)
 	if err != nil {
 		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

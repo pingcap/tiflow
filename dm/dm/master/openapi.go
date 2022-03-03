@@ -936,6 +936,16 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 			return nil, terror.ErrOpenAPICommonError.New("worker's query-status response is nil")
 		}
 		sourceStatus := workerStatus.SourceStatus
+		openapiSubTaskStatus := openapi.SubTaskStatus{
+			Name:       taskName,
+			SourceName: sourceStatus.GetSource(),
+			WorkerName: sourceStatus.GetWorker(),
+		}
+		if !workerStatus.Result {
+			openapiSubTaskStatus.ErrorMsg = &workerStatus.Msg
+			subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
+			continue
+		}
 		// find right task name
 		var subTaskStatus *pb.SubTaskStatus
 		for _, cfg := range workerStatus.SubTaskStatus {
@@ -947,14 +957,9 @@ func getOpenAPISubtaskStatusByTaskName(taskName string,
 			// not find
 			continue
 		}
-		openapiSubTaskStatus := openapi.SubTaskStatus{
-			Name:                taskName,
-			SourceName:          sourceStatus.GetSource(),
-			WorkerName:          sourceStatus.GetWorker(),
-			Stage:               subTaskStatus.GetStage().String(),
-			Unit:                subTaskStatus.GetUnit().String(),
-			UnresolvedDdlLockId: &subTaskStatus.UnresolvedDDLLockID,
-		}
+		openapiSubTaskStatus.Stage = subTaskStatus.GetStage().String()
+		openapiSubTaskStatus.Unit = subTaskStatus.GetUnit().String()
+		openapiSubTaskStatus.UnresolvedDdlLockId = &subTaskStatus.UnresolvedDDLLockID
 		// add load status
 		if loadS := subTaskStatus.GetLoad(); loadS != nil {
 			openapiSubTaskStatus.LoadStatus = &openapi.LoadStatus{

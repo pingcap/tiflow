@@ -170,12 +170,12 @@ func newMySQLSink(
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
+	metricConflictDetectDurationHis :=
+		conflictDetectDurationHis.WithLabelValues(params.changefeedID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
+		metricBucketSizeCounters[i] =
+			bucketSizeCounter.WithLabelValues(params.changefeedID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -185,7 +185,7 @@ func newMySQLSink(
 		filter:                          filter,
 		cyclic:                          sinkCyclic,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql", opts),
+		statistics:                      NewStatistics(ctx, "mysql"),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),

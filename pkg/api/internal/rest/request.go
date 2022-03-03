@@ -178,7 +178,7 @@ func (r *Request) WithBackoffBaseDelay(delay time.Duration) *Request {
 	return r
 }
 
-// BackoffMaxDelay specifies the maximum backoff sleep duration.
+// WithBackoffMaxDelay specifies the maximum backoff sleep duration.
 func (r *Request) WithBackoffMaxDelay(delay time.Duration) *Request {
 	if r.err != nil {
 		return r
@@ -187,7 +187,7 @@ func (r *Request) WithBackoffMaxDelay(delay time.Duration) *Request {
 	return r
 }
 
-// MaxRetries specifies the maximum times a request will retry.
+// WithMaxRetries specifies the maximum times a request will retry.
 func (r *Request) WithMaxRetries(maxRetries int64) *Request {
 	if r.err != nil {
 		return r
@@ -200,7 +200,7 @@ func (r *Request) WithMaxRetries(maxRetries int64) *Request {
 	return r
 }
 
-// Body makes http request use obj as its body.
+// WithBody makes http request use obj as its body.
 // only supports two types now:
 //   1. io.Reader
 //   2. type which can be json marshalled

@@ -928,7 +928,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, errCheckSyncConfigReg)
+	c.Assert(resp.CheckResult, check.Matches, errCheckSyncConfigReg)
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
 
@@ -1366,40 +1366,51 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 }
 
 func (t *testMaster) TestServer(c *check.C) {
+	var err error
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
 	cfg.PeerUrls = "http://127.0.0.1:8294"
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg.AdvertiseAddr = cfg.MasterAddr
 
-	s := NewServer(cfg)
+	basicServiceCheck := func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
+		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
+	}
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		basicServiceCheck(c, cfg)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+		// try to start another server with the same address.  Expect it to fail
+		dupServer := NewServer(cfg)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		err1 := dupServer.Start(ctx)
+		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
+		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+	})
 
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.MasterAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.MasterAddr), []byte("Types of profiles available"))
-	// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
-	// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.MasterAddr), []byte("task test-task has no source or not exist"))
-
-	dupServer := NewServer(cfg)
-	err := dupServer.Start(ctx)
-	c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err.Error(), check.Matches, ".*bind: address already in use.*")
-
-	// close
-	cancel()
-	s.Close()
-
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.closed.Load()
-	}), check.IsTrue)
+	// test the listen address is 0.0.0.0
+	masterAddrStr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddrStr)
+	c.Assert(err, check.IsNil)
+	cfg2 := NewConfig()
+	*cfg2 = *cfg
+	cfg2.MasterAddr = fmt.Sprintf("0.0.0.0:%s", masterPort)
+	cfg2.AdvertiseAddr = masterAddrStr
+	t.testNormalServerLifecycle(c, cfg2, basicServiceCheck)
 }
 
 func (t *testMaster) TestMasterTLS(c *check.C) {
+	var err error
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	peerAddr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddr)
+	c.Assert(err, check.IsNil)
+	_, peerPort, err := net.SplitHostPort(peerAddr)
+	c.Assert(err, check.IsNil)
 
 	// all with `https://` prefix
 	cfg := NewConfig()
@@ -1547,17 +1558,40 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
 	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
 	t.testTLSPrefix(c, cfg)
+
+	// listen address set to 0.0.0.0
+	cfg = NewConfig()
+	c.Assert(cfg.Parse([]string{
+		"--name=master-tls",
+		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--master-addr=0.0.0.0:%s", masterPort),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
+		fmt.Sprintf("--peer-urls=0.0.0.0:%s", peerPort),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
+		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
+		"--ssl-ca=./tls_for_test/ca.pem",
+		"--ssl-cert=./tls_for_test/dm.pem",
+		"--ssl-key=./tls_for_test/dm.key",
+	}), check.IsNil)
+	t.testTLSPrefix(c, cfg)
 }
 
 func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	})
+}
+
+func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C, *Config)) {
+	var err error
 	s := NewServer(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+	err = s.Start(ctx)
+	c.Assert(err, check.IsNil)
 
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	checkLogic(c, cfg)
 
 	// close
 	cancel()
@@ -1594,6 +1628,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -1613,6 +1648,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1647,6 +1683,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg3.Name = "dm-master-3"
 	cfg3.DataDir = c.MkDir()
 	cfg3.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg3.AdvertiseAddr = cfg3.MasterAddr
 	cfg3.PeerUrls = tempurl.Alloc()
 	cfg3.AdvertisePeerUrls = cfg3.PeerUrls
 	cfg3.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1689,7 +1726,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg1.AdvertiseAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -2169,4 +2206,138 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	resp := &pb.StartTaskResponse{}
 	err = common.SendRequest(ctx, "StartTask", &pb.StartTaskRequest{}, &resp)
 	c.Assert(err, check.IsNil)
+}
+
+func (t *testMaster) TestStartStopValidion(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq))
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1.1 start validation
+	validatorStartReq := &pb.StartValidationRequest{
+		Mode:     config.ValidationFull,
+		TaskName: taskName,
+	}
+	startResp, err := server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
+
+	// 1.2 start existed validaion task
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue) // return with no error
+
+	// 1.3 start non-existed subtask's validator
+	validatorStartReq.TaskName = "not-exist-name"
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsFalse)
+	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 2.1 stop validation
+	validatorStopReq := &pb.StopValidationRequest{
+		TaskName: taskName,
+	}
+	stopResp, err := server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 2.2 re-stop stopped task
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue) // return with no error
+
+	// 2.3 stop non-existed subtask's validator
+	validatorStopReq.TaskName = "not-exist-name"
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsFalse)
+	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 3.1 start validation with mode fast
+	validatorStartReq.TaskName = taskName
+	validatorStartReq.Mode = config.ValidationFast
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
+
+	// 4.1 stop all tasks
+	validatorStopReq.TaskName = ""
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 4.2 start all tasks
+	validatorStartReq.TaskName = ""
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+}
+
+func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, taskName)
+
+	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, taskName, 0)
+	c.Assert(err, check.IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, check.HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[taskName], stage)
+	default:
+		c.Assert(stageM, check.HasLen, 0)
+	}
+}
+
+//nolint:unparam
+func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string, expectMode string) {
+	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
+	v, ok := cfgs[task]
+	c.Assert(ok, check.IsTrue)
+	cfg, ok := v[source]
+	c.Assert(ok, check.IsTrue)
+	c.Assert(cfg.ValidatorCfg.Mode, check.Equals, expectMode)
 }

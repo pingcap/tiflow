@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -100,6 +101,10 @@ func (p *levelDB) Batch(cap int) Batch {
 	}
 }
 
+func (p *levelDB) DeleteRange(start, end []byte) error {
+	return errors.ErrUnimplemented.FastGenByArgs("leveldb.DeleteRange")
+}
+
 func (p *levelDB) Compact(start, end []byte) error {
 	return p.db.CompactRange(util.Range{Start: start, Limit: end})
 }
@@ -108,7 +113,7 @@ func (p *levelDB) Close() error {
 	return p.db.Close()
 }
 
-func (p *levelDB) CollectMetrics(captureAddr string, i int) {
+func (p *levelDB) CollectMetrics(i int) {
 	db := p.db
 	stats := leveldb.DBStats{}
 	err := db.Stats(&stats)
@@ -117,25 +122,25 @@ func (p *levelDB) CollectMetrics(captureAddr string, i int) {
 	}
 	id := strconv.Itoa(i)
 	sorter.OnDiskDataSizeGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.LevelSizes.Sum()))
+		WithLabelValues(id).Set(float64(stats.LevelSizes.Sum()))
 	sorter.InMemoryDataSizeGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.BlockCacheSize))
+		WithLabelValues(id).Set(float64(stats.BlockCacheSize))
 	sorter.OpenFileCountGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.OpenedTablesCount))
+		WithLabelValues(id).Set(float64(stats.OpenedTablesCount))
 	dbSnapshotGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.AliveSnapshots))
+		WithLabelValues(id).Set(float64(stats.AliveSnapshots))
 	dbIteratorGauge.
-		WithLabelValues(captureAddr, id).Set(float64(stats.AliveIterators))
+		WithLabelValues(id).Set(float64(stats.AliveIterators))
 	dbReadBytes.
-		WithLabelValues(captureAddr, id).Set(float64(stats.IORead))
+		WithLabelValues(id).Set(float64(stats.IORead))
 	dbWriteBytes.
-		WithLabelValues(captureAddr, id).Set(float64(stats.IOWrite))
+		WithLabelValues(id).Set(float64(stats.IOWrite))
 	dbWriteDelayCount.
-		WithLabelValues(captureAddr, id).Set(float64(stats.WriteDelayCount))
+		WithLabelValues(id).Set(float64(stats.WriteDelayCount))
 	dbWriteDelayDuration.
-		WithLabelValues(captureAddr, id).Set(stats.WriteDelayDuration.Seconds())
+		WithLabelValues(id).Set(stats.WriteDelayDuration.Seconds())
 	metricLevelCount := dbLevelCount.
-		MustCurryWith(map[string]string{"capture": captureAddr, "id": id})
+		MustCurryWith(map[string]string{"id": id})
 	for level, count := range stats.LevelTablesCounts {
 		metricLevelCount.WithLabelValues(strconv.Itoa(level)).Set(float64(count))
 	}
@@ -180,10 +185,6 @@ var _ Iterator = (*leveldbIter)(nil)
 
 func (i leveldbIter) Valid() bool {
 	return i.Iterator.Valid()
-}
-
-func (i leveldbIter) First() bool {
-	return i.Iterator.First()
 }
 
 func (i leveldbIter) Next() bool {

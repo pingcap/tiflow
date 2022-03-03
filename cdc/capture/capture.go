@@ -53,7 +53,7 @@ type Capture struct {
 	info      *model.CaptureInfo
 
 	ownerMu          sync.Mutex
-	owner            *owner.Owner
+	owner            owner.Owner
 	processorManager *processor.Manager
 
 	// session keeps alive between the capture and etcd
@@ -88,7 +88,7 @@ type Capture struct {
 	cancel context.CancelFunc
 
 	newProcessorManager func() *processor.Manager
-	newOwner            func(pd.Client) *owner.Owner
+	newOwner            func(pd.Client) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
@@ -107,13 +107,12 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 	}
 }
 
-func NewCapture4Test(isOwner bool) *Capture {
+// NewCapture4Test returns a new Capture instance for test.
+func NewCapture4Test(o owner.Owner) *Capture {
 	res := &Capture{
 		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
 	}
-	if isOwner {
-		res.owner = &owner.Owner{}
-	}
+	res.owner = o
 	return res
 }
 
@@ -144,7 +143,11 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.pdClock != nil {
 		c.pdClock.Stop()
 	}
-	c.pdClock = pdtime.NewClock(c.PDClient)
+
+	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -171,7 +174,9 @@ func (c *Capture) reset(ctx context.Context) error {
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		c.sorterSystem = ssystem.NewSystem(sortDir, conf.Debug.DB)
+		memPercentage :=
+			float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
+		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
 			return errors.Annotate(
@@ -456,8 +461,7 @@ func (c *Capture) runEtcdWorker(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	captureAddr := c.info.AdvertiseAddr
-	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
@@ -482,20 +486,20 @@ func (c *Capture) runEtcdWorker(
 	return nil
 }
 
-func (c *Capture) setOwner(owner *owner.Owner) {
+func (c *Capture) setOwner(owner owner.Owner) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	c.owner = owner
 }
 
-// OperateOwnerUnderLock operates the owner with lock
-func (c *Capture) OperateOwnerUnderLock(fn func(*owner.Owner) error) error {
+// GetOwner returns owner if it is the owner.
+func (c *Capture) GetOwner() (owner.Owner, error) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
-		return cerror.ErrNotOwner.GenWithStackByArgs()
+		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
-	return fn(c.owner)
+	return c.owner, nil
 }
 
 // campaign to be an owner.
@@ -529,10 +533,10 @@ func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
-	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	o, _ := c.GetOwner()
+	if o != nil {
 		o.AsyncStop()
-		return nil
-	})
+	}
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
@@ -571,20 +575,38 @@ func (c *Capture) AsyncClose() {
 }
 
 // WriteDebugInfo writes the debug info into writer.
-func (c *Capture) WriteDebugInfo(w io.Writer) {
+func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
+	wait := func(done <-chan error) {
+		var err error
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case err = <-done:
+		}
+		if err != nil {
+			log.Warn("write debug info failed", zap.Error(err))
+		}
+	}
 	// Safety: Because we are mainly outputting information about the owner here,
 	// if the owner does not exist or is not set, the information will not be output.
-	_ = c.OperateOwnerUnderLock(func(o *owner.Owner) error {
+	o, _ := c.GetOwner()
+	if o != nil {
+		doneOwner := make(chan error, 1)
 		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-		o.WriteDebugInfo(w)
-		return nil
-	})
+		o.WriteDebugInfo(w, doneOwner)
+		// wait the debug info printed
+		wait(doneOwner)
+	}
+
+	doneM := make(chan error, 1)
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
-		c.processorManager.WriteDebugInfo(w)
+		c.processorManager.WriteDebugInfo(ctx, w, doneM)
 	}
+	// wait the debug info printed
+	wait(doneM)
 }
 
 // IsOwner returns whether the capture is an owner
@@ -594,8 +616,8 @@ func (c *Capture) IsOwner() bool {
 	return c.owner != nil
 }
 
-// GetOwner return the owner of current TiCDC cluster
-func (c *Capture) GetOwner(ctx context.Context) (*model.CaptureInfo, error) {
+// GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
+func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
@@ -621,5 +643,5 @@ func (c *Capture) StatusProvider() owner.StatusProvider {
 	if c.owner == nil {
 		return nil
 	}
-	return c.owner.StatusProvider()
+	return owner.NewStatusProvider(c.owner)
 }

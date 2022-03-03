@@ -85,6 +85,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -93,10 +94,11 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
+	defer cancel()
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -105,6 +107,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -113,6 +116,12 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
+
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
 
 	baseURL := "/api/v1/sources"
 	// list source from leader
@@ -128,7 +137,6 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	// list source not from leader will get a redirect
 	result2 := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s2.openapiHandles)
 	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
-	cancel()
 }
 
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
@@ -138,6 +146,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -151,7 +160,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	cancel()
+	defer cancel()
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
@@ -536,7 +545,7 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 
 	// get task status
 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1)
+	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, false)
 	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 	taskStatusURL := fmt.Sprintf("%s/%s/status", taskURL, task.Name)
 	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -575,6 +584,21 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	status := statusList[0]
 	c.Assert(status.WorkerName, check.Equals, workerName1)
 	c.Assert(status.Name, check.Equals, task.Name)
+
+	// test some error happened on worker
+	mockWorkerClient = pbmock.NewMockWorkerClient(ctrl)
+	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, true)
+	s.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(t.testT, s.openapiHandles)
+	c.Assert(result.Code(), check.Equals, http.StatusOK)
+	c.Assert(result.UnmarshalBodyToObject(&resultListTask), check.IsNil)
+	c.Assert(resultListTask.Data, check.HasLen, 1)
+	c.Assert(resultListTask.Total, check.Equals, 1)
+	c.Assert(resultListTask.Data[0].StatusList, check.NotNil)
+	statusList = *resultListTask.Data[0].StatusList
+	c.Assert(statusList, check.HasLen, 1)
+	status = statusList[0]
+	c.Assert(status.ErrorMsg, check.NotNil)
 
 	// stop task
 	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", taskURL, task.Name)).GoWithHTTPHandler(t.testT, s.openapiHandles)
@@ -840,49 +864,62 @@ func mockRelayQueryStatus(
 }
 
 func mockTaskQueryStatus(
-	mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceName, workerName string) {
-	queryResp := &pb.QueryStatusResponse{
-		Result: true,
-		SourceStatus: &pb.SourceStatus{
-			Worker: workerName,
-			Source: sourceName,
-		},
-		SubTaskStatus: []*pb.SubTaskStatus{
-			{
-				Stage: pb.Stage_Running,
-				Name:  taskName,
-				Status: &pb.SubTaskStatus_Sync{
-					Sync: &pb.SyncStatus{
-						TotalEvents:         0,
-						TotalTps:            0,
-						RecentTps:           0,
-						MasterBinlog:        "",
-						MasterBinlogGtid:    "",
-						SyncerBinlog:        "",
-						SyncerBinlogGtid:    "",
-						BlockingDDLs:        nil,
-						UnresolvedGroups:    nil,
-						Synced:              false,
-						BinlogType:          "",
-						SecondsBehindMaster: 0,
+	mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceName, workerName string, needError bool) {
+	var queryResp *pb.QueryStatusResponse
+	if needError {
+		queryResp = &pb.QueryStatusResponse{
+			Result: false,
+			Msg:    "some error happened",
+			SourceStatus: &pb.SourceStatus{
+				Worker: workerName,
+				Source: sourceName,
+			},
+		}
+	} else {
+		queryResp = &pb.QueryStatusResponse{
+			Result: true,
+			SourceStatus: &pb.SourceStatus{
+				Worker: workerName,
+				Source: sourceName,
+			},
+			SubTaskStatus: []*pb.SubTaskStatus{
+				{
+					Stage: pb.Stage_Running,
+					Name:  taskName,
+					Status: &pb.SubTaskStatus_Sync{
+						Sync: &pb.SyncStatus{
+							TotalEvents:         0,
+							TotalTps:            0,
+							RecentTps:           0,
+							MasterBinlog:        "",
+							MasterBinlogGtid:    "",
+							SyncerBinlog:        "",
+							SyncerBinlogGtid:    "",
+							BlockingDDLs:        nil,
+							UnresolvedGroups:    nil,
+							Synced:              false,
+							BinlogType:          "",
+							SecondsBehindMaster: 0,
+						},
+					},
+				},
+				{
+					Stage: pb.Stage_Running,
+					Name:  taskName,
+					Status: &pb.SubTaskStatus_Dump{
+						Dump: &pb.DumpStatus{
+							CompletedTables:   0.0,
+							EstimateTotalRows: 10.0,
+							FinishedBytes:     0.0,
+							FinishedRows:      5.0,
+							TotalTables:       1,
+						},
 					},
 				},
 			},
-			{
-				Stage: pb.Stage_Running,
-				Name:  taskName,
-				Status: &pb.SubTaskStatus_Dump{
-					Dump: &pb.DumpStatus{
-						CompletedTables:   0.0,
-						EstimateTotalRows: 10.0,
-						FinishedBytes:     0.0,
-						FinishedRows:      5.0,
-						TotalTables:       1,
-					},
-				},
-			},
-		},
+		}
 	}
+
 	mockWorkerClient.EXPECT().QueryStatus(
 		gomock.Any(),
 		gomock.Any(),

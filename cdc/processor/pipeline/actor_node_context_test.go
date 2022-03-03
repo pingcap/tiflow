@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -29,12 +30,12 @@ import (
 
 func TestContext(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz", Info: &model.ChangeFeedInfo{}}, &context.GlobalVars{}, throwDoNothing)
 	require.NotNil(t, ctx.GlobalVars())
 	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
 	ctx.SendToNextNode(pipeline.BarrierMessage(1))
-	require.Equal(t, int32(1), ctx.noTickMessageCount)
+	require.Equal(t, uint32(1), ctx.eventCount)
 	wait(t, 500*time.Millisecond, func() {
 		msg := ctx.Message()
 		require.Equal(t, pipeline.MessageTypeBarrier, msg.Tp)
@@ -43,7 +44,7 @@ func TestContext(t *testing.T) {
 
 func TestTryGetProcessedMessageFromChan(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, nil, nil)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, throwDoNothing)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.Nil(t, ctx.tryGetProcessedMessage())
 	ctx.outputCh <- pipeline.TickMessage()
@@ -54,36 +55,18 @@ func TestTryGetProcessedMessageFromChan(t *testing.T) {
 
 func TestThrow(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := sdtContext.WithCancel(sdtContext.TODO())
-	sys := system.NewSystem()
-	defer func() {
-		cancel()
-		require.Nil(t, sys.Stop())
-	}()
-
-	require.Nil(t, sys.Start(ctx))
-	actorID := sys.ActorID("abc", 1)
-	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
-	ch := make(chan message.Message, defaultOutputChannelSize)
-	fa := &forwardActor{ch: ch}
-	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, sys.Router(), actorID, nil, nil)
+	a := 0
+	tf := func(err error) { a++ }
+	actorContext := newContext(sdtContext.TODO(), t.Name(), nil, 1, nil, nil, tf)
 	actorContext.Throw(nil)
-	time.Sleep(100 * time.Millisecond)
-	require.Equal(t, 0, len(ch))
+	require.Equal(t, 1, a)
 	actorContext.Throw(errors.New("error"))
-	tick := time.After(500 * time.Millisecond)
-	select {
-	case <-tick:
-		t.Fatal("timeout")
-	case m := <-ch:
-		require.Equal(t, message.TypeStop, m.Tp)
-	}
+	require.Equal(t, 2, a)
 }
 
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 	t.Parallel()
-	ctx := NewContext(sdtContext.TODO(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{})
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
 	ctx.outputCh = make(chan pipeline.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
 	require.False(t, ctx.TrySendToNextNode(pipeline.BarrierMessage(1)))
@@ -102,13 +85,13 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	}()
 
 	require.Nil(t, sys.Start(ctx))
-	actorID := sys.ActorID("abc", 1)
+	actorID := sys.ActorID()
 	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
 	ch := make(chan message.Message, defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := NewContext(ctx, sys.Router(), actorID, nil, nil)
-	actorContext.setTickMessageThreshold(2)
+	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{}, throwDoNothing)
+	actorContext.setEventBatchSize(2)
 	actorContext.SendToNextNode(pipeline.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 0, len(ch))
@@ -156,4 +139,7 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 	case <-time.After(timeout):
 		t.Fatal("Timed out")
 	}
+}
+
+func throwDoNothing(_ error) {
 }

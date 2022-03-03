@@ -95,7 +95,6 @@ func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 
 // flush should only be called in the same goroutine where the heap is being written to.
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	var (
@@ -109,7 +108,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		return nil
 	}
 
-	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID).Observe(float64(h.heap.Len()))
+	sorterFlushCountHistogram.WithLabelValues(changefeedID).Observe(float64(h.heap.Len()))
 
 	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
 	// As an optimization, when the condition is true, we clear the heap and send an empty flush.

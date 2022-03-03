@@ -19,12 +19,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -35,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -219,13 +219,16 @@ type CheckPoint interface {
 	Load(tctx *tcontext.Context) error
 
 	// LoadMeta loads checkpoints from meta config item or file
-	LoadMeta() error
+	LoadMeta(ctx context.Context) error
 
 	// SaveTablePoint saves checkpoint for specified table in memory
 	SaveTablePoint(table *filter.Table, point binlog.Location, ti *model.TableInfo)
 
 	// DeleteTablePoint deletes checkpoint for specified table in memory and storage
 	DeleteTablePoint(tctx *tcontext.Context, table *filter.Table) error
+
+	// DeleteAllTablePoint deletes all checkpoints for table in memory and storage
+	DeleteAllTablePoint(tctx *tcontext.Context) error
 
 	// DeleteSchemaPoint deletes checkpoint for specified schema
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
@@ -237,10 +240,13 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
+	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
+	SaveGlobalPointForcibly(location binlog.Location)
+
 	// Snapshot make a snapshot of current checkpoint
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
-	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
+	// FlushPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
 	// by extraSQLs and extraArgs. Currently extraSQLs contain shard meta only.
 	// @exceptTables: [[schema, table]... ]
@@ -551,6 +557,26 @@ func (cp *RemoteCheckPoint) DeleteTablePoint(tctx *tcontext.Context, table *filt
 	return nil
 }
 
+// DeleteAllTablePoint implements CheckPoint.DeleteAllTablePoint.
+func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
+	cp.Lock()
+	defer cp.Unlock()
+
+	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
+	defer cancel()
+	cp.logCtx.L().Info("delete all table checkpoint")
+	_, err := cp.dbConn.ExecuteSQL(
+		tctx2,
+		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
+		[]interface{}{cp.id, false},
+	)
+	if err != nil {
+		return err
+	}
+	cp.points = make(map[string]map[string]*binlogPoint)
+	return nil
+}
+
 // DeleteSchemaPoint implements CheckPoint.DeleteSchemaPoint.
 func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error {
 	cp.Lock()
@@ -614,7 +640,16 @@ func (cp *RemoteCheckPoint) SaveGlobalPoint(location binlog.Location) {
 	}
 }
 
-// FlushPointsExcept implements CheckPoint.FlushSnapshotPointsExcept.
+// SaveGlobalPointForcibly implements CheckPoint.SaveGlobalPointForcibly.
+func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
+	cp.Lock()
+	defer cp.Unlock()
+
+	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
+	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+}
+
+// FlushPointsExcept implements CheckPoint.FlushPointsExcept.
 func (cp *RemoteCheckPoint) FlushPointsExcept(
 	tctx *tcontext.Context,
 	snapshotID int,
@@ -1104,7 +1139,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 }
 
 // LoadMeta implements CheckPoint.LoadMeta.
-func (cp *RemoteCheckPoint) LoadMeta() error {
+func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -1117,7 +1152,7 @@ func (cp *RemoteCheckPoint) LoadMeta() error {
 	case config.ModeAll:
 		// NOTE: syncer must continue the syncing follow loader's tail, so we parse mydumper's output
 		// refine when master / slave switching added and checkpoint mechanism refactored
-		location, safeModeExitLoc, err = cp.parseMetaData()
+		location, safeModeExitLoc, err = cp.parseMetaData(ctx)
 		if err != nil {
 			return err
 		}
@@ -1205,13 +1240,12 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 	return sql2, args
 }
 
-func (cp *RemoteCheckPoint) parseMetaData() (*binlog.Location, *binlog.Location, error) {
+func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
-	filename := path.Join(cp.cfg.Dir, "metadata")
-
-	loc, loc2, err := dumpling.ParseMetaData(filename, cp.cfg.Flavor)
+	filename := "metadata"
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
 	if err != nil {
-		toPrint, err2 := os.ReadFile(filename)
+		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}

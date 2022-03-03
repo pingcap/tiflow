@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -47,8 +46,6 @@ import (
 const (
 	// TiDBClusteredIndex is the variable name for clustered index.
 	TiDBClusteredIndex = "tidb_enable_clustered_index"
-	// downstream mock table id, consists of serial numbers of letters.
-	mockTableID = 121402101900011104
 )
 
 var (
@@ -92,6 +89,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		// bypass wait time of https://github.com/pingcap/tidb/pull/20550
 		conf.TiKVClient.AsyncCommit.SafeWindow = 0
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
+		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
+		conf.NewCollationsEnabledOnFirstBootstrap = false
 	})
 
 	if len(sessionCfg) == 0 {
@@ -397,13 +396,13 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
-		ti, err := tr.getTableInfoByCreateStmt(tctx, tableID)
+		downstreamTI, err := tr.getTableInfoByCreateStmt(tctx, tableID)
 		if err != nil {
 			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
 			return nil, err
 		}
 
-		dti = GetDownStreamTI(ti, originTi)
+		dti = GetDownStreamTI(downstreamTI, originTi)
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
 	return dti, nil
@@ -482,10 +481,11 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	ti, err := ddl.MockTableInfo(mock.NewContext(), stmtNode.(*ast.CreateTableStmt), mockTableID)
+	ti, err := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
+	ti.State = model.StatePublic
 	return ti, nil
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
+// RowChangeType is the type of row change.
 type RowChangeType int
 
 // these constants represent types of row change.
@@ -330,6 +331,7 @@ func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
 	return GenInsertSQL(tp, r)
 }
 
+// DMLType indicates the type of DML.
 type DMLType int
 
 // these constants represent types of row change.
@@ -374,4 +376,24 @@ func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 		zap.String("sourceTable", r.sourceTable.String()),
 		zap.Stringer("DMLType", tp))
 	return "", nil
+}
+
+// GetPreValues is only used in tests.
+func (r *RowChange) GetPreValues() []interface{} {
+	return r.preValues
+}
+
+// GetPostValues is only used in tests.
+func (r *RowChange) GetPostValues() []interface{} {
+	return r.postValues
+}
+
+// GetSourceTable returns TableName of the source table.
+func (r *RowChange) GetSourceTable() *cdcmodel.TableName {
+	return r.sourceTable
+}
+
+// GetTargetTable returns TableName of the target table.
+func (r *RowChange) GetTargetTable() *cdcmodel.TableName {
+	return r.targetTable
 }
