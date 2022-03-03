@@ -132,17 +132,6 @@ type Scheduler struct {
 	// see `Cases trigger a source-to-worker bound try` above.
 	bounds map[string]*Worker
 
-	// unbound (pending to bound) sources.
-	// NOTE: refactor to support scheduling by priority.
-	// add:
-	// - add source by user request (calling `AddSourceCfg`).
-	// - recover from etcd (calling `recoverWorkersBounds`).
-	// - when the bounding worker become offline, in updateStatusToUnbound.
-	// delete:
-	// - remove source by user request (calling `RemoveSourceCfg`).
-	// - when bounded the source to a worker, in updateStatusToBound.
-	unbounds map[string]struct{}
-
 	// a mirror of bounds whose element is not deleted when worker unbound. source -> SourceBound
 	lastBound map[string]ha.SourceBound
 
@@ -201,7 +190,6 @@ func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
 		sourceCfgs:        make(map[string]*config.SourceConfig),
 		workers:           make(map[string]*Worker),
 		bounds:            make(map[string]*Worker),
-		unbounds:          make(map[string]struct{}),
 		lastBound:         make(map[string]ha.SourceBound), // sourceName -> SourceBound
 		expectRelayStages: make(map[string]ha.Stage),
 		relayWorkers:      make(map[string]map[string]struct{}),
@@ -389,7 +377,6 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 
 	// 3. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
-	s.unbounds[cfg.SourceID] = struct{}{}
 	return nil
 }
 
@@ -498,10 +485,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	// 6. unbound for the source.
 	s.updateStatusToUnbound(source)
 
-	// 7. remove it from unbounds.
-	delete(s.unbounds, source)
-
-	// 8. try to bound the worker for another source.
+	// 7. try to bound the worker for another source.
 	if worker != nil {
 		_, err = s.tryBoundForWorker(worker)
 		if err != nil {
@@ -609,7 +593,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	}
 
 	// del current bound relations.
-	if _, err := ha.DeleteSourceBound(s.etcdCli, boundWorkers...); err != nil {
+	if _, err := ha.DeleteSourceBoundByWorker(s.etcdCli, boundWorkers...); err != nil {
 		return err
 	}
 
@@ -621,7 +605,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	}
 
 	// put new bound relations.
-	// TODO: move this and above DeleteSourceBound in one txn.
+	// TODO: move this and above DeleteSourceBoundByWorker in one txn.
 	for i := range inputWorkers {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputWorkers[i] != "" && inputSources[another] != "" {
@@ -694,19 +678,13 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	s.mu.RUnlock()
 
 	// 2. check new worker is free and not started relay for another source
-	switch w.Stage() {
-	case WorkerOffline, WorkerBound:
+	if w.Stage() == WorkerOffline {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
-	case WorkerFree:
-	case WorkerRelay:
-		if relaySource := w.RelaySourceID(); relaySource != source {
-			return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(worker, source, relaySource)
-		}
 	}
 
 	// 3. if no old worker, bound it directly
 	if !hasOldWorker {
-		s.logger.Warn("in transfer source, found a free worker and not bound source, which should not happened",
+		s.logger.Warn("in transfer source, found an unbound source, which should not happened",
 			zap.String("source", source),
 			zap.String("worker", worker))
 		return s.boundSourceToWorker(source, w)
@@ -764,7 +742,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.mu.Unlock()
 		return err
 	}
-	if err2 := oldWorker.Unbound(); err2 != nil {
+	if err2 := oldWorker.Unbound(source); err2 != nil {
 		s.logger.DPanic("the oldWorker is get from s.bound, so there should not be an error", zap.Error(err2))
 	}
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
@@ -1229,9 +1207,16 @@ func (s *Scheduler) BoundSources() []string {
 func (s *Scheduler) UnboundSources() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	IDs := make([]string, 0, len(s.unbounds))
-	for ID := range s.unbounds {
-		IDs = append(IDs, ID)
+	capIDs := len(s.sourceCfgs) - len(s.bounds)
+	IDs := make([]string, 0, capIDs)
+	// In most times capIDs should be zero, except for all workers are offline.
+	if capIDs == 0 {
+		return IDs
+	}
+	for ID := range s.sourceCfgs {
+		if _, ok := s.bounds[ID]; !ok {
+			IDs = append(IDs, ID)
+		}
 	}
 	sort.Strings(IDs)
 	return IDs
@@ -1831,22 +1816,21 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 
 			// set the stage as Bound and record the bound relationship if exists.
 			if boundMap, ok := sbm[name]; ok {
-				bound := ha.GetSourceBoundFromMap(boundMap)
-				// source bounds without source configuration should be deleted later
-				if _, ok := scm[bound.Source]; ok {
-					err2 = s.updateStatusToBound(w, bound)
-					if err2 != nil {
-						// if etcd has saved KV that worker1 started relay for source1, but bound to source2,
-						// we remove the bound to avoid DM master leader failed to bootstrap
-						if terror.ErrSchedulerBoundDiffWithStartedRelay.Equal(err2) {
-							continue
+				for _, bound := range boundMap {
+					// source bounds without source configuration should be deleted later
+					if _, ok := scm[bound.Source]; ok {
+						err2 = s.updateStatusToBound(w, bound)
+						if err2 != nil {
+							return 0, err2
 						}
-						return 0, err2
+						boundsToTrigger = append(boundsToTrigger, bound)
+						delete(boundMap, bound.Source)
+						if len(boundMap) == 0 {
+							delete(sbm, name)
+						}
+					} else {
+						s.logger.Warn("find source bound without config", zap.Stringer("bound", bound))
 					}
-					boundsToTrigger = append(boundsToTrigger, bound)
-					delete(sbm, name)
-				} else {
-					s.logger.Warn("find source bound without config", zap.Stringer("bound", bound))
 				}
 			}
 		}
@@ -1858,11 +1842,13 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 	})
 	// 5. delete invalid source bound info in etcd
 	if len(sbm) > 0 {
-		invalidSourceBounds := make([]string, 0, len(sbm))
-		for name := range sbm {
-			invalidSourceBounds = append(invalidSourceBounds, name)
+		invalidSourceBounds := make([]ha.SourceBound, 0, len(sbm))
+		for _, boundMap := range sbm {
+			for _, bound := range boundMap {
+				invalidSourceBounds = append(invalidSourceBounds, bound)
+			}
 		}
-		_, err = ha.DeleteSourceBound(s.etcdCli, invalidSourceBounds...)
+		_, err = ha.DeleteSourceBoundByBound(s.etcdCli, invalidSourceBounds...)
 		if err != nil {
 			return 0, err
 		}
@@ -1873,13 +1859,6 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 		_, err = ha.PutSourceBound(s.etcdCli, boundsToTrigger...)
 		if err != nil {
 			return 0, err
-		}
-	}
-
-	// 7. recover bounds/unbounds, all sources which not in bounds should be in unbounds.
-	for source := range s.sourceCfgs {
-		if _, ok := s.bounds[source]; !ok {
-			s.unbounds[source] = struct{}{}
 		}
 	}
 
@@ -2073,10 +2052,10 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 2. find the bound relationship.
-	bound := w.Bound()
+	bounds := w.Bounds()
 
 	// 3. check whether bound before.
-	if bound.Source == "" {
+	if len(bounds) == 0 {
 		// 3.1. change the stage (from Free) to Offline.
 		w.ToOffline()
 		s.logger.Info("worker not bound, no need to unbound", zap.Stringer("event", ev))
@@ -2084,22 +2063,30 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 4. delete the bound relationship in etcd.
-	_, err := ha.DeleteSourceBound(s.etcdCli, bound.Worker)
+	_, err := ha.DeleteSourceBoundByWorker(s.etcdCli, w.baseInfo.Name)
 	if err != nil {
 		return err
 	}
 
 	// 5. unbound for the source.
-	s.updateStatusToUnbound(bound.Source)
+	unbounds := make([]string, 0, len(bounds))
+	for _, bound := range bounds {
+		s.logger.Debug("unbound the worker for source", zap.Stringer("bound", bound), zap.Stringer("event", ev))
+		s.updateStatusToUnbound(bound.Source)
+		unbounds = append(unbounds, bound.Source)
+	}
 
 	// 6. change the stage (from Free) to Offline.
 	w.ToOffline()
 
-	s.logger.Info("unbound the worker for source", zap.Stringer("bound", bound), zap.Stringer("event", ev))
-
 	// 7. try to bound the source to a Free worker again.
-	_, err = s.tryBoundForSource(bound.Source)
-	return err
+	for _, source := range unbounds {
+		_, err = s.tryBoundForSource(source)
+		if err != nil {
+			s.logger.Warn("fail to bound new worker for source", zap.Error(err), zap.String("source", source), zap.Stringer("event", ev))
+		}
+	}
+	return nil
 }
 
 // tryBoundForWorker tries to bind a source to the given worker. The order of picking source is
@@ -2127,7 +2114,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	source := ""
 	for _, lastBound := range s.lastBound {
 		if lastBound.Worker == w.BaseInfo().Name {
-			if _, ok := s.unbounds[lastBound.Source]; ok {
+			if _, ok := s.bounds[lastBound.Source]; !ok {
 				s.logger.Info("found last bound source when worker bound",
 					zap.String("worker", w.BaseInfo().Name),
 					zap.String("source", lastBound.Source))
@@ -2166,16 +2153,6 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 		}
 	}
 
-	// randomly pick one from unbounds
-	if source == "" {
-		for source = range s.unbounds {
-			s.logger.Info("found unbound source when worker bound",
-				zap.String("worker", w.BaseInfo().Name),
-				zap.String("source", source))
-			break // got a source.
-		}
-	}
-
 	if source == "" {
 		s.logger.Info("no unbound sources need to bound", zap.Stringer("worker", w.BaseInfo()))
 		return false, nil
@@ -2201,6 +2178,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	var worker *Worker
 
+	// TODO: change this to pick a worker which has the least load.
 	// pick a worker which has subtask in load stage.
 	workerName, sourceID := s.getNextLoadTaskTransfer("", source)
 	if workerName != "" {
@@ -2209,8 +2187,10 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 		return err == nil, err
 	}
 
+	sourceNum := len(s.sourceCfgs) + 1
+	// try to find a history worker in relay workers...
 	relayWorkers := s.relayWorkers[source]
-	// 1. try to find a history worker in relay workers...
+	boundSourcesNum := sourceNum
 	if len(relayWorkers) > 0 {
 		for _, bound := range s.lastBound {
 			workerName := bound.Worker
@@ -2221,17 +2201,18 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 					continue
 				}
 				// the worker is not Offline
-				if _, ok2 := relayWorkers[workerName]; ok2 && w.Stage() == WorkerRelay {
+				if _, ok2 := relayWorkers[workerName]; ok2 && w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 					worker = w
+					boundSourcesNum = len(w.Bounds())
 					s.logger.Info("found history relay worker when source bound",
 						zap.String("worker", workerName),
 						zap.String("source", source))
-					break
 				}
 			}
 		}
 	}
 	// then a relay worker for this source...
+	boundSourcesNum = sourceNum
 	if worker == nil {
 		for workerName := range relayWorkers {
 			w, ok := s.workers[workerName]
@@ -2241,51 +2222,52 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 				continue
 			}
 			// the worker is not Offline
-			if w.Stage() == WorkerRelay {
+			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 				worker = w
+				boundSourcesNum = len(w.Bounds())
 				s.logger.Info("found relay worker when source bound",
 					zap.String("worker", workerName),
 					zap.String("source", source))
-				break
 			}
 		}
 	}
 	// then a history worker for this source...
+	boundSourcesNum = sourceNum
 	if worker == nil {
-		for _, bound := range s.lastBound {
-			workerName := bound.Worker
-			if bound.Source == source {
-				w, ok := s.workers[workerName]
-				if !ok {
-					// a not found worker
-					continue
-				}
-				if w.Stage() == WorkerFree {
-					worker = w
-					s.logger.Info("found history worker when source bound",
-						zap.String("worker", workerName),
-						zap.String("source", source))
-					break
-				}
+		if bound, ok := s.lastBound[source]; ok {
+			w, ok := s.workers[bound.Worker]
+			if !ok {
+				// a not found worker, should not happen
+				s.logger.DPanic("worker instance not found for history worker", zap.String("worker", bound.Worker))
+				return false, nil
+			}
+
+			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
+				worker = w
+				boundSourcesNum = len(w.Bounds())
+				s.logger.Info("found history worker when source bound",
+					zap.String("worker", workerName),
+					zap.String("source", source))
 			}
 		}
 	}
 
 	// and then a random Free worker.
+	boundSourcesNum = sourceNum
 	if worker == nil {
 		for _, w := range s.workers {
-			if w.Stage() == WorkerFree {
+			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 				worker = w
+				boundSourcesNum = len(w.Bounds())
 				s.logger.Info("found free worker when source bound",
 					zap.String("worker", w.BaseInfo().Name),
 					zap.String("source", source))
-				break
 			}
 		}
 	}
 
 	if worker == nil {
-		s.logger.Info("no free worker exists for bound", zap.String("source", source))
+		s.logger.Info("no online worker exists for bound", zap.String("source", source))
 		return false, nil
 	}
 
@@ -2363,7 +2345,6 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 	}
 	s.bounds[b.Source] = w
 	s.lastBound[b.Source] = b
-	delete(s.unbounds, b.Source)
 	return nil
 }
 
@@ -2373,12 +2354,11 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 // - record the unbound relationship in the scheduler.
 // this func is called after the bound relationship removed from etcd.
 func (s *Scheduler) updateStatusToUnbound(source string) {
-	s.unbounds[source] = struct{}{}
 	w, ok := s.bounds[source]
 	if !ok {
 		return
 	}
-	if err := w.Unbound(); err != nil {
+	if err := w.Unbound(source); err != nil {
 		s.logger.DPanic("cannot updateStatusToUnbound", zap.Error(err))
 	}
 	delete(s.bounds, source)
@@ -2391,7 +2371,6 @@ func (s *Scheduler) reset() {
 	s.subTaskCfgs = sync.Map{}
 	s.workers = make(map[string]*Worker)
 	s.bounds = make(map[string]*Worker)
-	s.unbounds = make(map[string]struct{})
 	s.expectRelayStages = make(map[string]ha.Stage)
 	s.expectSubTaskStages = sync.Map{}
 	s.loadTasks = make(map[string]map[string]string)
@@ -2481,16 +2460,10 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 // return (worker, source) that is used by transferWorkerAndSource, to try to resolve a paused load task that the source can't be bound to the worker which has its dump files.
 // worker, source	This means a subtask finish load stage, often called by handleLoadTaskDel.
 // worker, ""		This means a free worker online, often called by tryBoundForWorker.
-// "", source		This means a unbounded source online, often called by tryBoundForSource.
+// "", source		This means a source online, often called by tryBoundForSource.
 func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, string) {
 	// origin worker not free, try to get a source.
 	if worker != "" {
-		// try to get a unbounded source
-		for sourceID := range s.unbounds {
-			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) {
-				return "", sourceID
-			}
-		}
 		// try to get a bounded source
 		for sourceID, w := range s.bounds {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
@@ -2501,21 +2474,10 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 
 	// origin source bounded, try to get a worker
 	if source != "" {
-		// try to get a free worker
-		for _, w := range s.workers {
-			workerName := w.baseInfo.Name
-			if workerName != worker && w.Stage() == WorkerFree && s.hasLoadTaskByWorkerAndSource(workerName, source) {
-				return workerName, ""
-			}
-		}
-
 		// try to get a bounded worker
-		for _, w := range s.workers {
-			workerName := w.baseInfo.Name
-			if workerName != worker && w.Stage() == WorkerBound {
-				if s.hasLoadTaskByWorkerAndSource(workerName, source) && !s.hasLoadTaskByWorkerAndSource(workerName, w.bound.Source) {
-					return workerName, w.bound.Source
-				}
+		for sourceID, w := range s.bounds {
+			if sourceID != source && s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, source) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
+				return w.baseInfo.Name, sourceID
 			}
 		}
 	}

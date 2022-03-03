@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/failpoint"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
@@ -80,9 +81,10 @@ type Worker struct {
 
 	cli workerrpc.Client // the gRPC client proxy.
 
-	baseInfo ha.WorkerInfo  // the base information of the DM-worker instance.
-	bound    ha.SourceBound // the source bound relationship, null value if not bounded.
-	stage    WorkerStage    // the current stage.
+	baseInfo ha.WorkerInfo             // the base information of the DM-worker instance.
+	bound    ha.SourceBound            // the source bound relationship, null value if not bounded.
+	bounds   map[string]ha.SourceBound // the source bound relationship, source-id -> bound.
+	stage    WorkerStage               // the current stage.
 
 	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
 	relaySource string
@@ -99,6 +101,7 @@ func NewWorker(baseInfo ha.WorkerInfo, securityCfg config.Security) (*Worker, er
 		cli:      cli,
 		baseInfo: baseInfo,
 		stage:    WorkerOffline,
+		bounds:   make(map[string]ha.SourceBound),
 	}
 	w.reportMetrics()
 	return w, nil
@@ -119,6 +122,7 @@ func (w *Worker) ToOffline() {
 	w.stage = WorkerOffline
 	w.reportMetrics()
 	w.bound = nullBound
+	w.bounds = make(map[string]ha.SourceBound)
 }
 
 // ToFree transforms to Free and clears the bound and relay information.
@@ -129,6 +133,7 @@ func (w *Worker) ToFree() {
 	w.stage = WorkerFree
 	w.reportMetrics()
 	w.bound = nullBound
+	w.bounds = make(map[string]ha.SourceBound)
 	w.relaySource = ""
 }
 
@@ -140,33 +145,24 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 	if w.stage == WorkerOffline {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(w.BaseInfo(), WorkerOffline, WorkerBound)
 	}
-	if w.stage == WorkerRelay {
-		if w.relaySource != bound.Source {
-			return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(w.BaseInfo().Name, bound.Source, w.relaySource)
-		}
-	}
 
-	w.stage = WorkerBound
 	w.reportMetrics()
 	w.bound = bound
+	w.bounds[bound.Source] = bound
 	return nil
 }
 
 // Unbound changes worker's stage from Bound to Free or Relay.
-func (w *Worker) Unbound() error {
+func (w *Worker) Unbound(source string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.stage != WorkerBound {
+	if _, ok := w.bounds[source]; !ok {
 		// caller should not do this.
-		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a worker that is not in bound stage.")
+		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a source %s that is not bound with worker %s.", source, w.baseInfo.Name)
 	}
 
 	w.bound = nullBound
-	if w.relaySource != "" {
-		w.stage = WorkerRelay
-	} else {
-		w.stage = WorkerFree
-	}
+	delete(w.bounds, source)
 	w.reportMetrics()
 	return nil
 }
@@ -229,6 +225,13 @@ func (w *Worker) Bound() ha.SourceBound {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.bound
+}
+
+// Bounds returns the bounds info of the worker.
+func (w *Worker) Bounds() map[string]ha.SourceBound {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.bounds
 }
 
 // RelaySourceID returns the source ID from which this worker is pulling relay log,

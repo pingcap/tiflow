@@ -69,8 +69,8 @@ func PutRelayStageRelayConfigSourceBound(cli *clientv3.Client, stage Stage, boun
 func DeleteSourceCfgRelayStageSourceBound(cli *clientv3.Client, source, worker string) (int64, error) {
 	sourceCfgOp := deleteSourceCfgOp(source)
 	relayStageOp := deleteRelayStageOp(source)
-	sourceBoundOp := deleteSourceBoundOp(worker)
-	lastBoundOp := deleteLastSourceBoundOp(worker)
+	sourceBoundOp := deleteSourceBoundByBoundOp(NewSourceBound(source, worker))
+	lastBoundOp := deleteLastSourceBoundOp(source)
 	ops := make([]clientv3.Op, 0, 3+len(sourceBoundOp))
 	ops = append(ops, sourceCfgOp)
 	ops = append(ops, relayStageOp)

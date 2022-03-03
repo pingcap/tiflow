@@ -984,9 +984,6 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	// step 2: add two sources and register four workers
 	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
 	c.Assert(s.AddSourceCfg(&sourceCfg2), IsNil)
-	c.Assert(s.unbounds, HasLen, 2)
-	c.Assert(s.unbounds, HasKey, sourceID1)
-	c.Assert(s.unbounds, HasKey, sourceID2)
 
 	c.Assert(s.AddWorker(workerName1, workerAddr1), IsNil)
 	c.Assert(s.AddWorker(workerName2, workerAddr2), IsNil)
@@ -1130,8 +1127,6 @@ func (t *testScheduler) TestLastBound(c *C) {
 
 	s.lastBound[sourceID1] = ha.SourceBound{Worker: workerName1}
 	s.lastBound[sourceID2] = ha.SourceBound{Worker: workerName2}
-	s.unbounds[sourceID1] = struct{}{}
-	s.unbounds[sourceID2] = struct{}{}
 
 	// worker1 goes to last bounded source
 	worker1.ToFree()
@@ -1195,7 +1190,6 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 	// sourceID2 doesn't have a source config and not in unbound
 	s.sourceCfgs[sourceID1] = sourceCfg1
 	s.lastBound[sourceID2] = ha.SourceBound{Worker: workerName1}
-	s.unbounds[sourceID1] = struct{}{}
 	// step2: worker1 doesn't go to last bounded source, because last source doesn't have a source config (might be removed)
 	worker1.ToFree()
 	bounded, err := s.tryBoundForWorker(worker1)
@@ -1257,7 +1251,6 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// test valid transfer: source -> worker = unbound -> free
 	s.sourceCfgs[sourceID3] = &config.SourceConfig{}
-	s.unbounds[sourceID3] = struct{}{}
 	c.Assert(s.TransferSource(ctx, sourceID3, workerName3), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
@@ -1277,10 +1270,8 @@ func (t *testScheduler) TestTransferSource(c *C) {
 
 	// test invalid transfer: source -> worker = unbound -> bound
 	s.sourceCfgs[sourceID4] = &config.SourceConfig{}
-	s.unbounds[sourceID4] = struct{}{}
 	c.Assert(s.TransferSource(ctx, sourceID4, workerName3), NotNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
-	delete(s.unbounds, sourceID4)
 	delete(s.sourceCfgs, sourceID4)
 
 	worker1.ToFree()
@@ -1598,8 +1589,6 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	// found source configs before bound
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
 	s.sourceCfgs[sourceID2] = &config.SourceConfig{}
-	s.unbounds[sourceID1] = struct{}{}
-	s.unbounds[sourceID2] = struct{}{}
 	c.Assert(s.AddWorker(workerName1, workerAddr1), IsNil)
 	c.Assert(s.AddWorker(workerName2, workerAddr2), IsNil)
 
@@ -1678,15 +1667,13 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	worker2.ToFree()
 	worker3.ToFree()
 	worker4.ToFree()
-	s.unbounds[sourceID1] = struct{}{}
-	s.unbounds[sourceID2] = struct{}{}
 
 	// test free worker and unbounded source
 	c.Assert(s.transferWorkerAndSource(workerName1, "", "", sourceID1), IsNil)
 	c.Assert(s.transferWorkerAndSource("", sourceID2, workerName2, ""), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
 	c.Assert(s.bounds[sourceID2], DeepEquals, worker2)
-	c.Assert(len(s.unbounds), Equals, 0)
+	c.Assert(len(s.UnboundSources()), Equals, 0)
 
 	// test transfer bounded source to free worker
 	c.Assert(s.transferWorkerAndSource(workerName1, sourceID1, workerName4, ""), IsNil)
@@ -1700,8 +1687,8 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	c.Assert(worker3.Stage(), Equals, WorkerBound)
 
 	// test transfer bounded worker to unbounded source
-	s.unbounds[sourceID3] = struct{}{}
-	s.unbounds[sourceID4] = struct{}{}
+	s.sourceCfgs[sourceID3] = &config.SourceConfig{}
+	s.sourceCfgs[sourceID4] = &config.SourceConfig{}
 	c.Assert(s.transferWorkerAndSource("", sourceID3, workerName3, sourceID2), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 	// sourceID2 bound to last bound worker
@@ -1712,7 +1699,7 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	// sourceID1 bound to last bound worker
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
 
-	c.Assert(len(s.unbounds), Equals, 0)
+	c.Assert(len(s.UnboundSources()), Equals, 0)
 
 	// test transfer two bounded sources
 	c.Assert(s.transferWorkerAndSource(workerName1, sourceID1, workerName2, sourceID2), IsNil)
@@ -1900,8 +1887,8 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	worker := s.workers[workerName1]
 	c.Assert(worker.Stage(), Equals, WorkerRelay)
 	c.Assert(worker.RelaySourceID(), Equals, sourceID2)
-	_, ok = s.unbounds[sourceID1]
-	c.Assert(ok, IsTrue)
+	_, ok = s.bounds[sourceID1]
+	c.Assert(ok, IsFalse)
 }
 
 func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
