@@ -810,6 +810,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 		switch stage.Expect {
 		case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
+			// todo refactor here deciding if the expected stage is valid should be put inside StartSubTask and OperateSubTask
 			log.L().Info("start to create subtask in operateSubTaskStage", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 			expectValidatorStage, err := getExpectValidatorStage(subTaskCfg.ValidatorCfg, w.etcdClient, stage.Source, stage.Task, stage.Revision)
 			if err != nil {
