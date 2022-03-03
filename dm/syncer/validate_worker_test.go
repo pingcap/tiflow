@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"sync"
 	"testing"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -237,43 +237,43 @@ func TestValidatorWorkerRun_delete(t *testing.T) {
 
 func TestValidatorWorkerCompareData(t *testing.T) {
 	worker := validateWorker{}
-	eq, err := worker.compareData([]*dbutil.ColumnData{{Data: []byte("1")}},
-		[]*dbutil.ColumnData{{IsNull: true}},
+	eq, err := worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
+		[]*sql.NullString{{Valid: false}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
-		[]*dbutil.ColumnData{{Data: []byte("1.x")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
+		[]*sql.NullString{{String: "1.x", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
 	require.Error(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
-		[]*dbutil.ColumnData{{Data: []byte("1.1000011")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
+		[]*sql.NullString{{String: "1.1000011", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
-		[]*dbutil.ColumnData{{Data: []byte("1.1000001")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
+		[]*sql.NullString{{String: "1.1000001", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1.1")}},
-		[]*dbutil.ColumnData{{Data: []byte("1.1000001")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
+		[]*sql.NullString{{String: "1.1000001", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("1")}},
-		[]*dbutil.ColumnData{{Data: []byte("1")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
+		[]*sql.NullString{{String: "1", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("aaa")}},
-		[]*dbutil.ColumnData{{Data: []byte("aaa")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "aaa", Valid: true}},
+		[]*sql.NullString{{String: "aaa", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*dbutil.ColumnData{{Data: []byte("\x01\x02")}},
-		[]*dbutil.ColumnData{{Data: []byte("\x01\x02")}},
+	eq, err = worker.compareData([]*sql.NullString{{String: "\x01\x02", Valid: true}},
+		[]*sql.NullString{{String: "\x01\x02", Valid: true}},
 		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}})
 	require.NoError(t, err)
 	require.True(t, eq)
@@ -367,11 +367,11 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 			require.Equal(t, len(tc.rowData[i]), len(data))
 			for j, val := range tc.rowData[i] {
 				if val == nil {
-					require.True(t, data[j].IsNull)
-					require.Nil(t, data[j].Data)
+					require.False(t, data[j].Valid)
+					require.Empty(t, data[j].String)
 				} else {
-					require.False(t, data[j].IsNull)
-					require.Equal(t, val, string(data[j].Data))
+					require.True(t, data[j].Valid)
+					require.Equal(t, val, data[j].String)
 				}
 			}
 		}
@@ -411,8 +411,8 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Len(t, rows["a"], 2)
 	require.Len(t, rows["b"], 2)
-	require.True(t, rows["a"][0].IsNull)
-	require.Equal(t, []byte("1"), rows["a"][1].Data)
-	require.Equal(t, []byte("1"), rows["b"][0].Data)
-	require.Equal(t, []byte("2"), rows["b"][1].Data)
+	require.False(t, rows["a"][0].Valid)
+	require.Equal(t, "1", rows["a"][1].String)
+	require.Equal(t, "1", rows["b"][0].String)
+	require.Equal(t, "2", rows["b"][1].String)
 }

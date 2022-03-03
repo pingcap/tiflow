@@ -234,13 +234,14 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 	return failedRows, nil
 }
 
-func (vw *validateWorker) compareData(sourceData, targetData []*dbutil.ColumnData, columns []*model.ColumnInfo) (bool, error) {
+// a simplified version of https://github.com/pingcap/tidb-tools/blob/d9fdfa2f9040aab3fab7cd11774a82226f467fe7/sync_diff_inspector/utils/utils.go#L487-L606
+func (vw *validateWorker) compareData(sourceData, targetData []*sql.NullString, columns []*model.ColumnInfo) (bool, error) {
 	for i, column := range columns {
 		data1, data2 := sourceData[i], targetData[i]
-		if data1.IsNull != data2.IsNull {
+		if data1.Valid != data2.Valid {
 			return false, nil
 		}
-		str1, str2 := string(data1.Data), string(data2.Data)
+		str1, str2 := data1.String, data2.String
 		if str1 == str2 {
 			continue
 		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
@@ -261,39 +262,34 @@ func (vw *validateWorker) compareData(sourceData, targetData []*dbutil.ColumnDat
 	return true, nil
 }
 
-func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*dbutil.ColumnData, error) {
+func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullString, error) {
 	tctx := tcontext.NewContext(vw.ctx, log.L())
 	fullTableName := cond.Table.Target.String()
-	pkColumnNames := make([]string, 0, len(cond.Table.pkIndices))
-	for i := range cond.Table.pkIndices {
-		pkColumnNames = append(pkColumnNames, cond.Table.Info.Columns[i].Name.O)
-	}
 	columnNames := make([]string, 0, cond.ColumnCnt)
 	for i := 0; i < cond.ColumnCnt; i++ {
 		col := cond.Table.Info.Columns[i]
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
 	}
 	columns := strings.Join(columnNames, ", ")
-	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s ORDER BY %s",
-		columns, fullTableName, cond.GetWhere(), strings.Join(pkColumnNames, ","))
+	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s",
+		columns, fullTableName, cond.GetWhere())
 	rows, err := vw.conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string][]*dbutil.ColumnData)
+	result := make(map[string][]*sql.NullString)
 	for rows.Next() {
 		rowData, err := scanRow(rows)
 		if err != nil {
 			return nil, err
 		}
-		pkVals := make([]string, 0, len(cond.Table.pkIndices))
+		pkValues := make([]string, 0, len(cond.Table.pkIndices))
 		for _, idx := range cond.Table.pkIndices {
-			colVal := genColData(rowData[idx].Data)
-			pkVals = append(pkVals, string(colVal))
+			pkValues = append(pkValues, rowData[idx].String)
 		}
-		pk := genRowKey(pkVals)
+		pk := genRowKey(pkValues)
 		result[pk] = rowData
 	}
 	return result, rows.Err()
@@ -303,7 +299,7 @@ func (vw *validateWorker) close() {
 	close(vw.rowChangeCh)
 }
 
-func scanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
+func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -320,29 +316,29 @@ func scanRow(rows *sql.Rows) ([]*dbutil.ColumnData, error) {
 		return nil, errors.Trace(err)
 	}
 
-	result := make([]*dbutil.ColumnData, len(cols))
+	result := make([]*sql.NullString, len(cols))
 	for i := range colVals {
-		result[i] = &dbutil.ColumnData{
-			Data:   colVals[i],
-			IsNull: colVals[i] == nil,
+		result[i] = &sql.NullString{
+			String: string(colVals[i]),
+			Valid:  colVals[i] != nil,
 		}
 	}
 
 	return result, nil
 }
 
-func getSourceRowsForCompare(rows []*rowChange) map[string][]*dbutil.ColumnData {
-	rowMap := make(map[string][]*dbutil.ColumnData, len(rows))
+func getSourceRowsForCompare(rows []*rowChange) map[string][]*sql.NullString {
+	rowMap := make(map[string][]*sql.NullString, len(rows))
 	for _, r := range rows {
-		colValues := make([]*dbutil.ColumnData, len(r.data))
+		colValues := make([]*sql.NullString, len(r.data))
 		for i := range r.data {
-			var colData []byte
+			var colData string
 			if r.data[i] != nil {
 				colData = genColData(r.data[i])
 			}
-			colValues[i] = &dbutil.ColumnData{
-				Data:   colData,
-				IsNull: r.data[i] == nil,
+			colValues[i] = &sql.NullString{
+				String: colData,
+				Valid:  r.data[i] != nil,
 			}
 		}
 		rowMap[r.key] = colValues

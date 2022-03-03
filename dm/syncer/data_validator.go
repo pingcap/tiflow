@@ -76,7 +76,7 @@ type tableChange struct {
 type rowChange struct {
 	table      *validateTableInfo
 	key        string
-	pkValues   []string
+	pkValues   []string // todo: might be removed in later pr
 	data       []interface{}
 	tp         rowChangeType
 	lastMeetTS int64 // the last meet timestamp(in seconds)
@@ -515,7 +515,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		row := ev.Rows[i]
 		pkValue := make([]string, len(pk.Columns))
 		for _, idx := range pkIndices {
-			pkValue[idx] = string(genColData(row[idx]))
+			pkValue[idx] = genColData(row[idx])
 		}
 		key := genRowKey(pkValue)
 
@@ -524,7 +524,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			afterRow := ev.Rows[i+1]
 			afterPkValue := make([]string, len(pk.Columns))
 			for _, idx := range pkIndices {
-				afterPkValue[idx] = string(genColData(afterRow[idx]))
+				afterPkValue[idx] = genColData(afterRow[idx])
 			}
 			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {
@@ -578,13 +578,13 @@ func genRowKey(pkValues []string) string {
 	return strings.Join(pkValues, "-")
 }
 
-func genColData(v interface{}) []byte {
+func genColData(v interface{}) string {
 	switch dv := v.(type) {
 	case []byte:
-		return dv
+		return string(dv)
 	case string:
-		return []byte(dv)
+		return dv
 	}
 	s := fmt.Sprintf("%v", v)
-	return []byte(s)
+	return s
 }
