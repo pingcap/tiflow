@@ -114,7 +114,7 @@ func (t *testServer) testWorker(c *C) {
 
 	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
 		Name: "testStartTask",
-	})
+	}, true)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 
 	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
@@ -131,11 +131,13 @@ func (t *testServer2) SetUpSuite(c *C) {
 
 	getMinLocForSubTaskFunc = getFakeLocForSubTask
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/SkipRefreshFromETCDInUT", `return()`), IsNil)
 }
 
 func (t *testServer2) TearDownSuite(c *C) {
 	getMinLocForSubTaskFunc = getMinLocForSubTask
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/SkipRefreshFromETCDInUT"), IsNil)
 }
 
 func (t *testServer2) TestTaskAutoResume(c *C) {

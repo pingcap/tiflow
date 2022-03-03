@@ -79,6 +79,74 @@ var _ = Suite(&testScheduler{})
 
 var stageEmpty ha.Stage
 
+func (t *testScheduler) TestUpdateSubTasks(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger       = log.L()
+		s            = NewScheduler(&logger, config.Security{})
+		sourceID1    = "mysql-replica-1"
+		taskName1    = "task-1"
+		workerName1  = "dm-worker-1"
+		workerAddr1  = "127.0.0.1:8262"
+		subtaskCfg1  config.SubTaskConfig
+		keepAliveTTL = int64(5)
+	)
+	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
+	c.Assert(err, IsNil)
+	sourceCfg1.SourceID = sourceID1
+	c.Assert(subtaskCfg1.DecodeFile(subTaskSampleFile, true), IsNil)
+	subtaskCfg1.SourceID = sourceID1
+	subtaskCfg1.Name = taskName1
+	c.Assert(subtaskCfg1.Adjust(true), IsNil)
+
+	// not started scheduler can't update
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
+
+	subtaskCfg2 := subtaskCfg1
+	subtaskCfg2.Name = "fake name"
+	// can't update subtask with different task name
+	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.UpdateSubTasks(subtaskCfg1, subtaskCfg2)), IsTrue)
+
+	// can't update not added subtask
+	c.Assert(terror.ErrSchedulerTaskNotExist.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+
+	// start worker,add source and subtask
+	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
+	c.Assert(s.AddWorker(workerName1, workerAddr1), IsNil)
+	go func() {
+		c.Assert(ha.KeepAlive(ctx1, etcdTestCli, workerName1, keepAliveTTL), IsNil)
+	}()
+	// wait for source1 bound to worker1.
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		bounds := s.BoundSources()
+		return len(bounds) == 1 && bounds[0] == sourceID1
+	}), IsTrue)
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1), IsNil)
+
+	// can't update subtask not in scheduler
+	subtaskCfg2.Name = subtaskCfg1.Name
+	subtaskCfg2.SourceID = "fake source name"
+	c.Assert(terror.ErrSchedulerSubTaskNotExist.Equal(s.UpdateSubTasks(subtaskCfg2)), IsTrue)
+
+	// can't update subtask in running stage
+	c.Assert(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+
+	// pause task
+	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1), IsNil)
+	subtaskCfg1.Batch = 1000
+
+	// update success
+	c.Assert(s.UpdateSubTasks(subtaskCfg1), IsNil)
+	c.Assert(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, Equals, subtaskCfg1.Batch)
+}
+
 func (t *testScheduler) TestScheduler(c *C) {
 	t.testSchedulerProgress(c, noRestart)
 	t.testSchedulerProgress(c, restartOnly)

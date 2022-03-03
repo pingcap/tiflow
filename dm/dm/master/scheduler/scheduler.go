@@ -394,7 +394,7 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
-// please verify the config before call this.
+// now only support update a source which not have running subtasks.
 func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -409,30 +409,18 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(cfg.SourceID)
 	}
 	// 2. check if tasks using this configuration are running
-	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID); len(tasks) > 0 {
-		return terror.ErrSchedulerSourceOpTaskExist.Generate(cfg.SourceID, tasks)
+	runningStage := pb.Stage_Running
+	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID, &runningStage); len(tasks) > 0 {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
-	// 3. check this cfg is ok to update.
-	if !checkSourceCfgCanUpdated(s.sourceCfgs[cfg.SourceID], cfg) {
-		return terror.ErrSchedulerSourceCfgUpdate.Generate()
-	}
-	// 4. put the config into etcd.
+	// 3. put the config into etcd.
 	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
 	if err != nil {
 		return err
 	}
-	// 5. record the config in the scheduler.
+	// 4. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	return nil
-}
-
-// currently the source cfg can only update relay-log related parts.
-func checkSourceCfgCanUpdated(oldCfg, newCfg *config.SourceConfig) bool {
-	newCfgClone := newCfg.Clone()
-	newCfgClone.RelayBinLogName = oldCfg.RelayBinLogName
-	newCfgClone.RelayBinlogGTID = oldCfg.RelayBinlogGTID
-	newCfgClone.RelayDir = oldCfg.RelayDir
-	return newCfgClone.String() == oldCfg.String()
 }
 
 // RemoveSourceCfg removes the upstream source config in the cluster.
@@ -1039,6 +1027,64 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	return nil
 }
 
+// UpdateSubTasks update the information of one or more subtasks for one task.
+// now only support update a task that not in running stage.
+func (s *Scheduler) UpdateSubTasks(cfgs ...config.SubTaskConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+
+	if len(cfgs) == 0 {
+		return nil // no subtasks need to add, this should not happen.
+	}
+
+	taskNamesM := make(map[string]struct{}, 1)
+
+	for _, cfg := range cfgs {
+		taskNamesM[cfg.Name] = struct{}{}
+	}
+	taskNames := strMapToSlice(taskNamesM)
+	if len(taskNames) > 1 {
+		// only subtasks from one task supported now.
+		return terror.ErrSchedulerMultiTask.Generate(taskNames)
+	}
+
+	// check whether exists.
+	for _, cfg := range cfgs {
+		v, ok := s.subTaskCfgs.Load(cfg.Name)
+		if !ok {
+			return terror.ErrSchedulerTaskNotExist.Generate(cfg.Name)
+		}
+		cfgM := v.(map[string]config.SubTaskConfig)
+		_, ok = cfgM[cfg.SourceID]
+		if !ok {
+			return terror.ErrSchedulerSubTaskNotExist.Generate(cfg.Name, cfg.SourceID)
+		}
+	}
+	// check whether in running stage
+	for _, cfg := range cfgs {
+		stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
+		if stage.Expect == pb.Stage_Running {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
+		}
+	}
+	// put the configs and stages into etcd.
+	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
+	if err != nil {
+		return err
+	}
+	// 5. record the config and the expectant stage.
+	for _, cfg := range cfgs {
+		v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+		m := v.(map[string]config.SubTaskConfig)
+		m[cfg.SourceID] = cfg
+	}
+	return nil
+}
+
 // getSubTaskCfgByTaskSource gets subtask config by task name and source ID. Only used in tests.
 func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTaskConfig {
 	v, ok := s.subTaskCfgs.Load(task)
@@ -1144,12 +1190,18 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 }
 
 // GetTaskNameListBySourceName gets task name list by source name.
-func (s *Scheduler) GetTaskNameListBySourceName(sourceName string) []string {
+func (s *Scheduler) GetTaskNameListBySourceName(sourceName string, expectStage *pb.Stage) []string {
 	var taskNameList []string
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
+		subtaskM := v.(map[string]ha.Stage)
+		subtaskStage, ok2 := subtaskM[sourceName]
+		if !ok2 {
+			return true
+		}
 		task := k.(string)
-		subtaskCfgMap := v.(map[string]config.SubTaskConfig)
-		if _, ok := subtaskCfgMap[sourceName]; ok {
+		if expectStage == nil {
+			taskNameList = append(taskNameList, task)
+		} else if subtaskStage.Expect == *expectStage {
 			taskNameList = append(taskNameList, task)
 		}
 		return true

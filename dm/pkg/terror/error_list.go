@@ -661,6 +661,8 @@ const (
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
 	codeSchedulerWorkerNotFree
+	codeSchedulerSubTaskNotExist
+	codeSchedulerSubTaskCfgUpdate
 )
 
 // dmctl error code.
@@ -1301,10 +1303,12 @@ var (
 	ErrSchedulerRelayStageSourceNotExist     = New(codeSchedulerRelayStageSourceNotExist, ClassScheduler, ScopeInternal, LevelMedium, "sources %v need to update expectant relay stage not exist", "")
 	ErrSchedulerMultiTask                    = New(codeSchedulerMultiTask, ClassScheduler, ScopeInternal, LevelMedium, "the scheduler cannot perform multiple different tasks %v in one operation", "")
 	ErrSchedulerSubTaskExist                 = New(codeSchedulerSubTaskExist, ClassScheduler, ScopeInternal, LevelMedium, "subtasks with name %s for sources %v already exist", "Please use `query-status` command to see tasks.")
+	ErrSchedulerSubTaskNotExist              = New(codeSchedulerSubTaskNotExist, ClassScheduler, ScopeInternal, LevelMedium, "subtasks with name %s for sources %v not exist", "Please create this subtask first.")
 	ErrSchedulerSubTaskStageInvalidUpdate    = New(codeSchedulerSubTaskStageInvalidUpdate, ClassDMMaster, ScopeInternal, LevelMedium, "invalid new expectant subtask stage %s", "")
 	ErrSchedulerSubTaskOpTaskNotExist        = New(codeSchedulerSubTaskOpTaskNotExist, ClassDMMaster, ScopeInternal, LevelMedium, "subtasks with name %s need to be operate not exist", "Please use `query-status` command to see tasks.")
 	ErrSchedulerSubTaskOpSourceNotExist      = New(codeSchedulerSubTaskOpSourceNotExist, ClassDMMaster, ScopeInternal, LevelMedium, "sources %v need to be operate not exist", "")
 	ErrSchedulerTaskNotExist                 = New(codeSchedulerTaskNotExist, ClassScheduler, ScopeInternal, LevelMedium, "task with name %s not exist", "Please use `query-status` command to see tasks.")
+	ErrSchedulerSubTaskCfgUpdate             = New(codeSchedulerSubTaskCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "subtask with name %s source name %s can only update when no running tasks for now", "")
 	ErrSchedulerRequireRunningTaskInSyncUnit = New(codeSchedulerRequireRunningTaskInSyncUnit, ClassScheduler, ScopeInternal, LevelHigh, "running tasks %v to be transferred on source %s should in sync unit", "Please use `pause-task [-s source ...] task` to pause them first.")
 	ErrSchedulerRelayWorkersBusy             = New(codeSchedulerRelayWorkersBusy, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have started relay for sources %s respectively", "Please use `stop-relay` to stop them, or change your topology.")
 	ErrSchedulerRelayWorkersWrongBound       = New(codeSchedulerRelayWorkersBound, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have bound for another sources %s respectively", "Please `start-relay` on free or same source workers.")
@@ -1320,6 +1324,7 @@ var (
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
 	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
+
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
 	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
