@@ -29,6 +29,9 @@ CREATE TABLE cdc_multi_data_type
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
 
+-- test for `nullable`
+INSERT INTO cdc_multi_data_type() VALUES ();
+
 INSERT INTO cdc_multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
                                , t_date, t_datetime, t_timestamp, t_time, t_year
                                , t_char, t_varchar, t_blob, t_text, t_enum
@@ -97,6 +100,9 @@ CREATE TABLE uk_without_pk
     UNIQUE KEY dex1 (a1, a3)
 );
 
+INSERT INTO uk_without_pk(a1, a3)
+VALUES (0, 0);
+
 INSERT INTO uk_without_pk(id, a1, a3)
 VALUES (1, 1, 2);
 
@@ -124,6 +130,8 @@ CREATE TABLE binlog_insert_bit
     a BIT(1) PRIMARY KEY,
     b BIT(64)
 );
+
+INSERT INTO binlog_insert_bit() VALUES ();
 
 INSERT INTO binlog_insert_bit
 VALUES (0x01, 0xffffffff);

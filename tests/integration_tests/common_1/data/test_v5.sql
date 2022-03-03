@@ -17,9 +17,11 @@ alter table `add_and_drop_columns`
 insert into `add_and_drop_columns` (id, col1, col2, col3)
 values (2, 3, 4, 5);
 
+insert into `add_and_drop_columns` (id) values (3);
+
 alter table `add_and_drop_columns`
     drop col1,
     drop col2;
 
 insert into `add_and_drop_columns` (id, col3)
-values (3, 4);
+values (4, 5);
