@@ -2662,3 +2662,65 @@ func (s *Scheduler) handleLoadTask(ctx context.Context, loadTaskCh <-chan ha.Loa
 		}
 	}
 }
+
+func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[string]map[string]config.SubTaskConfig) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+	for taskName := range stCfgs {
+		release, err := s.subtaskLatch.tryAcquire(taskName)
+		if err != nil {
+			return terror.Annotatef(err, "fail to require lock for validation task")
+		}
+		defer release()
+	}
+
+	// 1. get stages of subtask's validator and update stage
+	newCfgs := make([]config.SubTaskConfig, 0)
+	validatorStages := make([]ha.Stage, 0)
+	for taskName := range stCfgs {
+		for _, cfg := range stCfgs[taskName] {
+			stageM, _, err := ha.GetValidatorStage(s.etcdCli, cfg.SourceID, cfg.Name, 0)
+			if err != nil {
+				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
+			}
+			if v, ok := stageM[cfg.Name]; ok && v.Expect == expectStage {
+				s.logger.Info(
+					"validator stage is already in expected stage",
+					zap.String("expectStage", expectStage.String()),
+					zap.String("taskName", cfg.Name),
+					zap.String("source", cfg.SourceID),
+				)
+			} else {
+				if expectStage == pb.Stage_Running {
+					// don't need to update config if stopping the validator task
+					newCfgs = append(newCfgs, cfg)
+				}
+				validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
+			}
+		}
+	}
+	// 2. setting subtask stage in etcd
+	if len(newCfgs) > 0 || len(validatorStages) > 0 {
+		_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
+		if err != nil {
+			return terror.Annotate(err, "fail to set new validator stage")
+		}
+	}
+	// 3. cache validator stage
+	for _, stage := range validatorStages {
+		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
+		m := v.(map[string]ha.Stage)
+		m[stage.Source] = stage
+	}
+	if expectStage == pb.Stage_Running {
+		for _, cfg := range newCfgs {
+			v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+			m := v.(map[string]config.SubTaskConfig)
+			m[cfg.SourceID] = cfg
+		}
+	}
+	return nil
+}
