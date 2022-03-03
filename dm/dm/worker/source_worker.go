@@ -308,8 +308,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
 		failpoint.Goto("bypass")
 	})
-	// we need update worker source config from etcd first
-	// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
+	// we need update config from etcd first in case this cfg is updated by master
 	if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 		return refreshErr
 	}
@@ -625,12 +624,10 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		failpoint.Goto("bypassRefresh")
 	})
 	if op == pb.TaskOp_Resume || op == pb.TaskOp_AutoResume {
-		// we need update worker source config from etcd first
-		// because the configuration of source may be changed via scheduler.UpdateSourceCfg
+		// we need update config from etcd first in case this cfg is updated by master
 		if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 			return refreshErr
 		}
-		// we need update subtask and source config  in case of this config is updated in master
 		if refreshErr := w.refreshSubTaskConfig(w.cfg.SourceID, name); refreshErr != nil {
 			return refreshErr
 		}

@@ -79,7 +79,7 @@ var _ = Suite(&testScheduler{})
 
 var stageEmpty ha.Stage
 
-func (t *testScheduler) TestUpdateSubTasks(c *C) {
+func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 	defer clearTestInfoOperation(c)
 
 	var (
@@ -102,10 +102,15 @@ func (t *testScheduler) TestUpdateSubTasks(c *C) {
 
 	// not started scheduler can't update
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
+	// start the scheduler
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
+
+	// can't update source when source not added
+	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	subtaskCfg2 := subtaskCfg1
 	subtaskCfg2.Name = "fake name"
@@ -137,6 +142,8 @@ func (t *testScheduler) TestUpdateSubTasks(c *C) {
 
 	// can't update subtask in running stage
 	c.Assert(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+	// can't update source when there is running tasks
+	c.Assert(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	// pause task
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1), IsNil)
@@ -145,6 +152,10 @@ func (t *testScheduler) TestUpdateSubTasks(c *C) {
 	// update success
 	c.Assert(s.UpdateSubTasks(subtaskCfg1), IsNil)
 	c.Assert(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, Equals, subtaskCfg1.Batch)
+
+	sourceCfg1.MetaDir = "new meta"
+	c.Assert(s.UpdateSourceCfg(sourceCfg1), IsNil)
+	c.Assert(s.GetSourceCfgByID(sourceID1).MetaDir, Equals, sourceCfg1.MetaDir)
 }
 
 func (t *testScheduler) TestScheduler(c *C) {
@@ -246,11 +257,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	fake := newCfg.Clone()
 	fake.SourceID = "not a source id"
 	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.UpdateSourceCfg(fake)), IsTrue)
-
-	// update field not related to relay-log will failed
-	fake2 := newCfg.Clone()
-	fake2.AutoFixGTID = !fake2.AutoFixGTID
-	c.Assert(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(fake2)), IsTrue)
 
 	// one unbound source exist (because no free worker).
 	t.sourceBounds(c, s, []string{}, []string{sourceID1})

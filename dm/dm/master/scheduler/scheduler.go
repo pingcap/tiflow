@@ -1042,7 +1042,6 @@ func (s *Scheduler) UpdateSubTasks(cfgs ...config.SubTaskConfig) error {
 	}
 
 	taskNamesM := make(map[string]struct{}, 1)
-
 	for _, cfg := range cfgs {
 		taskNamesM[cfg.Name] = struct{}{}
 	}
