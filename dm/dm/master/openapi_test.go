@@ -60,7 +60,6 @@ type openAPISuite struct {
 }
 
 func (t *openAPISuite) SetUpSuite(c *check.C) {
-	integration.BeforeTest(t)
 	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 }
 

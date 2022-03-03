@@ -109,7 +109,6 @@ func (t *testServer) TestServer(c *C) {
 	etcdDir := c.MkDir()
 	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
 	c.Assert(err, IsNil)
-	defer ETCD.Close()
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
 	cfg.Join = masterAddr

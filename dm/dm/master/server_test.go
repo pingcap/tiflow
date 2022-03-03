@@ -175,6 +175,7 @@ func TestMaster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	integration.BeforeTest(t)
 	// inject *testing.T to testMaster
 	s := testSuite.(*testMaster)
 	s.testT = t
@@ -187,7 +188,6 @@ func TestMaster(t *testing.T) {
 }
 
 func (t *testMaster) SetUpSuite(c *check.C) {
-	integration.BeforeTest(t.testT)
 	err := log.InitLogger(&log.Config{})
 	c.Assert(err, check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)
