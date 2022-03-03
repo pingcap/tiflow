@@ -80,7 +80,10 @@ func (s *etcdTester) tearDownTest(t *testing.T) {
 logEtcdError:
 	for {
 		select {
-		case err := <-s.etcd.Err():
+		case err, ok := <-s.etcd.Err():
+			if !ok {
+				break logEtcdError
+			}
 			t.Logf("etcd server error: %v", err)
 		default:
 			break logEtcdError
