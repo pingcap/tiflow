@@ -100,9 +100,6 @@ CREATE TABLE uk_without_pk
     UNIQUE KEY dex1 (a1, a3)
 );
 
-INSERT INTO uk_without_pk(a1, a3)
-VALUES (0, 0);
-
 INSERT INTO uk_without_pk(id, a1, a3)
 VALUES (1, 1, 2);
 

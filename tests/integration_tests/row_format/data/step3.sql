@@ -32,7 +32,8 @@ create table tp_int
         primary key (id)
 );
 
-insert into tp_int() values ();
+insert into tp_int()
+values ();
 
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
@@ -59,7 +60,8 @@ create table tp_unsigned_int (
          primary key (id)
 );
 
-insert into tp_unsigned_int() values ();
+insert into tp_unsigned_int()
+values ();
 
 insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
                             c_unsigned_int, c_unsigned_bigint)
@@ -93,7 +95,8 @@ create table tp_text
         primary key (id)
 );
 
-insert into tp_text() values ();
+insert into tp_text()
+values ();
 
 insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A', '89504E470D0A1A0A'),
@@ -110,7 +113,8 @@ create table tp_char_binary
         primary key (id)
 );
 
-insert into tp_char_binary() values ();
+insert into tp_char_binary()
+values ();
 
 insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values ('89504E470D0A1A0A', '89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'),
@@ -128,7 +132,8 @@ create table tp_blob
         primary key (id)
 );
 
-insert into tp_blob() values ();
+insert into tp_blob()
+values ();
 
 insert into tp_blob(c_tinyblob, c_blob, c_mediumblob, c_longblob)
 values (x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A', x'89504E470D0A1A0A'),
@@ -176,7 +181,8 @@ create table tp_real
         primary key (id)
 );
 
-insert into tp_real() values ();
+insert into tp_real()
+values ();
 
 insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
@@ -194,7 +200,8 @@ create table tp_unsigned_real (
         primary key (id)
 );
 
-insert into tp_unsigned_real() values ();
+insert into tp_unsigned_real()
+values ();
 
 insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_decimal, c_unsigned_decimal_2)
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
@@ -212,12 +219,14 @@ create table tp_other
 
 insert into tp_text2() values();
 
-insert into tp_time() values ();
+insert into tp_time()
+values ();
 
 insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
 values ('2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020');
 
-insert into tp_other() values ();
+insert into tp_other()
+values ();
 
 insert into tp_other(c_enum, c_set, c_bit, c_json)
 values ('a', 'a,b', b'1000001', '{
