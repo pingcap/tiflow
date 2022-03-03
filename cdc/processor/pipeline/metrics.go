@@ -18,13 +18,6 @@ import (
 )
 
 var (
-	txnCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "txn_count",
-			Help:      "txn count received/executed by this processor",
-		}, []string{"type", "changefeed"})
 	tableMemoryHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -37,6 +30,5 @@ var (
 
 // InitMetrics registers all metrics used in processor
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(txnCounter)
 	registry.MustRegister(tableMemoryHistogram)
 }
