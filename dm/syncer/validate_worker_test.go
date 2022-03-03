@@ -60,27 +60,24 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	worker := newValidateWorker(validator, 0)
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "1",
-		pkValues:   []string{"1"},
-		data:       []interface{}{1, "a"},
-		tp:         rowInsert,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "1",
+		Data:       []interface{}{1, "a"},
+		Tp:         rowInsert,
+		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "1",
-		pkValues:   []string{"1"},
-		data:       []interface{}{1, "b"},
-		tp:         rowUpdated,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "1",
+		Data:       []interface{}{1, "b"},
+		Tp:         rowUpdated,
+		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "2",
-		pkValues:   []string{"2"},
-		data:       []interface{}{2, "2b"},
-		tp:         rowInsert,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "2",
+		Data:       []interface{}{2, "2b"},
+		Tp:         rowInsert,
+		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
@@ -90,11 +87,11 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
 	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 2)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "1")
-	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].tp)
-	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["1"].failedCnt)
+	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
+	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "2")
-	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].tp)
-	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["2"].failedCnt)
+	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].Tp)
+	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["2"].FailedCnt)
 
 	// validate again, this time row with pk=2 validate success
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -105,26 +102,24 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
 	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "1")
-	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].tp)
-	require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["1"].failedCnt)
+	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
+	require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 
 	//
 	// add 2 delete row of tbl2 and tbl3
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo2,
-		key:        "a",
-		pkValues:   []string{"a"},
-		data:       []interface{}{"a", "b"},
-		tp:         rowDeleted,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "a",
+		Data:       []interface{}{"a", "b"},
+		Tp:         rowDeleted,
+		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo3,
-		key:        "aa",
-		pkValues:   []string{"aa"},
-		data:       []interface{}{"aa", "b"},
-		tp:         rowDeleted,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "aa",
+		Data:       []interface{}{"aa", "b"},
+		Tp:         rowDeleted,
+		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}))
@@ -138,13 +133,13 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
 	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "1")
-	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].tp)
-	require.Equal(t, 3, worker.pendingChangesMap[tbl1.String()].rows["1"].failedCnt)
+	require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
+	require.Equal(t, 3, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 	require.Contains(t, worker.pendingChangesMap, tbl3.String())
 	require.Len(t, worker.pendingChangesMap[tbl3.String()].rows, 1)
 	require.Contains(t, worker.pendingChangesMap[tbl3.String()].rows, "aa")
-	require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].tp)
-	require.Equal(t, 1, worker.pendingChangesMap[tbl3.String()].rows["aa"].failedCnt)
+	require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].Tp)
+	require.Equal(t, 1, worker.pendingChangesMap[tbl3.String()].rows["aa"].FailedCnt)
 
 	// for tbl1, pk=1 is synced, validate success
 	// for tbl3, pk=aa is synced, validate success
@@ -161,27 +156,24 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	worker.batchSize = 2
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "1",
-		pkValues:   []string{"1"},
-		data:       []interface{}{1, "a"},
-		tp:         rowInsert,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "1",
+		Data:       []interface{}{1, "a"},
+		Tp:         rowInsert,
+		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "2",
-		pkValues:   []string{"2"},
-		data:       []interface{}{2, "2b"},
-		tp:         rowInsert,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "2",
+		Data:       []interface{}{2, "2b"},
+		Tp:         rowInsert,
+		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
-		key:        "3",
-		pkValues:   []string{"3"},
-		data:       []interface{}{3, "3c"},
-		tp:         rowInsert,
-		lastMeetTS: time.Now().Unix(),
+		Key:        "3",
+		Data:       []interface{}{3, "3c"},
+		Tp:         rowInsert,
+		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
@@ -193,8 +185,8 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
 	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
 	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "3")
-	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].tp)
-	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["3"].failedCnt)
+	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].Tp)
+	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["3"].FailedCnt)
 }
 
 func TestValidatorWorkerCompareData(t *testing.T) {
@@ -358,14 +350,14 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	rows := getSourceRowsForCompare([]*rowChange{
 		{
-			key: "a",
-			data: []interface{}{
+			Key: "a",
+			Data: []interface{}{
 				nil, 1,
 			},
 		},
 		{
-			key: "b",
-			data: []interface{}{
+			Key: "b",
+			Data: []interface{}{
 				1, 2,
 			},
 		},

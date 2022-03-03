@@ -93,7 +93,7 @@ outer:
 			if !ok {
 				break outer
 			}
-			if change.tp == flushCheckpoint {
+			if change.Tp == flushCheckpoint {
 				change.wg.Done()
 				break
 			}
@@ -124,13 +124,13 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 		change = newTableChange(row.table)
 		vw.pendingChangesMap[fullTableName] = change
 	}
-	if val, ok := change.rows[row.key]; ok {
-		val.data = row.data
-		val.tp = row.tp
-		val.lastMeetTS = row.lastMeetTS
-		val.failedCnt = 0 // clear failed count
+	if val, ok := change.rows[row.Key]; ok {
+		val.Data = row.Data
+		val.Tp = row.Tp
+		val.LastMeetTS = row.LastMeetTS
+		val.FailedCnt = 0 // clear failed count
 	} else {
-		change.rows[row.key] = row
+		change.rows[row.Key] = row
 		vw.pendingRowCount.Inc()
 	}
 }
@@ -144,7 +144,7 @@ func (vw *validateWorker) validateTableChange() error {
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
 		for _, r := range tblChange.rows {
-			if r.tp == rowDeleted {
+			if r.Tp == rowDeleted {
 				deleteChanges = append(deleteChanges, r)
 			} else {
 				insertUpdateChanges = append(insertUpdateChanges, r)
@@ -159,7 +159,7 @@ func (vw *validateWorker) validateTableChange() error {
 			// todo: if row failed count > threshold, should mark it as data inconsistent error
 			for pk := range failedRows {
 				rows[pk] = tblChange.rows[pk]
-				rows[pk].failedCnt++
+				rows[pk].FailedCnt++
 			}
 		}
 		if len(deleteChanges) > 0 {
@@ -169,7 +169,7 @@ func (vw *validateWorker) validateTableChange() error {
 			}
 			for pk := range failedRows {
 				rows[pk] = tblChange.rows[pk]
-				rows[pk].failedCnt++
+				rows[pk].FailedCnt++
 			}
 		}
 		if len(rows) > 0 {
@@ -214,9 +214,13 @@ func (vw *validateWorker) getPendingChangesMap() map[string]*tableChange {
 func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		pkValues = append(pkValues, r.pkValues)
+		vals := make([]string, 0, len(table.pkIndices))
+		for _, idx := range table.pkIndices {
+			vals = append(vals, string(genColData(r.Data[idx])))
+		}
+		pkValues = append(pkValues, vals)
 	}
-	colCnt := len(rows[0].data)
+	colCnt := len(rows[0].Data)
 	cond := &Cond{
 		Table:     table,
 		ColumnCnt: colCnt,
@@ -377,18 +381,18 @@ func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
 func getSourceRowsForCompare(rows []*rowChange) map[string][]*sql.NullString {
 	rowMap := make(map[string][]*sql.NullString, len(rows))
 	for _, r := range rows {
-		colValues := make([]*sql.NullString, len(r.data))
-		for i := range r.data {
+		colValues := make([]*sql.NullString, len(r.Data))
+		for i := range r.Data {
 			var colData string
-			if r.data[i] != nil {
-				colData = genColData(r.data[i])
+			if r.Data[i] != nil {
+				colData = genColData(r.Data[i])
 			}
 			colValues[i] = &sql.NullString{
 				String: colData,
-				Valid:  r.data[i] != nil,
+				Valid:  r.Data[i] != nil,
 			}
 		}
-		rowMap[r.key] = colValues
+		rowMap[r.Key] = colValues
 	}
 	return rowMap
 }

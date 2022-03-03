@@ -47,6 +47,10 @@ const (
 	checkpointFlushInterval = 1 * time.Minute
 )
 
+var (
+	noPrimaryKeyErr = errors.New("no primary key")
+)
+
 type validateTableInfo struct {
 	Source     *filter.Table
 	Info       *model.TableInfo
@@ -81,13 +85,12 @@ func newTableChange(table *validateTableInfo) *tableChange {
 // todo: maybe we can use reuse it later.
 type rowChange struct {
 	table      *validateTableInfo
-	key        string
-	pkValues   []string // todo: might be removed in later pr
-	data       []interface{}
-	tp         rowChangeType
+	Key        string        `json:"key"`
+	Data       []interface{} `json:"data"`
+	Tp         rowChangeType `json:"tp"`
 	wg         *sync.WaitGroup
-	lastMeetTS int64 // the last meet timestamp(in seconds)
-	failedCnt  int   // failed count
+	LastMeetTS int64 `json:"last-meet-ts"` // the last meet timestamp(in seconds)
+	FailedCnt  int   `json:"failed-cnt"`   // failed count
 }
 
 type tableValidateStatus struct {
@@ -200,10 +203,6 @@ func (v *DataValidator) initialize() error {
 	}
 
 	if err = v.persistHelper.init(); err != nil {
-		return err
-	}
-
-	if err = v.loadPersistedData(tctx); err != nil {
 		return err
 	}
 
@@ -337,6 +336,11 @@ func (v *DataValidator) doValidate() {
 
 	if err := v.waitSyncerRunning(); err != nil {
 		v.errChan <- terror.Annotate(err, "failed to wait syncer running")
+		return
+	}
+
+	if err := v.loadPersistedData(v.tctx); err != nil {
+		v.errChan <- terror.Annotate(err, "failed to load persisted data")
 		return
 	}
 
@@ -476,44 +480,18 @@ func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
 	v.workers[hashVal].rowChangeCh <- row
 }
 
-func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
-	sourceTable := &filter.Table{
-		Schema: string(ev.Table.Schema),
-		Name:   string(ev.Table.Table),
-	}
-	fullTableName := sourceTable.String()
-	if state, ok := v.tableStatus[fullTableName]; ok && state.stage == pb.Stage_Stopped {
-		return nil
-	}
-
-	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
-	if err != nil {
-		return err
-	}
-	if needSkip {
-		return nil
-	}
-
+func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*validateTableInfo, error) {
 	targetTable := v.syncer.route(sourceTable)
 	// todo: syncer will change schema in schemaTracker, will there be data race?
 	// todo: what if table is dropped while validator falls behind?
 	tableInfo, err := v.syncer.schemaTracker.GetTableInfo(sourceTable)
 	if err != nil {
-		if schema.IsTableNotExists(err) {
-			// not a table need to sync
-			return nil
-		}
-		return terror.Annotate(err, "failed to get table info")
+		return nil, err
 	}
-
-	if len(tableInfo.Columns) < int(ev.ColumnCount) {
-		v.tableStatus[fullTableName] = &tableValidateStatus{
-			source:  *sourceTable,
-			target:  *targetTable,
-			stage:   pb.Stage_Stopped,
-			message: "binlog has more columns than current table",
-		}
-		return nil
+	table := &validateTableInfo{
+		Source: sourceTable,
+		Info:   tableInfo,
+		Target: targetTable,
 	}
 
 	var primaryIdx *model.IndexInfo
@@ -525,28 +503,32 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	// todo: PKIsHandle = true when table has primary key like "id int primary key CLUSTERED", since schema-tracker(we get from it)
 	// todo: only use downstream DDL when the task is incremental only, will support this case later.
 	if primaryIdx == nil {
-		// todo: for table without primary index, need to record in the failed table, will add it later together with checkpoint
-		v.tableStatus[fullTableName] = &tableValidateStatus{
-			source:  *sourceTable,
-			target:  *targetTable,
-			stage:   pb.Stage_Stopped,
-			message: "no primary key",
-		}
-		return nil
+		// return partial initialized result
+		return table, noPrimaryKeyErr
 	}
-	if _, ok := v.tableStatus[fullTableName]; !ok {
-		v.tableStatus[fullTableName] = &tableValidateStatus{
-			source: *sourceTable,
-			target: *targetTable,
-			stage:  pb.Stage_Running,
-		}
-	}
+	table.PrimaryKey = primaryIdx
 
-	table := &validateTableInfo{
-		Source:     sourceTable,
-		Info:       tableInfo,
-		PrimaryKey: primaryIdx,
-		Target:     targetTable,
+	columnMap := make(map[string]*model.ColumnInfo)
+	for _, col := range tableInfo.Columns {
+		columnMap[col.Name.O] = col
+	}
+	pkIndices := make([]int, len(primaryIdx.Columns))
+	for i, col := range primaryIdx.Columns {
+		pkIndices[i] = columnMap[col.Name.O].Offset
+	}
+	table.pkIndices = pkIndices
+
+	return table, nil
+}
+
+func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
+	sourceTable := &filter.Table{
+		Schema: string(ev.Table.Schema),
+		Name:   string(ev.Table.Table),
+	}
+	fullTableName := sourceTable.String()
+	if state, ok := v.tableStatus[fullTableName]; ok && state.stage == pb.Stage_Stopped {
+		return nil
 	}
 
 	for _, cols := range ev.SkippedColumns {
@@ -556,19 +538,51 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		}
 	}
 
+	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
+	if err != nil {
+		return err
+	}
+	if needSkip {
+		return nil
+	}
+
+	table, err := v.genValidateTableInfo(sourceTable)
+	if err != nil {
+		if schema.IsTableNotExists(err) {
+			// not a table need to sync
+			return nil
+		} else if err == noPrimaryKeyErr {
+			v.tableStatus[fullTableName] = &tableValidateStatus{
+				source:  *sourceTable,
+				target:  *table.Target,
+				stage:   pb.Stage_Stopped,
+				message: "no primary key",
+			}
+			return nil
+		}
+		return terror.Annotate(err, "failed to get table info")
+	}
+
+	if len(table.Info.Columns) < int(ev.ColumnCount) {
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source:  *sourceTable,
+			target:  *table.Target,
+			stage:   pb.Stage_Stopped,
+			message: "binlog has more columns than current table",
+		}
+		return nil
+	}
+
+	if _, ok := v.tableStatus[fullTableName]; !ok {
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source: *sourceTable,
+			target: *table.Target,
+			stage:  pb.Stage_Running,
+		}
+	}
+
 	changeType := getRowChangeType(header.EventType)
 	v.changeEventCount[changeType].Inc()
-
-	columnMap := make(map[string]*model.ColumnInfo)
-	for _, col := range tableInfo.Columns {
-		columnMap[col.Name.O] = col
-	}
-	pk := table.PrimaryKey
-	pkIndices := make([]int, len(pk.Columns))
-	for i, col := range pk.Columns {
-		pkIndices[i] = columnMap[col.Name.O].Offset
-	}
-	table.pkIndices = pkIndices
 
 	step := 1
 	if changeType == rowUpdated {
@@ -576,8 +590,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	for i := 0; i < len(ev.Rows); i += step {
 		row := ev.Rows[i]
-		pkValue := make([]string, len(pk.Columns))
-		for _, idx := range pkIndices {
+		pkValue := make([]string, len(table.pkIndices))
+		for _, idx := range table.pkIndices {
 			pkValue[idx] = genColData(row[idx])
 		}
 		key := genRowKey(pkValue)
@@ -585,8 +599,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		if changeType == rowUpdated {
 			afterRowChangeType := changeType
 			afterRow := ev.Rows[i+1]
-			afterPkValue := make([]string, len(pk.Columns))
-			for _, idx := range pkIndices {
+			afterPkValue := make([]string, len(table.pkIndices))
+			for _, idx := range table.pkIndices {
 				afterPkValue[idx] = genColData(afterRow[idx])
 			}
 			afterKey := genRowKey(afterPkValue)
@@ -594,30 +608,27 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				// TODO: may reuse IsIdentityUpdated/SplitUpdate of RowChange in pkg/sqlmodel
 				v.dispatchRowChange(key, &rowChange{
 					table:      table,
-					key:        key,
-					pkValues:   pkValue,
-					data:       row,
-					tp:         rowDeleted,
-					lastMeetTS: int64(header.Timestamp),
+					Key:        key,
+					Data:       row,
+					Tp:         rowDeleted,
+					LastMeetTS: int64(header.Timestamp),
 				})
 				afterRowChangeType = rowInsert
 			}
 			v.dispatchRowChange(afterKey, &rowChange{
 				table:      table,
-				key:        afterKey,
-				pkValues:   afterPkValue,
-				data:       afterRow,
-				tp:         afterRowChangeType,
-				lastMeetTS: int64(header.Timestamp),
+				Key:        afterKey,
+				Data:       afterRow,
+				Tp:         afterRowChangeType,
+				LastMeetTS: int64(header.Timestamp),
 			})
 		} else {
 			v.dispatchRowChange(key, &rowChange{
 				table:      table,
-				key:        key,
-				pkValues:   pkValue,
-				data:       row,
-				tp:         changeType,
-				lastMeetTS: int64(header.Timestamp),
+				Key:        key,
+				Data:       row,
+				Tp:         changeType,
+				LastMeetTS: int64(header.Timestamp),
 			})
 		}
 	}
@@ -628,7 +639,7 @@ func (v *DataValidator) flushCheckpoint(loc binlog.Location) error {
 	var wg sync.WaitGroup
 	wg.Add(v.workerCnt)
 	flushJob := &rowChange{
-		tp: flushCheckpoint,
+		Tp: flushCheckpoint,
 		wg: &wg,
 	}
 	for _, worker := range v.workers {
@@ -655,6 +666,17 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	if err != nil {
 		return err
 	}
+	// fix missing data
+	for _, tblChange := range v.loadedPendingChanges {
+		tblChange.table, err = v.genValidateTableInfo(tblChange.table.Source)
+		if err != nil {
+			return err
+		}
+		for _, row := range tblChange.rows {
+			row.table = tblChange.table
+		}
+	}
+
 	v.persistHelper.setRevision(rev)
 
 	v.tableStatus, err = v.persistHelper.loadTableStatus(tctx)
