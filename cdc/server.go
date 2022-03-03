@@ -257,9 +257,8 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				// TODO: PD has removed "/health" API.
 				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
 				if err != nil {
 					log.Warn("etcd health check failed", zap.Error(err))
 					cancel()
