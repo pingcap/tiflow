@@ -300,6 +300,7 @@ func (v *DataValidator) doValidate() {
 	// todo: if validator starts on task start, we need to make sure the location we got is the init location of syncer
 	// todo: right now, there's change they have a gap
 	location := v.syncer.checkpoint.FlushedGlobalPoint()
+	// it's for test, some fields in streamerController is mocked, cannot call Start
 	if v.streamerController.IsClosed() {
 		err := v.streamerController.Start(v.tctx, location)
 		if err != nil {
@@ -400,6 +401,14 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	fullTableName := sourceTable.String()
 	if _, ok := v.unsupportedTable[fullTableName]; ok {
+		return nil
+	}
+
+	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
+	if err != nil {
+		return err
+	}
+	if needSkip {
 		return nil
 	}
 
