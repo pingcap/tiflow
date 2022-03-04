@@ -79,7 +79,10 @@ outer:
 			if !ok {
 				break outer
 			}
-			// todo: limit number of pending rows
+			// todo: limit number of pending rows.
+			// todo: trigger validation when pending rows count reaches a threshold, but we don't want trigger it too often
+			// todo: since it may not reduce the number of pending row changes as the downstream may have changed again,
+			// todo: we need to catchup with the progress of syncer first, so row changes which are changed again can be merged.
 			vw.updateRowChange(change)
 			vw.receivedRowCount.Inc()
 		case <-time.After(vw.interval):
