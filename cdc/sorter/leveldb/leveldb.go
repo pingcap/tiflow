@@ -180,15 +180,13 @@ func (ldb *DBActor) acquireIterators() {
 			break
 		}
 
-		iterCh := req.IterCh
 		iterRange := req.Range
 		iter := ldb.db.Iterator(iterRange[0], iterRange[1])
-		iterCh <- &message.LimitedIterator{
+		req.IterCallback(&message.LimitedIterator{
 			Iterator:   iter,
 			Sema:       ldb.iterSem,
 			ResolvedTs: req.ResolvedTs,
-		}
-		close(iterCh)
+		})
 	}
 }
 

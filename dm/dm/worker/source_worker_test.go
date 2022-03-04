@@ -105,12 +105,19 @@ func (t *testServer) testWorker(c *C) {
 	c.Assert(task, NotNil)
 	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
 
+	c.Assert(w.StartSubTask(&config.SubTaskConfig{
+		Name: "testStartTask-in-stopped",
+	}, pb.Stage_Stopped, pb.Stage_Stopped, true), IsNil)
+	task = w.subTaskHolder.findSubTask("testStartTask-in-stopped")
+	c.Assert(task, NotNil)
+	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
+
 	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
 		Name: "testStartTask",
 	})
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 
-	err = w.OperateSubTask("testSubTask", pb.TaskOp_Stop)
+	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 }
 
