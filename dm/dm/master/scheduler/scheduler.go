@@ -1035,7 +1035,6 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 }
 
 // UpdateSubTasks update the information of one or more subtasks for one task.
-// now only support update a task that not in running stage.
 func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskConfig) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()

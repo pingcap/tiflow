@@ -628,7 +628,6 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 			return refreshErr
 		}
-		println("after refresh source cfg", w.cfg)
 		if refreshErr := w.refreshSubTaskConfig(w.cfg.SourceID, name); refreshErr != nil {
 			return refreshErr
 		}

@@ -62,7 +62,6 @@ type PurgeConfig struct {
 
 // SourceConfig is the configuration for source.
 type SourceConfig struct {
-	Enable      bool   `yaml:"enable" toml:"enable" json:"enable"`
 	EnableGTID  bool   `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
@@ -106,7 +105,6 @@ func NewSourceConfig() *SourceConfig {
 // NewSourceConfig creates a new base config without adjust.
 func newSourceConfig() *SourceConfig {
 	c := &SourceConfig{
-		Enable: true,
 		Purge: PurgeConfig{
 			Interval:    60 * 60,
 			Expires:     0,
@@ -399,7 +397,6 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type SourceConfigForDowngrade struct {
-	Enable          bool                   `yaml:"enable"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
 	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
@@ -424,7 +421,6 @@ type SourceConfigForDowngrade struct {
 // NewSourceConfigForDowngrade creates a new base config for downgrade.
 func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngrade {
 	return &SourceConfigForDowngrade{
-		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
 		AutoFixGTID:     sourceCfg.AutoFixGTID,
 		RelayDir:        sourceCfg.RelayDir,

@@ -15,9 +15,6 @@ enable-relay: false
 # relay-binlog-gtid: ''
 # relay-dir: ./relay_log
 
-# source only can be updated if enable = false.
-enable: true
-
 #enable gtid in relay log unit
 enable-gtid: false
 
