@@ -1,6 +1,14 @@
 name: DM Binlog 999999
 
 on:
+  push:
+    branches:
+      - master
+      - "release-[0-9].[0-9]*"
+  pull_request:
+    branches:
+      - master
+      - "release-[0-9].[0-9]*"
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
@@ -53,8 +61,7 @@ jobs:
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
           curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-nightly-linux-amd64/bin/tidb-server bin/
-          curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
-          chmod +x minio
+          curl -L http://fileserver.pingcap.net/download/minio.tar.gz | tar xz
           mv minio bin/
 
       - name: change binlog sequence number to 999998
