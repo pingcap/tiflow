@@ -11,9 +11,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		return
-	fi
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
