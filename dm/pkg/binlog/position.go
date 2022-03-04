@@ -428,3 +428,7 @@ func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
 func (l *Location) GetGTID() gtid.Set {
 	return l.gtidSet
 }
+
+func (l *Location) Update(gtidStr string) error {
+	return l.gtidSet.Update(gtidStr)
+}
