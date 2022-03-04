@@ -32,5 +32,5 @@ func NewStopTaskCmd() *cobra.Command {
 
 // stopTaskFunc does stop task request.
 func stopTaskFunc(cmd *cobra.Command, _ []string) (err error) {
-	return operateTaskFunc(pb.TaskOp_Stop, cmd)
+	return operateTaskFunc(pb.TaskOp_Delete, cmd)
 }
