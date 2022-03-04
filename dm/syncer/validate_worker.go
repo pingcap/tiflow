@@ -65,10 +65,6 @@ type validateWorker struct {
 	pendingChangesMap map[string]*tableChange
 	pendingRowCount   atomic.Int64
 	sync.Mutex
-
-	// used for test
-	receivedRowCount atomic.Int64 // number of rowChange received from channel
-	validationCount  atomic.Int64 // number of successful validation
 }
 
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
@@ -97,14 +93,12 @@ outer:
 			// todo: since it may not reduce the number of pending row changes as the downstream may have changed again,
 			// todo: we need to catchup with the progress of syncer first, so row changes which are changed again can be merged.
 			vw.updateRowChange(change)
-			vw.receivedRowCount.Inc()
 		case <-time.After(vw.interval):
 			err := vw.validateTableChange()
 			if err != nil {
 				// todo: better error handling
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
 			}
-			vw.validationCount.Inc()
 			// todo: if a row failed too many times, add it to failed changes
 		}
 	}
