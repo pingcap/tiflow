@@ -394,7 +394,6 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
-// now only support update a source which not have running subtasks.
 func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1037,18 +1036,13 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 
 // UpdateSubTasks update the information of one or more subtasks for one task.
 // now only support update a task that not in running stage.
-func (s *Scheduler) UpdateSubTasks(cfgs ...config.SubTaskConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskConfig) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
-
 	if len(cfgs) == 0 {
 		return nil // no subtasks need to add, this should not happen.
 	}
-
 	taskNamesM := make(map[string]struct{}, 1)
 	for _, cfg := range cfgs {
 		taskNamesM[cfg.Name] = struct{}{}
@@ -1058,7 +1052,6 @@ func (s *Scheduler) UpdateSubTasks(cfgs ...config.SubTaskConfig) error {
 		// only subtasks from one task supported now.
 		return terror.ErrSchedulerMultiTask.Generate(taskNames)
 	}
-
 	// check whether exists.
 	for _, cfg := range cfgs {
 		v, ok := s.subTaskCfgs.Load(cfg.Name)
@@ -1078,6 +1071,24 @@ func (s *Scheduler) UpdateSubTasks(cfgs ...config.SubTaskConfig) error {
 			return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
 		}
 	}
+
+	// check wheather all subtask is in sync unit and check the wheather this config can updated
+	// todo batch
+	for _, cfg := range cfgs {
+		worker := s.GetWorkerBySource(cfg.SourceID)
+		if worker == nil {
+			return terror.ErrWorkerNoStart
+		}
+		resp, err := worker.checkSubtasksCanUpdate(ctx, &cfg)
+		if err != nil {
+			return err
+		}
+		if !resp.CheckSubtasksCanUpdate.Success {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("can not update because %s", resp.CheckSubtasksCanUpdate.Msg)
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// put the configs and stages into etcd.
 	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
 	if err != nil {

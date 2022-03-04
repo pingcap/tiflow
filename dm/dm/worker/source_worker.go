@@ -628,6 +628,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 			return refreshErr
 		}
+		println("after refresh source cfg", w.cfg)
 		if refreshErr := w.refreshSubTaskConfig(w.cfg.SourceID, name); refreshErr != nil {
 			return refreshErr
 		}
@@ -1287,11 +1288,12 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 }
 
 func (w *SourceWorker) refreshSourceCfg() error {
-	sourceCfg, _, err := ha.GetRelayConfig(w.etcdClient, w.name)
+	oldCfg := w.cfg
+	sourceCfgM, _, err := ha.GetSourceCfg(w.etcdClient, oldCfg.SourceID, int64(-1))
 	if err != nil {
 		return err
 	}
-	w.cfg = sourceCfg
+	w.cfg = sourceCfgM[oldCfg.SourceID]
 	return nil
 }
 
@@ -1306,4 +1308,15 @@ func (w *SourceWorker) refreshSubTaskConfig(sourceName, taskName string) error {
 		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
 	}
 	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
+}
+
+func (w *SourceWorker) checkCfgCanUpdated(cfg *config.SubTaskConfig) error {
+	w.RLock()
+	defer w.RUnlock()
+
+	st := w.subTaskHolder.findSubTask(cfg.Name)
+	if st == nil {
+		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
+	}
+	return st.CheckUnitCfgCanUpdate(cfg)
 }

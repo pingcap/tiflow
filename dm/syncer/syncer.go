@@ -3562,6 +3562,24 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
+	s.RLock()
+	defer s.RUnlock()
+	oldCfg, err := s.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	oldCfg.BAList = newCfg.BAList
+	oldCfg.BWList = newCfg.BWList
+	oldCfg.RouteRules = newCfg.RouteRules
+	oldCfg.FilterRules = newCfg.FilterRules
+	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	if oldCfg.String() != newCfg.String() {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+	}
+	return nil
+}
+
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.

@@ -91,6 +91,7 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 		workerAddr1  = "127.0.0.1:8262"
 		subtaskCfg1  config.SubTaskConfig
 		keepAliveTTL = int64(5)
+		ctx          = context.Background()
 	)
 	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
 	c.Assert(err, IsNil)
@@ -101,7 +102,7 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 	c.Assert(subtaskCfg1.Adjust(true), IsNil)
 
 	// not started scheduler can't update
-	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	// start the scheduler
@@ -115,10 +116,10 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 	subtaskCfg2 := subtaskCfg1
 	subtaskCfg2.Name = "fake name"
 	// can't update subtask with different task name
-	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.UpdateSubTasks(subtaskCfg1, subtaskCfg2)), IsTrue)
+	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.UpdateSubTasks(ctx, subtaskCfg1, subtaskCfg2)), IsTrue)
 
 	// can't update not added subtask
-	c.Assert(terror.ErrSchedulerTaskNotExist.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerTaskNotExist.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)), IsTrue)
 
 	// start worker,add source and subtask
 	c.Assert(s.AddSourceCfg(sourceCfg1), IsNil)
@@ -138,10 +139,10 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 	// can't update subtask not in scheduler
 	subtaskCfg2.Name = subtaskCfg1.Name
 	subtaskCfg2.SourceID = "fake source name"
-	c.Assert(terror.ErrSchedulerSubTaskNotExist.Equal(s.UpdateSubTasks(subtaskCfg2)), IsTrue)
+	c.Assert(terror.ErrSchedulerSubTaskNotExist.Equal(s.UpdateSubTasks(ctx, subtaskCfg2)), IsTrue)
 
 	// can't update subtask in running stage
-	c.Assert(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)), IsTrue)
 	// can't update source when there is running tasks
 	c.Assert(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
@@ -153,9 +154,21 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 	c.Assert(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(s.StopRelay(sourceID1, []string{workerName1}), IsNil)
 
+	// cant't updated when worker rpc error
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("error")`), IsNil)
+	c.Assert(s.UpdateSubTasks(ctx, subtaskCfg1), ErrorMatches, "query error")
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"), IsNil)
+
+	// cant't updated when worker rpc check not pass
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("failed")`), IsNil)
+	c.Assert(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)), IsTrue)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"), IsNil)
+
 	// update success
 	subtaskCfg1.Batch = 1000
-	c.Assert(s.UpdateSubTasks(subtaskCfg1), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`), IsNil)
+	c.Assert(s.UpdateSubTasks(ctx, subtaskCfg1), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"), IsNil)
 	c.Assert(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, Equals, subtaskCfg1.Batch)
 
 	sourceCfg1.MetaDir = "new meta"

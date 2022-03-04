@@ -217,6 +217,16 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Running)
 	}), IsTrue)
+
+	// check update subtask cfg failed
+	tomlStr, tomlErr := subtaskCfg.Toml()
+	c.Assert(tomlErr, IsNil)
+	ctx := context.Background()
+	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
+	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
+	c.Assert(checkErr, IsNil)
+	c.Assert(checkResp.Success, IsFalse)
+
 	// stop task
 	_, err = ha.DeleteSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name))
 	c.Assert(err, IsNil)

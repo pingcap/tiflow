@@ -682,16 +682,25 @@ func (st *SubTask) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 // CheckUnit checks whether current unit is sync unit.
 func (st *SubTask) CheckUnit() bool {
-	st.Lock()
-	defer st.Unlock()
-
+	st.RLock()
+	defer st.RUnlock()
 	flag := true
-
 	if _, ok := st.currUnit.(*syncer.Syncer); !ok {
 		flag = false
 	}
-
 	return flag
+}
+
+// CheckUnitCfgCanUpdate checks this unit cfg can update.
+func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
+	st.RLock()
+	defer st.RUnlock()
+
+	su, ok := st.currUnit.(*syncer.Syncer)
+	if !ok {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, st.currUnit.Type().String())
+	}
+	return su.CheckCanUpdateCfg(cfg)
 }
 
 // ShardDDLOperation returns the current shard DDL lock operation.

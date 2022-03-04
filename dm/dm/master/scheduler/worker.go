@@ -273,6 +273,36 @@ func (w *Worker) queryStatus(ctx context.Context) (*workerrpc.Response, error) {
 	return w.SendRequest(ctx, req, rpcTimeOut)
 }
 
+func (w *Worker) checkSubtasksCanUpdate(ctx context.Context, cfg *config.SubTaskConfig) (*workerrpc.Response, error) {
+	rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
+	tomlStr, err := cfg.Toml()
+	if err != nil {
+		return nil, err
+	}
+	req := &workerrpc.Request{
+		Type:                   workerrpc.CmdCheckSubtasksCanUpdate,
+		CheckSubtasksCanUpdate: &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr},
+	}
+	failpoint.Inject("operateCheckSubtasksCanUpdate", func(v failpoint.Value) {
+		resp := &workerrpc.Response{
+			Type: workerrpc.CmdCheckSubtasksCanUpdate, CheckSubtasksCanUpdate: &pb.CheckSubtasksCanUpdateResponse{},
+		}
+		switch v.(string) {
+		case "success":
+			resp.CheckSubtasksCanUpdate.Success = true
+			failpoint.Return(resp, nil)
+		case "failed":
+			resp.CheckSubtasksCanUpdate.Success = false
+			resp.CheckSubtasksCanUpdate.Msg = "error happened"
+			failpoint.Return(resp, nil)
+		default:
+			failpoint.Return(nil, errors.New("query error"))
+		}
+	})
+
+	return w.SendRequest(ctx, req, rpcTimeOut)
+}
+
 // NewMockWorker is used in tests.
 func NewMockWorker(cli workerrpc.Client) *Worker {
 	return &Worker{cli: cli}
