@@ -3565,6 +3565,14 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
+	// can't update when in sharding merge
+	if s.cfg.ShardMode == config.ShardPessimistic {
+		_, tables := s.sgk.UnresolvedTables()
+		if len(tables) > 0 {
+			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
+		}
+	}
+
 	oldCfg, err := s.cfg.Clone()
 	if err != nil {
 		return err

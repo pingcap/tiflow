@@ -207,7 +207,8 @@ func (t *testServer) TestServer(c *C) {
 	subtaskCfg.SyncerConfig.Batch = 111
 	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{}, []ha.Stage{})
 	c.Assert(err, IsNil)
-	c.Assert(s.worker.refreshSubTaskConfig(sourceCfg.SourceID, subtaskCfg.Name), IsNil)
+	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	c.Assert(s.worker.tryRefreshSubTaskConfig(subTask), IsNil)
 	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
 
