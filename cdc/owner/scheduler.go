@@ -137,6 +137,17 @@ func (s *schedulerV2) DispatchTable(
 		Epoch:    epoch,
 	}
 
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("schedulerV2: DispatchTable",
+			zap.Any("message", message),
+			zap.Any("successful", done),
+			zap.String("changefeedID", changeFeedID),
+			zap.String("captureID", captureID))
+	}()
+
 	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -157,12 +168,23 @@ func (s *schedulerV2) Announce(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	captureID model.CaptureID,
-) (bool, error) {
+) (done bool, err error) {
 	topic := model.AnnounceTopic(changeFeedID)
 	message := &model.AnnounceMessage{
 		OwnerRev:     ctx.GlobalVars().OwnerRevision,
 		OwnerVersion: version.ReleaseSemver(),
 	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("schedulerV2: Announce",
+			zap.Any("message", message),
+			zap.Any("successful", done),
+			zap.String("changefeedID", changeFeedID),
+			zap.String("captureID", captureID))
+	}()
 
 	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
