@@ -50,15 +50,7 @@ func startEtcd(etcdCfg *embed.Config,
 		etcdCfg.UserHandlers = httpHandles
 	}
 
-	println("123213123\n\n\n123123123\n\n\n")
-
-	go func() {
-		http.ListenAndServe(":8080", nil)
-	}()
-
 	e, err := embed.StartEtcd(etcdCfg)
-	println("345345435\n\n\n345345\n\n\n")
-
 	if err != nil {
 		return nil, terror.ErrMasterStartEmbedEtcdFail.Delegate(err)
 	}

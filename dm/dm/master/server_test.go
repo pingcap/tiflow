@@ -1392,7 +1392,7 @@ func (t *testMaster) TestServer(c *check.C) {
 		basicServiceCheck(c, cfg)
 
 		// try to start another server with the same address.  Expect it to fail
-		// unset an etcd variable becuase it will cause checking on exit, and block forever
+		// unset an etcd variable because it will cause checking on exit, and block forever
 		err = os.Unsetenv(verify.ENV_VERIFY)
 		c.Assert(err, check.IsNil)
 

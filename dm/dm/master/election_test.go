@@ -57,7 +57,6 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
 
 	s1 = NewServer(cfg1)
-	println(s1.cfg.InitialClusterState)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {

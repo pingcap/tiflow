@@ -15,7 +15,6 @@ package ha
 
 import (
 	"context"
-	"os"
 
 	. "github.com/pingcap/check"
 
@@ -25,7 +24,6 @@ import (
 func (t *testForEtcd) TestSubTaskEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
-	println(os.Getwd())
 	cfg1 := config.SubTaskConfig{}
 	c.Assert(cfg1.Decode(config.SampleSubtaskConfig, true), IsNil)
 	source := cfg1.SourceID
