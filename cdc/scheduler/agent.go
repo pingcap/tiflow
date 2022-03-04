@@ -493,3 +493,9 @@ func (a *BaseAgent) getEpoch() model.ProcessorEpoch {
 
 	return a.epoch
 }
+
+// CurrentEpoch is a public function used in unit tests for
+// checking epoch-related invariants.
+func (a *BaseAgent) CurrentEpoch() model.ProcessorEpoch {
+	return a.getEpoch()
+}
