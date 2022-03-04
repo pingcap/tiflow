@@ -624,7 +624,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		failpoint.Goto("bypassRefresh")
 	})
 
-	if op == pb.TaskOp_Resume || op == pb.TaskOp_AutoResume {
+	if op == pb.TaskOp_Resume {
 		if refreshErr := w.tryRefreshSubTaskConfig(st); refreshErr != nil {
 			// NOTE: for current unit is not syncer unit or syncer is in shardding merge.
 			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
@@ -1305,6 +1305,9 @@ func (w *SourceWorker) tryRefreshSubTaskConfig(subTask *SubTask) error {
 	var ok bool
 	if subTaskCfg, ok = tsm[taskName]; !ok {
 		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
+	}
+	if checkErr := subTask.CheckUnitCfgCanUpdate(&subTaskCfg); checkErr != nil {
+		return checkErr
 	}
 	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
 }
