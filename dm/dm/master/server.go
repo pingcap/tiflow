@@ -1615,6 +1615,9 @@ func withHost(addr string) string {
 }
 
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
+	failpoint.Inject("MockSkipRemoveMetaData", func() {
+		failpoint.Return(nil)
+	})
 	toDBCfg.Adjust()
 
 	// clear shard meta data for pessimistic/optimist

@@ -252,8 +252,9 @@ type LoaderConfig struct {
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      defaultDir,
+		PoolSize:   defaultPoolSize,
+		Dir:        defaultDir,
+		ImportMode: LoadModeSQL,
 	}
 }
 

@@ -12,7 +12,7 @@ SOURCE2_NAME = "mysql-02"
 API_ENDPOINT = "http://127.0.0.1:8361/api/v1/tasks"
 
 
-def start_task_failed():
+def create_task_failed():
     task = {
         "name": "test",
         "task_mode": "all",
@@ -51,12 +51,12 @@ def start_task_failed():
             ],
         },
     }
-    resp = requests.post(url=API_ENDPOINT, json={"remove_meta": True, "task": task})
-    print("start_task_failed resp=", resp.json())
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_task_failed resp=", resp.json())
     assert resp.status_code == 400
 
 
-def start_noshard_task_success(task_name, tartget_table_name=""):
+def create_noshard_task_success(task_name, tartget_table_name=""):
     task = {
         "name": task_name,
         "task_mode": "all",
@@ -95,12 +95,12 @@ def start_noshard_task_success(task_name, tartget_table_name=""):
             ],
         },
     }
-    resp = requests.post(url=API_ENDPOINT, json={"remove_meta": True, "task": task})
-    print("start_noshard_task_success resp=", resp.json())
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
 
-def start_shard_task_success():
+def create_shard_task_success():
     task = {
         "name": SHARD_TASK_NAME,
         "task_mode": "all",
@@ -145,13 +145,53 @@ def start_shard_task_success():
                 "ignore_event": ["delete"],
             },
             "rule-2": {
-                "ignore_sql": ["alter table .* add column `aaa` int"],
+                "ignore_sql": ["alter table openapi.t add column aaa int;"],
             },
         },
     }
-    resp = requests.post(url=API_ENDPOINT, json={"remove_meta": True, "task": task})
-    print("start_shard_task_success resp=", resp.json())
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_shard_task_success resp=", resp.json())
     assert resp.status_code == 201
+
+
+def start_task_success(task_name, source_name):
+    url = API_ENDPOINT + "/" + task_name + "/start"
+    req = {}
+    if source_name != "":
+        req = {"source_name_list": [source_name]}
+    resp = requests.post(url=url, json=req)
+    if resp.status_code != 200:
+        print("start_task_failed resp=", resp.json())
+    assert resp.status_code == 200
+
+
+def stop_task_success(task_name, source_name):
+    url = API_ENDPOINT + "/" + task_name + "/stop"
+    req = {}
+    if source_name != "":
+        req = {"source_name_list": [source_name]}
+    resp = requests.post(url=url, json=req)
+    if resp.status_code != 200:
+        print("stop_task_failed resp=", resp.json())
+    assert resp.status_code == 200
+
+
+def delete_task_success(task_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
+    assert resp.status_code == 204
+    print("delete_task_success")
+
+
+def delete_task_failed(task_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
+    print("delete_task_failed resp=", resp.json())
+    assert resp.status_code == 400
+
+
+def delete_task_with_force_success(task_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + task_name + "?force=true")
+    assert resp.status_code == 204
+    print("delete_task_success")
 
 
 def get_task_status_failed(task_name):
@@ -221,32 +261,6 @@ def get_task_list_with_status(task_count, task_name, status_count):
     assert find_task
 
 
-def pause_task_success(task_name, source_name):
-    url = API_ENDPOINT + "/" + task_name + "/pause"
-    resp = requests.post(
-        url=url,
-        json=[
-            source_name,
-        ],
-    )
-    if resp.status_code != 200:
-        print("pause_task_failed resp=", resp.json())
-    assert resp.status_code == 200
-
-
-def resume_task_success(task_name, source_name):
-    url = API_ENDPOINT + "/" + task_name + "/resume"
-    resp = requests.post(
-        url=url,
-        json=[
-            source_name,
-        ],
-    )
-    if resp.status_code != 200:
-        print("resume_task_failed resp=", resp.json())
-    assert resp.status_code == 200
-
-
 def operate_schema_and_table_success(task_name, source_name, schema_name, table_name):
     schema_url = API_ENDPOINT + "/" + task_name + "/sources/" + source_name + "/schemas"
     schema_resp = requests.get(url=schema_url)
@@ -293,18 +307,6 @@ def operate_schema_and_table_success(task_name, source_name, schema_name, table_
     table_list = requests.get(url=table_url).json()
     print("get_task_schema_success table resp=", table_list)
     assert len(table_list) == 1
-
-
-def stop_task_failed(task_name):
-    resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
-    print("stop_task_failed resp=", resp.json())
-    assert resp.status_code == 400
-
-
-def stop_task_success(task_name):
-    resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
-    assert resp.status_code == 204
-    print("stop_task_success")
 
 
 def create_task_template_success(task_name, target_table_name=""):
@@ -457,12 +459,13 @@ def check_noshard_task_dump_status_success(task_name, total):
 
 if __name__ == "__main__":
     FUNC_MAP = {
-        "start_task_failed": start_task_failed,
-        "start_noshard_task_success": start_noshard_task_success,
-        "start_shard_task_success": start_shard_task_success,
-        "stop_task_failed": stop_task_failed,
-        "pause_task_success": pause_task_success,
-        "resume_task_success": resume_task_success,
+        "create_task_failed": create_task_failed,
+        "create_noshard_task_success": create_noshard_task_success,
+        "create_shard_task_success": create_shard_task_success,
+        "delete_task_failed": delete_task_failed,
+        "delete_task_success": delete_task_success,
+        "delete_task_with_force_success": delete_task_with_force_success,
+        "start_task_success": start_task_success,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
         "get_task_list_with_status": get_task_list_with_status,

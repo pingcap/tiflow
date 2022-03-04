@@ -394,7 +394,6 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
-// please verify the config before call this.
 func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -409,30 +408,26 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(cfg.SourceID)
 	}
 	// 2. check if tasks using this configuration are running
-	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID); len(tasks) > 0 {
-		return terror.ErrSchedulerSourceOpTaskExist.Generate(cfg.SourceID, tasks)
+	runningStage := pb.Stage_Running
+	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID, &runningStage); len(tasks) > 0 {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
-	// 3. check this cfg is ok to update.
-	if !checkSourceCfgCanUpdated(s.sourceCfgs[cfg.SourceID], cfg) {
-		return terror.ErrSchedulerSourceCfgUpdate.Generate()
-	}
-	// 4. put the config into etcd.
-	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
+	// 3. check if there is relay workers for this source
+	relayWorkers, err := s.getRelayWorkers(cfg.SourceID)
 	if err != nil {
 		return err
 	}
-	// 5. record the config in the scheduler.
+	if len(relayWorkers) > 0 {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
+	}
+	// 4. put the config into etcd.
+	_, err = ha.PutSourceCfg(s.etcdCli, cfg)
+	if err != nil {
+		return err
+	}
+	// 4. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	return nil
-}
-
-// currently the source cfg can only update relay-log related parts.
-func checkSourceCfgCanUpdated(oldCfg, newCfg *config.SourceConfig) bool {
-	newCfgClone := newCfg.Clone()
-	newCfgClone.RelayBinLogName = oldCfg.RelayBinLogName
-	newCfgClone.RelayBinlogGTID = oldCfg.RelayBinlogGTID
-	newCfgClone.RelayDir = oldCfg.RelayDir
-	return newCfgClone.String() == oldCfg.String()
 }
 
 // RemoveSourceCfg removes the upstream source config in the cluster.
@@ -713,20 +708,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 
 	// 4. check if old worker has running tasks
-	var runningTasks []string
-	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
-		task := k.(string)
-		subtaskM := v.(map[string]ha.Stage)
-		subtaskStage, ok2 := subtaskM[source]
-		if !ok2 {
-			return true
-		}
-		if subtaskStage.Expect == pb.Stage_Running {
-			runningTasks = append(runningTasks, task)
-		}
-		return true
-	})
-	if len(runningTasks) > 0 {
+	runningStage := pb.Stage_Running
+	if runningTasks := s.GetTaskNameListBySourceName(source, &runningStage); len(runningTasks) > 0 {
 		// we only allow automatically transfer-source if all subtasks are in the sync phase.
 		resp, err := oldWorker.queryStatus(ctx)
 		if err != nil {
@@ -782,6 +765,9 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 // BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
 func (s *Scheduler) BatchOperateTaskOnWorker(
 	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
+	if len(tasks) == 0 {
+		return nil
+	}
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
 			return err
@@ -1039,6 +1025,73 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	return nil
 }
 
+// UpdateSubTasks update the information of one or more subtasks for one task.
+func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskConfig) error {
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+	if len(cfgs) == 0 {
+		return nil // no subtasks need to add, this should not happen.
+	}
+	taskNamesM := make(map[string]struct{}, 1)
+	for _, cfg := range cfgs {
+		taskNamesM[cfg.Name] = struct{}{}
+	}
+	taskNames := strMapToSlice(taskNamesM)
+	if len(taskNames) > 1 {
+		// only subtasks from one task supported now.
+		return terror.ErrSchedulerMultiTask.Generate(taskNames)
+	}
+	// check whether exists.
+	for _, cfg := range cfgs {
+		v, ok := s.subTaskCfgs.Load(cfg.Name)
+		if !ok {
+			return terror.ErrSchedulerTaskNotExist.Generate(cfg.Name)
+		}
+		cfgM := v.(map[string]config.SubTaskConfig)
+		_, ok = cfgM[cfg.SourceID]
+		if !ok {
+			return terror.ErrSchedulerSubTaskNotExist.Generate(cfg.Name, cfg.SourceID)
+		}
+	}
+	// check whether in running stage
+	for _, cfg := range cfgs {
+		stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
+		if stage.Expect == pb.Stage_Running {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
+		}
+	}
+
+	// check by workers todo batch
+	for _, cfg := range cfgs {
+		worker := s.GetWorkerBySource(cfg.SourceID)
+		if worker == nil {
+			return terror.ErrWorkerNoStart
+		}
+		resp, err := worker.checkSubtasksCanUpdate(ctx, &cfg)
+		if err != nil {
+			return err
+		}
+		if !resp.CheckSubtasksCanUpdate.Success {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("can not update because %s", resp.CheckSubtasksCanUpdate.Msg)
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// put the configs and stages into etcd.
+	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
+	if err != nil {
+		return err
+	}
+	// record the config
+	for _, cfg := range cfgs {
+		v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+		m := v.(map[string]config.SubTaskConfig)
+		m[cfg.SourceID] = cfg
+	}
+	return nil
+}
+
 // getSubTaskCfgByTaskSource gets subtask config by task name and source ID. Only used in tests.
 func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTaskConfig {
 	v, ok := s.subTaskCfgs.Load(task)
@@ -1139,17 +1192,43 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 		clone[task] = clone2
 		return true
 	})
+	return clone
+}
 
+// GetSubTaskCfgs gets all subconfig, return nil when error happens.
+func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskConfig {
+	// taskName -> sourceName -> SubTaskConfig
+	clone := make(map[string]map[string]*config.SubTaskConfig)
+	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+		task := k.(string)
+		m := v.(map[string]config.SubTaskConfig)
+		clone2 := make(map[string]*config.SubTaskConfig, len(m))
+		for source, cfg := range m {
+			cfg2, err := cfg.Clone()
+			if err != nil {
+				return true
+			}
+			clone2[source] = cfg2
+		}
+		clone[task] = clone2
+		return true
+	})
 	return clone
 }
 
 // GetTaskNameListBySourceName gets task name list by source name.
-func (s *Scheduler) GetTaskNameListBySourceName(sourceName string) []string {
+func (s *Scheduler) GetTaskNameListBySourceName(sourceName string, expectStage *pb.Stage) []string {
 	var taskNameList []string
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
+		subtaskM := v.(map[string]ha.Stage)
+		subtaskStage, ok2 := subtaskM[sourceName]
+		if !ok2 {
+			return true
+		}
 		task := k.(string)
-		subtaskCfgMap := v.(map[string]config.SubTaskConfig)
-		if _, ok := subtaskCfgMap[sourceName]; ok {
+		if expectStage == nil {
+			taskNameList = append(taskNameList, task)
+		} else if subtaskStage.Expect == *expectStage {
 			taskNameList = append(taskNameList, task)
 		}
 		return true
@@ -1402,7 +1481,6 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
-
 	// quick path for `stop-relay` without worker name
 	if len(workers) == 0 {
 		startedWorker := s.relayWorkers[source]
@@ -1490,11 +1568,14 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
+	return s.getRelayWorkers(source)
+}
 
+// getRelayWorkers get relay workers with no lock and check.
+func (s *Scheduler) getRelayWorkers(source string) ([]*Worker, error) {
 	workers := s.relayWorkers[source]
 	ret := make([]*Worker, 0, len(workers))
 	for w := range workers {

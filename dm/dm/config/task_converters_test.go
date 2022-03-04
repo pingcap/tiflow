@@ -14,10 +14,12 @@ package config
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
@@ -272,15 +274,14 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 1)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
-
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
 }
 
 func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
@@ -307,12 +308,12 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 2)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
-	subTaskConfigMap[task.Name][source2Name] = *subTaskConfigList[1]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+	subTaskConfigMap[task.Name][source2Name] = subTaskConfigList[1]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
 
@@ -335,5 +336,25 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
+}
+
+func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+
+	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, taskCfg)
+
+	newTask, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, newTask)
+	require.EqualValues(t, newTask, &task)
 }

@@ -305,21 +305,13 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 
 	w.startedRelayBySourceCfg = startBySourceCfg
 
-	var sourceCfg *config.SourceConfig
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
 		failpoint.Goto("bypass")
 	})
-
-	if !w.startedRelayBySourceCfg {
-		// we need update worker source config from etcd first
-		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-		if err != nil {
-			return err
-		}
-		w.cfg = sourceCfg
+	// we need update config from etcd first in case this cfg is updated by master
+	if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
+		return refreshErr
 	}
-
 	failpoint.Label("bypass")
 
 	w.relayCtx, w.relayCancel = context.WithCancel(w.ctx)
@@ -593,9 +585,11 @@ func (w *SourceWorker) getRelayWithoutLock() relay.Process {
 }
 
 // UpdateSubTask update config for a sub task.
-func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig) error {
-	w.Lock()
-	defer w.Unlock()
+func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig, needLock bool) error {
+	if needLock {
+		w.Lock()
+		defer w.Unlock()
+	}
 
 	if w.closed.Load() {
 		return terror.ErrWorkerAlreadyClosed.Generate()
@@ -625,6 +619,17 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	}
 
 	w.l.Info("OperateSubTask start", zap.Stringer("op", op), zap.String("task", name))
+	failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
+		failpoint.Goto("bypassRefresh")
+	})
+
+	if op == pb.TaskOp_Resume {
+		if refreshErr := w.tryRefreshSubTaskConfig(st); refreshErr != nil {
+			// NOTE: for current unit is not syncer unit or syncer is in shardding merge.
+			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
+		}
+	}
+	failpoint.Label("bypassRefresh")
 	var err error
 	switch op {
 	case pb.TaskOp_Delete:
@@ -1276,4 +1281,43 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
 	}
 	return nil
+}
+
+func (w *SourceWorker) refreshSourceCfg() error {
+	oldCfg := w.cfg
+	sourceCfgM, _, err := ha.GetSourceCfg(w.etcdClient, oldCfg.SourceID, int64(-1))
+	if err != nil {
+		return err
+	}
+	w.cfg = sourceCfgM[oldCfg.SourceID]
+	return nil
+}
+
+func (w *SourceWorker) tryRefreshSubTaskConfig(subTask *SubTask) error {
+	sourceName := subTask.cfg.SourceID
+	taskName := subTask.cfg.Name
+	tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, sourceName, taskName, int64(-1))
+	if err != nil {
+		return terror.Annotate(err, "fail to get subtask config from etcd")
+	}
+	var subTaskCfg config.SubTaskConfig
+	var ok bool
+	if subTaskCfg, ok = tsm[taskName]; !ok {
+		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
+	}
+	if checkErr := subTask.CheckUnitCfgCanUpdate(&subTaskCfg); checkErr != nil {
+		return checkErr
+	}
+	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
+}
+
+func (w *SourceWorker) checkCfgCanUpdated(cfg *config.SubTaskConfig) error {
+	w.RLock()
+	defer w.RUnlock()
+
+	st := w.subTaskHolder.findSubTask(cfg.Name)
+	if st == nil {
+		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
+	}
+	return st.CheckUnitCfgCanUpdate(cfg)
 }
