@@ -35,7 +35,7 @@ import (
 )
 
 // split into 3 cases, since it may be unstable when put together.
-func TestValidatorWorkerRun_insert_update(t *testing.T) {
+func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
 		"create table tbl1(a int primary key, b varchar(100))")
@@ -53,12 +53,6 @@ func TestValidatorWorkerRun_insert_update(t *testing.T) {
 
 	// insert & update same table, one success, one fail
 	worker := newValidateWorker(validator, 0)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		wg.Done()
-		worker.run()
-	}()
 	worker.rowChangeCh <- &rowChange{
 		table:      tableInfo1,
 		key:        "1",
@@ -85,11 +79,18 @@ func TestValidatorWorkerRun_insert_update(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
 	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
 		return worker.receivedRowCount.Load() == 3
 	}))
+	currCnt := worker.validationCount.Load()
 	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
-		return worker.validationCount.Load() > 0
+		return worker.validationCount.Load() > currCnt
 	}))
 	validator.cancel()
 	wg.Wait()
@@ -106,7 +107,7 @@ func TestValidatorWorkerRun_insert_update(t *testing.T) {
 	require.Equal(t, int(worker.validationCount.Load()), worker.pendingChangesMap[tbl1.String()].rows["2"].failedCnt)
 }
 
-func TestValidatorWorkerRun_all_validated(t *testing.T) {
+func TestValidatorWorkerRunAllValidated(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
 		"create table tbl1(a int primary key, b varchar(100))")
@@ -124,12 +125,6 @@ func TestValidatorWorkerRun_all_validated(t *testing.T) {
 
 	// insert & update same table, one success, one fail
 	worker := newValidateWorker(validator, 0)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		wg.Done()
-		worker.run()
-	}()
 	worker.rowChangeCh <- &rowChange{
 		table:      tableInfo1,
 		key:        "1",
@@ -156,11 +151,18 @@ func TestValidatorWorkerRun_all_validated(t *testing.T) {
 	}
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "b").AddRow(2, "2b"))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
 	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
 		return worker.receivedRowCount.Load() == 3
 	}))
+	currCnt := worker.validationCount.Load()
 	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
-		return worker.validationCount.Load() > 0
+		return worker.validationCount.Load() > currCnt
 	}))
 	validator.cancel()
 	wg.Wait()
@@ -169,7 +171,7 @@ func TestValidatorWorkerRun_all_validated(t *testing.T) {
 	require.Len(t, worker.pendingChangesMap, 0)
 }
 
-func TestValidatorWorkerRun_delete(t *testing.T) {
+func TestValidatorWorkerRunDelete(t *testing.T) {
 	tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
 	tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
 	tableInfo2 := genValidateTableInfo(t, tbl2.Schema, tbl2.Name,
@@ -189,12 +191,6 @@ func TestValidatorWorkerRun_delete(t *testing.T) {
 	defer validator.cancel()
 
 	worker := newValidateWorker(validator, 0)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		wg.Done()
-		worker.run()
-	}()
 	worker.rowChangeCh <- &rowChange{
 		table:      tableInfo2,
 		key:        "a",
@@ -216,6 +212,12 @@ func TestValidatorWorkerRun_delete(t *testing.T) {
 	mock.ExpectQuery("SELECT .* FROM .*tbl3.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow("aa", "b"))
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		worker.run()
+	}()
 	// wait all events received by worker
 	require.True(t, utils.WaitSomething(30, time.Second, func() bool {
 		return worker.receivedRowCount.Load() == 2
