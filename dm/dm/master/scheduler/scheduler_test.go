@@ -139,12 +139,13 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfgWithWorker(sourceCfg1, workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSourceCfg(sourceID1)), IsTrue)
-	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSubTasks(taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddWorker(workerName1, workerAddr1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(pb.Stage_Running, map[string]map[string]config.SubTaskConfig{})), IsTrue)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -252,13 +253,13 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 		return len(bounds) == 1 && bounds[0] == sourceID1
 	}), IsTrue)
 	// no subtask config exists before start.
-	c.Assert(s.AddSubTasks(false), IsNil) // can call without configs, return without error, but take no effect.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running), IsNil) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(c, s, taskName1, sourceID1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_InvalidStage)
 	t.downstreamMetaNotExist(c, s, taskName1)
 	// start the task.
-	c.Assert(s.AddSubTasks(false, subtaskCfg1), IsNil)
-	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue) // add again.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1), IsNil)
+	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue) // add again.
 	// subtask config and stage exist.
 	t.subTaskCfgExist(c, s, subtaskCfg1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_Running)
@@ -269,7 +270,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	// try start a task with two sources, some sources not bound.
-	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22)), IsTrue)
+	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)), IsTrue)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
@@ -285,10 +286,9 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, "", sourceID1), IsNil)
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1), IsNil)
 	t.relayStageMatch(c, s, sourceID1, pb.Stage_Running)
-	// update to non-(Running, Paused) stage is invalid.
+	// update to non-(New, Finished) stage is invalid.
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_InvalidStage, taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_New, taskName1, sourceID1)), IsTrue)
-	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Finished, taskName1, sourceID1)), IsTrue)
 	// can't update stage with not existing sources now.
 	c.Assert(terror.ErrSchedulerSubTaskOpSourceNotExist.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1, sourceID2)), IsTrue)
@@ -413,14 +413,14 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 
 	// CASE 4.4.1: start a task with two sources.
 	// can't add more than one tasks at a time now.
-	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, subtaskCfg1, subtaskCfg21)), IsTrue)
+	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1, subtaskCfg21)), IsTrue)
 	// task2' config and stage not exists before.
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	// start task2.
-	c.Assert(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22), IsNil)
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22), IsNil)
 	// config added, stage become Running.
 	t.subTaskCfgExist(c, s, subtaskCfg21)
 	t.subTaskCfgExist(c, s, subtaskCfg22)
@@ -792,6 +792,12 @@ func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source str
 	default:
 		c.Assert(stageM, HasLen, 0)
 	}
+}
+
+func (t *testScheduler) validatorModeMatch(c *C, s *Scheduler, task, source string, expectMode string) {
+	cfg := s.getSubTaskCfgByTaskSource(task, source)
+	c.Assert(cfg, NotNil)
+	c.Assert(cfg.ValidatorCfg.Mode, Equals, expectMode)
 }
 
 func (t *testScheduler) TestRestartScheduler(c *C) {
@@ -1966,4 +1972,79 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	c.Assert(worker.Stage(), Equals, WorkerBound)
 	c.Assert(worker.RelaySourceID(), HasLen, 0)
 	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
+}
+
+func (t *testScheduler) TestOperateValidatorTask(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		taskName    = "task-1"
+		keepAlive   = int64(2)
+		subtaskCfg  config.SubTaskConfig
+	)
+	c.Assert(subtaskCfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	subtaskCfg.SourceID = sourceID1
+	subtaskCfg.Name = taskName
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
+	c.Assert(subtaskCfg.Adjust(true), IsNil)
+
+	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	s.etcdCli = etcdTestCli
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	c.Assert(s.recoverSources(), IsNil)
+	_, err = s.recoverWorkersBounds()
+	c.Assert(err, IsNil)
+	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
+	// CASE 1: start subtask without starting validation
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg), IsNil) // create new subtask without validation
+	t.subTaskCfgExist(c, s, subtaskCfg)
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
+	stCfgs := make(map[string]map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name] = make(map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // start running validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // stage not changed
+
+	// CASE 2: stop running subtask
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)                  // stop stopped validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
+
+	// CASE 3: start subtask with fast mode
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+
+	// CASE 4: set the mode of a running task, not succeed
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
 }

@@ -60,6 +60,8 @@ const (
 	ValidationNone = "none"
 	ValidationFast = "fast"
 	ValidationFull = "full"
+
+	DefaultValidatorWorkerCount = 4
 )
 
 // default config item values.
@@ -337,7 +339,8 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode string `yaml:"mode" toml:"mode" json:"mode"`
+	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
 }
 
 func (v *ValidatorConfig) adjust() error {
@@ -346,6 +349,9 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.Mode != ValidationNone && v.Mode != ValidationFast && v.Mode != ValidationFull {
 		return terror.ErrConfigValidationMode
+	}
+	if v.WorkerCount <= 0 {
+		v.WorkerCount = DefaultValidatorWorkerCount
 	}
 	return nil
 }

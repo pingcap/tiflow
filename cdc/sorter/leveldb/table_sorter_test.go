@@ -16,6 +16,7 @@ package leveldb
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 
@@ -32,31 +33,44 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func newTestSorter(
-	ctx context.Context, capacity int,
-) (*Sorter, actor.Mailbox) {
-	id := actor.ID(1)
-	router := actor.NewRouter("test")
-	mb := actor.NewMailbox(1, capacity)
-	router.InsertMailbox4Test(id, mb)
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	compact := NewCompactScheduler(nil)
-	ls := NewSorter(ctx, 1, 1, router, id, compact, cfg)
-	return ls, mb
+func newTestReader() *reader {
+	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
+		prometheus.Labels{"id": "test"})
+	return &reader{
+		common: common{
+			dbActorID: 1,
+			// dbRouter:  dbRouter,
+			uid:     2,
+			tableID: uint64(3),
+			serde:   &encoding.MsgPackGenSerde{},
+		},
+		state: pollState{
+			metricIterFirst:   metricIterDuration.WithLabelValues("first"),
+			metricIterRelease: metricIterDuration.WithLabelValues("release"),
+		},
+		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
+		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
+	}
 }
 
 func TestRunAndReportError(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s, _ := newTestSorter(ctx, 2)
+	s, mb := newTestSorter(t.Name(), 2)
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.common.reportError(
 			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 	}()
-	require.Error(t, s.Run(ctx))
+	require.Error(t, s.Run(context.Background()))
+
+	// Stop writer and reader.
+	msg, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
+	msg, ok = mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
 
 	// Must be nonblock.
 	s.common.reportError(
@@ -65,279 +79,105 @@ func TestRunAndReportError(t *testing.T) {
 		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 }
 
-func TestInputOutOfOrder(t *testing.T) {
+func TestReaderSetTaskDelete(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Poll twice.
-	capacity := 2
-	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestSorter(ctx, capacity)
-
-	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 2))
-	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 3))
-	require.Nil(t, ls.poll(ctx, &pollState{
-		eventsBuf: make([]*model.PolymorphicEvent, 1),
-		outputBuf: newOutputBuffer(1),
-	}))
-	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 3), <-ls.Output())
-
-	ls.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, 2))
-	require.Nil(t, ls.poll(ctx, &pollState{
-		eventsBuf: make([]*model.PolymorphicEvent, 1),
-		outputBuf: newOutputBuffer(1),
-	}))
-}
-
-func TestWaitInput(t *testing.T) {
-	t.Parallel()
-	// Make sure input capacity is larger than batch size in order to test
-	// batch behavior.
-	require.Greater(t, sorterInputCap, batchReceiveEventSize)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	capacity := 8
-	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestSorter(ctx, capacity)
-	// Nonbuffered channel is unavailable during the test.
-	ls.outputCh = make(chan *model.PolymorphicEvent)
-
-	expectedEvents := make([]*model.PolymorphicEvent, batchReceiveEventSize)
-	for i := range expectedEvents {
-		expectedEvents[i] = model.NewPolymorphicEvent(
-			&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(i)})
+	r := newTestReader()
+	r.delete = deleteThrottle{
+		countThreshold: 2,
+		period:         2 * time.Second,
 	}
-
-	eventsBuf := make([]*model.PolymorphicEvent, batchReceiveEventSize)
-
-	// Test message count <= batchReceiveEventSize.
-	for i := 1; i <= batchReceiveEventSize; i++ {
-		for j := 0; j < i; j++ {
-			ls.inputCh <- model.NewPolymorphicEvent(
-				&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(j)})
-		}
-		cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
-		require.Nil(t, err)
-		require.Equal(t, i, n)
-		require.EqualValues(t, 0, rts)
-		require.EqualValues(t, ls.lastSentResolvedTs, cts)
-		require.EqualValues(t, expectedEvents[:n], eventsBuf[:n])
-	}
-
-	// Test message count > batchReceiveEventSize
-	for i := batchReceiveEventSize + 1; i <= sorterInputCap; i++ {
-		expectedEvents1 := make([]*model.PolymorphicEvent, i)
-		for j := 0; j < i; j++ {
-			ls.inputCh <- model.NewPolymorphicEvent(
-				&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(j)})
-			expectedEvents1[j] = model.NewPolymorphicEvent(
-				&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(j)})
-		}
-
-		quotient, remainder := i/batchReceiveEventSize, i%batchReceiveEventSize
-		for q := 0; q < quotient; q++ {
-			cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
-			require.Nil(t, err)
-			require.Equal(t, batchReceiveEventSize, n)
-			require.EqualValues(t, 0, rts)
-			require.EqualValues(t, ls.lastSentResolvedTs, cts)
-			start, end := q*batchReceiveEventSize, q*batchReceiveEventSize+n
-			require.EqualValues(t, expectedEvents1[start:end], eventsBuf[:n],
-				"%d, %d, %d, %d", i, quotient, remainder, n)
-		}
-		if remainder != 0 {
-			cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
-			require.Nil(t, err)
-			require.Equal(t, remainder, n)
-			require.EqualValues(t, 0, rts)
-			require.EqualValues(t, ls.lastSentResolvedTs, cts)
-			start, end := quotient*batchReceiveEventSize, quotient*batchReceiveEventSize+n
-			require.EqualValues(t, expectedEvents1[start:end], eventsBuf[:n],
-				"%d, %d, %d, %d", i, quotient, remainder, n)
-		}
-	}
-
-	// Test returned max resolved ts of new resolvedts events.
-	// Send batchReceiveEventSize/3 resolved events
-	for i := 1; i <= batchReceiveEventSize/3; i++ {
-		ls.inputCh <- model.NewResolvedPolymorphicEvent(0, uint64(i))
-	}
-	// Send batchReceiveEventSize/3 events
-	for i := 0; i < batchReceiveEventSize/3; i++ {
-		ls.inputCh <- model.NewPolymorphicEvent(
-			&model.RawKVEntry{CRTs: ls.lastSentResolvedTs, RegionID: uint64(i)})
-	}
-	_, rts, n, err := ls.wait(ctx, false, eventsBuf)
-	require.Nil(t, err)
-	require.EqualValues(t, batchReceiveEventSize/3, n)
-	require.EqualValues(t, batchReceiveEventSize/3, rts)
-	require.EqualValues(t, expectedEvents[:n], eventsBuf[:n])
-
-	// Test returned max commit ts of new events
-	// Send batchReceiveEventSize/2 events
-	for i := 1; i <= batchReceiveEventSize/2; i++ {
-		ls.inputCh <- model.NewPolymorphicEvent(
-			&model.RawKVEntry{CRTs: uint64(i), RegionID: uint64(i)})
-	}
-	cts, rts, n, err := ls.wait(ctx, false, eventsBuf)
-	require.Nil(t, err)
-	require.EqualValues(t, batchReceiveEventSize/2, n)
-	require.EqualValues(t, batchReceiveEventSize/2, cts)
-	require.EqualValues(t, 0, rts)
-
-	// Test input block on empty message.
-	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
-	defer dcancel()
-	cts, rts, n, err = ls.wait(dctx, false, eventsBuf)
-	require.Regexp(t, "context deadline exceeded", err)
-	require.Equal(t, 0, n)
-	require.EqualValues(t, 0, cts)
-	require.EqualValues(t, 0, rts)
-}
-
-func TestWaitOutput(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	capacity := 4
-	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestSorter(ctx, capacity)
-
-	eventsBuf := make([]*model.PolymorphicEvent, batchReceiveEventSize)
-
-	waitOutput := true
-	// It sends a dummy event if there is no buffered event.
-	cts, rts, n, err := ls.wait(ctx, waitOutput, eventsBuf)
-	require.Nil(t, err)
-	require.EqualValues(t, 0, n)
-	require.EqualValues(t, 0, cts)
-	require.EqualValues(t, 0, rts)
-	require.EqualValues(t,
-		model.NewResolvedPolymorphicEvent(0, 0), <-ls.outputCh)
-
-	// Test wait block when output channel is unavailable.
-	ls.outputCh = make(chan *model.PolymorphicEvent)
-	dctx, dcancel := context.WithDeadline(ctx, time.Now().Add(100*time.Millisecond))
-	defer dcancel()
-	cts, rts, n, err = ls.wait(dctx, waitOutput, eventsBuf)
-	require.Regexp(t, "context deadline exceeded", err)
-	require.Equal(t, 0, n)
-	require.EqualValues(t, 0, cts)
-	require.EqualValues(t, 0, rts)
-}
-
-func TestBuildTask(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	capacity := 4
-	require.Greater(t, batchReceiveEventSize, capacity)
-	ls, _ := newTestSorter(ctx, capacity)
 
 	cases := []struct {
-		events     []*model.PolymorphicEvent
-		deleteKeys []message.Key
+		deleteKeys   []message.Key
+		sleep        time.Duration
+		expectDelete *message.DeleteRequest
 	}{
-		// Empty write and delete.
+		// Empty delete does not set delete.
 		{
-			events:     []*model.PolymorphicEvent{},
 			deleteKeys: []message.Key{},
 		},
-		// Write one event
+		// 1 delete key does not set delete.
 		{
-			events: []*model.PolymorphicEvent{
-				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}),
-			},
-			deleteKeys: []message.Key{},
-		},
-		// Write one event and delete one key.
-		{
-			events: []*model.PolymorphicEvent{
-				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}),
-			},
 			deleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
 		},
-		// Write two events and delete one key.
+		// One more delete key sets delete.
 		{
-			events: []*model.PolymorphicEvent{
-				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
-				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 6}),
-			},
 			deleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
+			},
+			expectDelete: &message.DeleteRequest{
+				Count: 2,
+				Range: [2][]byte{
+					encoding.EncodeTsKey(r.uid, r.tableID, 0),
+					encoding.EncodeKey(r.uid, r.tableID,
+						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1})),
+				},
+			},
+		},
+		// Waiting long period sets delete.
+		{
+			deleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3}))),
+			},
+			sleep: 4 * time.Second,
+			expectDelete: &message.DeleteRequest{
+				Count: 1,
+				Range: [2][]byte{
+					encoding.EncodeTsKey(r.uid, r.tableID, 0),
+					encoding.EncodeKey(r.uid, r.tableID,
+						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3})),
+				},
 			},
 		},
 	}
 	for i, cs := range cases {
-		events, deleteKeys := cs.events, cs.deleteKeys
-		task, err := ls.buildTask(events, deleteKeys)
-		require.Nil(t, err, "case #%d, %v", i, cs)
+		if cs.sleep != 0 {
+			time.Sleep(cs.sleep)
+		}
+		deleteKeys := cs.deleteKeys
+		task := &message.Task{}
+		r.setTaskDelete(task, deleteKeys)
 
-		expectedEvents := make(map[message.Key][]uint8)
-		for _, ev := range events {
-			value, err := ls.serde.Marshal(ev, []byte{})
-			require.Nil(t, err, "case #%d, %v", i, cs)
-			key := message.Key(encoding.EncodeKey(ls.uid, ls.tableID, ev))
-			expectedEvents[key] = value
-		}
-		for _, key := range deleteKeys {
-			expectedEvents[key] = []byte{}
-		}
-		require.EqualValues(t, message.Task{
-			UID:      ls.uid,
-			TableID:  ls.tableID,
-			WriteReq: expectedEvents,
+		require.EqualValues(t, &message.Task{
+			DeleteReq: cs.expectDelete,
 		}, task, "case #%d, %v", i, cs)
 	}
 }
 
-func TestOutput(t *testing.T) {
+func TestReaderOutput(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	r := newTestReader()
 
-	capacity := 4
-	ls, _ := newTestSorter(ctx, capacity)
-
-	ls.outputCh = make(chan *model.PolymorphicEvent, 1)
-	ok := ls.output(&model.PolymorphicEvent{CRTs: 1})
+	r.outputCh = make(chan *model.PolymorphicEvent, 1)
+	ok := r.output(&model.PolymorphicEvent{CRTs: 1})
 	require.True(t, ok)
-	require.EqualValues(t, &model.PolymorphicEvent{CRTs: 1}, ls.lastEvent)
-	ok = ls.output(&model.PolymorphicEvent{CRTs: 1})
+	require.EqualValues(t, &model.PolymorphicEvent{CRTs: 1}, r.lastEvent)
+	ok = r.output(&model.PolymorphicEvent{CRTs: 1})
 	require.False(t, ok)
-	ls.outputResolvedTs(2)
-	require.EqualValues(t, 1, ls.lastSentResolvedTs)
+	r.outputResolvedTs(2)
+	require.EqualValues(t, 1, r.lastSentCommitTs)
 
-	<-ls.outputCh
-	ls.outputResolvedTs(2)
-	require.EqualValues(t, 2, ls.lastSentResolvedTs)
+	<-r.outputCh
+	r.outputResolvedTs(2)
+	require.EqualValues(t, 2, r.lastSentResolvedTs)
 
-	<-ls.outputCh
-	ok = ls.output(&model.PolymorphicEvent{CRTs: 3})
+	<-r.outputCh
+	ok = r.output(&model.PolymorphicEvent{CRTs: 3})
 	require.True(t, ok)
 }
 
-func TestOutputBufferedResolvedEvents(t *testing.T) {
+func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	capacity := 4
-	ls, _ := newTestSorter(ctx, capacity)
+	r := newTestReader()
 
 	buf := newOutputBuffer(capacity)
 
@@ -373,7 +213,7 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -387,14 +227,14 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 			outputChCap: 2,
 			inputEvents: []*model.PolymorphicEvent{},
 			inputDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			inputSendResolvedTsHint: true,
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{},
@@ -406,16 +246,16 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}),
 			},
 			inputDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			inputSendResolvedTsHint: true,
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -439,9 +279,9 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 3}),
 			},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 1}))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID,
+				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 2}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -470,11 +310,11 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		ls.outputCh = make(chan *model.PolymorphicEvent, cs.outputChCap)
+		r.outputCh = make(chan *model.PolymorphicEvent, cs.outputChCap)
 		buf.resolvedEvents = append([]*model.PolymorphicEvent{}, cs.inputEvents...)
 		buf.deleteKeys = append([]message.Key{}, cs.inputDeleteKeys...)
 
-		ls.outputBufferedResolvedEvents(buf, cs.inputSendResolvedTsHint)
+		r.outputBufferedResolvedEvents(buf, cs.inputSendResolvedTsHint)
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)
 
@@ -482,7 +322,7 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 	RECV:
 		for {
 			select {
-			case ev := <-ls.outputCh:
+			case ev := <-r.outputCh:
 				outputEvents = append(outputEvents, ev)
 			default:
 				break RECV
@@ -493,17 +333,17 @@ func TestOutputBufferedResolvedEvents(t *testing.T) {
 }
 
 func prepareTxnData(
-	t *testing.T, ls *Sorter, txnCount, txnSize int,
+	t *testing.T, r *reader, txnCount, txnSize int,
 ) db.DB {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	db, err := db.OpenLevelDB(context.Background(), 1, t.TempDir(), cfg)
+	db, err := db.OpenPebble(context.Background(), 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	wb := db.Batch(0)
 	for i := 1; i < txnCount+1; i++ { // txns.
 		for j := 0; j < txnSize; j++ { // events.
-			event := newTestEvent(uint64(i)+1, uint64(i), j)
-			key := encoding.EncodeKey(ls.uid, ls.tableID, event)
-			value, err := ls.serde.Marshal(event, []byte{})
+			event := newTestEvent(uint64(i)+2, uint64(i), j)
+			key := encoding.EncodeKey(r.uid, r.tableID, event)
+			value, err := r.serde.Marshal(event, []byte{})
 			require.Nil(t, err)
 			t.Logf("key: %s, value: %s\n", message.Key(key), hex.EncodeToString(value))
 			wb.Put(key, value)
@@ -513,22 +353,19 @@ func prepareTxnData(
 	return db
 }
 
-func TestOutputIterEvents(t *testing.T) {
+func TestReaderOutputIterEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	capacity := 4
-	ls, _ := newTestSorter(ctx, capacity)
+	r := newTestReader()
 
 	// Prepare data, 3 txns, 3 events for each.
-	// CRTs 2, StartTs 1, keys (0|1|2)
-	// CRTs 3, StartTs 2, keys (0|1|2)
-	// CRTs 4, StartTs 3, keys (0|1|2)
-	// CRTs 5, StartTs 4, keys (0|1|2)
+	// CRTs 3, StartTs 1, keys (0|1|2)
+	// CRTs 4, StartTs 2, keys (0|1|2)
+	// CRTs 5, StartTs 3, keys (0|1|2)
 	// CRTs 6, StartTs 4, keys (0|1|2)
-	db := prepareTxnData(t, ls, 5, 3)
+	// CRTs 7, StartTs 4, keys (0|1|2)
+	db := prepareTxnData(t, r, 5, 3)
 
 	cases := []struct {
 		outputChCap   int
@@ -555,83 +392,83 @@ func TestOutputIterEvents(t *testing.T) {
 		// Nonblocking output three events and one resolved ts.
 		{
 			outputChCap:   4,
-			maxResolvedTs: 2, // CRTs 2 has 3 events.
-
-			expectEvents: []*model.PolymorphicEvent{},
-			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 0))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 1))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 2))),
-			},
-			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(2, 1, 0),
-				newTestEvent(2, 1, 1),
-				newTestEvent(2, 1, 2),
-				// No buffered resolved events, it outputs a resolved ts event.
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
-			expectExhaustedRTs: 2, // Iter is exhausted and no buffered resolved events.
-			expectHasReadNext:  true,
-		},
-		// Blocking output two events of CRTs 3.
-		{
-			outputChCap:   2,
 			maxResolvedTs: 3, // CRTs 3 has 3 events.
 
-			expectEvents: []*model.PolymorphicEvent{newTestEvent(3, 2, 2)},
-			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(3, 2, 0))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(3, 2, 1))),
-			},
-			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(3, 2, 0),
-				newTestEvent(3, 2, 1),
-			},
-			// Events of CRTs 3 have been read and buffered.
-			expectExhaustedRTs: 0,
-			expectHasReadNext:  true,
-		},
-		// Output remaining event of CRTs 3.
-		{
-			outputChCap:   3,
-			maxResolvedTs: 3, // CRTs 3 has 1 events.
-
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(3, 2, 2))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(3, 2, 2),
+				newTestEvent(3, 1, 0),
+				newTestEvent(3, 1, 1),
+				newTestEvent(3, 1, 2),
+				// No buffered resolved events, it outputs a resolved ts event.
 				model.NewResolvedPolymorphicEvent(0, 3),
 			},
 			expectExhaustedRTs: 3, // Iter is exhausted and no buffered resolved events.
 			expectHasReadNext:  true,
 		},
+		// Blocking output two events of CRTs 4.
+		{
+			outputChCap:   2,
+			maxResolvedTs: 4, // CRTs 4 has 3 events.
+
+			expectEvents: []*model.PolymorphicEvent{newTestEvent(4, 2, 2)},
+			expectDeleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 1))),
+			},
+			expectOutputs: []*model.PolymorphicEvent{
+				newTestEvent(4, 2, 0),
+				newTestEvent(4, 2, 1),
+			},
+			// Events of CRTs 4 have been read and buffered.
+			expectExhaustedRTs: 0,
+			expectHasReadNext:  true,
+		},
+		// Output remaining event of CRTs 4.
+		{
+			outputChCap:   3,
+			maxResolvedTs: 4, // CRTs 4 has 1 events.
+
+			expectEvents: []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 2))),
+			},
+			expectOutputs: []*model.PolymorphicEvent{
+				newTestEvent(4, 2, 2),
+				model.NewResolvedPolymorphicEvent(0, 4),
+			},
+			expectExhaustedRTs: 4, // Iter is exhausted and no buffered resolved events.
+			expectHasReadNext:  true,
+		},
 		// Resolved ts covers all resolved events,
-		// blocking output events of CRTs 4 (3 events) and 5 (1 event).
+		// blocking output events of CRTs 5 (3 events) and 6 (1 event).
 		{
 			outputChCap:   5,
 			maxResolvedTs: 7,
 
 			expectEvents: []*model.PolymorphicEvent{
-				newTestEvent(5, 4, 1),
-				newTestEvent(5, 4, 2),
+				newTestEvent(6, 4, 1),
+				newTestEvent(6, 4, 2),
 			},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(4, 3, 0))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(4, 3, 1))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(4, 3, 2))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(5, 4, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 1))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 2))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 0))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(4, 3, 0),
-				newTestEvent(4, 3, 1),
-				newTestEvent(4, 3, 2),
-				model.NewResolvedPolymorphicEvent(0, 4),
-				newTestEvent(5, 4, 0),
+				newTestEvent(5, 3, 0),
+				newTestEvent(5, 3, 1),
+				newTestEvent(5, 3, 2),
+				model.NewResolvedPolymorphicEvent(0, 5),
+				newTestEvent(6, 4, 0),
 			},
 			expectExhaustedRTs: 0,     // Iter is not exhausted.
-			expectHasReadNext:  false, // (5, 4, 1) is neither output nor buffered.
+			expectHasReadNext:  false, // (6, 4, 1) is neither output nor buffered.
 		},
 		// Resolved ts covers all resolved events, nonblocking output all events.
 		{
@@ -640,19 +477,19 @@ func TestOutputIterEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(5, 4, 1))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(5, 4, 2))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(6, 5, 0))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(6, 5, 1))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(6, 5, 2))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 1))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 2))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 1))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(5, 4, 1),
-				newTestEvent(5, 4, 2),
-				model.NewResolvedPolymorphicEvent(0, 5),
-				newTestEvent(6, 5, 0),
-				newTestEvent(6, 5, 1),
-				newTestEvent(6, 5, 2),
+				newTestEvent(6, 4, 1),
+				newTestEvent(6, 4, 2),
+				model.NewResolvedPolymorphicEvent(0, 6),
+				newTestEvent(7, 5, 0),
+				newTestEvent(7, 5, 1),
+				newTestEvent(7, 5, 2),
 				model.NewResolvedPolymorphicEvent(0, 7),
 			},
 			expectExhaustedRTs: 7, // Iter is exhausted and no buffered resolved events.
@@ -661,22 +498,25 @@ func TestOutputIterEvents(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		ls.outputCh = make(chan *model.PolymorphicEvent, cs.outputChCap)
+		r.outputCh = make(chan *model.PolymorphicEvent, cs.outputChCap)
 		buf := newOutputBuffer(capacity)
 
 		iter := db.Iterator(
-			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-			encoding.EncodeTsKey(ls.uid, ls.tableID, cs.maxResolvedTs+1))
-		iter.Seek([]byte(""))
+			encoding.EncodeTsKey(r.uid, r.tableID, 0),
+			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1))
+		iter.Seek([]byte{})
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
 		hasReadLastNext, exhaustedRTs, err :=
-			ls.outputIterEvents(iter, cs.hasReadNext, buf, cs.maxResolvedTs)
+			r.outputIterEvents(iter, cs.hasReadNext, buf, cs.maxResolvedTs)
 		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
+		for _, k := range buf.deleteKeys {
+			fmt.Printf("%s\n", k)
+		}
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectHasReadNext, hasReadLastNext, "case #%d, %v", i, cs)
-		outputEvents := receiveOutputEvents(ls.outputCh)
+		outputEvents := receiveOutputEvents(r.outputCh)
 		require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d, %v", i, cs)
 
 		wb := db.Batch(0)
@@ -684,56 +524,59 @@ func TestOutputIterEvents(t *testing.T) {
 			wb.Delete([]byte(key))
 		}
 		require.Nil(t, wb.Commit())
+		require.Nil(t, iter.Release())
 	}
 
 	require.Nil(t, db.Close())
 }
 
-func TestStateIterator(t *testing.T) {
+func TestReaderStateIterator(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ls, _ := newTestSorter(ctx, 1)
+	r := newTestReader()
 	// Prepare data, 1 txn.
-	db := prepareTxnData(t, ls, 1, 1)
+	db := prepareTxnData(t, r, 1, 1)
 	sema := semaphore.NewWeighted(1)
-	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": t.Name()})
-	mb := actor.NewMailbox(1, 1)
 	router := actor.NewRouter(t.Name())
-	router.InsertMailbox4Test(mb.ID(), mb)
-	state := pollState{
-		actorID:               mb.ID(),
-		iterFirstSlowDuration: 100 * time.Second,
-		compact:               NewCompactScheduler(router),
-		iterMaxAliveDuration:  100 * time.Millisecond,
-		metricIterFirst:       metricIterDuration.WithLabelValues("first"),
-		metricIterRelease:     metricIterDuration.WithLabelValues("release"),
-	}
+	compactMb := actor.NewMailbox(1, 1)
+	router.InsertMailbox4Test(compactMb.ID(), compactMb)
+	readerMb := actor.NewMailbox(2, 1)
+	router.InsertMailbox4Test(readerMb.ID(), readerMb)
+	state := r.state
+	state.readerID = readerMb.ID()
+	state.readerRouter = router
+	state.compactorID = compactMb.ID()
+	state.iterFirstSlowDuration = 100 * time.Second
+	state.compact = NewCompactScheduler(router)
+	state.iterMaxAliveDuration = 100 * time.Millisecond
 
 	// First get returns a request.
-	req, ok := state.tryGetIterator(1, 1)
+	req, ok := state.tryGetIterator(1, 1, 1, 1)
 	require.False(t, ok)
 	require.NotNil(t, req)
 
 	// Still wait for iterator response.
-	req1, ok := state.tryGetIterator(1, 1)
+	req1, ok := state.tryGetIterator(1, 1, 1, 1)
 	require.False(t, ok)
 	require.Nil(t, req1)
 
 	// Send iterator.
 	require.Nil(t, sema.Acquire(ctx, 1))
-	req.IterCh <- &message.LimitedIterator{
+	req.IterCallback(&message.LimitedIterator{
 		Iterator: db.Iterator([]byte{}, []byte{}),
 		Sema:     sema,
-	}
+	})
+	// Must notify reader
+	_, ok = readerMb.Receive()
+	require.True(t, ok)
 	// Get iterator successfully.
-	req2, ok := state.tryGetIterator(1, 1)
+	req2, ok := state.tryGetIterator(1, 1, 1, 1)
 	require.True(t, ok)
 	require.Nil(t, req2)
 	// Get iterator successfully again.
-	req2, ok = state.tryGetIterator(1, 1)
+	req2, ok = state.tryGetIterator(1, 1, 1, 1)
 	require.True(t, ok)
 	require.Nil(t, req2)
 
@@ -748,7 +591,7 @@ func TestStateIterator(t *testing.T) {
 		Iterator: db.Iterator([]byte{}, []byte{0xff}),
 		Sema:     sema,
 	}
-	require.True(t, state.iter.Seek([]byte("")))
+	require.True(t, state.iter.Seek([]byte{}))
 	state.iterAliveTime = time.Now()
 	time.Sleep(2 * state.iterMaxAliveDuration)
 	require.Nil(t, state.tryReleaseIterator())
@@ -758,24 +601,27 @@ func TestStateIterator(t *testing.T) {
 	require.Nil(t, state.tryReleaseIterator())
 
 	// Slow first must send a compaction task.
-	req3, ok := state.tryGetIterator(1, 1)
+	req3, ok := state.tryGetIterator(1, 1, 1, 1)
 	require.False(t, ok)
 	require.NotNil(t, req3)
 	require.Nil(t, sema.Acquire(ctx, 1))
-	req3.IterCh <- &message.LimitedIterator{
+	req3.IterCallback(&message.LimitedIterator{
 		Iterator: db.Iterator([]byte{}, []byte{}),
 		Sema:     sema,
-	}
+	})
+	// Must notify reader
+	_, ok = readerMb.Receive()
+	require.True(t, ok)
 	// No compaction task yet.
-	_, ok = mb.Receive()
+	_, ok = compactMb.Receive()
 	require.False(t, ok)
 	// Always slow.
 	state.iterFirstSlowDuration = time.Duration(0)
-	_, ok = state.tryGetIterator(1, 1)
+	_, ok = state.tryGetIterator(1, 1, 1, 1)
 	require.True(t, ok)
 	require.NotNil(t, state.iter)
 	// Must recv a compaction task.
-	_, ok = mb.Receive()
+	_, ok = compactMb.Receive()
 	require.True(t, ok)
 	// Release iterator.
 	time.Sleep(2 * state.iterMaxAliveDuration)
@@ -785,30 +631,35 @@ func TestStateIterator(t *testing.T) {
 	require.Nil(t, db.Close())
 }
 
-func TestPoll(t *testing.T) {
+func TestReaderPoll(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	capacity := 4
-	ls, mb := newTestSorter(ctx, capacity)
+	router := actor.NewRouter(t.Name())
+	sema := semaphore.NewWeighted(1)
+	dbMb := actor.NewMailbox(1, capacity)
+	router.InsertMailbox4Test(dbMb.ID(), dbMb)
+	readerMb := actor.NewMailbox(2, capacity)
+	router.InsertMailbox4Test(readerMb.ID(), readerMb)
+	r := newTestReader()
+	r.common.dbRouter = router
+	r.common.dbActorID = dbMb.ID()
+	r.outputCh = make(chan *model.PolymorphicEvent, sorterOutputCap)
 
 	// Prepare data, 3 txns, 3 events for each.
-	// CRTs 2, StartTs 1, keys (0|1|2)
-	// CRTs 3, StartTs 2, keys (0|1|2)
-	// CRTs 4, StartTs 3, keys (0|1|2)
-	// CRTs 5, StartTs 4, keys (0|1|2)
-	// CRTs 6, StartTs 4, keys (0|1|2)
-	db := prepareTxnData(t, ls, 5, 3)
-	sema := semaphore.NewWeighted(1)
+	// CRTs 3, StartTs 1, keys (0|1|2)
+	// CRTs 4, StartTs 2, keys (0|1|2)
+	db := prepareTxnData(t, r, 2, 3)
 
 	// We need to poll twice to read resolved events, so we need a slice of
 	// two cases.
 	cases := [][2]struct {
-		inputEvents []*model.PolymorphicEvent
+		inputReadTs message.ReadTs
 		inputIter   func([2][]byte) *message.LimitedIterator
-		state       *pollState
+		state       pollState
 
 		expectEvents        []*model.PolymorphicEvent
 		expectDeleteKeys    []message.Key
@@ -818,33 +669,27 @@ func TestPoll(t *testing.T) {
 		expectExhaustedRTs  uint64
 	}{
 		{{ // The first poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 1),
-			},
-			state: &pollState{
-				eventsBuf: make([]*model.PolymorphicEvent, 1),
+			inputReadTs: message.ReadTs{MaxResolvedTs: 1},
+			state: pollState{
 				outputBuf: newOutputBuffer(1),
 			},
-			inputIter: func([2][]byte) *message.LimitedIterator { return nil },
+			inputIter: nil,
 
-			expectEvents:     []*model.PolymorphicEvent{},
-			expectDeleteKeys: []message.Key{},
-			// It is initialized to 1 in the test.
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
 			expectOutputs:       []*model.PolymorphicEvent{model.NewResolvedPolymorphicEvent(0, 1)},
 			expectMaxCommitTs:   0,
 			expectMaxResolvedTs: 1,
 			expectExhaustedRTs:  0,
 		}, { // The second poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 1),
-			},
-			state:     nil, // state is inherited from the first poll.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 1},
+			// state is inherited from the first poll.
 			inputIter: nil, // no need to make an iterator.
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
-			// It is initialized to 1 in the test.
-			expectOutputs:       []*model.PolymorphicEvent{model.NewResolvedPolymorphicEvent(0, 1)},
+			// Does not output the same resolved ts twice.
+			expectOutputs:       []*model.PolymorphicEvent{},
 			expectMaxCommitTs:   0,
 			expectMaxResolvedTs: 1,
 			expectExhaustedRTs:  0,
@@ -852,12 +697,8 @@ func TestPoll(t *testing.T) {
 		// maxCommitTs and maxResolvedTs must advance according to inputs.
 		// And exhaustedResolvedTs must advance if there is no resolved event.
 		{{ // The first poll
-			inputEvents: []*model.PolymorphicEvent{
-				newTestEvent(3, 2, 1), // crts 3, startts 2
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
-			state: &pollState{
-				eventsBuf: make([]*model.PolymorphicEvent, 2),
+			inputReadTs: message.ReadTs{MaxResolvedTs: 2, MaxCommitTs: 3},
+			state: pollState{
 				outputBuf: newOutputBuffer(1),
 			},
 			// An empty iterator.
@@ -870,10 +711,8 @@ func TestPoll(t *testing.T) {
 			expectMaxResolvedTs: 2,
 			expectExhaustedRTs:  0,
 		}, { // The second poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
-			state:     nil, // state is inherited from the first poll.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 2},
+			// state is inherited from the first poll.
 			inputIter: nil, // no need to make an iterator.
 
 			expectEvents:     []*model.PolymorphicEvent{},
@@ -887,90 +726,46 @@ func TestPoll(t *testing.T) {
 			expectExhaustedRTs: 2,
 		}},
 		// exhaustedResolvedTs must advance if all resolved events are outputted.
-		// Output: CRTs 2, StartTs 1, keys (0|1|2)
+		// Output: CRTs 3, StartTs 1, keys (0|1|2)
 		{{ // The first poll
-			inputEvents: []*model.PolymorphicEvent{
-				newTestEvent(3, 2, 1), // crts 3, startts 2
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
-			state: &pollState{
-				eventsBuf: make([]*model.PolymorphicEvent, 2),
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3, MaxCommitTs: 3},
+			state: pollState{
 				outputBuf: newOutputBuffer(1),
 			},
-			inputIter: newSnapshot(ctx, t, db, sema),
+			inputIter: newIterator(ctx, t, db, sema),
 
 			expectEvents:        []*model.PolymorphicEvent{},
 			expectDeleteKeys:    []message.Key{},
 			expectOutputs:       []*model.PolymorphicEvent{},
 			expectMaxCommitTs:   3,
-			expectMaxResolvedTs: 2,
+			expectMaxResolvedTs: 3,
 			expectExhaustedRTs:  0,
 		}, { // The second poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
-			state:     nil, // state is inherited from the first poll.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3},
+			// state is inherited from the first poll.
 			inputIter: nil, // no need to make an iterator.
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 0))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 1))),
-				message.Key(encoding.EncodeKey(ls.uid, ls.tableID, newTestEvent(2, 1, 2))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
-				newTestEvent(2, 1, 0),
-				newTestEvent(2, 1, 1),
-				newTestEvent(2, 1, 2),
-				model.NewResolvedPolymorphicEvent(0, 2),
+				newTestEvent(3, 1, 0),
+				newTestEvent(3, 1, 1),
+				newTestEvent(3, 1, 2),
+				model.NewResolvedPolymorphicEvent(0, 3),
 			},
 			expectMaxCommitTs:   3,
-			expectMaxResolvedTs: 2,
+			expectMaxResolvedTs: 3,
 			// exhaustedResolvedTs must advance if there is no resolved event.
-			expectExhaustedRTs: 2,
-		}},
-		// maxResolvedTs must advance even if there is only resolved ts event.
-		{{ // The first poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 3),
-			},
-			state: &pollState{
-				eventsBuf:           make([]*model.PolymorphicEvent, 2),
-				outputBuf:           newOutputBuffer(1),
-				maxCommitTs:         2,
-				exhaustedResolvedTs: 2,
-			},
-			inputIter: func([2][]byte) *message.LimitedIterator { return nil },
-
-			expectEvents:     []*model.PolymorphicEvent{},
-			expectDeleteKeys: []message.Key{},
-			expectOutputs: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 3),
-			},
-			expectMaxCommitTs:   2,
-			expectMaxResolvedTs: 3,
-			expectExhaustedRTs:  2,
-		}, { // The second poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 3),
-			},
-			state:     nil, // state is inherited from the first poll.
-			inputIter: nil, // no need to make an iterator.
-
-			expectEvents:     []*model.PolymorphicEvent{},
-			expectDeleteKeys: []message.Key{},
-			expectOutputs: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 3),
-			},
-			expectMaxCommitTs:   2,
-			expectMaxResolvedTs: 3,
-			expectExhaustedRTs:  2,
+			expectExhaustedRTs: 3,
 		}},
 		// Batch output buffered resolved events
 		{{ // The first poll
-			inputEvents: []*model.PolymorphicEvent{},
-			state: &pollState{
-				eventsBuf: make([]*model.PolymorphicEvent, 2),
+			inputReadTs: message.ReadTs{},
+			state: pollState{
 				outputBuf: &outputBuffer{
 					deleteKeys: make([]message.Key, 0, 2),
 					resolvedEvents: []*model.PolymorphicEvent{
@@ -981,12 +776,11 @@ func TestPoll(t *testing.T) {
 					advisedCapacity: 2,
 				},
 			},
-			inputIter: func([2][]byte) *message.LimitedIterator { return nil },
+			inputIter: nil,
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
 			expectOutputs: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 0), // A dummy events.
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4}),
@@ -996,17 +790,14 @@ func TestPoll(t *testing.T) {
 			expectMaxResolvedTs: 0,
 			expectExhaustedRTs:  0,
 		}, { // The second poll
-			inputEvents: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 4),
-			},
-			state:     nil, // state is inherited from the first poll.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 4},
+			// state is inherited from the first poll.
 			inputIter: nil, // no need to make an iterator.
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
-			expectOutputs: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 4),
-			},
+			// Does not output the same resolved ts twice.
+			expectOutputs:       []*model.PolymorphicEvent{},
 			expectMaxCommitTs:   0,
 			expectMaxResolvedTs: 4,
 			expectExhaustedRTs:  0,
@@ -1016,35 +807,43 @@ func TestPoll(t *testing.T) {
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
 		prometheus.Labels{"id": t.Name()})
 	for i, css := range cases {
-		state := css[0].state
-		state.iterFirstSlowDuration = 100 * time.Second
-		state.iterMaxAliveDuration = 100 * time.Second
-		state.metricIterFirst = metricIterDuration.WithLabelValues("first")
-		state.metricIterRelease = metricIterDuration.WithLabelValues("release")
+		r.state = css[0].state
+		r.state.readerRouter = router
+		r.state.readerID = readerMb.ID()
+		r.state.iterFirstSlowDuration = 100 * time.Second
+		r.state.iterMaxAliveDuration = 100 * time.Second
+		// Do not send delete range.
+		r.delete.countThreshold = 1000
+		r.delete.period = 100 * time.Second
+		r.state.metricIterFirst = metricIterDuration.WithLabelValues("first")
+		r.state.metricIterRelease = metricIterDuration.WithLabelValues("release")
 		for j, cs := range css {
-			for i := range cs.inputEvents {
-				ls.AddEntry(ctx, cs.inputEvents[i])
-			}
 			t.Logf("test case #%d[%d], %v", i, j, cs)
-			require.Nil(t, ls.poll(ctx, state))
-			require.EqualValues(t, cs.expectEvents, state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectDeleteKeys, state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxCommitTs, state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxResolvedTs, state.maxResolvedTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectExhaustedRTs, state.exhaustedResolvedTs, "case #%d[%d], %v", i, j, cs)
-			outputEvents := receiveOutputEvents(ls.outputCh)
+			msg := actormsg.SorterMessage(message.Task{ReadTs: cs.inputReadTs})
+			require.True(t, r.Poll(ctx, []actormsg.Message{msg}))
+			require.EqualValues(t, cs.expectEvents, r.state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectMaxCommitTs, r.state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectMaxResolvedTs, r.state.maxResolvedTs, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(t, cs.expectExhaustedRTs, r.state.exhaustedResolvedTs, "case #%d[%d], %v", i, j, cs)
+			outputEvents := receiveOutputEvents(r.outputCh)
 			require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d[%d], %v", i, j, cs)
 
-			task, ok := mb.Receive()
+			select {
+			case err := <-r.errCh:
+				require.Fail(t, "must not receive error", err)
+			default:
+			}
+			task, ok := dbMb.Receive()
 			if !ok {
 				// No task, so there must be nil inputIter.
 				require.Nil(t, cs.inputIter, "case #%d[%d], %v", i, j, cs)
 				continue
 			}
-			handleTask(task, cs.inputIter)
+			handleTask(t, task, cs.inputIter, readerMb)
 		}
-		if state.iter != nil {
-			require.Nil(t, state.iter.Release())
+		if r.state.iter != nil {
+			require.Nil(t, r.state.iter.Release())
 		}
 	}
 
@@ -1052,7 +851,8 @@ func TestPoll(t *testing.T) {
 }
 
 func handleTask(
-	task actormsg.Message, iterFn func(rg [2][]byte) *message.LimitedIterator,
+	t *testing.T, task actormsg.Message,
+	iterFn func(rg [2][]byte) *message.LimitedIterator, readerMb actor.Mailbox,
 ) {
 	if task.SorterTask.IterReq == nil || iterFn == nil {
 		return
@@ -1060,16 +860,19 @@ func handleTask(
 	iter := iterFn(task.SorterTask.IterReq.Range)
 	if iter != nil {
 		iter.ResolvedTs = task.SorterTask.IterReq.ResolvedTs
-		task.SorterTask.IterReq.IterCh <- iter
+		task.SorterTask.IterReq.IterCallback(iter)
+		// Must notify reader
+		_, ok := readerMb.Receive()
+		require.True(t, ok)
 	}
-	close(task.SorterTask.IterReq.IterCh)
 }
 
-func newSnapshot(
+func newIterator(
 	ctx context.Context, t *testing.T, db db.DB, sema *semaphore.Weighted,
 ) func(rg [2][]byte) *message.LimitedIterator {
 	return func(rg [2][]byte) *message.LimitedIterator {
 		require.Nil(t, sema.Acquire(ctx, 1))
+		fmt.Printf("newIterator %s %s\n", message.Key(rg[0]), message.Key(rg[1]))
 		return &message.LimitedIterator{
 			Iterator: db.Iterator(rg[0], rg[1]),
 			Sema:     sema,
@@ -1093,17 +896,20 @@ func TestTryAddEntry(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	capacity := 1
-	ls, _ := newTestSorter(ctx, capacity)
+	s, mb := newTestSorter(t.Name(), 1)
 
-	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
-	sent, err := ls.TryAddEntry(ctx, resolvedTs1)
+	event := model.NewResolvedPolymorphicEvent(0, 1)
+	sent, err := s.TryAddEntry(ctx, event)
 	require.True(t, sent)
 	require.Nil(t, err)
-	require.EqualValues(t, resolvedTs1, <-ls.inputCh)
+	task, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, event, task.SorterTask.InputEvent)
 
-	ls.inputCh = make(chan *model.PolymorphicEvent)
-	sent, err = ls.TryAddEntry(ctx, resolvedTs1)
+	sent, err = s.TryAddEntry(ctx, event)
+	require.True(t, sent)
+	require.Nil(t, err)
+	sent, err = s.TryAddEntry(ctx, event)
 	require.False(t, sent)
 	require.Nil(t, err)
 }

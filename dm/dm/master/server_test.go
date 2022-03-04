@@ -244,8 +244,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 			expect = pb.Stage_Running
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
-		case pb.TaskOp_Stop:
-			expect = pb.Stage_Stopped
+		case pb.TaskOp_Delete:
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
@@ -272,7 +271,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 		}
 	case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
 		queryResp.SubTaskStatus = []*pb.SubTaskStatus{{}}
-		if expect == pb.Stage_Stopped {
+		if opTaskReq, ok := masterReq.(*pb.OperateTaskRequest); ok && opTaskReq.Op == pb.TaskOp_Delete {
 			queryResp.SubTaskStatus[0].Status = &pb.SubTaskStatus_Msg{
 				Msg: fmt.Sprintf("no sub task with name %s has started", taskName),
 			}
@@ -607,7 +606,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 		}},
 	}}
 	req := &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
 	ctrl := gomock.NewController(c)
@@ -1168,12 +1167,12 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 		Name: taskName,
 	}
 	stopReq1 := &pb.OperateTaskRequest{
-		Op:      pb.TaskOp_Stop,
+		Op:      pb.TaskOp_Delete,
 		Name:    taskName,
 		Sources: []string{sources[0]},
 	}
 	stopReq2 := &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
@@ -1212,13 +1211,13 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	resp, err = server.OperateTask(context.Background(), stopReq1)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(server.getTaskResources(taskName), check.DeepEquals, []string{sources[1]})
+	c.Assert(server.getTaskSourceNameList(taskName), check.DeepEquals, []string{sources[1]})
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}})
 	// 5. test stop task successfully, remove all workers
 	resp, err = server.OperateTask(context.Background(), stopReq2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(server.getTaskResources(taskName)), check.Equals, 0)
+	c.Assert(len(server.getTaskSourceNameList(taskName)), check.Equals, 0)
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[1]}})
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
@@ -2206,4 +2205,138 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	resp := &pb.StartTaskResponse{}
 	err = common.SendRequest(ctx, "StartTask", &pb.StartTaskRequest{}, &resp)
 	c.Assert(err, check.IsNil)
+}
+
+func (t *testMaster) TestStartStopValidion(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq))
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1.1 start validation
+	validatorStartReq := &pb.StartValidationRequest{
+		Mode:     config.ValidationFull,
+		TaskName: taskName,
+	}
+	startResp, err := server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
+
+	// 1.2 start existed validaion task
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue) // return with no error
+
+	// 1.3 start non-existed subtask's validator
+	validatorStartReq.TaskName = "not-exist-name"
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsFalse)
+	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 2.1 stop validation
+	validatorStopReq := &pb.StopValidationRequest{
+		TaskName: taskName,
+	}
+	stopResp, err := server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 2.2 re-stop stopped task
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue) // return with no error
+
+	// 2.3 stop non-existed subtask's validator
+	validatorStopReq.TaskName = "not-exist-name"
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsFalse)
+	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 3.1 start validation with mode fast
+	validatorStartReq.TaskName = taskName
+	validatorStartReq.Mode = config.ValidationFast
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
+
+	// 4.1 stop all tasks
+	validatorStopReq.TaskName = ""
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 4.2 start all tasks
+	validatorStartReq.TaskName = ""
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+}
+
+func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, taskName)
+
+	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, taskName, 0)
+	c.Assert(err, check.IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, check.HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[taskName], stage)
+	default:
+		c.Assert(stageM, check.HasLen, 0)
+	}
+}
+
+//nolint:unparam
+func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string, expectMode string) {
+	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
+	v, ok := cfgs[task]
+	c.Assert(ok, check.IsTrue)
+	cfg, ok := v[source]
+	c.Assert(ok, check.IsTrue)
+	c.Assert(cfg.ValidatorCfg.Mode, check.Equals, expectMode)
 }

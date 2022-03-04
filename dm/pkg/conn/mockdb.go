@@ -74,6 +74,19 @@ func InitVersionDB(c *check.C) sqlmock.Sqlmock {
 	return mock
 }
 
+func InitMockDBFull() (*sql.DB, sqlmock.Sqlmock, error) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		return nil, nil, err
+	}
+	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
+		mdbp.db = db
+	} else {
+		DefaultDBProvider = &mockDBProvider{db: db}
+	}
+	return db, mock, err
+}
+
 // TODO: export Config in https://github.com/pingcap/tidb/blob/a8fa29b56d633b1ec843e21cb89131dd4fd601db/br/pkg/mock/mock_cluster.go#L35
 // Cluster is mock tidb cluster.
 type Cluster struct {
