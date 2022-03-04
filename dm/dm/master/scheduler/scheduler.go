@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -573,14 +574,6 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 			expect := inputSources[i]
 			if got != expect {
 				return terror.ErrSchedulerWrongWorkerInput.Generate(inputWorkers[i], expect, got)
-			}
-
-			// if the worker has started-relay for a source, it can't be bound to another source.
-			relaySource := workers[i].RelaySourceID()
-			another := i ^ 1 // make use of XOR to flip 0 and 1
-			toBindSource := inputSources[another]
-			if relaySource != "" && toBindSource != "" && relaySource != toBindSource {
-				return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(inputWorkers[i], toBindSource, relaySource)
 			}
 		}
 	}
@@ -1316,47 +1309,24 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 	}
 	var (
 		notExistWorkers []string
-		// below two list means the worker that requested start-relay has bound to another source
-		boundWorkers, boundSources []string
-		alreadyStarted             []string
-		// currently we forbid one worker starting multiple relay
-		busyWorkers, busySources []string
+		alreadyStarted  []string
 	)
 	for _, workerName := range workers {
-		var (
-			worker *Worker
-			ok     bool
-		)
-		if worker, ok = s.workers[workerName]; !ok {
+		var ok bool
+		if _, ok = s.workers[workerName]; !ok {
 			notExistWorkers = append(notExistWorkers, workerName)
 			continue
 		}
 		if _, ok = startedWorkers[workerName]; ok {
 			alreadyStarted = append(alreadyStarted, workerName)
 		}
-
-		// for Bound and Offline worker
-		if worker.Bound().Source != "" && worker.Bound().Source != source {
-			boundWorkers = append(boundWorkers, workerName)
-			boundSources = append(boundSources, worker.Bound().Source)
-		}
-		if relaySource := worker.RelaySourceID(); relaySource != "" && relaySource != source {
-			busyWorkers = append(busyWorkers, workerName)
-			busySources = append(busySources, relaySource)
-		}
 	}
 
 	if len(notExistWorkers) > 0 {
 		return terror.ErrSchedulerWorkerNotExist.Generate(notExistWorkers)
 	}
-	if len(boundWorkers) > 0 {
-		return terror.ErrSchedulerRelayWorkersWrongBound.Generate(boundWorkers, boundSources)
-	}
-	if len(busyWorkers) > 0 {
-		return terror.ErrSchedulerRelayWorkersBusy.Generate(busyWorkers, busySources)
-	}
 	if len(alreadyStarted) > 0 {
-		s.logger.Warn("some workers already started relay",
+		s.logger.Info("some workers already started relay",
 			zap.String("source", source),
 			zap.Strings("already started workers", alreadyStarted))
 	}
@@ -1444,15 +1414,19 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 			continue
 		}
 
-		startedRelay := worker.RelaySourceID()
-		if startedRelay == "" {
+		relaySources := worker.RelaySources()
+		if len(relaySources) == 0 {
 			alreadyStopped = append(alreadyStopped, workerName)
 			continue
 		}
 
-		if startedRelay != source {
+		if _, ok := relaySources[source]; !ok {
 			unmatchedWorkers = append(unmatchedWorkers, workerName)
-			unmatchedSources = append(unmatchedSources, startedRelay)
+			relaySourcesArr := make([]string, 0, len(relaySources))
+			for relaySource := range relaySources {
+				relaySourcesArr = append(relaySourcesArr, relaySource)
+			}
+			unmatchedSources = append(unmatchedSources, strings.Join(relaySourcesArr, ","))
 		}
 	}
 	if len(notExistWorkers) > 0 {
@@ -2199,31 +2173,40 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	}
 
 	if source != "" {
-		relaySource := w.RelaySourceID()
-		if relaySource != "" && relaySource != source {
-			source = ""
-		} else {
-			// worker not enable relay or last bound is relay source
-			s.logger.Info("found history source when worker bound",
-				zap.String("worker", w.BaseInfo().Name),
-				zap.String("source", source))
+		relaySources := w.RelaySources()
+		if len(relaySources) > 0 {
+			if _, ok := relaySources[source]; !ok {
+				source = ""
+			} else {
+				// worker not enable relay or last bound is relay source
+				s.logger.Info("found history source when worker bound",
+					zap.String("worker", w.BaseInfo().Name),
+					zap.String("source", source))
+			}
 		}
 	}
 
 	// try to find its relay source (currently only one relay source)
 	if source == "" {
-		source = w.RelaySourceID()
-		if source != "" {
-			s.logger.Info("found relay source when worker bound",
-				zap.String("worker", w.BaseInfo().Name),
-				zap.String("source", source))
-			// currently worker can only handle same relay source and source bound, so we don't try bound another source
-			if oldWorker, ok := s.bounds[source]; ok {
-				s.logger.Info("worker has started relay for a source, but that source is bound to another worker, so we let this worker free",
+		relaySources := w.RelaySources()
+		if len(relaySources) > 0 {
+			for relaySource := range relaySources {
+				s.logger.Debug("found relay source when worker bound",
 					zap.String("worker", w.BaseInfo().Name),
-					zap.String("relay source", source),
+					zap.String("source", relaySource))
+				// currently, worker can only handle same relay source and source bound, so we don't try bound another source
+				var (
+					oldWorker *Worker
+					ok        bool
+				)
+				if oldWorker, ok = s.bounds[relaySource]; !ok {
+					source = relaySource
+					break
+				}
+				s.logger.Debug("worker has started relay for a source, but that source is bound to another worker, so we let this worker free",
+					zap.String("worker", w.BaseInfo().Name),
+					zap.String("relay source", relaySource),
 					zap.String("bound worker for its relay source", oldWorker.BaseInfo().Name))
-				return false, nil
 			}
 		}
 	}

@@ -87,12 +87,12 @@ func (t *testWorker) TestWorker(c *C) {
 	w.ToFree()
 	c.Assert(w.StartRelay(source1), IsNil)
 	c.Assert(w.Stage(), Equals, WorkerRelay)
-	c.Assert(w.RelaySourceID(), Equals, source1)
+	checkRelaySource(c, w.RelaySources(), source1)
 
 	// Relay to Free
 	w.StopRelay()
 	c.Assert(w.Stage(), Equals, WorkerFree)
-	c.Assert(w.RelaySourceID(), HasLen, 0)
+	c.Assert(w.RelaySources(), HasLen, 0)
 
 	// Relay to Bound (bound with relay)
 	c.Assert(w.StartRelay(source1), IsNil)
@@ -117,7 +117,7 @@ func (t *testWorker) TestWorker(c *C) {
 	c.Assert(w.relaySource, Equals, source1)
 
 	// Bound to Relay
-	c.Assert(w.Unbound(), IsNil)
+	c.Assert(w.Unbound(source1), IsNil)
 	c.Assert(w.Stage(), Equals, WorkerRelay)
 	c.Assert(w.bound, DeepEquals, nullBound)
 	c.Assert(w.relaySource, Equals, source1)
@@ -125,12 +125,12 @@ func (t *testWorker) TestWorker(c *C) {
 	// Relay to Offline
 	w.ToOffline()
 	c.Assert(w.Stage(), Equals, WorkerOffline)
-	c.Assert(w.RelaySourceID(), Equals, source1)
+	checkRelaySource(c, w.RelaySources(), source1)
 
 	// Offline turn off relay (when DM worker is offline, stop-relay)
 	w.StopRelay()
 	c.Assert(w.stage, Equals, WorkerOffline)
-	c.Assert(w.RelaySourceID(), HasLen, 0)
+	c.Assert(w.RelaySources(), HasLen, 0)
 
 	// SendRequest.
 	req := &workerrpc.Request{

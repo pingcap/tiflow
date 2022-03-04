@@ -225,14 +225,6 @@ func (w *Worker) Bounds() map[string]ha.SourceBound {
 	return w.bounds
 }
 
-// RelaySourceID returns the source ID from which this worker is pulling relay log,
-// returns empty string if not started relay.
-func (w *Worker) RelaySourceID() string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.relaySource
-}
-
 // RelaySources returns the sources from which this worker is pulling relay log,
 // returns empty string if not started relay.
 func (w *Worker) RelaySources() map[string]struct{} {

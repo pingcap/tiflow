@@ -73,6 +73,11 @@ func clearTestInfoOperation(c *C) {
 	c.Assert(ha.ClearTestInfoOperation(etcdTestCli), IsNil)
 }
 
+func checkRelaySource(c *C, relaySources map[string]struct{}, source string) {
+	c.Assert(relaySources, HasLen, 1)
+	c.Assert(relaySources[source], Equals, source)
+}
+
 type testScheduler struct{}
 
 var _ = Suite(&testScheduler{})
@@ -1446,7 +1451,7 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 
 	c.Assert(s.StartRelay(sourceID1, []string{workerName2}), IsNil)
 	c.Assert(worker2.Stage(), Equals, WorkerRelay)
-	c.Assert(worker2.RelaySourceID(), Equals, sourceID1)
+	checkRelaySource(c, worker2.RelaySources(), sourceID1)
 
 	worker3.ToOffline()
 	worker4.ToOffline()
@@ -1894,7 +1899,7 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	c.Assert(ok, IsTrue)
 	worker := s.workers[workerName1]
 	c.Assert(worker.Stage(), Equals, WorkerRelay)
-	c.Assert(worker.RelaySourceID(), Equals, sourceID2)
+	checkRelaySource(c, worker.RelaySources(), sourceID2)
 	_, ok = s.bounds[sourceID1]
 	c.Assert(ok, IsFalse)
 }
@@ -1959,7 +1964,7 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 
 	worker := s.workers[workerName1]
 	c.Assert(worker.Stage(), Equals, WorkerBound)
-	c.Assert(worker.RelaySourceID(), HasLen, 0)
+	c.Assert(worker.RelaySources(), HasLen, 0)
 	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
 }
 
