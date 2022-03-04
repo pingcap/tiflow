@@ -1447,7 +1447,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 	for _, workerName := range workers {
 		delete(s.relayWorkers[source], workerName)
-		s.workers[workerName].StopRelay()
+		s.workers[workerName].StopRelay(source)
 	}
 	if len(s.relayWorkers[source]) == 0 {
 		if _, err := ha.DeleteRelayStage(s.etcdCli, source); err != nil {

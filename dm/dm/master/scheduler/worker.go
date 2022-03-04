@@ -86,9 +86,7 @@ type Worker struct {
 	bounds   map[string]ha.SourceBound // the source bound relationship, source-id -> bound.
 	stage    WorkerStage               // the current stage.
 
-	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
-	relaySource string
-	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
+	// the sources from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
 	relaySources map[string]struct{}
 }
 
@@ -181,20 +179,16 @@ func (w *Worker) StartRelay(sources ...string) error {
 }
 
 // StopRelay clears relay source information of a bound worker and calculates the stage.
-func (w *Worker) StopRelay() {
+func (w *Worker) StopRelay(source string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.relaySource = ""
-	switch w.stage {
-	case WorkerOffline, WorkerBound:
-	case WorkerFree:
+	if _, ok := w.relaySources[source]; !ok {
 		log.L().DPanic("StopRelay for a Free worker should not happen",
 			zap.String("worker name", w.baseInfo.Name))
-	case WorkerRelay:
-		w.stage = WorkerFree
-		w.reportMetrics()
 	}
+	delete(w.relaySources, source)
+	w.reportMetrics()
 }
 
 // BaseInfo returns the base info of the worker.
