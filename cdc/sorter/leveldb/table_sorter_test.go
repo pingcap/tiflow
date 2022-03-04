@@ -182,10 +182,9 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 	buf := newOutputBuffer(capacity)
 
 	cases := []struct {
-		outputChCap             int
-		inputEvents             []*model.PolymorphicEvent
-		inputDeleteKeys         []message.Key
-		inputSendResolvedTsHint bool
+		outputChCap     int
+		inputEvents     []*model.PolymorphicEvent
+		inputDeleteKeys []message.Key
 
 		expectEvents     []*model.PolymorphicEvent
 		expectDeleteKeys []message.Key
@@ -193,10 +192,9 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 	}{
 		// Empty buffer.
 		{
-			outputChCap:             1,
-			inputEvents:             []*model.PolymorphicEvent{},
-			inputDeleteKeys:         []message.Key{},
-			inputSendResolvedTsHint: true,
+			outputChCap:     1,
+			inputEvents:     []*model.PolymorphicEvent{},
+			inputDeleteKeys: []message.Key{},
 
 			expectEvents:     []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{},
@@ -208,8 +206,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 			inputEvents: []*model.PolymorphicEvent{
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}),
 			},
-			inputDeleteKeys:         []message.Key{},
-			inputSendResolvedTsHint: true,
+			inputDeleteKeys: []message.Key{},
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
@@ -230,7 +227,6 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
-			inputSendResolvedTsHint: true,
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
@@ -249,7 +245,6 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				message.Key(encoding.EncodeKey(r.uid, r.tableID,
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
-			inputSendResolvedTsHint: true,
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
@@ -272,8 +267,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 2}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 3}),
 			},
-			inputDeleteKeys:         []message.Key{},
-			inputSendResolvedTsHint: true,
+			inputDeleteKeys: []message.Key{},
 
 			expectEvents: []*model.PolymorphicEvent{
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 3}),
@@ -297,8 +291,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4, RegionID: 1}),
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4, RegionID: 2}),
 			},
-			inputDeleteKeys:         []message.Key{},
-			inputSendResolvedTsHint: true,
+			inputDeleteKeys: []message.Key{},
 
 			expectEvents: []*model.PolymorphicEvent{
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 4, RegionID: 1}),
@@ -314,7 +307,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 		buf.resolvedEvents = append([]*model.PolymorphicEvent{}, cs.inputEvents...)
 		buf.deleteKeys = append([]message.Key{}, cs.inputDeleteKeys...)
 
-		r.outputBufferedResolvedEvents(buf, cs.inputSendResolvedTsHint)
+		r.outputBufferedResolvedEvents(buf)
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)
 
@@ -389,9 +382,9 @@ func TestReaderOutputIterEvents(t *testing.T) {
 			expectExhaustedRTs: 0,
 			expectHasReadNext:  true,
 		},
-		// Nonblocking output three events and one resolved ts.
+		// Nonblocking output three events.
 		{
-			outputChCap:   4,
+			outputChCap:   3,
 			maxResolvedTs: 3, // CRTs 3 has 3 events.
 
 			expectEvents: []*model.PolymorphicEvent{},
@@ -404,8 +397,6 @@ func TestReaderOutputIterEvents(t *testing.T) {
 				newTestEvent(3, 1, 0),
 				newTestEvent(3, 1, 1),
 				newTestEvent(3, 1, 2),
-				// No buffered resolved events, it outputs a resolved ts event.
-				model.NewResolvedPolymorphicEvent(0, 3),
 			},
 			expectExhaustedRTs: 3, // Iter is exhausted and no buffered resolved events.
 			expectHasReadNext:  true,
@@ -425,7 +416,7 @@ func TestReaderOutputIterEvents(t *testing.T) {
 				newTestEvent(4, 2, 1),
 			},
 			// Events of CRTs 4 have been read and buffered.
-			expectExhaustedRTs: 0,
+			expectExhaustedRTs: 4,
 			expectHasReadNext:  true,
 		},
 		// Output remaining event of CRTs 4.
@@ -467,7 +458,9 @@ func TestReaderOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 5),
 				newTestEvent(6, 4, 0),
 			},
-			expectExhaustedRTs: 0,     // Iter is not exhausted.
+			// Iter is not exhausted, but all events with commit ts 6 have been
+			// read into buffer.
+			expectExhaustedRTs: 6,
 			expectHasReadNext:  false, // (6, 4, 1) is neither output nor buffered.
 		},
 		// Resolved ts covers all resolved events, nonblocking output all events.
@@ -493,6 +486,18 @@ func TestReaderOutputIterEvents(t *testing.T) {
 				model.NewResolvedPolymorphicEvent(0, 7),
 			},
 			expectExhaustedRTs: 7, // Iter is exhausted and no buffered resolved events.
+			expectHasReadNext:  true,
+		},
+		// All resolved events outputted, as resolved ts continues advance,
+		// exhausted resolved ts advances too.
+		{
+			outputChCap:   1,
+			maxResolvedTs: 8,
+
+			expectEvents:       []*model.PolymorphicEvent{},
+			expectDeleteKeys:   []message.Key{},
+			expectOutputs:      []*model.PolymorphicEvent{},
+			expectExhaustedRTs: 8,
 			expectHasReadNext:  true,
 		},
 	}
@@ -715,11 +720,9 @@ func TestReaderPoll(t *testing.T) {
 			// state is inherited from the first poll.
 			inputIter: nil, // no need to make an iterator.
 
-			expectEvents:     []*model.PolymorphicEvent{},
-			expectDeleteKeys: []message.Key{},
-			expectOutputs: []*model.PolymorphicEvent{
-				model.NewResolvedPolymorphicEvent(0, 2),
-			},
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
+			expectOutputs:       []*model.PolymorphicEvent{},
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 2,
 			// exhaustedResolvedTs must advance if there is no resolved event.
