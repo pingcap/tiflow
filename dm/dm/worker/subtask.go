@@ -696,6 +696,10 @@ func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
 	st.RLock()
 	defer st.RUnlock()
 
+	if st.currUnit == nil {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, pb.UnitType_InvalidUnit)
+	}
+
 	switch st.currUnit.Type() {
 	case pb.UnitType_Sync:
 		if s, ok := st.currUnit.(*syncer.Syncer); ok {
