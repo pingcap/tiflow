@@ -39,6 +39,8 @@ import (
 
 const (
 	workerChannelSize = 1000
+
+	maxBatchSize = 100 // todo: choose a proper value, or configurable?
 )
 
 type validateFailedType int
@@ -64,6 +66,7 @@ type validateWorker struct {
 	rowChangeCh       chan *rowChange
 	pendingChangesMap map[string]*tableChange
 	pendingRowCount   atomic.Int64
+	batchSize         int
 	sync.Mutex
 }
 
@@ -77,6 +80,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		conn:              v.toDBConns[id],
 		rowChangeCh:       make(chan *rowChange, workerChannelSize),
 		pendingChangesMap: make(map[string]*tableChange),
+		batchSize:         maxBatchSize,
 	}
 }
 
@@ -141,7 +145,6 @@ func (vw *validateWorker) validateTableChange() error {
 		}
 		rows := make(map[string]*rowChange)
 		if len(insertUpdateChanges) > 0 {
-			// todo: limit number of validated rows
 			failedRows, err := vw.validateRowChanges(tblChange.table, insertUpdateChanges, false)
 			if err != nil {
 				return err
@@ -153,7 +156,6 @@ func (vw *validateWorker) validateTableChange() error {
 			}
 		}
 		if len(deleteChanges) > 0 {
-			// todo: limit number of validated rows
 			failedRows, err := vw.validateRowChanges(tblChange.table, deleteChanges, true)
 			if err != nil {
 				return err
@@ -177,6 +179,25 @@ func (vw *validateWorker) validateTableChange() error {
 }
 
 func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
+	res := make(map[string]*validateFailedRow)
+	for start := 0; start < len(rows); start += vw.batchSize {
+		end := start + vw.batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+		batch := rows[start:end]
+		failedRows, err := vw.validateRowChangesInner(table, batch, deleteChange)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range failedRows {
+			res[k] = v
+		}
+	}
+	return res, nil
+}
+
+func (vw *validateWorker) validateRowChangesInner(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.pkValues)

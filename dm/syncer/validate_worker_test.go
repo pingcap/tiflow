@@ -46,6 +46,7 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 
 	cfg := genSubtaskConfig(t)
 	_, mock, err := conn.InitMockDBFull()
+	mock.MatchExpectationsInOrder(false)
 	require.NoError(t, err)
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
@@ -154,6 +155,46 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	require.NoError(t, worker.validateTableChange())
 	require.Equal(t, int64(0), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 0)
+
+	//
+	// validate with batch size = 2
+	worker.batchSize = 2
+	worker.updateRowChange(&rowChange{
+		table:      tableInfo1,
+		key:        "1",
+		pkValues:   []string{"1"},
+		data:       []interface{}{1, "a"},
+		tp:         rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	})
+	worker.updateRowChange(&rowChange{
+		table:      tableInfo1,
+		key:        "2",
+		pkValues:   []string{"2"},
+		data:       []interface{}{2, "2b"},
+		tp:         rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	})
+	worker.updateRowChange(&rowChange{
+		table:      tableInfo1,
+		key:        "3",
+		pkValues:   []string{"3"},
+		data:       []interface{}{3, "3c"},
+		tp:         rowInsert,
+		lastMeetTS: time.Now().Unix(),
+	})
+	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
+	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
+	require.NoError(t, worker.validateTableChange())
+	require.Equal(t, int64(1), worker.pendingRowCount.Load())
+	require.Len(t, worker.pendingChangesMap, 1)
+	require.Contains(t, worker.pendingChangesMap, tbl1.String())
+	require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
+	require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "3")
+	require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].tp)
+	require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["3"].failedCnt)
 }
 
 func TestValidatorWorkerCompareData(t *testing.T) {
