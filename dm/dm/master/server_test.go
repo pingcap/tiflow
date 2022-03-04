@@ -244,8 +244,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 			expect = pb.Stage_Running
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
-		case pb.TaskOp_Stop:
-			expect = pb.Stage_Stopped
+		case pb.TaskOp_Delete:
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
@@ -272,7 +271,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 		}
 	case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
 		queryResp.SubTaskStatus = []*pb.SubTaskStatus{{}}
-		if expect == pb.Stage_Stopped {
+		if opTaskReq, ok := masterReq.(*pb.OperateTaskRequest); ok && opTaskReq.Op == pb.TaskOp_Delete {
 			queryResp.SubTaskStatus[0].Status = &pb.SubTaskStatus_Msg{
 				Msg: fmt.Sprintf("no sub task with name %s has started", taskName),
 			}
@@ -607,7 +606,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 		}},
 	}}
 	req := &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
 	ctrl := gomock.NewController(c)
@@ -1168,12 +1167,12 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 		Name: taskName,
 	}
 	stopReq1 := &pb.OperateTaskRequest{
-		Op:      pb.TaskOp_Stop,
+		Op:      pb.TaskOp_Delete,
 		Name:    taskName,
 		Sources: []string{sources[0]},
 	}
 	stopReq2 := &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
@@ -1212,13 +1211,13 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	resp, err = server.OperateTask(context.Background(), stopReq1)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(server.getTaskResources(taskName), check.DeepEquals, []string{sources[1]})
+	c.Assert(server.getTaskSourceNameList(taskName), check.DeepEquals, []string{sources[1]})
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}})
 	// 5. test stop task successfully, remove all workers
 	resp, err = server.OperateTask(context.Background(), stopReq2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(server.getTaskResources(taskName)), check.Equals, 0)
+	c.Assert(len(server.getTaskSourceNameList(taskName)), check.Equals, 0)
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[1]}})
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
