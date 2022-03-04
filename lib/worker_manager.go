@@ -388,8 +388,13 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 
 	if _, exists := m.tombstones[id]; exists {
 		if m.fsmState.Load() != workerManagerWaitingHeartbeats {
-			log.L().Panic("Discovered a worker whose status is not persisted",
-				zap.String("worker-id", id), zap.String("executor-id", executorNodeID))
+			// TODO: confirm whether this check is needed
+			// when the workerID doesn't change, such as failover of a job master,
+			// the check will be true here
+			log.L().Warn("Discovered a worker whose status is not persisted",
+				zap.String("worker-id", id), zap.String("executor-id", executorNodeID),
+				zap.Int32("fsm-state", m.fsmState.Load()),
+			)
 		}
 		delete(m.tombstones, id)
 	}

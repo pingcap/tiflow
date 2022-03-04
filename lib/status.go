@@ -310,7 +310,7 @@ func (r *StatusReceiver) Tick(ctx context.Context) error {
 }
 
 func (r *StatusReceiver) Close(ctx context.Context) error {
-	topic := StatusUpdateTopic(r.workerMetaClient.MasterID(), r.workerID)
+	topic := workerStatusUpdatedTopic(r.workerMetaClient.MasterID(), r.workerID)
 	ok, err := r.messageHandlerManager.UnregisterHandler(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)

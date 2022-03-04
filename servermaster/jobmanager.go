@@ -160,11 +160,29 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
-	return jm.JobFsm.IterPendingJobs(
+	err := jm.JobFsm.IterPendingJobs(
 		func(job *lib.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
+	if err != nil {
+		return err
+	}
+
+	err = jm.JobFsm.IterWaitAckJobs(
+		func(job *lib.MasterMetaKVData) (string, error) {
+			err := jm.BaseMaster.UnregisterWorker(ctx, job.ID)
+			if err != nil {
+				return job.ID, err
+			}
+			return jm.BaseMaster.CreateWorker(
+				job.Tp, job, defaultJobMasterCost)
+		})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
@@ -178,7 +196,6 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
 			return err
 		}
-		// TODO: support check job that is not active in WaitAck queue and recreate it.
 		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
 	}
 	return nil

@@ -80,6 +80,8 @@ type BaseMaster interface {
 	OnError(err error)
 	// RegisterWorker registers worker handler only, the worker is expected to be running
 	RegisterWorker(ctx context.Context, workerID WorkerID) error
+	// UnregisterWorker unregisters worker handlers, this worker is expected to be offline
+	UnregisterWorker(ctx context.Context, workerID WorkerID) error
 	// CreateWorker registers worker handler and dispatches worker to executor
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 }
@@ -364,7 +366,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 				)
 			}
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
-			err := m.unregisterMessageHandler(ctx, workerInfo.ID)
+			err := m.UnregisterWorker(ctx, workerInfo.ID)
 			if err != nil {
 				return err
 			}
@@ -376,7 +378,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 	}
 }
 
-func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, workerID WorkerID) error {
+func (m *DefaultBaseMaster) UnregisterWorker(ctx context.Context, workerID WorkerID) error {
 	topic := HeartbeatPingTopic(m.id, workerID)
 	removed, err := m.messageHandlerManager.UnregisterHandler(ctx, topic)
 	if err != nil {
@@ -384,15 +386,6 @@ func (m *DefaultBaseMaster) unregisterMessageHandler(ctx context.Context, worker
 	}
 	if !removed {
 		log.L().Warn("heartbeat message handler is not removed", zap.String("topic", topic))
-	}
-
-	topic = StatusUpdateTopic(m.id, workerID)
-	removed, err = m.messageHandlerManager.UnregisterHandler(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !removed {
-		log.L().Warn("status update message handler is not removed", zap.String("topic", topic))
 	}
 
 	return m.workerManager.OnWorkerOffline(ctx, workerID)
@@ -561,7 +554,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			if needUnregisterWorkerHandler {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				if err := m.unregisterMessageHandler(ctx, workerID); err != nil {
+				if err := m.UnregisterWorker(ctx, workerID); err != nil {
 					m.OnError(errors.Trace(err))
 				}
 			}
