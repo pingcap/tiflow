@@ -5,7 +5,7 @@
 
 ## Background
 
-Current optimist shard mode do not support three types of DDLs.
+Current optimist shard mode does not support three types of DDLs.
 
 - DDLs that make a table "big and small", such as `alter table tb rename column a to b`, which in a sense is equivalent to deleting `a` and adding `b` to table `tb`, making the table "big and small".
 - DDLs that make the table incomparable, such as `alter table tb change a from int to varchar`, make it impossible to compare the size of `varchar` and `int`. For this kind of DDL, we can resolve it according to TiDB's fieldTypeMergeRules case by case, but we still need to consider a generic solution in order to be as compatible as possible with all DDLs. In a sense, this DDL also makes the table "big and small" (remove `a int`, add `a varchar`)
