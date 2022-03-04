@@ -40,6 +40,7 @@ func NewActorNode(parentNode AsyncMessageHolder, messageProcessor AsyncMessagePr
 //  or message handling is blocking
 // only one message will be cached
 func (n *ActorNode) TryRun(ctx context.Context) error {
+	processedCount := 0
 	for {
 		// batch?
 		if n.messageStash == nil {
@@ -54,9 +55,15 @@ func (n *ActorNode) TryRun(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if ok {
-			n.messageStash = nil
-		} else {
+		// node is blocked
+		if !ok {
+			return nil
+		}
+
+		n.messageStash = nil
+		processedCount++
+		// processed too many messages, not block other tables
+		if processedCount >= defaultOutputChannelSize {
 			return nil
 		}
 	}
