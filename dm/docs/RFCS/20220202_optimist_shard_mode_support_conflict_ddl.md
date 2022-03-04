@@ -17,7 +17,7 @@ Current optimist shard mode does not support three types of DDLs.
 
 A simple solution is to simply check whether the DDLs are the same, just as what we do for pessimistic DDL coordination. Coordination is completed when all sharding tables encounter the same conflicting DDL. This approach has the following problems.
 
-- If the sharding DDLs are not identical (e.g., different comment information), then the coordination will fail
+- If the sharding DDLs are not identical (e.g. different comment information), then the coordination will fail
 - As with pessimistic reconciliation, there may be problems with failover cases
   - DDL1, DDL2 are executed on split tables 1 and 2
   - master coordination of DDL1 is complete
