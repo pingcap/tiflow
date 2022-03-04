@@ -48,7 +48,7 @@ Just to be clear, for a conflicting DDL that makes the table structure "big and 
 
 #### Definitions
 
-To determine whether the sharding tables consistent, the following operations and variables are defined.
+To determine whether the sharding tables are consistent, the following operations and variables are defined.
 
 #### Operations
 
