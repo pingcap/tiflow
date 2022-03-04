@@ -1871,7 +1871,7 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	sourceCfg.SourceID = sourceID2
 	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
 	c.Assert(err, IsNil)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID2, workerName1)
+	_, err = ha.PutRelayConfig(etcdTestCli, ha.NewSourceBound(sourceID2, workerName1))
 	c.Assert(err, IsNil)
 	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo)
 	c.Assert(err, IsNil)
@@ -1928,9 +1928,9 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 	sourceCfg.SourceID = sourceID1
 	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
 	c.Assert(err, IsNil)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName1)
+	_, err = ha.PutRelayConfig(etcdTestCli, ha.NewSourceBound(sourceID1, workerName1))
 	c.Assert(err, IsNil)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName2)
+	_, err = ha.PutRelayConfig(etcdTestCli, ha.NewSourceBound(sourceID1, workerName2))
 	c.Assert(err, IsNil)
 	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
 	c.Assert(err, IsNil)

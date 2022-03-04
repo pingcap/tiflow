@@ -35,7 +35,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	c.Assert(rev1, Greater, int64(0))
 	c.Assert(cfg1, IsNil)
 
-	rev2, err := PutRelayConfig(etcdTestCli, source, worker)
+	rev2, err := PutRelayConfig(etcdTestCli, NewSourceBound(source, worker))
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 
