@@ -41,6 +41,19 @@ const (
 	workerChannelSize = 1000
 )
 
+type validateFailedType int
+
+const (
+	hasDeletedRow validateFailedType = iota
+	rowNotExist
+	rowDifferent
+)
+
+type validateFailedRow struct {
+	tp      validateFailedType
+	dstData []*sql.NullString
+}
+
 type validateWorker struct {
 	cfg               config.ValidatorConfig
 	ctx               context.Context
@@ -123,9 +136,9 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 func (vw *validateWorker) validateTableChange() error {
 	failedChanges := make(map[string]*tableChange)
 	var failedRowCnt int64
-	for k, val := range vw.pendingChangesMap {
+	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
-		for _, r := range val.rows {
+		for _, r := range tblChange.rows {
 			if r.tp == rowDeleted {
 				deleteChanges = append(deleteChanges, r)
 			} else {
@@ -135,29 +148,30 @@ func (vw *validateWorker) validateTableChange() error {
 		rows := make(map[string]*rowChange)
 		if len(insertUpdateChanges) > 0 {
 			// todo: limit number of validated rows
-			failedRows, err := vw.validateRowChanges(val.table, insertUpdateChanges, false)
+			failedRows, err := vw.validateRowChanges(tblChange.table, insertUpdateChanges, false)
 			if err != nil {
 				return err
 			}
-			for _, pk := range failedRows {
-				rows[pk] = val.rows[pk]
+			// todo: if row failed count > threshold, should mark it as data inconsistent error
+			for pk := range failedRows {
+				rows[pk] = tblChange.rows[pk]
 				rows[pk].failedCnt++
 			}
 		}
 		if len(deleteChanges) > 0 {
 			// todo: limit number of validated rows
-			failedRows, err := vw.validateRowChanges(val.table, deleteChanges, true)
+			failedRows, err := vw.validateRowChanges(tblChange.table, deleteChanges, true)
 			if err != nil {
 				return err
 			}
-			for _, pk := range failedRows {
-				rows[pk] = val.rows[pk]
+			for pk := range failedRows {
+				rows[pk] = tblChange.rows[pk]
 				rows[pk].failedCnt++
 			}
 		}
 		if len(rows) > 0 {
 			failedChanges[k] = &tableChange{
-				table: val.table,
+				table: tblChange.table,
 				rows:  rows,
 			}
 			failedRowCnt += int64(len(rows))
@@ -168,7 +182,7 @@ func (vw *validateWorker) validateTableChange() error {
 	return nil
 }
 
-func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) ([]string, error) {
+func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.pkValues)
@@ -179,7 +193,7 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 		ColumnCnt: colCnt,
 		PkValues:  pkValues,
 	}
-	var failedRows []string
+	var failedRows map[string]*validateFailedRow
 	var err error
 	if deleteChange {
 		failedRows, err = vw.validateDeletedRows(cond)
@@ -193,21 +207,21 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 	return failedRows, nil
 }
 
-func (vw *validateWorker) validateDeletedRows(cond *Cond) ([]string, error) {
+func (vw *validateWorker) validateDeletedRows(cond *Cond) (map[string]*validateFailedRow, error) {
 	targetRows, err := vw.getTargetRows(cond)
 	if err != nil {
-		return []string{}, err
+		return nil, err
 	}
 
-	failedRows := make([]string, 0, len(targetRows))
-	for key := range targetRows {
-		failedRows = append(failedRows, key)
+	failedRows := make(map[string]*validateFailedRow, len(targetRows))
+	for key, val := range targetRows {
+		failedRows[key] = &validateFailedRow{tp: hasDeletedRow, dstData: val}
 	}
 	return failedRows, nil
 }
 
-func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *Cond) ([]string, error) {
-	var failedRows []string
+func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *Cond) (map[string]*validateFailedRow, error) {
+	failedRows := make(map[string]*validateFailedRow)
 	sourceRows := getSourceRowsForCompare(rows)
 	targetRows, err := vw.getTargetRows(cond)
 	if err != nil {
@@ -223,7 +237,7 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 	for key, sourceRow := range sourceRows {
 		targetRow, ok := targetRows[key]
 		if !ok {
-			failedRows = append(failedRows, key)
+			failedRows[key] = &validateFailedRow{tp: rowNotExist}
 			continue
 		}
 
@@ -232,7 +246,7 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 			return nil, err
 		}
 		if !eq {
-			failedRows = append(failedRows, key)
+			failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
 		}
 	}
 	return failedRows, nil
