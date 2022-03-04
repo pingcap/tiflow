@@ -45,6 +45,9 @@ const (
 	checkInterval           = 5 * time.Second
 	validationInterval      = 10 * time.Second
 	checkpointFlushInterval = 1 * time.Minute
+
+	moreColumnInBinlogMsg     = "binlog has more columns than current table"
+	tableWithoutPrimaryKeyMsg = "no primary key"
 )
 
 var (
@@ -556,7 +559,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				source:  *sourceTable,
 				target:  *table.Target,
 				stage:   pb.Stage_Stopped,
-				message: "no primary key",
+				message: tableWithoutPrimaryKeyMsg,
 			}
 			return nil
 		}
@@ -568,7 +571,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			source:  *sourceTable,
 			target:  *table.Target,
 			stage:   pb.Stage_Stopped,
-			message: "binlog has more columns than current table",
+			message: moreColumnInBinlogMsg,
 		}
 		return nil
 	}

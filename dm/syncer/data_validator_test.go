@@ -429,9 +429,13 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
 	require.Equal(t, int64(1), validator.changeEventCount[rowDeleted].Load())
 	ft := filter.Table{Schema: schemaName, Name: tableName2}
-	require.Contains(t, validator.unsupportedTable, ft.String())
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, moreColumnInBinlogMsg, validator.tableStatus[ft.String()].message)
 	ft = filter.Table{Schema: schemaName, Name: tableName3}
-	require.Contains(t, validator.unsupportedTable, ft.String())
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, tableWithoutPrimaryKeyMsg, validator.tableStatus[ft.String()].message)
 }
 
 func TestValidatorGetRowChangeType(t *testing.T) {
