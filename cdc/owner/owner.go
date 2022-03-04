@@ -351,11 +351,13 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 			totalCounts := infoProvider.GetTotalTableCounts()
 			pendingCounts := infoProvider.GetPendingTableCounts()
 
-			for captureID := range o.captures {
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+			for captureID, info := range o.captures {
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeTotal).
+					Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeWip).
+					Set(float64(pendingCounts[captureID]))
 			}
 		}
 		return
