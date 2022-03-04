@@ -925,6 +925,80 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 	communicator.AssertExpectations(t)
 }
 
+func TestInvalidFinishedTableOperation(t *testing.T) {
+	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   2,
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   3,
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", false, defaultEpoch).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	// Invalid epoch
+	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(1), "invalid-epoch")
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok := dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Invalid capture
+	dispatcher.OnAgentFinishedTableOperation("capture-invalid", model.TableID(1), defaultEpoch)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok = dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Invalid table
+	dispatcher.OnAgentFinishedTableOperation("capture-1", model.TableID(999), defaultEpoch)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok = dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Capture not matching
+	require.Panics(t, func() {
+		dispatcher.OnAgentFinishedTableOperation("capture-1", model.TableID(1), defaultEpoch)
+	})
+}
+
 func BenchmarkAddTable(b *testing.B) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 
