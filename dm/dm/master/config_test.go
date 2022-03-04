@@ -30,8 +30,7 @@ import (
 )
 
 var (
-	defaultConfigFile = "./dm-master.toml"
-	_                 = check.Suite(&testConfigSuite{})
+	_ = check.Suite(&testConfigSuite{})
 )
 
 type testConfigSuite struct{}
@@ -42,16 +41,13 @@ func (t *testConfigSuite) SetUpSuite(c *check.C) {
 }
 
 func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
-	buf, err := os.ReadFile(defaultConfigFile)
-	c.Assert(err, check.IsNil)
-
 	// test print sample config
 	out := capturer.CaptureStdout(func() {
 		cfg := NewConfig()
-		err = cfg.Parse([]string{"-print-sample-config"})
+		err := cfg.Parse([]string{"-print-sample-config"})
 		c.Assert(err, check.ErrorMatches, flag.ErrHelp.Error())
 	})
-	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(string(buf)))
+	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(SampleConfig))
 }
 
 func (t *testConfigSuite) TestConfig(c *check.C) {
@@ -82,7 +78,8 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 		}
 	)
 
-	cfg.ConfigFile = defaultConfigFile
+	err = cfg.FromContent(SampleConfig)
+	c.Assert(err, check.IsNil)
 	err = cfg.Reload()
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
@@ -259,7 +256,7 @@ func (t *testConfigSuite) TestParseURLs(c *check.C) {
 
 func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 
 	// invalid `advertise-addr`
@@ -279,14 +276,14 @@ func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 
 func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 
 	// test default value
 	c.Assert(cfg.OpenAPI, check.Equals, false)
 	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
 
-	//  adjust openapi from experimental-features
+	// adjust openapi from experimental-features
 	cfg.ExperimentalFeatures.OpenAPI = true
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.OpenAPI, check.Equals, true)

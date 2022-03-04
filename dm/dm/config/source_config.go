@@ -167,6 +167,9 @@ func ParseYaml(content string) (*SourceConfig, error) {
 		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
 	}
 	c.adjust()
+	if err := c.Verify(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -348,19 +351,11 @@ func (c *SourceConfig) AdjustServerID(ctx context.Context, db *sql.DB) error {
 
 // LoadFromFile loads config from file.
 func LoadFromFile(path string) (*SourceConfig, error) {
-	c := newSourceConfig()
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, terror.ErrConfigReadCfgFromFile.Delegate(err, path)
 	}
-	if err = yaml.UnmarshalStrict(content, c); err != nil {
-		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
-	}
-	c.adjust()
-	if err = c.Verify(); err != nil {
-		return nil, err
-	}
-	return c, nil
+	return ParseYaml(string(content))
 }
 
 func (c *SourceConfig) check(metaData *toml.MetaData, err error) error {

@@ -234,7 +234,7 @@ func (c *Config) FromContent(content string) error {
 		}
 		return terror.ErrMasterConfigUnknownItem.Generate(strings.Join(undecodedItems, ","))
 	}
-	return nil
+	return c.adjust()
 }
 
 // adjust adjusts configs.

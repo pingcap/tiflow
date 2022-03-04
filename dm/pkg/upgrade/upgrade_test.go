@@ -26,21 +26,17 @@ import (
 )
 
 var (
+	mockCluster   *integration.ClusterV3
+	bigTxnCluster *integration.ClusterV3
 	etcdTestCli   *clientv3.Client
 	bigTxnTestCli *clientv3.Client
 )
 
 func TestUpgrade(t *testing.T) {
 	integration.BeforeTestExternal(t)
-	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
-	defer mockCluster.Terminate(t)
 
-	etcdTestCli = mockCluster.RandClient()
-
-	bigCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1, MaxTxnOps: 2048})
-	defer bigCluster.Terminate(t)
-
-	bigTxnTestCli = bigCluster.RandClient()
+	suite.(*testForEtcd).testT = t
+	suiteForBigTxn.(*testForBigTxn).testT = t
 
 	TestingT(t)
 }
@@ -51,9 +47,33 @@ func clearTestData(c *C) {
 	c.Assert(err, IsNil)
 }
 
-type testForEtcd struct{}
+type testForEtcd struct {
+	testT *testing.T
+}
+type testForBigTxn struct {
+	testT *testing.T
+}
 
-var _ = SerialSuites(&testForEtcd{})
+var suite = SerialSuites(&testForEtcd{})
+var suiteForBigTxn = SerialSuites(&testForBigTxn{})
+
+func (t *testForEtcd) SetUpSuite(c *C) {
+	mockCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+	etcdTestCli = mockCluster.RandClient()
+}
+
+func (t *testForEtcd) TearDownSuite(c *C) {
+	mockCluster.Terminate(t.testT)
+}
+
+func (t *testForBigTxn) SetUpSuite(c *C) {
+	bigTxnCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1, MaxTxnOps: 2048})
+	bigTxnTestCli = bigTxnCluster.RandClient()
+}
+
+func (t *testForBigTxn) TearDownSuite(c *C) {
+	bigTxnCluster.Terminate(t.testT)
+}
 
 func (t *testForEtcd) TestTryUpgrade(c *C) {
 	defer clearTestData(c)
@@ -154,6 +174,13 @@ func (t *testForEtcd) TestUpgradeToVer3(c *C) {
 		c.Assert(err, IsNil)
 	}
 	c.Assert(upgradeToVer3(ctx, etcdTestCli), ErrorMatches, ".*too many operations in txn request.*")
+
+}
+
+func (t *testForBigTxn) TestUpgradeToVer3(c *C) {
+	source := "source-1"
+	oldVal := "test"
+	ctx := context.Background()
 
 	for i := 0; i < 1000; i++ {
 		key := common.UpstreamConfigKeyAdapterV1.Encode(fmt.Sprintf("%s-%d", source, i))
