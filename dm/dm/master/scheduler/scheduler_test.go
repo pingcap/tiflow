@@ -110,7 +110,7 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 			}
 		}
 	)
-	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
@@ -807,7 +807,7 @@ func (t *testScheduler) TestRestartScheduler(c *C) {
 		wg           sync.WaitGroup
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 
@@ -968,7 +968,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 		workerAddr4  = "127.0.0.1:18462"
 		keepAliveTTL = int64(2) // NOTE: this should be >= minLeaseTTL, in second.
 	)
-	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := *sourceCfg1
@@ -1108,7 +1108,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 		workerName4 = "dm-worker-4"
 	)
 
-	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1181,7 +1181,7 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 		workerName1 = "dm-worker-1"
 	)
 
-	sourceCfg1, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
 	sourceCfg2 := sourceCfg1
@@ -1864,7 +1864,7 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -1923,7 +1923,7 @@ func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
 		Worker: workerName1,
 	}
 
-	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
@@ -1991,7 +1991,7 @@ func (t *testScheduler) TestOperateValidatorTask(c *C) {
 		Source: sourceID1,
 		Worker: workerName1,
 	}
-	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	s.etcdCli = etcdTestCli
 	sourceCfg.SourceID = sourceID1

@@ -50,12 +50,15 @@ func clearTestData(c *C) {
 type testForEtcd struct {
 	testT *testing.T
 }
+
 type testForBigTxn struct {
 	testT *testing.T
 }
 
-var suite = SerialSuites(&testForEtcd{})
-var suiteForBigTxn = SerialSuites(&testForBigTxn{})
+var (
+	suite          = SerialSuites(&testForEtcd{})
+	suiteForBigTxn = SerialSuites(&testForBigTxn{})
+)
 
 func (t *testForEtcd) SetUpSuite(c *C) {
 	mockCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
@@ -174,7 +177,6 @@ func (t *testForEtcd) TestUpgradeToVer3(c *C) {
 		c.Assert(err, IsNil)
 	}
 	c.Assert(upgradeToVer3(ctx, etcdTestCli), ErrorMatches, ".*too many operations in txn request.*")
-
 }
 
 func (t *testForBigTxn) TestUpgradeToVer3(c *C) {

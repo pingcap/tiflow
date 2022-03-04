@@ -29,9 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-var (
-	_ = check.Suite(&testConfigSuite{})
-)
+var _ = check.Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 

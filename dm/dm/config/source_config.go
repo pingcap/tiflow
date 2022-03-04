@@ -167,7 +167,16 @@ func ParseYaml(content string) (*SourceConfig, error) {
 		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
 	}
 	c.adjust()
-	if err := c.Verify(); err != nil {
+	return c, nil
+}
+
+// ParseYamlAndVerify does ParseYaml and Verify.
+func ParseYamlAndVerify(content string) (*SourceConfig, error) {
+	c, err := ParseYaml(content)
+	if err != nil {
+		return nil, err
+	}
+	if err = c.Verify(); err != nil {
 		return nil, err
 	}
 	return c, nil

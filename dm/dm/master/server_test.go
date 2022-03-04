@@ -169,7 +169,7 @@ type testMaster struct {
 }
 
 var (
-	testSuite = check.Suite(&testMaster{})
+	testSuite = check.SerialSuites(&testMaster{})
 	pwd       string
 )
 
@@ -1746,7 +1746,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	s1.leader.Store(oneselfLeader)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
-	mysqlCfg, err := config.ParseYaml(config.SampleSourceConfig)
+	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
 	task, err := mysqlCfg.Yaml()

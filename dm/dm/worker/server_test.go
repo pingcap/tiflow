@@ -635,7 +635,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.ParseYaml(config.SampleSourceConfig)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg
