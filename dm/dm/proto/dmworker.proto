@@ -29,6 +29,7 @@ enum TaskOp {
     Start = 4;
     Update = 5;
     AutoResume = 6;
+    Delete = 7;
 }
 
 message QueryStatusRequest {

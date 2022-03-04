@@ -183,7 +183,7 @@ func (t *task) run() error {
 func (t *task) stopPreviousTask() error {
 	t.logger.Info("stopping previous task")
 	resp, err := t.cli.OperateTask(t.ctx, &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: t.taskCfg.Name,
 	})
 	if err != nil {
