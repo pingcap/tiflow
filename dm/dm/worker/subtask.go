@@ -698,7 +698,11 @@ func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
 
 	su, ok := st.currUnit.(*syncer.Syncer)
 	if !ok {
-		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, st.currUnit.Type().String())
+		ut := pb.UnitType_InvalidUnit
+		if st.currUnit != nil {
+			ut = st.currUnit.Type()
+		}
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, ut.String())
 	}
 	return su.CheckCanUpdateCfg(cfg)
 }
