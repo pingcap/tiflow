@@ -650,7 +650,7 @@ func (v *DataValidator) flushCheckpoint(loc binlog.Location) error {
 	}
 	wg.Wait()
 
-	err := v.persistHelper.flush(loc)
+	err := v.persistHelper.persist(loc)
 	if err != nil {
 		return err
 	}

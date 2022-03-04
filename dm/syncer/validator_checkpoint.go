@@ -33,6 +33,15 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
+type validateErrorState int
+
+const (
+	// todo: maybe move to some common place, dmctl may use it
+	newValidateErrorRow validateErrorState = iota
+	ignoredValidateErrorRow
+	resolvedValidateErrorRow
+)
+
 type validatorPersistHelper struct {
 	tctx      *tcontext.Context
 	cfg       *config.SubTaskConfig
@@ -127,16 +136,18 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 		`CREATE TABLE IF NOT EXISTS ` + c.errorChangeTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 			source VARCHAR(32) NOT NULL,
-			schema_name VARCHAR(128) NOT NULL,
-			table_name VARCHAR(128) NOT NULL,
+			src_schema_name VARCHAR(128) NOT NULL,
+			src_table_name VARCHAR(128) NOT NULL,
 			key VARCHAR(512) NOT NULL,
+			dst_schema_name VARCHAR(128) NOT NULL,
+			dst_table_name VARCHAR(128) NOT NULL,
 			data JSON NOT NULL,
 			dst_data JSON NOT NULL,
 			error_type int NOT NULL,
 			status int not null,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, schema_name, table_name, key)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, key)
 		)`,
 		`CREATE TABLE IF NOT EXISTS ` + c.tableStatusTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -157,15 +168,14 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 	return err
 }
 
-func (c *validatorPersistHelper) flush(loc binlog.Location) error {
+func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	var queries []string
 	var args [][]interface{}
 	nextRevision := c.revision + 1
 
 	// update checkpoint
 	queries = append(queries, `INSERT INTO `+c.checkpointTableName+
-		`(source, binlog_name, binlog_pos, binlog_gtid) VALUES (?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
+		`(source, binlog_name, binlog_pos, binlog_gtid) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE
 			source = VALUES(source),
 			binlog_name = VALUES(binlog_name),
 			binlog_pos = VALUES(binlog_pos),
@@ -210,15 +220,15 @@ func (c *validatorPersistHelper) flush(loc binlog.Location) error {
 	// unsupported table info
 	for _, state := range c.validator.tableStatus {
 		sql := `INSERT INTO ` + c.tableStatusTableName + `
-						(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)
-						VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
-						source = VALUES(source),
-						src_schema_name = VALUES(src_schema_name),
-						src_table_name = VALUES(src_table_name),
-						dst_schema_name = VALUES(dst_schema_name),
-						dst_table_name = VALUES(dst_table_name),
-						stage = VALUES(stage),
-						message = VALUES(message)
+					(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)
+					VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
+					source = VALUES(source),
+					src_schema_name = VALUES(src_schema_name),
+					src_table_name = VALUES(src_table_name),
+					dst_schema_name = VALUES(dst_schema_name),
+					dst_table_name = VALUES(dst_table_name),
+					stage = VALUES(stage),
+					message = VALUES(message)
 				`
 		queries = append(queries, sql)
 		args = append(args, []interface{}{
@@ -226,11 +236,58 @@ func (c *validatorPersistHelper) flush(loc binlog.Location) error {
 			int(state.stage), state.message},
 		)
 	}
+	// error rows
+	for _, worker := range c.validator.workers {
+		for _, r := range worker.getErrorRows() {
+			sql := `INSERT INTO ` + c.errorChangeTableName + `
+					(source, src_schema_name, src_table_name, key, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
+					VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
+					source = VALUES(source),
+					src_schema_name = VALUES(src_schema_name),
+					src_table_name = VALUES(src_table_name),
+					key = VALUES(key),
+					dst_schema_name = VALUES(dst_schema_name),
+					dst_table_name = VALUES(dst_table_name),
+					data = VALUES(data),
+					dst_data = VALUES(dst_data),
+					error_type = VALUES(error_type),
+					status = VALUES(status)
+			`
+			queries = append(queries, sql)
+
+			srcDataStr, err := json.Marshal(r.srcRow.Data)
+			if err != nil {
+				return err
+			}
+			dstData := make([]interface{}, len(r.dstData))
+			for i, d := range r.dstData {
+				if d.Valid {
+					dstData[i] = d.String
+				}
+			}
+			dstDataStr, err := json.Marshal(dstData)
+			if err != nil {
+				return err
+			}
+			table := r.srcRow.table
+			args = append(args, []interface{}{
+				c.cfg.SourceID, table.Source.Schema, table.Source.Name, r.srcRow.Key,
+				table.Target.Schema, table.Target.Name,
+				srcDataStr, dstDataStr, r.tp, newValidateErrorRow,
+			})
+		}
+	}
 	_, err := c.dbConn.ExecuteSQL(c.tctx, queries, args...)
 	if err != nil {
 		return err
 	}
 	c.revision++
+
+	// reset errors after save
+	for _, worker := range c.validator.workers {
+		worker.resetErrorRows()
+	}
+
 	return nil
 }
 

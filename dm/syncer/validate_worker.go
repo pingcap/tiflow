@@ -40,7 +40,8 @@ import (
 const (
 	workerChannelSize = 1000
 
-	maxBatchSize = 100 // todo: choose a proper value, or configurable?
+	maxBatchSize           = 100 // todo: choose a proper value, or configurable?
+	failedRowRetryDuration = 1 * time.Hour
 )
 
 type validateFailedType int
@@ -54,6 +55,8 @@ const (
 type validateFailedRow struct {
 	tp      validateFailedType
 	dstData []*sql.NullString
+
+	srcRow *rowChange
 }
 
 type validateWorker struct {
@@ -67,6 +70,8 @@ type validateWorker struct {
 	pendingChangesMap map[string]*tableChange
 	pendingRowCount   atomic.Int64
 	batchSize         int
+	maxFailedCount    int
+	errorRows         []*validateFailedRow
 	sync.Mutex
 }
 
@@ -82,6 +87,8 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		rowChangeCh:       make(chan *rowChange, workerChannelSize),
 		pendingChangesMap: make(map[string]*tableChange),
 		batchSize:         maxBatchSize,
+		// =600 if using default validate interval=10s
+		maxFailedCount: int(failedRowRetryDuration / v.validateInterval),
 	}
 }
 
@@ -140,6 +147,7 @@ func (vw *validateWorker) validateTableChange() error {
 	defer vw.Unlock()
 
 	failedChanges := make(map[string]*tableChange)
+	allErrorRows := make([]*validateFailedRow, 0)
 	var failedRowCnt int64
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
@@ -150,39 +158,46 @@ func (vw *validateWorker) validateTableChange() error {
 				insertUpdateChanges = append(insertUpdateChanges, r)
 			}
 		}
-		rows := make(map[string]*rowChange)
-		if len(insertUpdateChanges) > 0 {
-			failedRows, err := vw.validateRowChanges(tblChange.table, insertUpdateChanges, false)
+		allFailedRows := make(map[string]*rowChange)
+		validateFunc := func(rows []*rowChange, isDelete bool) error {
+			if len(rows) == 0 {
+				return nil
+			}
+			failedRows, err := vw.validateRowChanges(tblChange.table, rows, false)
 			if err != nil {
 				return err
 			}
 			// todo: if row failed count > threshold, should mark it as data inconsistent error
-			for pk := range failedRows {
-				rows[pk] = tblChange.rows[pk]
-				rows[pk].FailedCnt++
+			for pk, val := range failedRows {
+				r := tblChange.rows[pk]
+				r.FailedCnt++
+				if r.FailedCnt >= vw.maxFailedCount {
+					val.srcRow = r
+					allErrorRows = append(allErrorRows, val)
+				} else {
+					allFailedRows[pk] = r
+				}
 			}
+			return nil
 		}
-		if len(deleteChanges) > 0 {
-			failedRows, err := vw.validateRowChanges(tblChange.table, deleteChanges, true)
-			if err != nil {
-				return err
-			}
-			for pk := range failedRows {
-				rows[pk] = tblChange.rows[pk]
-				rows[pk].FailedCnt++
-			}
+		if err := validateFunc(insertUpdateChanges, false); err != nil {
+			return err
 		}
-		if len(rows) > 0 {
+		if err := validateFunc(deleteChanges, true); err != nil {
+			return err
+		}
+		if len(allFailedRows) > 0 {
 			failedChanges[k] = &tableChange{
 				table: tblChange.table,
-				rows:  rows,
+				rows:  allFailedRows,
 			}
-			failedRowCnt += int64(len(rows))
+			failedRowCnt += int64(len(allFailedRows))
 		}
 	}
 	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", failedRowCnt))
 	vw.pendingRowCount.Store(failedRowCnt)
 	vw.pendingChangesMap = failedChanges
+	vw.errorRows = append(vw.errorRows, allErrorRows...)
 	return nil
 }
 
@@ -209,6 +224,12 @@ func (vw *validateWorker) getPendingChangesMap() map[string]*tableChange {
 	vw.Lock()
 	defer vw.Unlock()
 	return vw.pendingChangesMap
+}
+
+func (vw *validateWorker) getErrorRows() []*validateFailedRow {
+	vw.Lock()
+	defer vw.Unlock()
+	return vw.errorRows
 }
 
 func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
@@ -348,6 +369,12 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 
 func (vw *validateWorker) close() {
 	close(vw.rowChangeCh)
+}
+
+func (vw *validateWorker) resetErrorRows() {
+	vw.Lock()
+	defer vw.Unlock()
+	vw.errorRows = make([]*validateFailedRow, 0)
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
