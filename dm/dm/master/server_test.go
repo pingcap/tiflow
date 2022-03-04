@@ -41,6 +41,7 @@ import (
 	tidbmock "github.com/pingcap/tidb/util/mock"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/verify"
 	"go.etcd.io/etcd/tests/v3/integration"
 	"google.golang.org/grpc"
 
@@ -1391,12 +1392,19 @@ func (t *testMaster) TestServer(c *check.C) {
 		basicServiceCheck(c, cfg)
 
 		// try to start another server with the same address.  Expect it to fail
+		// unset an etcd variable becuase it will cause checking on exit, and block forever
+		err = os.Unsetenv(verify.ENV_VERIFY)
+		c.Assert(err, check.IsNil)
+
 		dupServer := NewServer(cfg)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		err1 := dupServer.Start(ctx)
 		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
 		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+
+		err = os.Setenv(verify.ENV_VERIFY, verify.ENV_VERIFY_ALL_VALUE)
+		c.Assert(err, check.IsNil)
 	})
 
 	// test the listen address is 0.0.0.0

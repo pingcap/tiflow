@@ -34,7 +34,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -57,22 +56,20 @@ type openAPISuite struct {
 
 	etcdTestCli     *clientv3.Client
 	testEtcdCluster *integration.ClusterV3
-	workerClients   map[string]workerrpc.Client
 }
 
 func (t *openAPISuite) SetUpSuite(c *check.C) {
 	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+	t.etcdTestCli = t.testEtcdCluster.RandClient()
 }
 
 func (t *openAPISuite) TearDownSuite(c *check.C) {
 	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	t.testEtcdCluster.Terminate(t.testT)
 }
 
 func (t *openAPISuite) SetUpTest(c *check.C) {
-	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
-	t.etcdTestCli = t.testEtcdCluster.RandClient()
-	t.workerClients = make(map[string]workerrpc.Client)
-
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
