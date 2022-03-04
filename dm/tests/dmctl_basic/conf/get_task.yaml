@@ -164,6 +164,7 @@ syncers:
 validators:
   validator-01:
     mode: none
+    worker-count: 4
 clean-dump-file: true
 ansi-quotes: false
 remove-meta: false
