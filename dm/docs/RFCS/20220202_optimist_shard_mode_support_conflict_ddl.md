@@ -24,7 +24,7 @@ A simple solution is to simply check whether the DDLs are the same, just as what
   - worker1 executes DDL1 successfully, then tries to coordinate DDL2
   - worker2 crashes while executing DDL1 (DDL and checkpoint are not atomic), restarts and recoordinates DDL1
   - master receives DDL2 from worker1, DDL1 from worker2, an error will be reported
-- Since our optimistic coordination allows inconsistent initial table structures, we also encounter the following problem.
+- Since our optimistic coordination allows inconsistent initial table structures, we also encounter the following problems.
   - initial structure tb1(a int, b int), tb2(a int, b varchar(4))
   - tb1 execute `modify b varchar(4)`
   - at this point, all the sub-tables are consistent, but the master only receives the DDL for tb1, so coordination fails
