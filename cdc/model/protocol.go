@@ -66,6 +66,7 @@ func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status-resp/%s", changefeedID)
 }
 
+// ProcessorEpoch designates a continuous period of the processor working normally.
 type ProcessorEpoch = string
 
 // SyncMessage is the message body for syncing the current states of a processor.
