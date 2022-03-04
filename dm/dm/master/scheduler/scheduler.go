@@ -413,12 +413,20 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID, &runningStage); len(tasks) > 0 {
 		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
-	// 3. put the config into etcd.
-	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
+	// 3. check if there is relay workers for this source
+	relayWorkers, err := s.getRelayWorkers(cfg.SourceID)
 	if err != nil {
 		return err
 	}
-	// 4. record the config in the scheduler.
+	if len(relayWorkers) > 0 {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
+	}
+	// 4. put the config into etcd.
+	_, err = ha.PutSourceCfg(s.etcdCli, cfg)
+	if err != nil {
+		return err
+	}
+	// 5. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	return nil
 }
@@ -1541,11 +1549,14 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
+	return s.getRelayWorkers(source)
+}
 
+// getRelayWorkers get relay workers with no lock and check.
+func (s *Scheduler) getRelayWorkers(source string) ([]*Worker, error) {
 	workers := s.relayWorkers[source]
 	ret := make([]*Worker, 0, len(workers))
 	for w := range workers {

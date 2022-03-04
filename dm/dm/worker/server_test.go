@@ -658,7 +658,6 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 }
 
 func (t *testServer) testSourceWorker(c *C) {
-	return
 	cfg := loadSourceConfigWithoutPassword(c)
 
 	dir := c.MkDir()

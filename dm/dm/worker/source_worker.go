@@ -1296,7 +1296,6 @@ func (w *SourceWorker) refreshSourceCfg() error {
 }
 
 func (w *SourceWorker) refreshSubTaskConfig(sourceName, taskName string) error {
-	// TODO check -1 rev is the newest version
 	tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, sourceName, taskName, int64(-1))
 	if err != nil {
 		return terror.Annotate(err, "fail to get subtask config from etcd")

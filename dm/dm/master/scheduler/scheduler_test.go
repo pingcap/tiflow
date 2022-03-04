@@ -147,9 +147,14 @@ func (t *testScheduler) TestUpdateSubTasksAndSourceCfg(c *C) {
 
 	// pause task
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1), IsNil)
-	subtaskCfg1.Batch = 1000
+
+	// can't update source when there is a relay worker for this source
+	c.Assert(s.StartRelay(sourceID1, []string{workerName1}), IsNil)
+	c.Assert(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
+	c.Assert(s.StopRelay(sourceID1, []string{workerName1}), IsNil)
 
 	// update success
+	subtaskCfg1.Batch = 1000
 	c.Assert(s.UpdateSubTasks(subtaskCfg1), IsNil)
 	c.Assert(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, Equals, subtaskCfg1.Batch)
 

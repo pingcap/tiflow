@@ -3221,7 +3221,7 @@ workaround = "Please try again later"
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46025]
-message = "source can only update relay-log related parts for now"
+message = "source can only update when no relay workers and no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]
