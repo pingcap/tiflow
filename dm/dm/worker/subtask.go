@@ -696,15 +696,16 @@ func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
 	st.RLock()
 	defer st.RUnlock()
 
-	su, ok := st.currUnit.(*syncer.Syncer)
-	if !ok {
-		ut := pb.UnitType_InvalidUnit
-		if st.currUnit != nil {
-			ut = st.currUnit.Type()
+	switch st.currUnit.Type() {
+	case pb.UnitType_Sync:
+		if s, ok := st.currUnit.(*syncer.Syncer); ok {
+			return s.CheckCanUpdateCfg(cfg)
 		}
-		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, ut.String())
+		// skip check for mock sync unit
+	default:
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, st.currUnit.Type())
 	}
-	return su.CheckCanUpdateCfg(cfg)
+	return nil
 }
 
 // ShardDDLOperation returns the current shard DDL lock operation.

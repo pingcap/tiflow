@@ -203,11 +203,21 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(s.worker.refreshSourceCfg(), IsNil)
 	c.Assert(s.worker.cfg.MetaDir, Equals, sourceCfg.MetaDir)
 
+	// check update subtask cfg failed
+	tomlStr, tomlErr := subtaskCfg.Toml()
+	c.Assert(tomlErr, IsNil)
+	ctx := context.Background()
+	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
+	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
+	c.Assert(checkErr, IsNil)
+	c.Assert(checkResp.Success, IsFalse)
+
 	// test refresh subtask cfg
 	subtaskCfg.SyncerConfig.Batch = 111
 	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{}, []ha.Stage{})
 	c.Assert(err, IsNil)
 	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	subTask.setCurrUnit(subTask.units[2]) // set to syncer unit
 	c.Assert(s.worker.tryRefreshSubTaskConfig(subTask), IsNil)
 	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
@@ -218,15 +228,6 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Running)
 	}), IsTrue)
-
-	// check update subtask cfg failed
-	tomlStr, tomlErr := subtaskCfg.Toml()
-	c.Assert(tomlErr, IsNil)
-	ctx := context.Background()
-	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
-	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
-	c.Assert(checkErr, IsNil)
-	c.Assert(checkResp.Success, IsFalse)
 
 	// stop task
 	_, err = ha.DeleteSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name))
