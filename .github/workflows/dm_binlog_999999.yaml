@@ -53,7 +53,7 @@ jobs:
           mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
           curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
           mv tidb-nightly-linux-amd64/bin/tidb-server bin/
-          curl -O https://dl.min.io/server/minio/release/darwin-amd64/minio
+          curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
           chmod +x minio
           mv minio bin/
 
