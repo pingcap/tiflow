@@ -32,9 +32,9 @@ func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
 // DispatchTableMessage is the message body for dispatching a table.
 type DispatchTableMessage struct {
 	OwnerRev int64          `json:"owner-rev"`
+	Epoch    ProcessorEpoch `json:"epoch"`
 	ID       TableID        `json:"id"`
 	IsDelete bool           `json:"is-delete"`
-	Epoch    ProcessorEpoch `json:"epoch"`
 }
 
 // DispatchTableResponseTopic returns a message topic for the result of
