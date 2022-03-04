@@ -280,3 +280,51 @@ func TestOwnerMismatchShouldPanic(t *testing.T) {
 		agent.OnOwnerAnnounce("capture-2", 1)
 	}, "should have panicked")
 }
+
+func TestIgnoreStaleEpoch(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+
+	executor := NewMockTableExecutor(t)
+	messenger := &MockProcessorMessenger{}
+	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
+	agent.checkpointSender = &mockCheckpointSender{}
+
+	var epoch, newEpoch model.ProcessorEpoch
+	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
+		[]model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
+		Return(true, nil).Run(func(args mock.Arguments) {
+		epoch = args.String(1)
+	})
+
+	err := agent.Tick(ctx)
+	require.NoError(t, err)
+	messenger.AssertExpectations(t)
+
+	agent.OnOwnerAnnounce("capture-1", 1)
+	messenger.On("OnOwnerChanged", mock.Anything, "capture-1")
+
+	err = agent.Tick(ctx)
+	require.NoError(t, err)
+	messenger.AssertExpectations(t)
+
+	messenger.ExpectedCalls = nil
+	messenger.On("OnOwnerChanged", mock.Anything, "capture-1")
+	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
+		[]model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
+		Return(true, nil).Run(func(args mock.Arguments) {
+		newEpoch = args.String(1)
+	})
+	agent.OnOwnerAnnounce("capture-1", 1)
+
+	err = agent.Tick(ctx)
+	require.NoError(t, err)
+	messenger.AssertExpectations(t)
+
+	require.NotEqual(t, epoch, newEpoch)
+	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(2), false, epoch)
+
+	err = agent.Tick(ctx)
+	require.NoError(t, err)
+	messenger.AssertExpectations(t)
+	executor.AssertNotCalled(t, "AddTable", mock.Anything, model.TableID(1))
+}

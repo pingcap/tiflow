@@ -17,6 +17,8 @@ import (
 	stdContext "context"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -158,34 +160,73 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (a *agentImpl) FinishTableOperation(ctx context.Context, tableID model.TableID, epoch model.ProcessorEpoch) (bool, error) {
-	done, err := a.trySendMessage(
+func (a *agentImpl) FinishTableOperation(
+	ctx context.Context,
+	tableID model.TableID,
+	epoch model.ProcessorEpoch,
+) (done bool, err error) {
+	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("SchedulerAgent: FinishTableOperation", zap.Any("message", message),
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx, a.ownerCaptureID,
 		model.DispatchTableResponseTopic(a.changeFeed),
-		&model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	return done, nil
 }
 
-func (a *agentImpl) SyncTaskStatuses(ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (bool, error) {
+func (a *agentImpl) SyncTaskStatuses(
+	ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID,
+) (done bool, err error) {
 	if !a.Barrier(ctx) {
 		// The Sync message needs to be strongly ordered w.r.t. other messages.
 		return false, nil
 	}
 
-	done, err := a.trySendMessage(
+	message := &model.SyncMessage{
+		ProcessorVersion: version.ReleaseSemver(),
+		Epoch:            epoch,
+		Running:          running,
+		Adding:           adding,
+		Removing:         removing,
+	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		if log.GetLevel() == zapcore.DebugLevel {
+			// The message can be REALLY large, so we do not print it
+			// unless the log level is debug.
+			log.Debug("SchedulerAgent: SyncTaskStatuses",
+				zap.Any("message", message),
+				zap.Bool("successful", done),
+				zap.String("changefeedID", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID))
+			return
+		}
+		log.Info("SchedulerAgent: SyncTaskStatuses",
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
 		model.SyncTopic(a.changeFeed),
-		&model.SyncMessage{
-			ProcessorVersion: version.ReleaseSemver(),
-			Epoch:            epoch,
-			Running:          running,
-			Adding:           adding,
-			Removing:         removing,
-		})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -196,15 +237,30 @@ func (a *agentImpl) SendCheckpoint(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	resolvedTs model.Ts,
-) (bool, error) {
-	done, err := a.trySendMessage(
+) (done bool, err error) {
+	message := &model.CheckpointMessage{
+		CheckpointTs: checkpointTs,
+		ResolvedTs:   resolvedTs,
+	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		// This log is very often, so we only print it if the
+		// log level is debug.
+		log.Debug("SchedulerAgent: SendCheckpoint",
+			zap.Any("message", message),
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
 		model.CheckpointTopic(a.changeFeed),
-		&model.CheckpointMessage{
-			CheckpointTs: checkpointTs,
-			ResolvedTs:   resolvedTs,
-		})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
