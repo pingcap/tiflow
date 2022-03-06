@@ -105,12 +105,57 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
       }),
     }),
+    dmapiDisableRelay: build.mutation<
+      void,
+      {
+        name: string
+        disableRelayRequest: {
+          worker_name_list?: string[]
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/api/v1/sources/${queryArg.name}/relay/disable`,
+        method: 'POST',
+        body: queryArg.disableRelayRequest,
+      }),
+    }),
+    dmapiEnableRelay: build.mutation<
+      void,
+      {
+        name: string
+        enableRelayRequest: {
+          relay_binlog_gtid?: string | null
+          relay_binlog_name?: string | null
+          relay_dir?: string | null
+          worker_name_list: string[]
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/api/v1/sources/${queryArg.name}/relay/enable`,
+        method: 'POST',
+        body: queryArg.enableRelayRequest,
+      }),
+    }),
+    dmapiPurgeRelay: build.mutation<
+      void,
+      {
+        name: string
+        purgeRelayRequest: {
+          relay_binlog_name: string
+          relay_dir?: string | null
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/api/v1/sources/${queryArg.name}/relay/purge`,
+        method: 'POST',
+        body: queryArg.purgeRelayRequest,
+      }),
+    }),
   }),
 })
-
-export type DmapiGetSourceStatusApiArg = {
-  sourceName: string
-}
 
 export type Security = {
   ssl_ca_content: string
@@ -149,6 +194,7 @@ export type RelayConfig = {
 }
 
 export type Source = {
+  enable: boolean
   source_name: string
   host: string
   port: number
@@ -173,4 +219,7 @@ export const {
   useDmapiTransferSourceMutation,
   useDmapiGetSourceSchemaListQuery,
   useDmapiGetSourceTableListMutation,
+  useDmapiDisableRelayMutation,
+  useDmapiEnableRelayMutation,
+  useDmapiPurgeRelayMutation,
 } = injectedRtkApi

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -46,10 +46,13 @@ import {
   useDmapiGetTaskStatusQuery,
   calculateTaskStatus,
   TaskStage,
+  TaskUnit,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
 import { actions, useAppDispatch, useAppSelector } from '~/models'
+import { Source, useDmapiGetSourceListQuery } from '~/models/source'
+import TaskUnitTag from '~/components/SimpleTaskPanel/TaskUnitTag'
 
 SyntaxHighlighter.registerLanguage('json', json)
 
@@ -58,10 +61,45 @@ enum CreateTaskMethod {
   ByConfigFile,
 }
 
+const SourceTable: React.FC<{
+  data: Source[]
+}> = ({ data }) => {
+  const [t] = useTranslation()
+  const { result, setKeyword } = useFuseSearch(data, { keys: ['source_name'] })
+  const columns: TableColumnsType<Source> = [
+    {
+      title: t('name'),
+      dataIndex: 'source_name',
+    },
+    {
+      title: t('host'),
+      render(s: Source) {
+        return `${s.host}:${s.port}`
+      },
+    },
+    {
+      title: t('port'),
+      dataIndex: 'user',
+    },
+  ]
+  return (
+    <div>
+      <Input
+        className="mb-4"
+        suffix={<SearchOutlined />}
+        onChange={e => setKeyword(e.target.value)}
+        placeholder={t('search placeholder')}
+      />
+      <Table dataSource={result} columns={columns} rowKey="source_name" />
+    </div>
+  )
+}
+
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
   const dispatch = useAppDispatch()
-  const [visible, setVisible] = useState(false)
+  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false)
+  const [sourceDrawerVisible, setSourceDrawerVisible] = useState(false)
   const [currentTask, setCurrentTask] = useState<Task>()
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [displayedSubtaskOffset, setDisplayedSubtaskOffset] = useState({
@@ -80,6 +118,16 @@ const TaskList: React.FC = () => {
     { taskName: currentTask?.name ?? '' },
     { skip: !currentTask }
   )
+  const { data: sources } = useDmapiGetSourceListQuery({ with_status: false })
+  const sourcesOfCurrentTask: Source[] = useMemo(() => {
+    if (!currentTask || !sources) {
+      return []
+    }
+    const names = new Set(
+      currentTask.source_config.source_conf.map(i => i.source_name)
+    )
+    return sources.data.filter(i => names.has(i.source_name))
+  }, [currentTask, sources])
 
   const [stopTask] = useDmapiStopTaskMutation()
   const [startTask] = useDmapiStartTaskMutation()
@@ -163,7 +211,7 @@ const TaskList: React.FC = () => {
             type="link"
             onClick={() => {
               setCurrentTask(data)
-              setVisible(true)
+              setDetailDrawerVisible(true)
             }}
           >
             {data.name}
@@ -173,14 +221,29 @@ const TaskList: React.FC = () => {
     },
     {
       title: t('source info'),
-      dataIndex: 'source_config',
-      render(sourceConfig) {
-        return sourceConfig.source_conf?.length > 0
-          ? t('{{val}} and {{count}} others', {
-              val: `${sourceConfig.source_conf[0].source_name}`,
-              count: sourceConfig.source_conf.length,
-            })
-          : '-'
+      render(data) {
+        const sourceConfig = data.source_config
+        const sources =
+          sourceConfig.source_conf?.length > 0
+            ? t('{{val}} and {{count}} others', {
+                val: `${sourceConfig.source_conf[0].source_name}`,
+                count: sourceConfig.source_conf.length,
+              })
+            : '-'
+        if (sources.length > 1) {
+          return (
+            <Button
+              type="link"
+              onClick={() => {
+                setCurrentTask(data)
+                setSourceDrawerVisible(true)
+              }}
+            >
+              {sources}
+            </Button>
+          )
+        }
+        return sources
       },
     },
     {
@@ -191,9 +254,21 @@ const TaskList: React.FC = () => {
       },
     },
     {
+      title: t('current stage'),
+      dataIndex: 'status_list',
+      render(statusList: Task['status_list']) {
+        if (!statusList) return '-'
+        return (
+          <div>
+            <TaskUnitTag status={statusList} />
+          </div>
+        )
+      },
+    },
+    {
       title: t('status'),
       dataIndex: 'status_list',
-      render(subtasks) {
+      render(subtasks: Task['status_list']) {
         return calculateTaskStatus(subtasks)
       },
       filters: Object.values(TaskStage).map(stage => ({
@@ -202,6 +277,19 @@ const TaskList: React.FC = () => {
       })),
       onFilter: (value, record) =>
         calculateTaskStatus(record.status_list) === value,
+    },
+    {
+      title: t('incremental sync delay'),
+      dataIndex: 'status_list',
+      render(data: Task['status_list']) {
+        const syncUnits = data?.filter(i => i.unit === TaskUnit.Sync)
+        if (syncUnits && syncUnits.length > 0) {
+          return `${Math.max(
+            ...syncUnits.map(i => i?.sync_status?.seconds_behind_master ?? 0)
+          )}s`
+        }
+        return '-'
+      },
     },
     {
       title: t('operations'),
@@ -308,8 +396,8 @@ const TaskList: React.FC = () => {
         title={t('task detail')}
         placement="right"
         size="large"
-        visible={visible}
-        onClose={() => setVisible(false)}
+        visible={detailDrawerVisible}
+        onClose={() => setDetailDrawerVisible(false)}
       >
         {currentTaskStatus ? (
           <Tabs defaultActiveKey="1">
@@ -364,6 +452,16 @@ const TaskList: React.FC = () => {
             <Spin />
           </div>
         )}
+      </Drawer>
+
+      <Drawer
+        title={t('source detail')}
+        placement="right"
+        size="large"
+        visible={sourceDrawerVisible}
+        onClose={() => setSourceDrawerVisible(false)}
+      >
+        <SourceTable data={sourcesOfCurrentTask} />
       </Drawer>
 
       <Modal

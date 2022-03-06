@@ -121,6 +121,19 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/tasks/${queryArg.taskName}/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
       }),
     }),
+    dmapiConverterTask: build.mutation<
+      { task: Task; task_config_file: string },
+      {
+        task?: Task
+        task_config_file?: string
+      }
+    >({
+      query: queryArg => ({
+        url: `/tasks/converters`,
+        method: 'POST',
+        body: queryArg,
+      }),
+    }),
   }),
 })
 
@@ -302,6 +315,7 @@ export const {
   useDmapiUpdateTaskMutation,
   useDmapiGetSchemaListByTaskAndSourceQuery,
   useDmapiGetTableListByTaskAndSourceQuery,
+  useDmapiConverterTaskMutation,
 } = injectedRtkApi
 
 export enum TaskUnit {

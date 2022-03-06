@@ -1,9 +1,8 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '~/i18n'
 import {
-  Input,
   Row,
   Col,
   Button,
@@ -12,20 +11,17 @@ import {
   Breadcrumb,
   TableColumnsType,
 } from '~/uikit'
-import { RedoOutlined, SearchOutlined } from '~/uikit/icons'
+import { RedoOutlined } from '~/uikit/icons'
 import { Task, useDmapiGetTaskListQuery } from '~/models/task'
-import { useFuseSearch } from '~/utils/search'
 
 const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
+  const [currentTask, setCurrentTask] = useState<Task>()
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
     withStatus: true,
   })
 
   const dataSource = data?.data
-  const { result, setKeyword } = useFuseSearch(dataSource, {
-    keys: ['name'],
-  })
   const columns: TableColumnsType<Task> = [
     {
       title: t('task name'),
@@ -44,6 +40,13 @@ const ReplicationDetail: React.FC = () => {
       },
     },
   ]
+
+  useEffect(() => {
+    if (!currentTask && data && data.data[0]) {
+      setCurrentTask(data.data[0])
+    }
+  }, [currentTask, data])
+
   return (
     <div>
       <div className="px-4 pt-4">
@@ -56,11 +59,6 @@ const ReplicationDetail: React.FC = () => {
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
-            <Input
-              onChange={e => setKeyword(e.target.value)}
-              suffix={<SearchOutlined />}
-              placeholder={t('search placeholder')}
-            />
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
@@ -70,7 +68,7 @@ const ReplicationDetail: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={result}
+        dataSource={dataSource}
         columns={columns}
         loading={isFetching}
         rowKey="name"

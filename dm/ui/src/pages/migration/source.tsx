@@ -31,8 +31,6 @@ import {
   PlayCircleOutlined,
   PauseCircleOutlined,
   DeleteOutlined,
-  DatabaseOutlined,
-  FlagOutlined,
   RedoOutlined,
 } from '~/uikit/icons'
 import CreateOrUpdateSource from '~/components/CreateOrUpdateSource'
@@ -45,10 +43,11 @@ import {
   useDmapiGetSourceListQuery,
   useDmapiUpdateSourceMutation,
 } from '~/models/source'
-import { calculateTaskStatus, useDmapiGetTaskListQuery } from '~/models/task'
+import { useDmapiGetTaskListQuery } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
 import { isEmptyObject } from '~/utils/isEmptyObject'
+import SimpleTaskPanel from '~/components/SimpleTaskPanel'
 
 SyntaxHighlighter.registerLanguage('json', json)
 
@@ -65,7 +64,7 @@ const SourceList: React.FC = () => {
   const { data: taskListData, isFetching: isFetchingTaskListData } =
     useDmapiGetTaskListQuery(
       {
-        withStatus: false,
+        withStatus: true,
         sourceNameList: currentSource ? [currentSource.source_name] : [],
       },
       { skip: !currentSource }
@@ -83,7 +82,6 @@ const SourceList: React.FC = () => {
   const handleCancel = () => {
     setShowModal(false)
   }
-
   const handleConfirm = async (payload: Source) => {
     const isEditing = Boolean(currentSource)
     const key = 'createSource-' + Date.now()
@@ -105,7 +103,6 @@ const SourceList: React.FC = () => {
         message.destroy(key)
       })
   }
-
   const handleRemoveSource = async () => {
     if (selectedSources.length === 0) return
     const key = 'removeSource-' + Date.now()
@@ -152,7 +149,6 @@ const SourceList: React.FC = () => {
       }
     })
   }
-
   const dataSource = data?.data
 
   const { result, setKeyword } = useFuseSearch(dataSource, {
@@ -187,6 +183,30 @@ const SourceList: React.FC = () => {
     {
       title: t('user name'),
       dataIndex: 'user',
+    },
+    {
+      title: t('is enabled'),
+      dataIndex: 'enable',
+      render(enabled: boolean) {
+        return (
+          <Badge
+            status={enabled ? 'success' : 'default'}
+            text={enabled ? t('enabled') : t('stopped')}
+          />
+        )
+      },
+    },
+    {
+      title: t('relay log'),
+      dataIndex: 'relay_config',
+      render(relayConfig) {
+        return (
+          <Badge
+            status={relayConfig.enable_relay ? 'success' : 'default'}
+            text={relayConfig.enable_relay ? t('on') : t('off')}
+          />
+        )
+      },
     },
     {
       title: t('enable gtid'),
@@ -333,24 +353,7 @@ const SourceList: React.FC = () => {
                   <Collapse.Panel
                     showArrow={false}
                     key={item.name}
-                    header={
-                      <div
-                        className="flex-1 flex justify-between"
-                        onClick={e => {
-                          e.stopPropagation()
-                          e.preventDefault()
-                        }}
-                      >
-                        <span>
-                          <DatabaseOutlined className="mr-2" />
-                          {item.name}
-                        </span>
-                        <span>
-                          <FlagOutlined className="mr-2" />
-                          {calculateTaskStatus(item.status_list)}
-                        </span>
-                      </div>
-                    }
+                    header={<SimpleTaskPanel task={item} preventClick />}
                   />
                 ))}
               </Collapse>

@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { pick } from 'lodash'
+import { pick } from 'lodash-es'
 
 import { Form, Button, Card, Input, Select } from '~/uikit'
 import { FileAddOutlined, CloseOutlined } from '~/uikit/icons'

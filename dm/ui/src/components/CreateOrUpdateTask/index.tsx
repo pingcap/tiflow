@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { merge, omit } from 'lodash'
+import { merge, omit } from 'lodash-es'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 import { Card, Form, Steps, message } from '~/uikit'
@@ -18,6 +18,7 @@ import TargetInfo from '~/components/CreateOrUpdateTask/TargetInfo'
 import EventFilters from '~/components/CreateOrUpdateTask/EventFilter'
 import MigrateRule from '~/components/CreateOrUpdateTask/MigrateRule'
 import CreateTaskEditorMode from '~/components/CreateOrUpdateTask/CreateTaskEditorMode'
+import { isEmptyObject } from '~/utils/isEmptyObject'
 
 const { Step } = Steps
 
@@ -79,11 +80,10 @@ const CreateTaskConfig: React.FC<{
     const key = 'createTask-' + Date.now()
     message.loading({ content: t('requesting'), key })
     const payload = { ...taskData }
-    delete payload.binlog_filter_rule_array
-    if (
-      Object.values(payload.target_config.security ?? {}).filter(Boolean)
-        .length === 0
-    ) {
+    if ('binlog_filter_rule_array' in payload) {
+      delete payload.binlog_filter_rule_array
+    }
+    if (isEmptyObject(payload.target_config.security)) {
       delete payload.target_config.security
     }
     const handler = isEditing ? updateTask : createTask
