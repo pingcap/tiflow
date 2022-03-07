@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -381,10 +382,7 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	}
 	b.msg = msg
 	b.data = nil
-	if b.msg.Type == model.MqMessageTypeUnknown {
-		return model.MqMessageTypeUnknown, false, nil
-	}
-	return b.msg.Type, true, nil
+	return b.msg.Type, b.msg.Type != model.MqMessageTypeUnknown, nil
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
@@ -503,6 +501,15 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 
 	// we lost DDL type from canal flat json format, only got the DDL SQL.
 	result.Query = flatDDL.getQuery()
+
+	// set the DDL Type to be compatible with mysql sink's logic
+	// see https://github.com/pingcap/tiflow/blob/0578db337d783643cfab9f25ccb28a5dd0de5806/cdc/sink/mysql.go#L362-L370
+	// see https://github.com/pingcap/tidb/blob/6dbf2de2f05bbdeff6bde45d8cbad740a361dd6c/parser/model/ddl.go#L101-L102
+	if strings.HasPrefix(result.Query, "create schema") {
+		result.Type = timodel.ActionCreateSchema
+	} else if strings.HasPrefix(result.Query, "drop schema") {
+		result.Type = timodel.ActionDropSchema
+	}
 
 	return result
 }
