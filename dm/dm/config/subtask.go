@@ -410,7 +410,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		} else {
 			dirSuffix = c.Name
 		}
-		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix, ".", true)
 		if err != nil {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}

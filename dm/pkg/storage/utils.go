@@ -26,8 +26,34 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
+// // AdjustPath adjust rawURL, add uniqueId as path suffix.
+// func AdjustPath(rawURL string, uniqueID string) (string, error) {
+// 	if rawURL == "" || uniqueID == "" {
+// 		return rawURL, nil
+// 	}
+// 	u, err := bstorage.ParseRawURL(rawURL)
+// 	if err != nil {
+// 		return "", errors.Trace(err)
+// 	}
+// 	// not url format, we don't use url library to avoid being escaped or unescaped
+// 	if u.Scheme == "" {
+// 		// avoid duplicate add uniqueID
+// 		if !strings.HasSuffix(rawURL, uniqueID) {
+// 			return rawURL + "." + uniqueID, nil
+// 		}
+// 		return rawURL, nil
+// 	}
+// 	// u.Path is an unescaped string and can be used as normal
+// 	if !strings.HasSuffix(u.Path, uniqueID) {
+// 		u.Path = u.Path + "." + uniqueID
+// 		// u.String will return escaped url and can be used safely in other steps
+// 		return u.String(), err
+// 	}
+// 	return rawURL, nil
+// }
+
 // AdjustPath adjust rawURL, add uniqueId as path suffix.
-func AdjustPath(rawURL string, uniqueID string) (string, error) {
+func AdjustPath(rawURL string, uniqueID string, separator string, needCheckDuplicate bool) (string, error) {
 	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
 	}
@@ -38,14 +64,14 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
 		// avoid duplicate add uniqueID
-		if !strings.HasSuffix(rawURL, uniqueID) {
-			return rawURL + "." + uniqueID, nil
+		if !needCheckDuplicate || !strings.HasSuffix(rawURL, uniqueID) {
+			return rawURL + separator + uniqueID, nil
 		}
 		return rawURL, nil
 	}
 	// u.Path is an unescaped string and can be used as normal
-	if !strings.HasSuffix(u.Path, uniqueID) {
-		u.Path = u.Path + "." + uniqueID
+	if !needCheckDuplicate || !strings.HasSuffix(u.Path, uniqueID) {
+		u.Path = u.Path + separator + uniqueID
 		// u.String will return escaped url and can be used safely in other steps
 		return u.String(), err
 	}

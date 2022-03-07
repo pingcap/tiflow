@@ -43,6 +43,7 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
+	TmpTlsConfigPath            = "./tidb_lightning_tls_config"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -239,7 +240,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			cfg.Checkpoint.Enable = false
 		} else {
 			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-			cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+			var cpPath string
+			cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName, string(filepath.Separator), false)
+			if err != nil {
+				return err
+			}
 			cfg.Checkpoint.DSN = cpPath
 			cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 		}
