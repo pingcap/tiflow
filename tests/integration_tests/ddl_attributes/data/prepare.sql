@@ -5,11 +5,13 @@ USE `ddl_attributes`;
 CREATE TABLE attributes_t1 (id INT PRIMARY KEY, name VARCHAR(50));
 ALTER TABLE attributes_t1 ATTRIBUTES='merge_option=deny';
 INSERT INTO attributes_t1 (id, name) VALUES (1, "test1");
+INSERT INTO attributes_t1 (id) VALUES (2);
 
 CREATE TABLE attributes_t2 (id INT PRIMARY KEY, name VARCHAR(50)) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (10000), PARTITION p1 VALUES LESS THAN (MAXVALUE));
 ALTER TABLE attributes_t2 ATTRIBUTES='merge_option=deny';
 ALTER TABLE attributes_t2 PARTITION p0 ATTRIBUTES='merge_option=allow';
 INSERT INTO attributes_t2 (id, name) VALUES (2, "test2");
+INSERT INTO attributes_t2 (id) VALUES (3);
 
 DROP TABLE attributes_t1;
 RECOVER TABLE attributes_t1;
