@@ -348,7 +348,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	mockDDLSink := cf.sink.(*mockDDLSink)
 
-	require.Len(t, cf.schema.AllPhysicalTables(), 1)
+	require.Len(t, cf.schema.AllTableNames(), 1)
 	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
 	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
@@ -365,7 +365,11 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tickThreeTime()
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, cf.schema.AllPhysicalTables(), 0)
+	require.Len(t, cf.schema.AllTableNames(), 0)
+	// We can't use the new schema because the ddl hasn't been executed yet.
+	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
+	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Len(t, names, 1)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
