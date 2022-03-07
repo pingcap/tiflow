@@ -154,7 +154,7 @@ func TestHandleError(t *testing.T) {
 		},
 		stopped: stopped,
 	}
-	//table is already stopped
+	// table is already stopped
 	tbl.handleError(nil)
 	require.Equal(t, TableStatusInitializing, tbl.sinkNode.status)
 	require.False(t, canceled)
@@ -308,7 +308,7 @@ func TestNewTableActor(t *testing.T) {
 		tbl.UpdateBarrierTs(model.Ts(5))
 	})
 
-	//start puller failed
+	// start puller failed
 	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 		return errors.New("failed to start puller")
 	}
@@ -323,7 +323,6 @@ func TestNewTableActor(t *testing.T) {
 }
 
 func TestTableActorStart(t *testing.T) {
-
 	realStartPullerFunc := startPuller
 	realStartSorterFunc := startSorter
 	ctx, cancel := context.WithCancel(context.TODO())

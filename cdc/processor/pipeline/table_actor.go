@@ -480,7 +480,7 @@ func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
 }
 
-//for ut
+// for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
 }
