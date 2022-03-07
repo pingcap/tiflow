@@ -426,7 +426,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			err     error
 		)
 		switch c.protocol {
-		case config.ProtocolDefault:
+		case config.ProtocolOpen, config.ProtocolDefault:
 			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
 			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
