@@ -728,22 +728,26 @@ func (o *Optimist) removeLockOptional(op optimism.Operation, lock *optimism.Lock
 
 // handleLock handles a single shard DDL lock.
 func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, skipDone bool) error {
-	cfStage := optimism.ConflictNone
-	cfMsg := ""
+	var (
+		cfStage = optimism.ConflictNone
+		cfMsg   = ""
+	)
+
 	lockID, newDDLs, cols, err := o.lk.TrySync(o.cli, info, tts)
 	switch {
 	case info.IgnoreConflict:
 		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
 			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	case err != nil:
-		if terror.ErrShardDDLOptimismTrySyncFail.Equal(err) {
-			cfStage = optimism.ConflictDetected // we treat only ErrShardDDLOptimismTrySyncFail returned from `TrySync` as conflict detected now.
+		if terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+			cfStage = optimism.ConflictSkipWaitRedirect
+			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
 		} else {
-			cfStage = optimism.ConflictWarned
+			cfStage = optimism.ConflictDetected // we treat any errors returned from `TrySync` as conflict detected now.
+			cfMsg = err.Error()
+			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
+				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 		}
-		cfMsg = err.Error()
-		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
-			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	default:
 		o.logger.Info("the shard DDL lock returned some DDLs",
 			zap.String("lock", lockID), zap.Strings("ddls", newDDLs), zap.Strings("cols", cols), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted))
