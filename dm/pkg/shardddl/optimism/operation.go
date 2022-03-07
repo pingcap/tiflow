@@ -17,9 +17,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/clientv3util"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/clientv3util"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -36,9 +36,12 @@ const (
 	// in this stage, DM-worker should not execute/skip DDL/DML,
 	// but it should still try to find the DDL which can resolve the conflict in the binlog stream.
 	ConflictDetected ConflictStage = "detected"
-	// ConflictResolved indicates a conflict will be resolved after applied the shard DDL.
-	// in this stage, DM-worker should replay DML skipped in ConflictDetected to downstream.
+	// ConflictResolved indicates a conflict DDL be resolved.
+	// in this stage, DM-worker should redirect to the conflict DDL.
 	ConflictResolved ConflictStage = "resolved"
+	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
+	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
+	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
 )
 
 // Operation represents a shard DDL coordinate operation.

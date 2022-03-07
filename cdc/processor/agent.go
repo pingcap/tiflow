@@ -17,9 +17,15 @@ import (
 	stdContext "context"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -28,9 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -161,11 +164,23 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 func (a *agentImpl) FinishTableOperation(
 	ctx context.Context,
 	tableID model.TableID,
-) (bool, error) {
-	done, err := a.trySendMessage(
+	epoch model.ProcessorEpoch,
+) (done bool, err error) {
+	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("SchedulerAgent: FinishTableOperation", zap.Any("message", message),
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx, a.ownerCaptureID,
 		model.DispatchTableResponseTopic(a.changeFeed),
-		&model.DispatchTableResponseMessage{ID: tableID})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -173,19 +188,46 @@ func (a *agentImpl) FinishTableOperation(
 }
 
 func (a *agentImpl) SyncTaskStatuses(
-	ctx context.Context,
-	running, adding, removing []model.TableID,
-) (bool, error) {
-	done, err := a.trySendMessage(
+	ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID,
+) (done bool, err error) {
+	if !a.Barrier(ctx) {
+		// The Sync message needs to be strongly ordered w.r.t. other messages.
+		return false, nil
+	}
+
+	message := &model.SyncMessage{
+		ProcessorVersion: version.ReleaseSemver(),
+		Epoch:            epoch,
+		Running:          running,
+		Adding:           adding,
+		Removing:         removing,
+	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		if log.GetLevel() == zapcore.DebugLevel {
+			// The message can be REALLY large, so we do not print it
+			// unless the log level is debug.
+			log.Debug("SchedulerAgent: SyncTaskStatuses",
+				zap.Any("message", message),
+				zap.Bool("successful", done),
+				zap.String("changefeedID", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID))
+			return
+		}
+		log.Info("SchedulerAgent: SyncTaskStatuses",
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
 		model.SyncTopic(a.changeFeed),
-		&model.SyncMessage{
-			ProcessorVersion: version.ReleaseSemver(),
-			Running:          running,
-			Adding:           adding,
-			Removing:         removing,
-		})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -196,15 +238,30 @@ func (a *agentImpl) SendCheckpoint(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	resolvedTs model.Ts,
-) (bool, error) {
-	done, err := a.trySendMessage(
+) (done bool, err error) {
+	message := &model.CheckpointMessage{
+		CheckpointTs: checkpointTs,
+		ResolvedTs:   resolvedTs,
+	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		// This log is very often, so we only print it if the
+		// log level is debug.
+		log.Debug("SchedulerAgent: SendCheckpoint",
+			zap.Any("message", message),
+			zap.Bool("successful", done),
+			zap.String("changefeedID", a.changeFeed),
+			zap.String("ownerID", a.ownerCaptureID))
+	}()
+
+	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
 		model.CheckpointTopic(a.changeFeed),
-		&model.CheckpointMessage{
-			CheckpointTs: checkpointTs,
-			ResolvedTs:   resolvedTs,
-		})
+		message)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -339,7 +396,8 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 				ownerCapture,
 				message.OwnerRev,
 				message.ID,
-				message.IsDelete)
+				message.IsDelete,
+				message.Epoch)
 			return nil
 		})
 	if err != nil {

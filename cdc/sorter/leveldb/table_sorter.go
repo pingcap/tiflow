@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,288 +15,72 @@ package leveldb
 
 import (
 	"context"
-	"math"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
-const (
-	// Capacity of db sorter input and output channels.
-	sorterInputCap, sorterOutputCap = 64, 64
-	// Max size of received event batch.
-	batchReceiveEventSize = 32
-)
-
-var levelDBSorterIDAlloc uint32 = 0
-
-func allocID() uint32 {
-	return atomic.AddUint32(&levelDBSorterIDAlloc, 1)
-}
-
-type common struct {
-	dbActorID actor.ID
-	dbRouter  *actor.Router
-
-	uid     uint32
-	tableID uint64
-	serde   *encoding.MsgPackGenSerde
-	errCh   chan error
-}
-
-// reportError notifies Sorter to return an error and close.
-func (c *common) reportError(msg string, err error) {
-	if errors.Cause(err) != context.Canceled {
-		log.L().WithOptions(zap.AddCallerSkip(1)).
-			Warn(msg, zap.Uint64("tableID", c.tableID), zap.Error(err))
-	}
-	select {
-	case c.errCh <- err:
-	default:
-		// It means there is an error already.
-	}
-}
-
-// Sorter accepts out-of-order raw kv entries and output sorted entries
-type Sorter struct {
+// reader accepts out-of-order raw kv entries and output sorted entries
+type reader struct {
 	common
 
-	compact *CompactScheduler
+	state pollState
 
-	iterMaxAliveDuration  time.Duration
-	iterFirstSlowDuration time.Duration
-
+	lastSentCommitTs   uint64
 	lastSentResolvedTs uint64
 	lastEvent          *model.PolymorphicEvent
 
-	inputCh  chan *model.PolymorphicEvent
 	outputCh chan *model.PolymorphicEvent
+	delete   deleteThrottle
 
-	closed int32
-
-	metricTotalEventsKV         prometheus.Counter
-	metricTotalEventsResolvedTs prometheus.Counter
-	metricIterDuration          prometheus.ObserverVec
-	metricIterReadDuration      prometheus.Observer
-	metricIterNextDuration      prometheus.Observer
+	metricIterReadDuration prometheus.Observer
+	metricIterNextDuration prometheus.Observer
 }
 
-// NewSorter creates a new Sorter
-func NewSorter(
-	ctx context.Context, tableID int64, startTs uint64,
-	router *actor.Router, actorID actor.ID, compact *CompactScheduler,
-	cfg *config.DBConfig,
-) *Sorter {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": changefeedID})
-	return &Sorter{
-		common: common{
-			dbActorID: actorID,
-			dbRouter:  router,
-			uid:       allocID(),
-			tableID:   uint64(tableID),
-			serde:     &encoding.MsgPackGenSerde{},
-			errCh:     make(chan error, 1),
-		},
-		compact:            compact,
-		lastSentResolvedTs: startTs,
+var _ actor.Actor = (*reader)(nil)
 
-		iterMaxAliveDuration:  time.Duration(cfg.IteratorMaxAliveDuration) * time.Millisecond,
-		iterFirstSlowDuration: time.Duration(cfg.IteratorSlowReadDuration) * time.Millisecond,
-
-		inputCh:  make(chan *model.PolymorphicEvent, sorterInputCap),
-		outputCh: make(chan *model.PolymorphicEvent, sorterOutputCap),
-
-		metricTotalEventsKV:         sorter.EventCount.WithLabelValues(changefeedID, "kv"),
-		metricTotalEventsResolvedTs: sorter.EventCount.WithLabelValues(changefeedID, "resolved"),
-		metricIterDuration:          metricIterDuration,
-		metricIterReadDuration:      metricIterDuration.WithLabelValues("read"),
-		metricIterNextDuration:      metricIterDuration.WithLabelValues("next"),
-	}
-}
-
-func (ls *Sorter) waitInput(ctx context.Context) (*model.PolymorphicEvent, error) {
-	select {
-	case <-ctx.Done():
-		return nil, errors.Trace(ctx.Err())
-	case err := <-ls.errCh:
-		return nil, errors.Trace(err)
-	case ev := <-ls.inputCh:
-		return ev, nil
-	}
-}
-
-func (ls *Sorter) waitInputOutput(
-	ctx context.Context,
-) (*model.PolymorphicEvent, error) {
-	// A dummy event for detecting whether output is available.
-	dummyEvent := model.NewResolvedPolymorphicEvent(0, 0)
-	select {
-	// Prefer receiving input events.
-	case ev := <-ls.inputCh:
-		return ev, nil
-	default:
-		select {
-		case <-ctx.Done():
-			return nil, errors.Trace(ctx.Err())
-		case err := <-ls.errCh:
-			return nil, errors.Trace(err)
-		case ev := <-ls.inputCh:
-			return ev, nil
-		case ls.outputCh <- dummyEvent:
-			return nil, nil
-		}
-	}
-}
-
-// wait input or output becomes available.
-// It returns
-//   1) the max commit ts of received new events,
-//   2) the max resolved ts of new resolvedTs events,
-//   3) number of received new events,
-//   4) error.
-//
-// If input is available, it batches newly received events.
-// If output available, it sends a dummy resolved ts event and returns.
-func (ls *Sorter) wait(
-	ctx context.Context, waitOutput bool, events []*model.PolymorphicEvent,
-) (uint64, uint64, int, error) {
-	batchSize := len(events)
-	if batchSize <= 0 {
-		log.Panic("batch size must be larger than 0")
-	}
-	maxCommitTs, maxResolvedTs := uint64(0), uint64(0)
-	inputCount, kvEventCount, resolvedEventCount := 0, 0, 0
-	appendInputEvent := func(ev *model.PolymorphicEvent) {
-		if ls.lastSentResolvedTs != 0 && ev.CRTs < ls.lastSentResolvedTs {
-			// Since TiKV/Puller may send out of order or duplicated events,
-			// we should not panic here.
-			// Regression is not a common case, use warn level to rise our
-			// attention.
-			log.Warn("commit ts < resolved ts",
-				zap.Uint64("lastSentResolvedTs", ls.lastSentResolvedTs),
-				zap.Any("event", ev), zap.Uint64("regionID", ev.RegionID()))
-			return
-		}
-		if ev.RawKV.OpType == model.OpTypeResolved {
-			if maxResolvedTs < ev.CRTs {
-				maxResolvedTs = ev.CRTs
-			}
-			resolvedEventCount++
-		} else {
-			if maxCommitTs < ev.CRTs {
-				maxCommitTs = ev.CRTs
-			}
-			events[inputCount] = ev
-			inputCount++
-			kvEventCount++
-		}
+// setTaskDelete set delete range if there are too many events can be deleted or
+// it has been a long time since last delete.
+func (r *reader) setTaskDelete(task *message.Task, deleteKeys []message.Key) {
+	if len(deleteKeys) <= 0 {
+		return
 	}
 
-	if waitOutput {
-		// Wait intput and output.
-		ev, err := ls.waitInputOutput(ctx)
-		if err != nil {
-			atomic.StoreInt32(&ls.closed, 1)
-			close(ls.outputCh)
-			return 0, 0, 0, errors.Trace(err)
-		}
-		if ev == nil {
-			// No input event and output is available.
-			return maxCommitTs, maxResolvedTs, 0, nil
-		}
-		appendInputEvent(ev)
-	} else {
-		// Wait input only.
-		ev, err := ls.waitInput(ctx)
-		if err != nil {
-			atomic.StoreInt32(&ls.closed, 1)
-			close(ls.outputCh)
-			return 0, 0, 0, errors.Trace(err)
-		}
-		appendInputEvent(ev)
+	totalDelete := r.delete.count
+	if !r.delete.trigger(len(deleteKeys), time.Now()) {
+		return
 	}
 
-	// Batch receive events
-BATCH:
-	for inputCount < batchSize {
-		select {
-		case ev := <-ls.inputCh:
-			appendInputEvent(ev)
-		default:
-			break BATCH
-		}
-	}
-	ls.metricTotalEventsKV.Add(float64(kvEventCount))
-	ls.metricTotalEventsResolvedTs.Add(float64(resolvedEventCount))
-
-	// Release buffered events to help GC reclaim memory.
-	for i := inputCount; i < batchSize; i++ {
-		events[i] = nil
-	}
-	return maxCommitTs, maxResolvedTs, inputCount, nil
-}
-
-// buildTask build a task for writing new events and delete outputted events.
-func (ls *Sorter) buildTask(
-	events []*model.PolymorphicEvent, deleteKeys []message.Key,
-) (message.Task, error) {
-	writes := make(map[message.Key][]byte)
-	for i := range events {
-		event := events[i]
-		if event.RawKV.OpType == model.OpTypeResolved {
-			continue
-		}
-
-		key := encoding.EncodeKey(ls.uid, ls.tableID, event)
-		value := []byte{}
-		var err error
-		value, err = ls.serde.Marshal(event, value)
-		if err != nil {
-			return message.Task{}, errors.Trace(err)
-		}
-		writes[message.Key(key)] = value
-	}
-
-	// Delete keys of outputted resolved events.
-	for i := range deleteKeys {
-		writes[deleteKeys[i]] = []byte{}
-	}
-
-	return message.Task{
-		UID:      ls.uid,
-		TableID:  ls.tableID,
-		WriteReq: writes,
-	}, nil
+	// Delete events that less than the last delete keys' commit ts.
+	task.DeleteReq = &message.DeleteRequest{}
+	task.DeleteReq.Range[0] = encoding.EncodeTsKey(r.uid, r.tableID, 0)
+	task.DeleteReq.Range[1] = []byte(deleteKeys[len(deleteKeys)-1])
+	task.DeleteReq.Count = totalDelete + len(deleteKeys)
 }
 
 // output nonblocking outputs an event. Caller should retry when it returns false.
-func (ls *Sorter) output(event *model.PolymorphicEvent) bool {
-	if ls.lastEvent == nil {
-		ls.lastEvent = event
+func (r *reader) output(event *model.PolymorphicEvent) bool {
+	if r.lastEvent == nil {
+		r.lastEvent = event
 	}
-	if ls.lastEvent.CRTs > event.CRTs {
+	if r.lastEvent.CRTs > event.CRTs {
 		log.Panic("regression",
-			zap.Any("lastEntry", ls.lastEvent), zap.Any("event", event),
+			zap.Any("lastEntry", r.lastEvent), zap.Any("event", event),
 			zap.Uint64("regionID", event.RegionID()))
 	}
 	select {
-	case ls.outputCh <- event:
-		ls.lastEvent = event
+	case r.outputCh <- event:
+		r.lastEvent = event
+		r.lastSentCommitTs = event.CRTs
 		return true
 	default:
 		return false
@@ -304,19 +88,17 @@ func (ls *Sorter) output(event *model.PolymorphicEvent) bool {
 }
 
 // outputResolvedTs nonblocking outputs a resolved ts event.
-func (ls *Sorter) outputResolvedTs(rts model.Ts) {
-	ok := ls.output(model.NewResolvedPolymorphicEvent(0, rts))
+func (r *reader) outputResolvedTs(rts model.Ts) {
+	ok := r.output(model.NewResolvedPolymorphicEvent(0, rts))
 	if ok {
-		ls.lastSentResolvedTs = rts
+		r.lastSentResolvedTs = rts
 	}
 }
 
 // outputBufferedResolvedEvents nonblocking output resolved events and
 // resolved ts that are buffered in outputBuffer.
 // It pops outputted events in the buffer and append their key to deleteKeys.
-func (ls *Sorter) outputBufferedResolvedEvents(
-	buffer *outputBuffer, sendResolvedTsHint bool,
-) {
+func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 	hasRemainEvents := false
 	// Index of remaining output events
 	remainIdx := 0
@@ -324,7 +106,7 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 	lastCommitTs := uint64(0)
 	for idx := range buffer.resolvedEvents {
 		event := buffer.resolvedEvents[idx]
-		ok := ls.output(event)
+		ok := r.output(event)
 		if !ok {
 			hasRemainEvents = true
 			break
@@ -332,7 +114,7 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 		lastCommitTs = event.CRTs
 
 		// Delete sent events.
-		key := encoding.EncodeKey(ls.uid, ls.tableID, event)
+		key := encoding.EncodeKey(r.uid, r.tableID, event)
 		buffer.appendDeleteKey(message.Key(key))
 		remainIdx = idx + 1
 	}
@@ -340,8 +122,8 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 	buffer.shiftResolvedEvents(remainIdx)
 
 	// If all buffered resolved events are sent, send its resolved ts too.
-	if sendResolvedTsHint && lastCommitTs != 0 && !hasRemainEvents {
-		ls.outputResolvedTs(lastCommitTs)
+	if lastCommitTs != 0 && !hasRemainEvents {
+		r.outputResolvedTs(lastCommitTs)
 	}
 }
 
@@ -358,9 +140,8 @@ func (ls *Sorter) outputBufferedResolvedEvents(
 //   * an error if it occurs.
 //
 // Note: outputBuffer must be empty.
-func (ls *Sorter) outputIterEvents(
-	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer,
-	resolvedTs uint64,
+func (r *reader) outputIterEvents(
+	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer, resolvedTs uint64,
 ) (bool, uint64, error) {
 	lenResolvedEvents, lenDeleteKeys := buffer.len()
 	if lenDeleteKeys > 0 || lenResolvedEvents > 0 {
@@ -376,20 +157,20 @@ func (ls *Sorter) outputIterEvents(
 	if hasReadLastNext {
 		// We have read the last key/value, move the Next.
 		iter.Next()
-		ls.metricIterNextDuration.Observe(time.Since(start).Seconds())
+		r.metricIterNextDuration.Observe(time.Since(start).Seconds())
 	} // else the last is not read, we need to skip calling Next and read again.
 	hasReadNext := true
 	hasNext := iter.Valid()
 	for ; hasNext; hasNext = iter.Next() {
 		now := time.Now()
-		ls.metricIterNextDuration.Observe(now.Sub(lastNext).Seconds())
+		r.metricIterNextDuration.Observe(now.Sub(lastNext).Seconds())
 		lastNext = now
 
 		if iter.Error() != nil {
 			return false, 0, errors.Trace(iter.Error())
 		}
 		event := new(model.PolymorphicEvent)
-		_, err := ls.serde.Unmarshal(event, iter.Value())
+		_, err := r.serde.Unmarshal(event, iter.Value())
 		if err != nil {
 			return false, 0, errors.Trace(err)
 		}
@@ -402,14 +183,15 @@ func (ls *Sorter) outputIterEvents(
 		if commitTs == 0 {
 			commitTs = event.CRTs
 		}
-		// Group resolved events that has the same commit ts.
+		// Read all resolved events that have the same commit ts.
 		if commitTs == event.CRTs {
 			buffer.appendResolvedEvent(event)
 			continue
 		}
-		// As a new event belongs to a new txn group, we need to output all
-		// buffered events before append the event.
-		ls.outputBufferedResolvedEvents(buffer, true)
+
+		// Commit ts has changed, the new event belongs to a new txn group,
+		// we need to output all buffered events before append the event.
+		r.outputBufferedResolvedEvents(buffer)
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, skip append new event.
@@ -423,54 +205,47 @@ func (ls *Sorter) outputIterEvents(
 		buffer.appendResolvedEvent(event)
 	}
 	elapsed := time.Since(start)
-	ls.metricIterReadDuration.Observe(elapsed.Seconds())
+	r.metricIterReadDuration.Observe(elapsed.Seconds())
+
+	// When iter exhausts, buffer may never get a chance to output in the above
+	// for loop. We retry output buffer again.
+	r.outputBufferedResolvedEvents(buffer)
 
 	// Try shrink buffer to release memory.
 	buffer.maybeShrink()
 
-	// Events have not been sent, buffer them and output them later.
-	// Do not let outputBufferedResolvedEvents output resolved ts, instead we
-	// output resolved ts here.
-	sendResolvedTsHint := false
-	ls.outputBufferedResolvedEvents(buffer, sendResolvedTsHint)
-	lenResolvedEvents, _ = buffer.len()
-
-	// Skip output resolved ts if there is any buffered resolved event.
-	if lenResolvedEvents != 0 {
-		return hasReadNext, 0, nil
+	// All resolved events whose commit ts are less or equal to the commitTs
+	// have read into buffer.
+	exhaustedResolvedTs := commitTs
+	if !hasNext {
+		// Iter is exhausted, it means resolved events whose commit ts are
+		// less or equal to the commitTs have read into buffer.
+		if resolvedTs != 0 {
+			exhaustedResolvedTs = resolvedTs
+		}
 	}
 
-	if !hasNext && resolvedTs != 0 {
-		// Iter is exhausted and there is no resolved event (up to max
-		// resolved ts), output max resolved ts and return an exhausted
-		// resolved ts.
-		ls.outputResolvedTs(resolvedTs)
-		return hasReadNext, resolvedTs, nil
-	}
-	if commitTs != 0 {
-		// All buffered resolved events are outputted,
-		// output last commit ts.
-		ls.outputResolvedTs(commitTs)
-	}
-
-	return hasReadNext, 0, nil
+	return hasReadNext, exhaustedResolvedTs, nil
 }
 
+// TODO: inline the struct to reader.
 type pollState struct {
-	// Buffer for receiveing new events from AddEntry.
-	eventsBuf []*model.PolymorphicEvent
 	// Buffer for resolved events and to-be-deleted events.
 	outputBuf *outputBuffer
 	// The maximum commit ts for all events.
 	maxCommitTs uint64
 	// The maximum commit ts for all resolved ts events.
 	maxResolvedTs uint64
-	// All resolved events before the resolved ts are outputted.
+	// All resolved events before the resolved ts are read into buffer.
 	exhaustedResolvedTs uint64
 
+	// ID and router of the reader itself.
+	readerID     actor.ID
+	readerRouter *actor.Router
+
 	// Compactor actor ID.
-	actorID actor.ID
-	// A scheduler that triggers db compaction to speed up Iterator.First().
+	compactorID actor.ID
+	// A scheduler that triggers db compaction to speed up Iterator.Seek().
 	compact *CompactScheduler
 	// A threshold of triggering db compaction.
 	iterFirstSlowDuration time.Duration
@@ -533,7 +308,7 @@ func (state *pollState) advanceMaxTs(maxCommitTs, maxResolvedTs uint64) {
 // When it returns a request, caller must send it.
 // When it returns true, it means there is an iterator that can be used.
 func (state *pollState) tryGetIterator(
-	uid uint32, tableID uint64,
+	uid uint32, tableID uint64, lastSentResolvedTs, lastSentCommitTs uint64,
 ) (*message.IterRequest, bool) {
 	if state.iter != nil && state.iterCh != nil {
 		log.Panic("assert failed, there can only be one of iter or iterCh",
@@ -547,20 +322,37 @@ func (state *pollState) tryGetIterator(
 
 	if state.iterCh == nil {
 		// We haven't send request.
-		state.iterCh = make(chan *message.LimitedIterator, 1)
+		iterCh := make(chan *message.LimitedIterator, 1)
+		state.iterCh = iterCh
+		readerRouter := state.readerRouter
+		readerID := state.readerID
 		return &message.IterRequest{
 			Range: [2][]byte{
-				encoding.EncodeTsKey(uid, tableID, 0),
+				encoding.EncodeTsKey(uid, tableID, state.exhaustedResolvedTs+1),
 				encoding.EncodeTsKey(uid, tableID, state.maxResolvedTs+1),
 			},
 			ResolvedTs: state.maxResolvedTs,
-			IterCh:     state.iterCh,
+			IterCallback: func(iter *message.LimitedIterator) {
+				iterCh <- iter
+				close(iterCh)
+				// Notify itself that iterator has acquired.
+				_ = readerRouter.Send(readerID, actormsg.SorterMessage(
+					message.Task{
+						UID:     uid,
+						TableID: tableID,
+						ReadTs:  message.ReadTs{},
+					}))
+			},
 		}, false
 	}
 
 	// Try receive iterator.
 	select {
 	case iter := <-state.iterCh:
+		seekTs := lastSentCommitTs
+		if lastSentResolvedTs >= lastSentCommitTs {
+			seekTs = lastSentResolvedTs + 1
+		}
 		// Iterator received, reset state.iterCh
 		state.iterCh = nil
 		state.iter = iter
@@ -568,12 +360,12 @@ func (state *pollState) tryGetIterator(
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false
-		state.iter.Seek([]byte(""))
+		state.iter.Seek(encoding.EncodeTsKey(uid, tableID, seekTs))
 		duration := time.Since(start)
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
-			// Force trigger a compaction if Iterator.Fisrt is too slow.
-			state.compact.tryScheduleCompact(state.actorID, int(math.MaxInt32))
+			// Try trigger a compaction if Iterator.Seek is too slow.
+			state.compact.tryScheduleCompact(state.compactorID, 0)
 		}
 		return nil, true
 	default:
@@ -604,157 +396,97 @@ func (state *pollState) tryReleaseIterator() error {
 	return nil
 }
 
-// poll receives new events and send resolved events asynchronously.
-// TODO: Refactor into actor model, divide receive-send into two parts
-//       to reduce complexity.
-func (ls *Sorter) poll(ctx context.Context, state *pollState) error {
-	// Wait input or output becomes available.
-	waitOutput := state.hasResolvedEvents()
-	// TODO: we should also wait state.iterCh, so that we can read and output
-	//       resolved events ASAP.
-	maxCommitTs, maxResolvedTs, n, err := ls.wait(ctx, waitOutput, state.eventsBuf)
-	if err != nil {
-		return errors.Trace(err)
+// Poll receives ReadTs and send resolved events.
+func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running bool) {
+	for i := range msgs {
+		switch msgs[i].Tp {
+		case actormsg.TypeSorterTask:
+		case actormsg.TypeStop:
+			return false
+		default:
+			log.Panic("unexpected message", zap.Any("message", msgs[i]))
+		}
+		// Update the max commit ts and resolved ts of all received events.
+		ts := msgs[i].SorterTask.ReadTs
+		r.state.advanceMaxTs(ts.MaxCommitTs, ts.MaxResolvedTs)
 	}
-	// The max commit ts and resolved ts of all received events.
-	state.advanceMaxTs(maxCommitTs, maxResolvedTs)
+
 	// Length of buffered resolved events.
-	lenResolvedEvents, _ := state.outputBuf.len()
-	if n == 0 && lenResolvedEvents != 0 {
-		// No new received events, it means output channel is available.
-		// output resolved events as much as possible.
-		ls.outputBufferedResolvedEvents(state.outputBuf, true)
-		lenResolvedEvents, _ = state.outputBuf.len()
+	lenResolvedEvents, _ := r.state.outputBuf.len()
+	if lenResolvedEvents != 0 {
+		// Try output buffered resolved events.
+		r.outputBufferedResolvedEvents(r.state.outputBuf)
+		lenResolvedEvents, _ = r.state.outputBuf.len()
 	}
-	// New received events.
-	newEvents := state.eventsBuf[:n]
 	// Build task for new events and delete sent keys.
-	task, err := ls.buildTask(newEvents, state.outputBuf.deleteKeys)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	task := message.Task{UID: r.uid, TableID: r.tableID}
+	r.setTaskDelete(&task, r.state.outputBuf.deleteKeys)
 	// Reset buffer as delete keys are scheduled.
-	state.outputBuf.resetDeleteKey()
+	r.state.outputBuf.resetDeleteKey()
 	// Try shrink buffer to release memory.
-	state.outputBuf.maybeShrink()
+	r.state.outputBuf.maybeShrink()
 
 	// It can only read an iterator when
 	// 1. No buffered resolved events, they must be sent before
 	//    sending further resolved events from iterator.
 	readIter := lenResolvedEvents == 0
 	// 2. There are some events that can be resolved.
-	readIter = readIter && state.hasResolvedEvents()
+	readIter = readIter && r.state.hasResolvedEvents()
 	if !readIter {
-		// No new events and no resolved events.
-		if !state.hasResolvedEvents() && state.maxResolvedTs != 0 {
-			ls.outputResolvedTs(state.maxResolvedTs)
+		// No buffered resolved events, try to send resolved ts.
+		if !r.state.hasResolvedEvents() && r.state.maxResolvedTs != 0 {
+			// To avoid ping-pong busy loop, we only send resolved ts
+			// when it advances.
+			if r.state.maxResolvedTs > r.lastSentResolvedTs {
+				r.outputResolvedTs(r.state.maxResolvedTs)
+			}
 		}
 		// Release iterator as we does not need to read.
-		err := state.tryReleaseIterator()
+		err := r.state.tryReleaseIterator()
 		if err != nil {
-			return errors.Trace(err)
+			r.reportError("failed to release iterator", err)
+			return false
 		}
-		// Send write task to leveldb.
-		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+		// Send delete task to leveldb.
+		if task.DeleteReq != nil {
+			err = r.dbRouter.SendB(ctx, r.dbActorID, actormsg.SorterMessage(task))
+			if err != nil {
+				r.reportError("failed to send delete request", err)
+				return false
+			}
+		}
+		return true
 	}
 
 	var hasIter bool
-	task.IterReq, hasIter = state.tryGetIterator(ls.uid, ls.tableID)
-	// Send write/read task to leveldb.
-	err = ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+	task.IterReq, hasIter = r.state.tryGetIterator(
+		r.uid, r.tableID, r.lastSentResolvedTs, r.lastSentCommitTs)
+	// Send delete/read task to leveldb.
+	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.SorterMessage(task))
 	if err != nil {
-		// Skip read iterator if send fails.
-		return errors.Trace(err)
+		r.reportError("failed to send delete request", err)
+		return false
 	}
 	if !hasIter {
 		// Skip read iterator if there is no iterator
-		return nil
+		return true
 	}
 
 	// Read and send resolved events from iterator.
-	hasReadNext, exhaustedResolvedTs, err := ls.outputIterEvents(
-		state.iter, state.iterHasRead, state.outputBuf, state.iterResolvedTs)
+	hasReadNext, exhaustedResolvedTs, err := r.outputIterEvents(
+		r.state.iter, r.state.iterHasRead, r.state.outputBuf, r.state.iterResolvedTs)
 	if err != nil {
-		return errors.Trace(err)
+		r.reportError("failed to read iterator", err)
+		return false
 	}
-	if exhaustedResolvedTs > state.exhaustedResolvedTs {
-		state.exhaustedResolvedTs = exhaustedResolvedTs
+	if exhaustedResolvedTs > r.state.exhaustedResolvedTs {
+		r.state.exhaustedResolvedTs = exhaustedResolvedTs
 	}
-	state.iterHasRead = hasReadNext
-	return state.tryReleaseIterator()
-}
-
-// Run runs Sorter
-func (ls *Sorter) Run(ctx context.Context) error {
-	state := &pollState{
-		eventsBuf: make([]*model.PolymorphicEvent, batchReceiveEventSize),
-		outputBuf: newOutputBuffer(batchReceiveEventSize),
-
-		maxCommitTs:         uint64(0),
-		maxResolvedTs:       uint64(0),
-		exhaustedResolvedTs: uint64(0),
-
-		actorID:               ls.dbActorID,
-		compact:               ls.compact,
-		iterFirstSlowDuration: ls.iterFirstSlowDuration,
-		iterMaxAliveDuration:  ls.iterMaxAliveDuration,
-
-		metricIterFirst:   ls.metricIterDuration.WithLabelValues("first"),
-		metricIterRelease: ls.metricIterDuration.WithLabelValues("release"),
+	r.state.iterHasRead = hasReadNext
+	err = r.state.tryReleaseIterator()
+	if err != nil {
+		r.reportError("failed to release iterator", err)
+		return false
 	}
-	for {
-		err := ls.poll(ctx, state)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-}
-
-// AddEntry adds an RawKVEntry to the EntryGroup
-func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
-	if atomic.LoadInt32(&ls.closed) != 0 {
-		return
-	}
-	select {
-	case <-ctx.Done():
-	case ls.inputCh <- event:
-	}
-}
-
-// TryAddEntry tries to add an RawKVEntry to the EntryGroup
-func (ls *Sorter) TryAddEntry(
-	ctx context.Context, event *model.PolymorphicEvent,
-) (bool, error) {
-	if atomic.LoadInt32(&ls.closed) != 0 {
-		return false, nil
-	}
-	select {
-	case <-ctx.Done():
-		return false, errors.Trace(ctx.Err())
-	case ls.inputCh <- event:
-		return true, nil
-	default:
-		return false, nil
-	}
-}
-
-// Output returns the sorted raw kv output channel
-func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
-	return ls.outputCh
-}
-
-// CleanupFunc returns a function that cleans up sorter's data.
-func (ls *Sorter) CleanupFunc() func(context.Context) error {
-	return func(ctx context.Context) error {
-		task := message.Task{UID: ls.uid, TableID: ls.tableID}
-		task.DeleteReq = &message.DeleteRequest{
-			// We do not set task.Delete.Count, because we don't know
-			// how many key-value pairs in the range.
-			Range: [2][]byte{
-				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
-			},
-		}
-		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
-	}
+	return true
 }
