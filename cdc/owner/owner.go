@@ -280,6 +280,7 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping")
+	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }
 
@@ -298,15 +299,24 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	}
 }
 
+func (o *Owner) cleanStaleMetrics() {
+	// The gauge metrics of the Owner should be reset
+	// each time a new owner is launched, in case the previous owner
+	// has crashed and has not cleaned up the stale metrics values.
+	changefeedCheckpointTsGauge.Reset()
+	changefeedCheckpointTsLagGauge.Reset()
+	changefeedResolvedTsGauge.Reset()
+	changefeedResolvedTsLagGauge.Reset()
+	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
+}
+
 func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
-
-	ownerMaintainTableNumGauge.Reset()
-	changefeedStatusGauge.Reset()
 
 	conf := config.GetGlobalServerConfig()
 
