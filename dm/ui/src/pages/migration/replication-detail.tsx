@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import i18n from '~/i18n'
@@ -8,44 +8,109 @@ import {
   Button,
   Space,
   Table,
+  Input,
+  Select,
   Breadcrumb,
   TableColumnsType,
 } from '~/uikit'
-import { RedoOutlined } from '~/uikit/icons'
-import { Task, useDmapiGetTaskListQuery } from '~/models/task'
+import {
+  Task,
+  TaskMigrateTarget,
+  useDmapiGetTaskListQuery,
+  useDmapiGetTaskMigrateTargetsQuery,
+} from '~/models/task'
+import { useDmapiGetSourceQuery } from '~/models/source'
 
 const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
   const [currentTask, setCurrentTask] = useState<Task>()
-  const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
-    withStatus: true,
-  })
+  const [currentSourceName, setCurrentSourceName] = useState('')
+  const currentTaskName = currentTask?.name ?? ''
+  const [dbPattern, tablePattern] = useMemo(() => {
+    const currentSourceRule = currentTask?.table_migrate_rule?.find(
+      i => i.source.source_name === currentSourceName
+    )
+    if (currentSourceRule) {
+      return [
+        currentSourceRule.source.schema,
+        currentSourceRule.source.table,
+      ] as const
+    }
+    return ['*', '*'] as const
+  }, [currentTask])
+  const { data: taskList, isFetching: isFetchingTaskList } =
+    useDmapiGetTaskListQuery({
+      withStatus: true,
+    })
+  const {
+    data: migrateTagetData,
+    refetch,
+    isFetching: isFetchingMigrateTarget,
+  } = useDmapiGetTaskMigrateTargetsQuery(
+    {
+      taskName: currentTaskName,
+      sourceName: currentSourceName,
+    },
+    { skip: !currentTask || !currentSourceName }
+  )
+  const { data: sourceData } = useDmapiGetSourceQuery(
+    { sourceName: currentSourceName },
+    { skip: !currentSourceName }
+  )
+  const loading = isFetchingTaskList || isFetchingMigrateTarget
 
-  const dataSource = data?.data
-  const columns: TableColumnsType<Task> = [
+  const dataSource =
+    migrateTagetData?.data?.map((i, index) => ({ ...i, key: index })) ?? []
+  const columns: TableColumnsType<TaskMigrateTarget & { key: number }> = [
     {
       title: t('task name'),
-      dataIndex: 'name',
+      key: 'taskname',
+      render() {
+        return currentTask?.name
+      },
     },
     {
       title: t('source info'),
-      dataIndex: 'source_config',
-      render(sourceConfig) {
-        return sourceConfig.source_conf?.length > 0
-          ? t('{{val}} and {{count}} others', {
-              val: `${sourceConfig.source_conf[0].source_name}`,
-              count: sourceConfig.source_conf.length,
-            })
-          : '-'
+      key: 'sourceinfo',
+      render() {
+        if (sourceData) {
+          return `${sourceData?.host}:${sourceData.port}`
+        }
+        return '-'
       },
+    },
+    {
+      title: t('source schema'),
+      dataIndex: 'source_schema',
+    },
+    {
+      title: t('source table'),
+      dataIndex: 'source_table',
+    },
+    {
+      title: t('target info'),
+      render() {
+        return `${currentTask?.target_config.host}:${currentTask?.target_config.port}`
+      },
+    },
+    {
+      title: t('target schema'),
+      dataIndex: 'target_schema',
+    },
+    {
+      title: t('target table'),
+      dataIndex: 'target_table',
     },
   ]
 
   useEffect(() => {
-    if (!currentTask && data && data.data[0]) {
-      setCurrentTask(data.data[0])
+    if (!currentTask && taskList && taskList.data[0]) {
+      setCurrentTask(taskList.data[0])
+      setCurrentSourceName(
+        taskList.data[0]?.source_config.source_conf?.[0]?.source_name ?? ''
+      )
     }
-  }, [currentTask, data])
+  }, [currentTask, taskList])
 
   return (
     <div>
@@ -59,9 +124,29 @@ const ReplicationDetail: React.FC = () => {
       <Row className="p-4" justify="space-between">
         <Col span={22}>
           <Space>
-            <Button icon={<RedoOutlined />} onClick={refetch}>
-              {t('refresh')}
-            </Button>
+            <Select
+              value={currentTask?.name}
+              className="min-w-100px"
+              loading={loading}
+              options={taskList?.data?.map(i => ({
+                label: i.name,
+                value: i.name,
+              }))}
+            />
+
+            <Select
+              value={currentSourceName}
+              className="min-w-100px"
+              loading={loading}
+              options={currentTask?.source_config.source_conf?.map(i => ({
+                label: i.source_name,
+                value: i.source_name,
+              }))}
+            />
+
+            <Input addonBefore="database" value={dbPattern} disabled />
+            <Input addonBefore="table" value={tablePattern} disabled />
+            <Button onClick={refetch}>{t('check')}</Button>
           </Space>
         </Col>
       </Row>
@@ -70,10 +155,10 @@ const ReplicationDetail: React.FC = () => {
         className="p-4"
         dataSource={dataSource}
         columns={columns}
-        loading={isFetching}
-        rowKey="name"
+        loading={loading}
+        rowKey="key"
         pagination={{
-          total: data?.total,
+          total: taskList?.total,
         }}
       />
     </div>

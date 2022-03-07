@@ -134,8 +134,32 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg,
       }),
     }),
+    dmapiGetTaskMigrateTargets: build.query<
+      ListResponse<TaskMigrateTarget>,
+      {
+        taskName: string
+        sourceName: string
+        schemaPattern?: string
+        tablePattern?: string
+      }
+    >({
+      query: queryArg => ({
+        url: `/tasks/${queryArg.taskName}/sources/${queryArg.sourceName}/migrate_targets`,
+        params: {
+          schema_pattern: queryArg.schemaPattern,
+          table_pattern: queryArg.tablePattern,
+        },
+      }),
+    }),
   }),
 })
+
+export type TaskMigrateTarget = {
+  source_schema: string
+  source_table: string
+  target_schema: string
+  target_table: string
+}
 
 export type DmapiStartTaskApiArg = {
   taskName: string
@@ -316,6 +340,7 @@ export const {
   useDmapiGetSchemaListByTaskAndSourceQuery,
   useDmapiGetTableListByTaskAndSourceQuery,
   useDmapiConverterTaskMutation,
+  useDmapiGetTaskMigrateTargetsQuery,
 } = injectedRtkApi
 
 export enum TaskUnit {
