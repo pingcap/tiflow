@@ -86,7 +86,8 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
-// AllTableNames returns the table names of all tables.
+// AllTableNames returns the table names of all tables that are being replicated.
+// NOTICE: AllTableNames is not thread-safe.
 func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 	if s.allTableNamesCache != nil {
 		return s.allTableNamesCache
