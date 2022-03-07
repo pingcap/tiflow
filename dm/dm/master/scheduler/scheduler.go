@@ -464,12 +464,8 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	}
 
 	// 3. find worker name by source ID.
-	var (
-		workerName string // empty should be fine below.
-		worker     *Worker
-	)
+	var workerName string // empty should be fine below.
 	if w, ok2 := s.bounds[source]; ok2 {
-		worker = w
 		workerName = w.BaseInfo().Name
 	}
 
@@ -486,13 +482,6 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	// 6. unbound for the source.
 	s.updateStatusToUnbound(source)
 
-	// 7. try to bound the worker for another source.
-	if worker != nil {
-		_, err = s.tryBoundForWorker(worker)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -542,13 +531,13 @@ func (s *Scheduler) GetSourceCfgByID(source string) *config.SourceConfig {
 func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource string) error {
 	// in first four arrays, index 0 is for left worker, index 1 is for right worker
 	var (
-		inputWorkers [2]string
-		inputSources [2]string
-		workers      [2]*Worker
-		bounds       [2]ha.SourceBound
-		boundWorkers []string
-		boundsToPut  []ha.SourceBound
-		ok           bool
+		inputWorkers   [2]string
+		inputSources   [2]string
+		workers        [2]*Worker
+		bounds         [2]ha.SourceBound
+		boundsToDelete []ha.SourceBound
+		boundsToPut    []ha.SourceBound
+		ok             bool
 	)
 
 	s.logger.Info("transfer source and worker", zap.String("left worker", lworker), zap.String("left source", lsource), zap.String("right worker", rworker), zap.String("right source", rsource))
@@ -581,16 +570,16 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	// get current bound workers.
 	for i := range inputWorkers {
 		if inputWorkers[i] != "" && inputSources[i] != "" {
-			boundWorkers = append(boundWorkers, inputWorkers[i])
+			boundsToDelete = append(boundsToDelete, ha.NewSourceBound(inputSources[i], inputWorkers[i]))
 		}
 	}
 
 	// del current bound relations.
-	if _, err := ha.DeleteSourceBoundByWorker(s.etcdCli, boundWorkers...); err != nil {
+	if _, err := ha.DeleteSourceBoundByBound(s.etcdCli, boundsToDelete...); err != nil {
 		return err
 	}
 
-	needUpdateLastUnbounds := make([]ha.SourceBound, 0, len(boundWorkers))
+	needUpdateLastUnbounds := make([]ha.SourceBound, 0, len(boundsToDelete))
 	// update unbound sources
 	for _, sourceID := range inputSources {
 		if sourceID != "" {
@@ -634,16 +623,9 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		}
 	}
 
-	// if one of the workers/sources become free/unbounded
+	// if one of the sources become unbounded
 	// try bound it.
-	for i := range inputWorkers {
-		another := i ^ 1 // make use of XOR to flip 0 and 1
-		if inputWorkers[i] != "" && inputSources[another] == "" {
-			if _, err := s.tryBoundForWorker(workers[i]); err != nil {
-				return err
-			}
-		}
-	}
+	// no need for workers because we can wait for re-schedule
 	for i := range inputSources {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
 		if inputSources[i] != "" && inputWorkers[another] == "" {
@@ -750,11 +732,6 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
-	}
-	// 6. now this old worker is free, try bound source to it
-	_, err = s.tryBoundForWorker(oldWorker)
-	if err != nil {
-		s.logger.Warn("in transfer source, error when try bound the old worker", zap.Error(err))
 	}
 	s.mu.Unlock()
 	return nil
@@ -1442,7 +1419,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 
 	// 2. delete from etcd and update memory cache
-	if _, err := ha.DeleteRelayConfig(s.etcdCli, workers...); err != nil {
+	if _, err := ha.DeleteRelayConfig(s.etcdCli, source, workers...); err != nil {
 		return err
 	}
 	for _, workerName := range workers {
@@ -1755,7 +1732,7 @@ func (s *Scheduler) recoverRelayConfigs() error {
 		}
 		if sourceCfg.EnableRelay {
 			// current etcd max-txn-op is 2048
-			_, err2 := ha.DeleteRelayConfig(s.etcdCli, utils.SetToSlice(workers)...)
+			_, err2 := ha.DeleteRelayConfig(s.etcdCli, source, utils.SetToSlice(workers)...)
 			if err2 != nil {
 				return err2
 			}
@@ -2186,7 +2163,7 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 		}
 	}
 
-	// try to find its relay source (currently only one relay source)
+	// try to find its relay source
 	if source == "" {
 		relaySources := w.RelaySources()
 		if len(relaySources) > 0 {
@@ -2519,7 +2496,7 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 // worker, ""		This means a free worker online, often called by tryBoundForWorker.
 // "", source		This means a source online, often called by tryBoundForSource.
 func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, string) {
-	// origin worker not free, try to get a source.
+	// try to get a source for online worker.
 	if worker != "" {
 		// try to get a bounded source
 		for sourceID, w := range s.bounds {
@@ -2529,7 +2506,7 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 		}
 	}
 
-	// origin source bounded, try to get a worker
+	// try to get a worker for a transferred source.
 	if source != "" {
 		// try to get a bounded worker
 		for sourceID, w := range s.bounds {
