@@ -127,6 +127,7 @@ func init() {
 		}
 		kafkaPartitionNum = int32(c)
 	}
+	log.Info("Setting partitionNum", zap.Int32("partitionNum", kafkaPartitionNum))
 
 	s = upstreamURI.Query().Get("max-message-bytes")
 	if s != "" {
@@ -134,9 +135,9 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-message-bytes of upstream-uri")
 		}
-		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
 		kafkaMaxMessageBytes = c
 	}
+	log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", kafkaMaxMessageBytes))
 
 	s = upstreamURI.Query().Get("max-batch-size")
 	if s != "" {
@@ -144,14 +145,15 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-batch-size of upstream-uri")
 		}
-		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
 	}
+	log.Info("Setting max-batch-size", zap.Int("max-batch-size", kafkaMaxBatchSize))
 
 	s = upstreamURI.Query().Get("protocol")
 	if s != "" {
 		protocol = s
 	}
+	log.Info("Setting protocol", zap.String("protocol", protocol))
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
 	if s != "" {
@@ -165,9 +167,6 @@ func init() {
 
 		enableTiDBExtension = b
 	}
-	log.Info("Starting a new TiCDC consumer", zap.Any("protocol", protocol),
-		zap.Bool("enable-tidb-extension", enableTiDBExtension))
-
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
