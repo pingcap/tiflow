@@ -191,6 +191,9 @@ const (
 
 	// pkg/binlog.
 	codeBinlogNotLogColumn
+
+	// pkg/shardddl/optimism.
+	codeShardDDLOptimismNeedSkipAndRedirect
 )
 
 // Config related error code list.
@@ -858,6 +861,9 @@ var (
 
 	// pkg/binlog.
 	ErrBinlogNotLogColumn = New(codeBinlogNotLogColumn, ClassBinlogOp, ScopeUpstream, LevelHigh, "upstream didn't log enough columns in binlog", "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used.")
+
+	// pkg/shardddl/optimism.
+	ErrShardDDLOptimismNeedSkipAndRedirect = New(codeShardDDLOptimismNeedSkipAndRedirect, ClassFunctional, ScopeInternal, LevelLow, "receive conflict DDL for the optimistic shard ddl lock %s: %s", "")
 
 	// Config related error.
 	ErrConfigCheckItemNotSupport    = New(codeConfigCheckItemNotSupport, ClassConfig, ScopeInternal, LevelMedium, "checking item %s is not supported\n%s", "Please check `ignore-checking-items` config in task configuration file, which can be set including `all`/`dump_privilege`/`replication_privilege`/`version`/`binlog_enable`/`binlog_format`/`binlog_row_image`/`table_schema`/`schema_of_shard_tables`/`auto_increment_ID`.")

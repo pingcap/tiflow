@@ -21,16 +21,11 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
-const (
-	// do not forget to update this path if the file removed/renamed.
-	subTaskSampleFile = "../../dm/worker/subtask.toml"
-)
-
 func (t *testForEtcd) TestSubTaskEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	cfg1 := config.SubTaskConfig{}
-	c.Assert(cfg1.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(cfg1.Decode(config.SampleSubtaskConfig, true), IsNil)
 	source := cfg1.SourceID
 	taskName1 := cfg1.Name
 

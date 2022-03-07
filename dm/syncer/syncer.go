@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -172,7 +172,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed atomic.Bool
+	closed  atomic.Bool
+	running atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -258,6 +259,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
+	syncer.running.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -690,6 +692,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		defer wg.Done()
 		<-newCtx.Done() // ctx or newCtx
 	}()
+
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	err := s.Run(newCtx)
 	if err != nil {
@@ -3468,6 +3473,10 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
+func (s *Syncer) IsRunning() bool {
+	return s.running.Load()
+}
+
 func (s *Syncer) isClosed() bool {
 	return s.closed.Load()
 }
@@ -3493,6 +3502,7 @@ func (s *Syncer) Close() {
 	// when closing syncer by `stop-task`, remove active relay log from hub
 	s.removeActiveRelayLog()
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
+
 	s.runWg.Wait()
 	s.closed.Store(true)
 }
