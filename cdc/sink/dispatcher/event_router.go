@@ -124,6 +124,13 @@ func (s *EventRouter) GetActiveTopics(activeTables []model.TableName) []string {
 	for _, table := range activeTables {
 		topicDispatcher, _ := s.matchDispatcher(table.Schema, table.Table)
 		topicName := topicDispatcher.Substitute(table.Schema, table.Table)
+		if topicName == s.defaultTopic {
+			log.Warn("topic name corresponding to the table is the same as the default topic name",
+				zap.String("table", table.String()),
+				zap.String("defaultTopic", s.defaultTopic),
+				zap.String("topicDispatcherExpression", topicDispatcher.String()),
+			)
+		}
 		if !topicsMap[topicName] {
 			topicsMap[topicName] = true
 			topics = append(topics, topicName)
