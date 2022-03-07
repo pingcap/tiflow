@@ -31,11 +31,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-// do not forget to update this path if the file removed/renamed.
-const sourceSampleFile = "../worker/source.yaml"
-
 func (t *testConfig) TestConfig(c *C) {
-	cfg, err := LoadFromFile(sourceSampleFile)
+	cfg, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, IsNil)
 	cfg.RelayDir = "./xx"
 	c.Assert(cfg.RelayDir, Equals, "./xx")
@@ -134,7 +131,7 @@ aaa: xxx
 
 func (t *testConfig) TestConfigVerify(c *C) {
 	newConfig := func() *SourceConfig {
-		cfg, err := LoadFromFile(sourceSampleFile)
+		cfg, err := ParseYaml(SampleSourceConfig)
 		c.Assert(err, IsNil)
 		cfg.RelayDir = "./xx"
 		return cfg
@@ -240,7 +237,7 @@ func (t *testConfig) TestConfigVerify(c *C) {
 }
 
 func (t *testConfig) TestSourceConfigForDowngrade(c *C) {
-	cfg, err := LoadFromFile(sourceSampleFile)
+	cfg, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, IsNil)
 
 	// make sure all new field were added
@@ -274,7 +271,7 @@ func subtestFlavor(c *C, cfg *SourceConfig, sqlInfo, expectedFlavor, expectedErr
 }
 
 func (t *testConfig) TestAdjustFlavor(c *C) {
-	cfg, err := LoadFromFile(sourceSampleFile)
+	cfg, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, IsNil)
 	cfg.RelayDir = "./xx"
 
@@ -297,7 +294,7 @@ func (t *testConfig) TestAdjustServerID(c *C) {
 	}()
 	getAllServerIDFunc = getMockServerIDs
 
-	cfg, err := LoadFromFile(sourceSampleFile)
+	cfg, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, IsNil)
 	cfg.RelayDir = "./xx"
 
@@ -317,7 +314,7 @@ func getMockServerIDs(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 }
 
 func (t *testConfig) TestAdjustCaseSensitive(c *C) {
-	cfg, err := LoadFromFile(sourceSampleFile)
+	cfg, err := ParseYaml(SampleSourceConfig)
 	c.Assert(err, IsNil)
 
 	db, mock, err := sqlmock.New()
@@ -339,5 +336,5 @@ func (t *testConfig) TestAdjustCaseSensitive(c *C) {
 func (t *testConfig) TestEmbedSampleFile(c *C) {
 	data, err := os.ReadFile("./source.yaml")
 	c.Assert(err, IsNil)
-	c.Assert(SampleConfigFile, Equals, string(data))
+	c.Assert(SampleSourceConfig, Equals, string(data))
 }

@@ -302,6 +302,7 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *ownerImpl) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping")
+	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }
 
@@ -320,15 +321,24 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	}
 }
 
+func (o *ownerImpl) cleanStaleMetrics() {
+	// The gauge metrics of the Owner should be reset
+	// each time a new owner is launched, in case the previous owner
+	// has crashed and has not cleaned up the stale metrics values.
+	changefeedCheckpointTsGauge.Reset()
+	changefeedCheckpointTsLagGauge.Reset()
+	changefeedResolvedTsGauge.Reset()
+	changefeedResolvedTsLagGauge.Reset()
+	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
+}
+
 func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
-
-	ownerMaintainTableNumGauge.Reset()
-	changefeedStatusGauge.Reset()
 
 	conf := config.GetGlobalServerConfig()
 
@@ -352,23 +362,29 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 			pendingCounts := infoProvider.GetPendingTableCounts()
 
 			for captureID, info := range o.captures {
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, info.AdvertiseAddr, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeTotal).
+					Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeWip).
+					Set(float64(pendingCounts[captureID]))
 			}
 		}
 		return
 	}
 
 	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID := range state.Captures {
+		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
 			if !exist {
 				continue
 			}
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+			ownerMaintainTableNumGauge.
+				WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).
+				Set(float64(len(taskStatus.Tables)))
+			ownerMaintainTableNumGauge.
+				WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).
+				Set(float64(len(taskStatus.Operation)))
 			if changefeedState.Info != nil {
 				changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
 			}

@@ -104,7 +104,7 @@ func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint6
 	return resolvedTs, nil
 }
 
-func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// the table sink doesn't receive the checkpoint event
 	return nil
 }
