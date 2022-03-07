@@ -29,7 +29,7 @@ CREATE TABLE cdc_multi_data_type
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
 
--- test for `nullable`
+-- make sure `nullable` can be handled by the mounter and mq encoding protocol
 INSERT INTO cdc_multi_data_type() VALUES ();
 
 INSERT INTO cdc_multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit

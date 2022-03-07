@@ -43,7 +43,7 @@ CREATE TABLE multi_data_type
     PRIMARY KEY (id)
 );
 
--- test for `nullable`
+-- make sure `nullable` can be handled by the mounter and mq encoding protocol
 INSERT INTO multi_data_type() VALUES ();
 
 INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smallint_unsigned, t_mediumint
