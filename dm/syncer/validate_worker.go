@@ -101,6 +101,12 @@ outer:
 				break outer
 			}
 			if change.Tp == flushCheckpoint {
+				// validate before flush to reduce the number of row changes
+				err := vw.validateTableChange()
+				if err != nil {
+					// todo: better error handling
+					vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
+				}
 				change.wg.Done()
 				break
 			}
@@ -115,7 +121,6 @@ outer:
 				// todo: better error handling
 				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
 			}
-			// todo: if a row failed too many times, add it to failed changes
 		}
 	}
 }

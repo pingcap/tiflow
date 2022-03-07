@@ -277,6 +277,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			})
 		}
 	}
+	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	_, err := c.dbConn.ExecuteSQL(c.tctx, queries, args...)
 	if err != nil {
 		return err
