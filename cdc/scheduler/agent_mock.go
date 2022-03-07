@@ -30,14 +30,14 @@ type MockProcessorMessenger struct {
 }
 
 // FinishTableOperation marks this function as being called.
-func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
-	args := m.Called(ctx, tableID)
+func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID, epoch model.ProcessorEpoch) (bool, error) {
+	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
 }
 
 // SyncTaskStatuses marks this function as being called.
-func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, running, adding, removing []model.TableID) (bool, error) {
-	args := m.Called(ctx, running, adding, removing)
+func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (bool, error) {
+	args := m.Called(ctx, epoch, running, adding, removing)
 	return args.Bool(0), args.Error(1)
 }
 
