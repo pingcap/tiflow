@@ -51,7 +51,7 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
@@ -115,11 +115,11 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
-	sourceCfg2, err := LoadFromFile(sourceSampleFile)
+	sourceCfg2, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
@@ -256,7 +256,7 @@ func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
@@ -286,11 +286,11 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
-	sourceCfg2, err := LoadFromFile(sourceSampleFile)
+	sourceCfg2, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
