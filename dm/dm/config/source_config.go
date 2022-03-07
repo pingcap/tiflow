@@ -47,11 +47,11 @@ const (
 
 var getAllServerIDFunc = utils.GetAllServerID
 
-// SampleConfigFile is sample config file of source.
+// SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
 // can only match regular files in the current directory and subdirectories.
 //go:embed source.yaml
-var SampleConfigFile string
+var SampleSourceConfig string
 
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
@@ -167,6 +167,18 @@ func ParseYaml(content string) (*SourceConfig, error) {
 		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
 	}
 	c.adjust()
+	return c, nil
+}
+
+// ParseYamlAndVerify does ParseYaml and Verify.
+func ParseYamlAndVerify(content string) (*SourceConfig, error) {
+	c, err := ParseYaml(content)
+	if err != nil {
+		return nil, err
+	}
+	if err = c.Verify(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -348,19 +360,11 @@ func (c *SourceConfig) AdjustServerID(ctx context.Context, db *sql.DB) error {
 
 // LoadFromFile loads config from file.
 func LoadFromFile(path string) (*SourceConfig, error) {
-	c := newSourceConfig()
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, terror.ErrConfigReadCfgFromFile.Delegate(err, path)
 	}
-	if err = yaml.UnmarshalStrict(content, c); err != nil {
-		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
-	}
-	c.adjust()
-	if err = c.Verify(); err != nil {
-		return nil, err
-	}
-	return c, nil
+	return ParseYaml(string(content))
 }
 
 func (c *SourceConfig) check(metaData *toml.MetaData, err error) error {

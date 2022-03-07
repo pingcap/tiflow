@@ -218,7 +218,7 @@ func (t *testForEtcd) TestGetSubTaskStageConfigEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	cfg := config.SubTaskConfig{}
-	c.Assert(cfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(cfg.Decode(config.SampleSubtaskConfig, true), IsNil)
 	source := cfg.SourceID
 	task := cfg.Name
 	stage := NewSubTaskStage(pb.Stage_Running, source, task)
