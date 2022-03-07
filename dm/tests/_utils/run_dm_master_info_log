@@ -1,0 +1,28 @@
+#!/bin/sh
+# parameter 1: work directory
+# parameter 2: master-addr port
+# parameter 3: config file for DM-master
+# parameter 4: binary version, previous or current, can be omitted
+
+set -eu
+
+workdir=$1
+port=$2
+conf=$3
+
+binary=$PWD/bin/dm-master.test
+if [ "$#" -ge 4 ]; then
+	version=$4
+	binary=$PWD/bin/dm-master.test.$version
+fi
+
+PWD=$(pwd)
+
+mkdir -p $workdir/log
+
+echo "[$(date)] <<<<<< START DM-MASTER on port $port, config: $conf >>>>>>"
+cd $workdir
+$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.master.out" DEVEL \
+	--master-addr=:$port --log-file="$workdir/log/dm-master.log" -L=info \
+	--config="$conf" >>$workdir/log/stdout.log 2>&1 &
+cd $PWD

@@ -482,9 +482,8 @@ enum RelayOpV2 {
 message StartValidationRequest {
     string mode = 1;
     string fromTime = 2;
-    bool isAllTask = 3;
-    repeated string sources = 4;
-    string taskName = 5;
+    repeated string sources = 3;
+    string taskName = 4;
 }
 
 message StartValidationResponse {
@@ -494,9 +493,8 @@ message StartValidationResponse {
 }
 
 message StopValidationRequest {
-    bool isAllTask = 1;
-    repeated string sources = 2;
-    string taskName = 3;
+    repeated string sources = 1;
+    string taskName = 2;
 }
 
 message StopValidationResponse {

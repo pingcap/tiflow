@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/common"

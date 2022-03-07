@@ -395,23 +395,32 @@ var testColumnsTable = []*testColumnTuple{
 	{&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)}, "tinyint", JavaSQLTypeTINYINT, "127"}, // TinyInt
 	{&model.Column{Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT, "127"},
 	{&model.Column{Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128), Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeSMALLINT, "128"},
+	{&model.Column{Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0", Flag: model.UnsignedFlag}, "tinyint unsigned", JavaSQLTypeTINYINT, "0"},
+	{&model.Column{Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil, Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag}, "tinyint unsigned", JavaSQLTypeTINYINT, ""},
 
 	{&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)}, "smallint", JavaSQLTypeSMALLINT, "32767"},
 	{&model.Column{Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT, "32767"},
 	{&model.Column{Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768), Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeINTEGER, "32768"},
+	{&model.Column{Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0", Flag: model.UnsignedFlag}, "smallint unsigned", JavaSQLTypeSMALLINT, "0"},
+	{&model.Column{Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil, Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag}, "smallint unsigned", JavaSQLTypeSMALLINT, ""},
 
 	{&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)}, "mediumint", JavaSQLTypeINTEGER, "8388607"},
 	{&model.Column{Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "8388607"},
 	{&model.Column{Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608), Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "8388608"},
+	{&model.Column{Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0", Flag: model.UnsignedFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, "0"},
+	{&model.Column{Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil, Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag}, "mediumint unsigned", JavaSQLTypeINTEGER, ""},
 
 	{&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)}, "int", JavaSQLTypeINTEGER, "2147483647"},
 	{&model.Column{Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER, "2147483647"},
 	{&model.Column{Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648), Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeBIGINT, "2147483648"},
+	{&model.Column{Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0", Flag: model.UnsignedFlag}, "int unsigned", JavaSQLTypeINTEGER, "0"},
+	{&model.Column{Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil, Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag}, "int unsigned", JavaSQLTypeINTEGER, ""},
 
 	{&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)}, "bigint", JavaSQLTypeBIGINT, "9223372036854775807"},
 	{&model.Column{Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "9223372036854775807"},
 	{&model.Column{Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808), Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeDECIMAL, "9223372036854775808"},
 	{&model.Column{Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0", Flag: model.UnsignedFlag}, "bigint unsigned", JavaSQLTypeBIGINT, "0"},
+	{&model.Column{Name: "bigint unsigned 4", Type: mysql.TypeLonglong, Value: nil, Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag}, "bigint unsigned", JavaSQLTypeBIGINT, ""},
 
 	{&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14}, "float", JavaSQLTypeREAL, "3.14"},
 	{&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71}, "double", JavaSQLTypeDOUBLE, "2.71"},
