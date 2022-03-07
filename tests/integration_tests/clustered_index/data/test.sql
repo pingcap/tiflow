@@ -176,7 +176,6 @@ insert into t11 values(1, 1.1, 1),(2, 2.2, 2),(3, 3.3, 3);
 update t11 set b = 4.4 where c = 3;
 delete from t11 where b = 2;
 
-  
 create table t12(name char(255) primary key, b int, c int, index idx(name), unique index uidx(name));
 insert into t12 values("aaaa", 1, 1), ("bbb", 2, 2), ("ccc", 3, 3);
 update t12 set name = 'ddd' where c = 3;
