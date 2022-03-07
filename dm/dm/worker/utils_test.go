@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/integration"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -25,6 +25,7 @@ import (
 )
 
 func TestGetExpectValidatorStage(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 
@@ -33,7 +34,7 @@ func TestGetExpectValidatorStage(t *testing.T) {
 		require.Nil(t, ha.ClearTestInfoOperation(etcdTestCli))
 	}()
 	cfg := config.SubTaskConfig{}
-	require.Nil(t, cfg.DecodeFile("subtask.toml", true))
+	require.Nil(t, cfg.Decode(config.SampleSubtaskConfig, true))
 	source := cfg.SourceID
 	task := cfg.Name
 	stage := ha.NewSubTaskStage(pb.Stage_Running, source, task)

@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -36,13 +36,25 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-type testOptimist struct{}
+type testOptimist struct {
+	mockCluster *integration.ClusterV3
+	etcdTestCli *clientv3.Client
+}
 
 var _ = SerialSuites(&testOptimist{})
 
+func (t *testOptimist) SetUpSuite(c *C) {
+	t.mockCluster = integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 1})
+	t.etcdTestCli = t.mockCluster.RandClient()
+}
+
+func (t *testOptimist) TearDownSuite(c *C) {
+	t.mockCluster.Terminate(tt)
+}
+
 // clear keys in etcd test cluster.
-func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
+func (t *testOptimist) clearOptimistTestSourceInfoOperation(c *C) {
+	c.Assert(optimism.ClearTestInfoOperationColumn(t.etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -125,7 +137,7 @@ func checkLocksByMap(c *C, o *Optimist, expectedLocks map[string]*pb.DDLLock, so
 }
 
 func (t *testOptimist) TestOptimistSourceTables(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		logger     = log.L()
@@ -148,17 +160,17 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 	defer cancel()
 
 	// CASE 1: start without any previous kv and no etcd operation.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	c.Assert(o.tk.FindTables(task, downSchema, downTable), IsNil)
 	o.Close()
 	o.Close() // close multiple times.
 
 	// CASE 2: start again without any previous kv.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	c.Assert(o.tk.FindTables(task, downSchema, downTable), IsNil)
 
 	// PUT st1, should find tables.
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts := o.tk.FindTables(task, downSchema, downTable)
@@ -170,13 +182,13 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 	o.Close()
 
 	// CASE 3: start again with previous source tables.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	c.Assert(tts, HasLen, 1)
 	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
 
 	// PUT st2, should find more tables.
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
@@ -190,14 +202,14 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 
 	// CASE 4: create (not re-start) a new optimist with previous source tables.
 	o = NewOptimist(&logger, getDownstreamMeta)
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
 	c.Assert(tts[1], DeepEquals, st2.TargetTable(downSchema, downTable))
 
 	// DELETE st1, should find less tables.
-	_, err = optimism.DeleteSourceTables(etcdTestCli, st1)
+	_, err = optimism.DeleteSourceTables(t.etcdTestCli, st1)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
@@ -210,14 +222,10 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 }
 
 func (t *testOptimist) TestOptimist(c *C) {
-	cluster := integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 1})
-	defer cluster.Terminate(tt)
-
-	cli := cluster.RandClient()
-	t.testOptimist(c, cli, noRestart)
-	t.testOptimist(c, cli, restartOnly)
-	t.testOptimist(c, cli, restartNewInstance)
-	t.testSortInfos(c, cli)
+	t.testOptimist(c, t.etcdTestCli, noRestart)
+	t.testOptimist(c, t.etcdTestCli, restartOnly)
+	t.testOptimist(c, t.etcdTestCli, restartNewInstance)
+	t.testSortInfos(c, t.etcdTestCli)
 }
 
 func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
@@ -635,7 +643,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 }
 
 func (t *testOptimist) TestOptimistLockConflict(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		watchTimeout       = 5 * time.Second
@@ -664,23 +672,23 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	st1.AddTable("foo", "bar-2", downSchema, downTable)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
 	c.Assert(err, IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	c.Assert(o.Locks(), HasLen, 0)
 
 	// PUT i1, will create a lock but not synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i1)
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i1)
 	c.Assert(err, IsNil)
 	// wait operation for i1 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -696,14 +704,14 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	c.Assert(len(errCh), Equals, 0)
 
 	// PUT i2, conflict will be detected.
-	rev2, err := optimism.PutInfo(etcdTestCli, i2)
+	rev2, err := optimism.PutInfo(t.etcdTestCli, i2)
 	c.Assert(err, IsNil)
 	// wait operation for i2 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
 
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -720,13 +728,13 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 
 	// PUT i3, no conflict now.
 	// case for handle-error replace
-	rev3, err := optimism.PutInfo(etcdTestCli, i3)
+	rev3, err := optimism.PutInfo(t.etcdTestCli, i3)
 	c.Assert(err, IsNil)
 	// wait operation for i3 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -742,7 +750,7 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 }
 
 func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		backOff            = 30
@@ -778,19 +786,19 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	sts.AddTable(upSchema, upTables[3], downSchema, downTable2)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, sts)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, sts)
 	c.Assert(err, IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	c.Assert(o.Locks(), HasLen, 0)
 
 	// PUT i11 and i21, will create two locks but no synced.
-	_, err = optimism.PutInfo(etcdTestCli, i11)
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
 	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, i21)
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 2
@@ -830,9 +838,9 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	checkLocksByMap(c, o, expectedLock, []string{}, lockID1, lockID2)
 
 	// put i12 and i22, both of locks will be synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i12)
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
 	c.Assert(err, IsNil)
-	rev2, err := optimism.PutInfo(etcdTestCli, i22)
+	rev2, err := optimism.PutInfo(t.etcdTestCli, i22)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		synced1, _ := o.Locks()[lockID1].IsSynced()
@@ -857,7 +865,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	errCh := make(chan error, 10)
 	var op12 optimism.Operation
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -875,12 +883,12 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	op11c := op12
 	op11c.Done = true
 	op11c.UpTable = i11.UpTable // overwrite `UpTable`.
-	_, putted, err := optimism.PutOperation(etcdTestCli, false, op11c, 0)
+	_, putted, err := optimism.PutOperation(t.etcdTestCli, false, op11c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	op12c := op12
 	op12c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op12c, 0)
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
@@ -895,7 +903,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	errCh = make(chan error, 10)
 	var op22 optimism.Operation
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -913,12 +921,12 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	op21c := op22
 	op21c.Done = true
 	op21c.UpTable = i21.UpTable // overwrite `UpTable`.
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op21c, 0)
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op21c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	op22c := op22
 	op22c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op22c, 0)
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op22c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
@@ -930,7 +938,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 }
 
 func (t *testOptimist) TestOptimistInitSchema(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		backOff      = 30
@@ -963,17 +971,17 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	st.AddTable(upSchema, upTables[1], downSchema, downTable)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, st)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st)
 	c.Assert(err, IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
 	c.Assert(o.Locks(), HasLen, 0)
 
 	// PUT i11, will creat a lock.
-	_, err = optimism.PutInfo(etcdTestCli, i11)
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
@@ -981,7 +989,7 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
 
 	// PUT i12, the lock will be synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i12)
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
 	c.Assert(err, IsNil)
 
 	// wait operation for i12 become available.
@@ -989,7 +997,7 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	errCh := make(chan error, 10)
 	var op12 optimism.Operation
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
 		c.Fatal("timeout")
@@ -1007,12 +1015,12 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	op11c := op12
 	op11c.Done = true
 	op11c.UpTable = i11.UpTable // overwrite `UpTable`.
-	_, putted, err := optimism.PutOperation(etcdTestCli, false, op11c, 0)
+	_, putted, err := optimism.PutOperation(t.etcdTestCli, false, op11c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	op12c := op12
 	op12c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op12c, 0)
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
@@ -1020,7 +1028,7 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	}), IsTrue)
 
 	// PUT i21 to create the lock again.
-	_, err = optimism.PutInfo(etcdTestCli, i21)
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
@@ -1098,7 +1106,7 @@ func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 }
 
 func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		logger           = log.L()
@@ -1130,24 +1138,24 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
 	c.Assert(err, IsNil)
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
-
-	_, err = optimism.PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, i11)
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
 	c.Assert(err, IsNil)
 
-	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
+	c.Assert(err, IsNil)
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
+	c.Assert(err, IsNil)
+
+	stm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
 }
 
 func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
 		logger     = log.L()
@@ -1179,18 +1187,18 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
+	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
 	c.Assert(err, IsNil)
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
-
-	_, err = optimism.PutInfo(etcdTestCli, infoDropB)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, infoDropC)
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
 	c.Assert(err, IsNil)
 
-	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
+	_, err = optimism.PutInfo(t.etcdTestCli, infoDropB)
+	c.Assert(err, IsNil)
+	_, err = optimism.PutInfo(t.etcdTestCli, infoDropC)
+	c.Assert(err, IsNil)
+
+	stm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
 }
