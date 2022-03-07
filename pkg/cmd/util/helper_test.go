@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/spf13/cobra"
 )
 
@@ -186,10 +186,14 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 	})
 	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
-			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
-			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+			{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
+			{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},
 		},
-		Protocol: "default",
+		ColumnSelectors: []*config.ColumnSelector{
+			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
+			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
+		},
+		Protocol: "open-protocol",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          false,
@@ -232,4 +236,52 @@ func (s *utilsSuite) TestJSONPrint(c *check.C) {
 }
 `
 	c.Assert(b.String(), check.Equals, output)
+}
+
+func (s *utilsSuite) TestIgnoreStrictCheckItem(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dataDir := c.MkDir()
+	tmpDir := c.MkDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	conf := config.GetDefaultServerConfig()
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.IsNil)
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[unknown]
+max-size = 200
+max-days = 1
+max-backups = 1
+[unknown2]
+max-size = 200
+max-days = 1
+max-backups = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "unknown")
+	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[debug]
+unknown = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "debug")
+	c.Assert(err, check.IsNil)
 }

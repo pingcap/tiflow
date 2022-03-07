@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter/encoding"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -65,7 +65,7 @@ func newFileBackEnd(fileName string, serde encoding.SerializerDeserializer) (*fi
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o644)
+	fd, err := os.OpenFile(f.fileName, os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
 	}
@@ -103,7 +103,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
-	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o644)
+	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, errors.Trace(wrapIOError(err))
 	}
@@ -386,11 +386,11 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 }
 
 func (w *fileBackEndWriter) writtenCount() int {
-	return int(w.bytesWritten)
+	return int(w.eventsWritten)
 }
 
 func (w *fileBackEndWriter) dataSize() uint64 {
-	return uint64(w.eventsWritten)
+	return uint64(w.bytesWritten)
 }
 
 func (w *fileBackEndWriter) flushAndClose() error {

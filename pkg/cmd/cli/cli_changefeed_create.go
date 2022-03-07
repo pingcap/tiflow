@@ -23,31 +23,25 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink"
-	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil/gc"
-	ticdcutil "github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/cyclic"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	ticdcutil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
-
-// forceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var forceEnableOldValueProtocols = []string{
-	"canal",
-	"maxwell",
-}
 
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
@@ -173,18 +167,19 @@ func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factor
 		}
 		o.startTs = oracle.ComposeTS(ts, logical)
 	}
-
-	return o.completeCfg(ctx, cmd)
-}
-
-// completeCfg complete the replica config from file and cmd flags.
-func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Command) error {
 	_, captureInfos, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {
 		return err
 	}
 
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	return o.completeCfg(cmd, captureInfos)
+}
+
+// completeCfg complete the replica config from file and cmd flags.
+func (o *createChangefeedOptions) completeCfg(
+	cmd *cobra.Command, captureInfos []*model.CaptureInfo,
+) error {
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -208,10 +203,13 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 			return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 		}
 
-		protocol := sinkURIParsed.Query().Get("protocol")
-		for _, fp := range forceEnableOldValueProtocols {
-			if protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", protocol))
+		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
+		if protocol != "" {
+			cfg.Sink.Protocol = protocol
+		}
+		for _, fp := range config.ForceEnableOldValueProtocols {
+			if cfg.Sink.Protocol == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -224,7 +222,7 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.Dispatcher) {
+		switch strings.ToLower(rules.PartitionRule) {
 		case "rowid", "index-value":
 			if cfg.EnableOldValue {
 				cmd.Printf("[WARN] This index-value distribution mode "+
@@ -232,6 +230,16 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
 			}
 		}
+	}
+
+	switch o.commonChangefeedOptions.sortEngine {
+	case model.SortInMemory:
+	case model.SortInFile:
+	case model.SortUnified:
+	default:
+		log.Warn("invalid sort-engine, use Unified Sorter by default",
+			zap.String("invalidSortEngine", o.commonChangefeedOptions.sortEngine))
+		o.commonChangefeedOptions.sortEngine = model.SortUnified
 	}
 
 	if o.commonChangefeedOptions.sortEngine == model.SortUnified && !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
@@ -263,7 +271,6 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 			// TODO(neil) enable ID bucket.
 		}
 	}
-
 	// Complete cfg.
 	o.cfg = cfg
 
@@ -272,6 +279,11 @@ func (o *createChangefeedOptions) completeCfg(ctx context.Context, cmd *cobra.Co
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+	err := o.cfg.Validate()
+	if err != nil {
+		return err
+	}
+
 	if err := o.validateStartTs(ctx); err != nil {
 		return err
 	}

@@ -50,7 +50,7 @@ function run() {
 
 	sleep 1
 	curl -X GET 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test >$WORK_DIR/status.log
-	check_log_contains $WORK_DIR/status.log "\"stage\": \"Running\"" 1
+	check_log_contains $WORK_DIR/status.log "\"stage\": \"Running\"" 2
 	check_log_contains $WORK_DIR/status.log "\"name\": \"test\"" 1
 
 	echo "get sub task configs"
@@ -72,7 +72,7 @@ function run() {
 
 	sleep 1
 	curl -X GET 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test >$WORK_DIR/status.log
-	check_log_contains $WORK_DIR/status.log "\"stage\": \"Running\"" 1
+	check_log_contains $WORK_DIR/status.log "\"stage\": \"Running\"" 2
 	check_log_contains $WORK_DIR/status.log "\"name\": \"test\"" 1
 
 	sleep 1

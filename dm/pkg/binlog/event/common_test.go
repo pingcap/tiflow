@@ -22,7 +22,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 var _ = Suite(&testCommonSuite{})
@@ -39,7 +39,7 @@ func (t *testCommonSuite) TestGenCommonFileHeader(c *C) {
 	gSet, err := gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
 
-	events, data, err := GenCommonFileHeader(flavor, serverID, gSet)
+	events, data, err := GenCommonFileHeader(flavor, serverID, gSet, true, 0)
 	c.Assert(err, IsNil)
 	c.Assert(len(events), Equals, 2)
 	c.Assert(events[0].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
@@ -79,7 +79,7 @@ func (t *testCommonSuite) TestGenCommonFileHeader(c *C) {
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
 
-	events, data, err = GenCommonFileHeader(flavor, serverID, gSet)
+	events, data, err = GenCommonFileHeader(flavor, serverID, gSet, true, 0)
 	c.Assert(err, IsNil)
 	c.Assert(len(events), Equals, 2)
 	c.Assert(events[0].Header.EventType, Equals, replication.FORMAT_DESCRIPTION_EVENT)
@@ -107,7 +107,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	)
 
 	// nil gSet, invalid
-	gtidEv, err := GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err := GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -115,7 +115,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr := "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123,05474d3c-28c7-11e7-8352-203db246dd3d:1-456,10b039fc-c843-11e7-8f6a-1866daf8d810:1-789"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -123,7 +123,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123:200-456"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -131,7 +131,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:1-123"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -141,7 +141,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	c.Assert(err, IsNil)
 	sid, err := ParseSID(gSetStr[:len(gSetStr)-4])
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(gtidEv, NotNil)
 	c.Assert(gtidEv.Header.EventType, Equals, replication.GTID_EVENT)
@@ -160,7 +160,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	flavor = gmysql.MariaDBFlavor
 
 	// GTID mismatch with flavor
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -168,7 +168,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr = "1-2-3,4-5-6"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -176,7 +176,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr = "1-2-3"
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, NotNil)
 	c.Assert(gtidEv, IsNil)
 
@@ -184,7 +184,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	gSetStr = fmt.Sprintf("1-%d-3", serverID)
 	gSet, err = gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
-	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet)
+	gtidEv, err = GenCommonGTIDEvent(flavor, serverID, latestPos, gSet, false, 0)
 	c.Assert(err, IsNil)
 	c.Assert(gtidEv, NotNil)
 	c.Assert(gtidEv.Header.EventType, Equals, replication.MARIADB_GTID_EVENT)

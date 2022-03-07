@@ -13,6 +13,11 @@ insert into t1 (id, name, dt, ts) values (1, 'ar"ya', now(), now()), (2, 'cately
 -- test sql_mode=NO_AUTO_VALUE_ON_ZERO
 insert into t1 (id, name) values (0, 'lalala');
 
+-- test downstream schema contains extra datetime/timestamp column
+-- do not use sync-diff to check this table
+create table no_diff(id int NOT NULL PRIMARY KEY);
+insert into no_diff (id) values (1), (2), (3);
+
 -- test block-allow-list
 drop database if exists `ignore_db`;
 create database `ignore_db`;

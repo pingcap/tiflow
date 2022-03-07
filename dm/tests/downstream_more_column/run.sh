@@ -32,17 +32,8 @@ function run() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1<100;" "count(1): 2"
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"sourceTable: \`${db1}\`.\`${tb1}\`" 1 \
-		"targetTable: \`${db}\`.\`${tb}\`" 1 \
-		"Column count doesn't match value count" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-schema set -s mysql-replica-01 test -d ${db1} -t ${tb1} $cur/data/schema.sql" \
-		"\"result\": true" 2
+	# we load table structure from dump files, so there's no error now
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test"
 	# check incremental data
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c1>100 and c1<1000;" "count(1): 2"
 
@@ -52,7 +43,7 @@ function run() {
 
 	# start DM task in incremental mode
 	# schemaTracker create table from downstream
-	master_status=($(get_master_status))
+	master_status=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	cp $cur/conf/dm-task-incremental.yaml $WORK_DIR/dm-task-incremental.yaml
 	sed -i "s/binlog-gtid-placeholder/${master_status[2]}/g" $WORK_DIR/dm-task-incremental.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

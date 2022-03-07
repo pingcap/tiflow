@@ -1,0 +1,44 @@
+#!/bin/bash
+# parameter 1: work directory
+# parameter 2: config file for sync_diff_inspector
+# parameter 3: max check times
+
+workdir=$1
+conf=$2
+if [ $# -ge 3 ]; then
+	check_time=$3
+else
+	check_time=30
+fi
+binary=sync_diff_inspector
+
+PWD=$(pwd)
+LOG=$workdir/sync_diff_inspector.log
+
+mkdir -p /tmp/ticdc_dm_test
+
+cd $workdir
+i=0
+while [ $i -lt $check_time ]; do
+	rm -rf $workdir/sync_diff/
+	$binary --log-level=debug --config=$conf >>$LOG 2>&1
+	ret=$?
+	if [ "$ret" == 0 ]; then
+		echo "check diff successfully"
+		break
+	fi
+	((i++))
+	echo "check diff failed $i-th time, retry later"
+	sleep 2
+done
+
+if [ $i -ge $check_time ]; then
+	echo "check diff failed at last"
+	# show \n and other blanks
+	cat $LOG
+	printf "\n"
+	cat $workdir/sync_diff/output/sync_diff.log
+	printf "\n"
+	exit 1
+fi
+cd $PWD

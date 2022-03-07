@@ -30,8 +30,8 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 )
 
 var etcdTestCli *clientv3.Client
@@ -47,7 +47,7 @@ func TestInfo(t *testing.T) {
 
 // clear keys in etcd test cluster.
 func clearTestInfoOperation(c *C) {
-	c.Assert(ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {

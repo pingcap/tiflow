@@ -14,14 +14,19 @@
 package dumpling
 
 import (
+	"context"
 	"os"
+	"path"
+	"strings"
 	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb/dumpling/export"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = Suite(&testSuite{})
@@ -36,6 +41,8 @@ func (t *testSuite) TestParseMetaData(c *C) {
 	f, err := os.CreateTemp("", "metadata")
 	c.Assert(err, IsNil)
 	defer os.Remove(f.Name())
+	fdir := path.Dir(f.Name())
+	fname := path.Base(f.Name())
 
 	testCases := []struct {
 		source   string
@@ -229,11 +236,11 @@ Finished dump at: 2020-09-30 12:16:49
 			"",
 		},
 	}
-
+	ctx := context.Background()
 	for _, tc := range testCases {
 		err2 := os.WriteFile(f.Name(), []byte(tc.source), 0o644)
 		c.Assert(err2, IsNil)
-		loc, loc2, err2 := ParseMetaData(f.Name(), "mysql")
+		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql")
 		c.Assert(err2, IsNil)
 		c.Assert(loc.Position, DeepEquals, tc.pos)
 		gs, _ := gtid.ParserGTID("mysql", tc.gsetStr)
@@ -252,6 +259,70 @@ Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	c.Assert(err, IsNil)
-	_, _, err = ParseMetaData(f.Name(), "mysql")
+	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql")
 	c.Assert(terror.ErrMetadataNoBinlogLoc.Equal(err), IsTrue)
+}
+
+func (t *testSuite) TestParseArgs(c *C) {
+	logger := log.L()
+
+	exportCfg := export.DefaultConfig()
+	extraArgs := `--statement-size=100 --where t>10 --threads 8 -F 50B`
+	err := ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
+	c.Assert(exportCfg.Where, Equals, "t>10")
+	c.Assert(exportCfg.Threads, Equals, 8)
+	c.Assert(exportCfg.FileSize, Equals, uint64(50))
+
+	extraArgs = `--threads 16 --skip-tz-utc`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, NotNil)
+	c.Assert(exportCfg.Threads, Equals, 16)
+	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
+
+	// no `--tables-list` or `--filter` specified, match anything
+	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsTrue)
+	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsTrue)
+
+	// specify `--tables-list`.
+	extraArgs = `--threads 16 --tables-list=foo.bar`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsTrue)
+	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsFalse)
+
+	// specify `--tables-list` and `--filter`
+	extraArgs = `--threads 16 --tables-list=foo.bar --filter=*.foo`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, ErrorMatches, ".*--tables-list and --filter together.*")
+
+	// only specify `--filter`.
+	extraArgs = `--threads 16 --filter=*.foo`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsFalse)
+	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsTrue)
+
+	// compatibility for `--no-locks`
+	extraArgs = `--no-locks`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.Consistency, Equals, "none")
+
+	// compatibility for `--no-locks`
+	extraArgs = `--no-locks --consistency none`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.Consistency, Equals, "none")
+
+	extraArgs = `--consistency lock`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.Consistency, Equals, "lock")
+
+	// compatibility for `--no-locks`
+	extraArgs = `--no-locks --consistency lock`
+	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
+	c.Assert(err.Error(), Equals, "cannot both specify `--no-locks` and `--consistency` other than `none`")
 }

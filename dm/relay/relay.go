@@ -32,26 +32,23 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	binlogReader "github.com/pingcap/ticdc/dm/pkg/binlog/reader"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	pkgstreamer "github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/relay/reader"
-	"github.com/pingcap/ticdc/dm/relay/retry"
-	"github.com/pingcap/ticdc/dm/relay/transformer"
-	"github.com/pingcap/ticdc/dm/relay/writer"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	binlogReader "github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	pkgstreamer "github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // used to fill RelayLogInfo.
-var fakeTaskName = "relay"
+var fakeRelayTaskName = "relay"
 
 const (
 	flushMetaInterval           = 30 * time.Second
@@ -108,6 +105,10 @@ type Process interface {
 	RegisterListener(el Listener)
 	// UnRegisterListener unregisters a relay listener
 	UnRegisterListener(el Listener)
+	// NewReader creates a new relay reader
+	NewReader(logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader
+	// IsActive check whether given uuid+filename is active binlog file, if true return current file offset
+	IsActive(uuid, filename string) (bool, int64)
 }
 
 // Relay relays mysql binlog to local file.
@@ -126,17 +127,21 @@ type Relay struct {
 		sync.RWMutex
 		info *pkgstreamer.RelayLogInfo
 	}
+
+	writer    Writer
 	listeners map[Listener]struct{} // make it a set to make it easier to remove listener
 }
 
 // NewRealRelay creates an instance of Relay.
 func NewRealRelay(cfg *Config) Process {
-	return &Relay{
+	r := &Relay{
 		cfg:       cfg,
 		meta:      NewLocalMeta(cfg.Flavor, cfg.RelayDir),
 		logger:    log.With(zap.String("component", "relay log")),
 		listeners: make(map[Listener]struct{}),
 	}
+	r.writer = NewFileWriter(r.logger, cfg.RelayDir)
+	return r
 }
 
 // Init implements the dm.Unit interface.
@@ -176,13 +181,13 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(r.cfg.From)
+	db, err := conn.DefaultDBProvider.Apply(&r.cfg.From)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeUpstream)
 	}
 	r.db = db
 
-	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o755); err2 != nil {
+	if err2 := os.MkdirAll(r.cfg.RelayDir, 0o700); err2 != nil {
 		return terror.ErrRelayMkdir.Delegate(err2)
 	}
 
@@ -240,7 +245,7 @@ func (r *Relay) process(ctx context.Context) error {
 			}
 		} else {
 			_, metaPos := r.meta.Pos()
-			if neededBinlogName > metaPos.Name {
+			if mysql.CompareBinlogFileName(neededBinlogName, metaPos.Name) > 0 {
 				isRelayMetaOutdated = true
 			}
 		}
@@ -284,31 +289,27 @@ func (r *Relay) process(ctx context.Context) error {
 		}
 	}()
 
-	writer2, err := r.setUpWriter(parser2)
-	if err != nil {
-		return err
-	}
+	uuid, pos := r.meta.Pos()
+	r.writer.Init(uuid, pos.Name)
+	r.logger.Info("started underlying writer", zap.String("UUID", uuid), zap.String("filename", pos.Name))
 	defer func() {
-		err = writer2.Close()
+		err = r.writer.Close()
 		if err != nil {
 			r.logger.Error("fail to close binlog event writer", zap.Error(err))
 		}
 	}()
 
-	readerRetry, err := retry.NewReaderRetry(r.cfg.ReaderRetry)
+	readerRetry, err := NewReaderRetry(r.cfg.ReaderRetry)
 	if err != nil {
 		return err
 	}
-
-	transformer2 := transformer.NewTransformer(parser2)
 
 	go r.doIntervalOps(ctx)
 
 	// handles binlog events with retry mechanism.
 	// it only do the retry for some binlog reader error now.
 	for {
-		eventIdx, err := r.handleEvents(ctx, reader2, transformer2, writer2)
-	checkError:
+		err = r.handleEvents(ctx, reader2, parser2)
 		if err == nil {
 			return nil
 		} else if !readerRetry.Check(ctx, err) {
@@ -325,33 +326,6 @@ func (r *Relay) process(ctx context.Context) error {
 			return err
 		}
 		r.logger.Info("retrying to read binlog")
-		if r.cfg.EnableGTID && eventIdx > 0 {
-			// check if server has switched
-			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
-			// should start from the transaction beginning when switch to a new server
-			if err2 != nil {
-				r.logger.Warn("check new server failed, continue outer loop", log.ShortError(err2))
-				err = err2
-				goto checkError
-			}
-			if !isNew {
-				for i := 0; i < eventIdx; {
-					res, err2 := reader2.GetEvent(ctx)
-					if err2 != nil {
-						err = err2
-						goto checkError
-					}
-					tResult := transformer2.Transform(res.Event)
-					// do not count skip event
-					if !tResult.Ignore {
-						i++
-					}
-				}
-				if eventIdx > 0 {
-					r.logger.Info("discard duplicate event", zap.Int("count", eventIdx))
-				}
-			}
-		}
 	}
 }
 
@@ -395,25 +369,11 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 	}
 
 	// setup a special writer to do the recovering
-	cfg := &writer.FileConfig{
-		RelayDir: r.meta.Dir(),
-		Filename: latestPos.Name,
-	}
-	writer2 := writer.NewFileWriter(r.logger, cfg, parser2)
-	err := writer2.Start()
-	if err != nil {
-		return terror.Annotatef(err, "start recover writer for UUID %s with config %+v", uuid, cfg)
-	}
-	defer func() {
-		err2 := writer2.Close()
-		if err2 != nil {
-			r.logger.Error("fail to close recover writer", zap.String("UUID", uuid), zap.Reflect("config", cfg), log.ShortError(err2))
-		}
-	}()
-	r.logger.Info("started recover writer", zap.String("UUID", uuid), zap.Reflect("config", cfg))
+	binlogDir := r.meta.Dir()
+	r.logger.Info("started recover", zap.String("binlog dir", binlogDir), zap.String("filename", latestPos.Name))
 
 	// NOTE: recover a relay log file with too many binlog events may take a little long time.
-	result, err := writer2.Recover(ctx)
+	result, err := r.doRecovering(ctx, r.meta.Dir(), latestPos.Name, parser2)
 	if err == nil {
 		relayLogHasMore := result.LatestPos.Compare(latestPos) > 0 ||
 			(result.LatestGTIDs != nil && !result.LatestGTIDs.Equal(latestGTID) && result.LatestGTIDs.Contain(latestGTID))
@@ -451,30 +411,157 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 			}
 		}
 	}
-	return terror.Annotatef(err, "recover for UUID %s with config %+v", uuid, cfg)
+	return terror.Annotatef(err, "recover for UUID %s with relay dir %s, filename %s", uuid, binlogDir, latestPos.Name)
+}
+
+// recoverResult represents a result for a binlog recover operation.
+type recoverResult struct {
+	// if truncate trailing incomplete events during recovering in relay log
+	Truncated bool
+	// the latest binlog position after recover operation has done.
+	LatestPos mysql.Position
+	// the latest binlog GTID set after recover operation has done.
+	LatestGTIDs gtid.Set
+}
+
+// doRecovering tries to recover the current binlog file.
+// 1. read events from the file
+// 2.
+//    a. update the position with the event's position if the transaction finished
+//    b. update the GTID set with the event's GTID if the transaction finished
+// 3. truncate any incomplete events/transactions
+// now, we think a transaction finished if we received a XIDEvent or DDL in QueryEvent
+// NOTE: handle cases when file size > 4GB.
+func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, parser *parser.Parser) (recoverResult, error) {
+	fullName := filepath.Join(binlogDir, filename)
+	fs, err := os.Stat(fullName)
+	if (err != nil && os.IsNotExist(err)) || (err == nil && len(filename) == 0) {
+		return recoverResult{}, nil // no file need to recover
+	} else if err != nil {
+		return recoverResult{}, terror.ErrRelayWriterGetFileStat.Delegate(err, fullName)
+	}
+
+	// get latest pos/GTID set for all completed transactions from the file
+	latestPos, latestGTIDs, err := getTxnPosGTIDs(ctx, fullName, parser)
+	if err != nil {
+		return recoverResult{}, terror.Annotatef(err, "get latest pos/GTID set from %s", fullName)
+	}
+
+	// mock file truncated by recover
+	failpoint.Inject("MockRecoverRelayWriter", func() {
+		r.logger.Info("mock recover relay writer")
+		failpoint.Goto("bypass")
+	})
+
+	// in most cases, we think the file is fine, so compare the size is simpler.
+	if fs.Size() == latestPos {
+		return recoverResult{
+			Truncated:   false,
+			LatestPos:   mysql.Position{Name: filename, Pos: uint32(latestPos)},
+			LatestGTIDs: latestGTIDs,
+		}, nil
+	} else if fs.Size() < latestPos {
+		return recoverResult{}, terror.ErrRelayWriterLatestPosGTFileSize.Generate(latestPos, fs.Size())
+	}
+
+	failpoint.Label("bypass")
+
+	// truncate the file
+	f, err := os.OpenFile(fullName, os.O_WRONLY, 0o600)
+	if err != nil {
+		return recoverResult{}, terror.Annotatef(terror.ErrRelayWriterFileOperate.New(err.Error()), "open %s", fullName)
+	}
+	defer f.Close()
+	err = f.Truncate(latestPos)
+	if err != nil {
+		return recoverResult{}, terror.Annotatef(terror.ErrRelayWriterFileOperate.New(err.Error()), "truncate %s to %d", fullName, latestPos)
+	}
+
+	return recoverResult{
+		Truncated:   true,
+		LatestPos:   mysql.Position{Name: filename, Pos: uint32(latestPos)},
+		LatestGTIDs: latestGTIDs,
+	}, nil
+}
+
+const (
+	ignoreReasonHeartbeat      = "heartbeat event"
+	ignoreReasonArtificialFlag = "artificial flag (0x0020) set"
+)
+
+type preprocessResult struct {
+	Ignore       bool          // whether the event should be ignored
+	IgnoreReason string        // why the transformer ignore the event
+	LogPos       uint32        // binlog event's End_log_pos or Position in RotateEvent
+	NextLogName  string        // next binlog filename, only valid for RotateEvent
+	GTIDSet      mysql.GTIDSet // GTIDSet got from QueryEvent and XIDEvent when RawModeEnabled not true
+	CanSaveGTID  bool          // whether can save GTID into meta, true for DDL query and XIDEvent
+}
+
+func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Parser) preprocessResult {
+	result := preprocessResult{
+		LogPos: e.Header.LogPos,
+	}
+
+	switch ev := e.Event.(type) {
+	case *replication.PreviousGTIDsEvent:
+		result.CanSaveGTID = true
+	case *replication.MariadbGTIDListEvent:
+		result.CanSaveGTID = true
+	case *replication.RotateEvent:
+		// NOTE: we need to get the first binlog filename from fake RotateEvent when using auto position
+		result.LogPos = uint32(ev.Position)         // next event's position
+		result.NextLogName = string(ev.NextLogName) // for RotateEvent, update binlog name
+	case *replication.QueryEvent:
+		// when RawModeEnabled not true, QueryEvent will be parsed.
+		if parserpkg.CheckIsDDL(string(ev.Query), parser2) {
+			// we only update/save GTID for DDL/XID event
+			// if the query is something like `BEGIN`, we do not update/save GTID.
+			result.GTIDSet = ev.GSet
+			result.CanSaveGTID = true
+		}
+	case *replication.XIDEvent:
+		// when RawModeEnabled not true, XIDEvent will be parsed.
+		result.GTIDSet = ev.GSet
+		result.CanSaveGTID = true // need save GTID for XID
+	case *replication.GenericEvent:
+		// handle some un-parsed events
+		if e.Header.EventType == replication.HEARTBEAT_EVENT {
+			// ignore artificial heartbeat event
+			// ref: https://dev.mysql.com/doc/internals/en/heartbeat-event.html
+			result.Ignore = true
+			result.IgnoreReason = ignoreReasonHeartbeat
+		}
+	default:
+		if e.Header.Flags&replication.LOG_EVENT_ARTIFICIAL_F != 0 {
+			// ignore events with LOG_EVENT_ARTIFICIAL_F flag(0x0020) set
+			// ref: https://dev.mysql.com/doc/internals/en/binlog-event-flag.html
+			result.Ignore = true
+			result.IgnoreReason = ignoreReasonArtificialFlag
+		}
+	}
+	return result
 }
 
 // handleEvents handles binlog events, including:
 //   1. read events from upstream
 //   2. transform events
 //   3. write events into relay log files
-//   4. update metadata if needed
-// the first return value is the index of last read rows event if the transaction is not finished.
+//   4. update metadata if needed.
 func (r *Relay) handleEvents(
 	ctx context.Context,
-	reader2 reader.Reader,
-	transformer2 transformer.Transformer,
-	writer2 writer.Writer,
-) (int, error) {
+	reader2 Reader,
+	parser2 *parser.Parser,
+) error {
 	var (
 		_, lastPos  = r.meta.Pos()
 		_, lastGTID = r.meta.GTID()
 		err         error
-		eventIndex  int
+		eventIndex  int // only for test
 	)
 	if lastGTID == nil {
 		if lastGTID, err = gtid.ParserGTID(r.cfg.Flavor, ""); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
@@ -496,7 +583,7 @@ func (r *Relay) handleEvents(
 		if err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:
-				return 0, nil
+				return nil
 			case replication.ErrChecksumMismatch:
 				relayLogDataCorruptionCounter.Inc()
 			case replication.ErrSyncClosed, replication.ErrNeedSyncAgain:
@@ -508,14 +595,14 @@ func (r *Relay) handleEvents(
 					r.logger.Error("the requested binlog files have purged in the master server or the master server have switched, currently DM do no support to handle this error",
 						zap.String("db host", cfg.Host), zap.Int("db port", cfg.Port), zap.Stringer("last pos", lastPos), log.ShortError(err))
 					// log the status for debug
-					pos, gs, err2 := utils.GetMasterStatus(ctx, r.db.DB, r.cfg.Flavor)
+					pos, gs, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
 					if err2 == nil {
 						r.logger.Info("current master status", zap.Stringer("position", pos), log.WrapStringerField("GTID sets", gs))
 					}
 				}
 				binlogReadErrorCounter.Inc()
 			}
-			return eventIndex, err
+			return err
 		}
 
 		binlogReadDurationHistogram.Observe(time.Since(readTimer).Seconds())
@@ -529,7 +616,7 @@ func (r *Relay) handleEvents(
 
 		// 2. transform events
 		transformTimer := time.Now()
-		tResult := transformer2.Transform(e)
+		tResult := r.preprocessEvent(e, parser2)
 		binlogTransformDurationHistogram.Observe(time.Since(transformTimer).Seconds())
 		if len(tResult.NextLogName) > 0 && tResult.NextLogName > lastPos.Name {
 			lastPos = mysql.Position{
@@ -549,13 +636,13 @@ func (r *Relay) handleEvents(
 			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
 			// should start from the transaction beginning when switch to a new server
 			if err2 != nil {
-				return 0, err2
+				return err2
 			}
 			// upstream database switch
 			// report an error, let outer logic handle it
 			// should start from the transaction beginning when switch to a new server
 			if isNew {
-				return 0, terror.ErrRotateEventWithDifferentServerID.Generate()
+				return terror.ErrRotateEventWithDifferentServerID.Generate()
 			}
 		}
 
@@ -566,17 +653,19 @@ func (r *Relay) handleEvents(
 			// and meta file is not created when relay resumed.
 			firstEvent = false
 			if err2 := r.saveAndFlushMeta(lastPos, lastGTID); err2 != nil {
-				return 0, err2
+				return err2
 			}
 		}
 
 		// 3. save events into file
 		writeTimer := time.Now()
-		r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
-		wResult, err := writer2.WriteEvent(e)
+		if ce := r.logger.Check(zap.DebugLevel, ""); ce != nil {
+			r.logger.Debug("writing binlog event", zap.Reflect("header", e.Header))
+		}
+		wResult, err := r.writer.WriteEvent(e)
 		if err != nil {
 			relayLogWriteErrorCounter.Inc()
-			return eventIndex, err
+			return err
 		} else if wResult.Ignore {
 			r.logger.Info("ignore event by writer",
 				zap.Reflect("header", e.Header),
@@ -595,7 +684,7 @@ func (r *Relay) handleEvents(
 		lastPos.Pos = tResult.LogPos
 		err = lastGTID.Set(tResult.GTIDSet)
 		if err != nil {
-			return 0, terror.ErrRelayUpdateGTID.Delegate(err, lastGTID, tResult.GTIDSet)
+			return terror.ErrRelayUpdateGTID.Delegate(err, lastGTID, tResult.GTIDSet)
 		}
 		if !r.cfg.EnableGTID {
 			// if go-mysql set RawModeEnabled to true
@@ -620,7 +709,7 @@ func (r *Relay) handleEvents(
 		if needSavePos {
 			err = r.SaveMeta(lastPos, lastGTID)
 			if err != nil {
-				return 0, terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
+				return terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
 			}
 			eventIndex = 0
 		} else {
@@ -630,7 +719,7 @@ func (r *Relay) handleEvents(
 			// if the binlog is rotated, we need to save and flush the next binlog filename to meta
 			lastPos.Name = tResult.NextLogName
 			if err := r.saveAndFlushMeta(lastPos, lastGTID); err != nil {
-				return 0, err
+				return err
 			}
 		}
 	}
@@ -695,7 +784,7 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 
 	var latestPosName, latestGTIDStr string
 	if (r.cfg.EnableGTID && len(r.cfg.BinlogGTID) == 0) || (!r.cfg.EnableGTID && len(r.cfg.BinLogName) == 0) {
-		latestPos, latestGTID, err2 := utils.GetMasterStatus(ctx, r.db.DB, r.cfg.Flavor)
+		latestPos, latestGTID, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
 		if err2 != nil {
 			return err2
 		}
@@ -775,7 +864,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				return
 			}
 			ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-			pos, _, err := utils.GetMasterStatus(ctx2, r.db.DB, r.cfg.Flavor)
+			pos, _, err := utils.GetPosAndGs(ctx2, r.db.DB, r.cfg.Flavor)
 			cancel2()
 			if err != nil {
 				r.logger.Warn("get master status", zap.Error(err))
@@ -811,7 +900,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 }
 
 // setUpReader setups the underlying reader used to read binlog events from the upstream master server.
-func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
+func (r *Relay) setUpReader(ctx context.Context) (Reader, error) {
 	ctx2, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
 
@@ -826,7 +915,7 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 
 	uuid, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
-	cfg := &reader.Config{
+	cfg := &RConfig{
 		SyncConfig: r.syncerCfg,
 		Pos:        pos,
 		GTIDs:      gs,
@@ -834,7 +923,7 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 		EnableGTID: r.cfg.EnableGTID,
 	}
 
-	reader2 := reader.NewReader(cfg)
+	reader2 := NewUpstreamReader(cfg)
 	err = reader2.Start()
 	if err != nil {
 		// do not log the whole config to protect the password in `SyncConfig`.
@@ -844,22 +933,6 @@ func (r *Relay) setUpReader(ctx context.Context) (reader.Reader, error) {
 
 	r.logger.Info("started underlying reader", zap.String("UUID", uuid))
 	return reader2, nil
-}
-
-// setUpWriter setups the underlying writer used to writer binlog events into file or other places.
-func (r *Relay) setUpWriter(parser2 *parser.Parser) (writer.Writer, error) {
-	uuid, pos := r.meta.Pos()
-	cfg := &writer.FileConfig{
-		RelayDir: r.meta.Dir(),
-		Filename: pos.Name,
-	}
-	writer2 := writer.NewFileWriter(r.logger, cfg, parser2)
-	if err := writer2.Start(); err != nil {
-		return nil, terror.Annotatef(err, "start writer for UUID %s with config %+v", uuid, cfg)
-	}
-
-	r.logger.Info("started underlying writer", zap.String("UUID", uuid), zap.Reflect("config", cfg))
-	return writer2, nil
 }
 
 func (r *Relay) masterNode() string {
@@ -917,6 +990,10 @@ func (r *Relay) Close() {
 
 	r.closed.Store(true)
 	r.logger.Info("relay unit closed")
+}
+
+func (r *Relay) IsActive(uuid, filename string) (bool, int64) {
+	return r.writer.IsActive(uuid, filename)
 }
 
 // Status implements the dm.Unit interface.
@@ -1007,7 +1084,7 @@ func (r *Relay) Reload(newCfg *Config) error {
 		r.cfg.From.RawDBCfg = config.DefaultRawDBConfig()
 	}
 	r.cfg.From.RawDBCfg.ReadTimeout = showStatusConnectionTimeout
-	db, err := conn.DefaultDBProvider.Apply(r.cfg.From)
+	db, err := conn.DefaultDBProvider.Apply(&r.cfg.From)
 	if err != nil {
 		return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
 	}
@@ -1027,7 +1104,7 @@ func (r *Relay) setActiveRelayLog(filename string) {
 	uuid := r.meta.UUID()
 	_, suffix, _ := utils.ParseSuffixForUUID(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
-		TaskName:   fakeTaskName,
+		TaskName:   fakeRelayTaskName,
 		UUID:       uuid,
 		UUIDSuffix: suffix,
 		Filename:   filename,
@@ -1116,6 +1193,10 @@ func (r *Relay) notify(e *replication.BinlogEvent) {
 	for el := range r.listeners {
 		el.OnEvent(e)
 	}
+}
+
+func (r *Relay) NewReader(logger log.Logger, cfg *BinlogReaderConfig) *BinlogReader {
+	return newBinlogReader(logger, cfg, r)
 }
 
 // RegisterListener implements Process.RegisterListener.

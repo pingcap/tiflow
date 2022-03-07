@@ -15,8 +15,8 @@ package dumpling
 
 import (
 	"context"
-	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,15 +27,16 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	dutils "github.com/pingcap/ticdc/dm/pkg/dumpling"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Dumpling dumps full data from a MySQL-compatible database.
@@ -46,6 +47,8 @@ type Dumpling struct {
 
 	dumpConfig *export.Config
 	closed     atomic.Bool
+	core       *export.Dumper
+	mu         sync.RWMutex
 }
 
 // NewDumpling creates a new Dumpling.
@@ -60,11 +63,9 @@ func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 // Init implements Unit.Init.
 func (m *Dumpling) Init(ctx context.Context) error {
 	var err error
-	if m.dumpConfig, err = m.constructArgs(); err != nil {
+	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
-	m.detectSQLMode(ctx)
-	m.dumpConfig.SessionParams["time_zone"] = "+00:00"
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
@@ -101,7 +102,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := os.RemoveAll(m.cfg.Dir)
+	err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 	if err != nil {
 		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
 		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
@@ -119,7 +120,11 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
+
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
+		m.mu.Lock()
+		m.core = dumpling
+		m.mu.Unlock()
 		err = dumpling.Dump()
 		dumpling.Close()
 	}
@@ -170,6 +175,12 @@ func (m *Dumpling) Close() {
 	m.closed.Store(true)
 }
 
+// Kill implements Unit.Kill.
+func (m *Dumpling) Kill() {
+	// TODO: implement kill
+	m.Close()
+}
+
 // Pause implements Unit.Pause.
 func (m *Dumpling) Pause() {
 	if m.closed.Load() {
@@ -190,7 +201,7 @@ func (m *Dumpling) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 // Update implements Unit.Update.
-func (m *Dumpling) Update(cfg *config.SubTaskConfig) error {
+func (m *Dumpling) Update(context.Context, *config.SubTaskConfig) error {
 	// not support update configuration now
 	return nil
 }
@@ -198,7 +209,20 @@ func (m *Dumpling) Update(cfg *config.SubTaskConfig) error {
 // Status implements Unit.Status.
 func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	// NOTE: try to add some status, like dumped file count
-	return &pb.DumpStatus{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.core == nil {
+		return &pb.DumpStatus{}
+	}
+	mid := m.core.GetParameters()
+	s := &pb.DumpStatus{
+		TotalTables:       mid.TotalTables,
+		CompletedTables:   mid.CompletedTables,
+		FinishedBytes:     mid.FinishedBytes,
+		FinishedRows:      mid.FinishedRows,
+		EstimateTotalRows: mid.EstimateTotalRows,
+	}
+	return s
 }
 
 // Type implements Unit.Type.
@@ -212,7 +236,7 @@ func (m *Dumpling) IsFreshTask(ctx context.Context) (bool, error) {
 }
 
 // constructArgs constructs arguments for exec.Command.
-func (m *Dumpling) constructArgs() (*export.Config, error) {
+func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	cfg := m.cfg
 	db := cfg.From
 
@@ -226,6 +250,7 @@ func (m *Dumpling) constructArgs() (*export.Config, error) {
 	dumpConfig.User = db.User
 	dumpConfig.Password = db.Password
 	dumpConfig.OutputDirPath = cfg.Dir // use LoaderConfig.Dir as output dir
+	dumpConfig.CollationCompatible = cfg.CollationCompatible
 	tableFilter, err := filter.ParseMySQLReplicationRules(cfg.BAList)
 	if err != nil {
 		return nil, err
@@ -233,9 +258,18 @@ func (m *Dumpling) constructArgs() (*export.Config, error) {
 	dumpConfig.TableFilter = tableFilter
 	dumpConfig.CompleteInsert = true // always keep column name in `INSERT INTO` statements.
 	dumpConfig.Logger = m.logger.Logger
-	// force using UTC timezone
+
+	tz := m.cfg.Timezone
+	if len(tz) == 0 {
+		// use target db time_zone as default
+		var err1 error
+		tz, err1 = conn.FetchTimeZoneSetting(ctx, &m.cfg.To)
+		if err1 != nil {
+			return nil, err1
+		}
+	}
 	dumpConfig.SessionParams = map[string]interface{}{
-		"time_zone": "+00:00",
+		"time_zone": tz,
 	}
 
 	if cfg.Threads > 0 {
@@ -273,7 +307,7 @@ func (m *Dumpling) constructArgs() (*export.Config, error) {
 
 	extraArgs := strings.Fields(cfg.ExtraArgs)
 	if len(extraArgs) > 0 {
-		err := parseExtraArgs(&m.logger, dumpConfig, ParseArgLikeBash(extraArgs))
+		err := dutils.ParseExtraArgs(&m.logger, dumpConfig, dutils.ParseArgLikeBash(extraArgs))
 		if err != nil {
 			m.logger.Warn("parsed some unsupported arguments", zap.Error(err))
 		}
@@ -293,15 +327,19 @@ func (m *Dumpling) constructArgs() (*export.Config, error) {
 	}
 
 	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
+	// update sql_mode if needed
+	m.detectSQLMode(ctx, dumpConfig)
 
 	return dumpConfig, nil
 }
 
 // detectSQLMode tries to detect SQL mode from upstream. If success, write it to LoaderConfig.
 // Because loader will use this SQL mode, we need to treat disable `EscapeBackslash` when NO_BACKSLASH_ESCAPES.
-func (m *Dumpling) detectSQLMode(ctx context.Context) {
-	baseDB, err := conn.DefaultDBProvider.Apply(m.cfg.From)
+func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
+	baseDB, err := conn.DefaultDBProvider.Apply(&m.cfg.From)
 	if err != nil {
+		log.L().Warn("set up db connect failed", zap.Any("db", m.cfg.From),
+			zap.Error(err))
 		return
 	}
 	defer baseDB.Close()
@@ -309,13 +347,14 @@ func (m *Dumpling) detectSQLMode(ctx context.Context) {
 
 	sqlMode, err := utils.GetGlobalVariable(ctx, db, "sql_mode")
 	if err != nil {
+		log.L().Warn("get global sql_mode from upstream failed", zap.Any("db", m.cfg.From), zap.Error(err))
 		return
 	}
 	m.logger.Info("found upstream SQL mode", zap.String("SQL mode", sqlMode))
 	m.cfg.LoaderConfig.SQLMode = sqlMode
 	if strings.Contains(sqlMode, "NO_BACKSLASH_ESCAPES") {
-		m.dumpConfig.EscapeBackslash = false
+		dumpCfg.EscapeBackslash = false
 	} else {
-		m.dumpConfig.EscapeBackslash = true
+		dumpCfg.EscapeBackslash = true
 	}
 }

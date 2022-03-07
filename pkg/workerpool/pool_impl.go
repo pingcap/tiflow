@@ -22,10 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/notify"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -166,6 +167,9 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 
 func (h *defaultEventHandle) Unregister() {
 	if !atomic.CompareAndSwapInt32(&h.status, handleRunning, handleCancelled) {
+		// call synchronize so that the returning of Unregister cannot race
+		// with the calling of the errorHandler, if an error is already being processed.
+		h.worker.synchronize()
 		// already cancelled
 		return
 	}
@@ -298,6 +302,9 @@ type worker struct {
 	isRunning int32
 	// notifies exits of run()
 	stopNotifier notify.Notifier
+
+	slowSynchronizeThreshold time.Duration
+	slowSynchronizeLimiter   *rate.Limiter
 }
 
 func newWorker() *worker {
@@ -305,6 +312,9 @@ func newWorker() *worker {
 		taskCh:         make(chan task, 128),
 		handles:        make(map[*defaultEventHandle]struct{}),
 		handleCancelCh: make(chan struct{}), // this channel must be unbuffered, i.e. blocking
+
+		slowSynchronizeThreshold: 10 * time.Second,
+		slowSynchronizeLimiter:   rate.NewLimiter(rate.Every(time.Second*5), 1),
 	}
 }
 
@@ -398,12 +408,19 @@ func (w *worker) synchronize() {
 			break
 		}
 
-		if time.Since(startTime) > time.Second*10 {
-			// likely the workerpool has deadlocked, or there is a bug in the event handlers.
-			log.Warn("synchronize is taking too long, report a bug", zap.Duration("elapsed", time.Since(startTime)))
+		if time.Since(startTime) > w.slowSynchronizeThreshold &&
+			w.slowSynchronizeLimiter.Allow() {
+			// likely the workerpool has deadlocked, or there is a bug
+			// in the event handlers.
+			logWarn("synchronize is taking too long, report a bug",
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Stack("stacktrace"))
 		}
 	}
 }
+
+// A delegate to log.Warn. It exists only for testing.
+var logWarn = log.Warn
 
 func (w *worker) addHandle(handle *defaultEventHandle) {
 	w.handleRWLock.Lock()

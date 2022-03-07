@@ -17,13 +17,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -93,6 +93,29 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// Check invalid PD/TiKV version.
+	{
+		mock.getVersion = func() string {
+			return "testPD"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Regexp(t, ".*invalid PD version.*", err)
+	}
+
+	{
+		mock.getVersion = func() string {
+			return minPDVersion.String()
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "testKV"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Regexp(t, ".*invalid TiKV version.*", err)
+	}
+
 	{
 		mock.getVersion = func() string {
 			return `v1.0.0-alpha-271-g824ae7fd`
@@ -149,7 +172,7 @@ func TestCheckClusterVersion(t *testing.T) {
 		}
 
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
-		require.Regexp(t, ".*response status: .*", err)
+		require.Regexp(t, ".*400 Bad Request.*", err)
 	}
 }
 
@@ -188,59 +211,72 @@ func TestReleaseSemver(t *testing.T) {
 func TestGetTiCDCClusterVersion(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		captureInfos []*model.CaptureInfo
-		expected     TiCDCClusterVersion
+		captureVersions []string
+		expected        TiCDCClusterVersion
 	}{
 		{
-			captureInfos: []*model.CaptureInfo{},
-			expected:     TiCDCClusterVersionUnknown,
+			captureVersions: []string{},
+			expected:        TiCDCClusterVersionUnknown,
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: ""},
-				{ID: "capture2", Version: ""},
-				{ID: "capture3", Version: ""},
+			captureVersions: []string{
+				"",
+				"",
+				"",
 			},
 			expected: TiCDCClusterVersion{defaultTiCDCVersion},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.1"},
-				{ID: "capture2", Version: "4.0.7"},
-				{ID: "capture3", Version: "5.0.0-rc"},
+			captureVersions: []string{
+				"5.0.1",
+				"4.0.7",
+				"5.0.0-rc",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.0.7")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.0-rc"},
+			captureVersions: []string{
+				"5.0.0-rc",
 			},
 			expected: TiCDCClusterVersion{semver.New("5.0.0-rc")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "5.0.0"},
+			captureVersions: []string{
+				"5.0.0",
 			},
 			expected: TiCDCClusterVersion{semver.New("5.0.0")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "4.1.0"},
+			captureVersions: []string{
+				"4.1.0",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.1.0")},
 		},
 		{
-			captureInfos: []*model.CaptureInfo{
-				{ID: "capture1", Version: "4.0.10"},
+			captureVersions: []string{
+				"4.0.10",
 			},
 			expected: TiCDCClusterVersion{semver.New("4.0.10")},
 		},
 	}
 	for _, tc := range testCases {
-		ver, err := GetTiCDCClusterVersion(tc.captureInfos)
+		ver, err := GetTiCDCClusterVersion(tc.captureVersions)
 		require.Nil(t, err)
 		require.Equal(t, ver, tc.expected)
 	}
+
+	invalidTestCase := struct {
+		captureVersions []string
+		expected        TiCDCClusterVersion
+	}{
+		captureVersions: []string{
+			"",
+			"testCDC",
+		},
+		expected: TiCDCClusterVersionUnknown,
+	}
+	_, err := GetTiCDCClusterVersion(invalidTestCase.captureVersions)
+	require.Regexp(t, ".*invalid CDC cluster version.*", err)
 }
 
 func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
@@ -302,7 +338,7 @@ func TestCheckTiCDCClusterVersion(t *testing.T) {
 			expectedUnknown:   true,
 		},
 		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: minTiCDCVersion},
+			cdcClusterVersion: TiCDCClusterVersion{Version: MinTiCDCVersion},
 			expectedErr:       "",
 			expectedUnknown:   false,
 		},
@@ -325,4 +361,21 @@ func TestCheckTiCDCClusterVersion(t *testing.T) {
 			require.Regexp(t, tc.expectedErr, err)
 		}
 	}
+}
+
+func TestCheckPDVersionError(t *testing.T) {
+	t.Parallel()
+
+	var resp func(w http.ResponseWriter, r *http.Request)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp(w, r)
+	}))
+	defer ts.Close()
+
+	resp = func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	require.Contains(t, CheckPDVersion(context.TODO(), ts.URL, nil).Error(),
+		"[CDC:ErrCheckClusterVersionFromPD]failed to request PD 500 Internal Server Error , please try again later",
+	)
 }

@@ -14,7 +14,7 @@
 package version
 
 import (
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 )
 

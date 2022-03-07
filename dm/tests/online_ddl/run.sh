@@ -7,15 +7,6 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
-	run_sql_file $cur/data/gho.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_contains 'Query OK, 2 rows affected'
-	run_sql_file $cur/data/gho.db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_contains 'Query OK, 3 rows affected'
-	run_sql_file $cur/data/pt.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_contains 'Query OK, 2 rows affected'
-	run_sql_file $cur/data/pt.db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_contains 'Query OK, 3 rows affected'
-
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
@@ -29,9 +20,30 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
+	cp $cur/conf/check-task.yaml $WORK_DIR/check-task.yaml
+	# prevent start task in process of online-ddl
+	run_sql_file $cur/data/check.gho.db1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/check-task.yaml" \
+		"your ddl is in pt\/ghost online-ddl" 1
+
+	run_sql_file $cur/data/check.pt.db1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/check-task.yaml" \
+		"your ddl is in pt\/ghost online-ddl" 1
+
+	run_sql_file $cur/data/gho.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_contains 'Query OK, 2 rows affected'
+	run_sql_file $cur/data/gho.db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_contains 'Query OK, 3 rows affected'
+	run_sql_file $cur/data/pt.db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_contains 'Query OK, 2 rows affected'
+	run_sql_file $cur/data/pt.db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_contains 'Query OK, 3 rows affected'
+
 	inject_points=(
-		"github.com/pingcap/ticdc/dm/syncer/online-ddl-tools/ExitAfterSaveOnlineDDL=return()"
-		"github.com/pingcap/ticdc/dm/syncer/ExitAfterSaveOnlineDDL=return()"
+		"github.com/pingcap/tiflow/dm/syncer/online-ddl-tools/ExitAfterSaveOnlineDDL=return()"
+		"github.com/pingcap/tiflow/dm/syncer/ExitAfterSaveOnlineDDL=return()"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -39,10 +51,6 @@ function run() {
 	export GO_FAILPOINTS=""
 
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
 
 	# imitate a DM task is started during the running of online DDL tool
 	# *_ignore will be skipped by block-allow-list
@@ -115,10 +123,6 @@ function run() {
 
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker3" \
-		"\"result\": true" 1
 
 	echo "wait and check task running"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

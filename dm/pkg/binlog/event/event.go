@@ -23,8 +23,8 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // flags used in RowsEvent.
@@ -225,6 +225,14 @@ func GenPreviousGTIDsEvent(header *replication.EventHeader, latestPos uint32, gS
 // `uuid` is the UUID part of the GTID, like `9f61c5f9-1eef-11e9-b6cf-0242ac140003`.
 // `gno` is the GNO part of the GTID, like `6`.
 func GenGTIDEvent(header *replication.EventHeader, latestPos uint32, gtidFlags uint8, uuid string, gno int64, lastCommitted int64, sequenceNumber int64) (*replication.BinlogEvent, error) {
+	return genGTIDEventInner(header, latestPos, gtidFlags, uuid, gno, lastCommitted, sequenceNumber, replication.GTID_EVENT)
+}
+
+func GenAnonymousGTIDEvent(header *replication.EventHeader, latestPos uint32, gtidFlags uint8, lastCommitted int64, sequenceNumber int64) (*replication.BinlogEvent, error) {
+	return genGTIDEventInner(header, latestPos, gtidFlags, "00000000-0000-0000-0000-000000000000", 0, lastCommitted, sequenceNumber, replication.ANONYMOUS_GTID_EVENT)
+}
+
+func genGTIDEventInner(header *replication.EventHeader, latestPos uint32, gtidFlags uint8, uuid string, gno int64, lastCommitted int64, sequenceNumber int64, eventType replication.EventType) (*replication.BinlogEvent, error) {
 	payload := new(bytes.Buffer)
 
 	// GTID flags, 1 byte
@@ -269,7 +277,7 @@ func GenGTIDEvent(header *replication.EventHeader, latestPos uint32, gtidFlags u
 
 	buf := new(bytes.Buffer)
 	event := &replication.GTIDEvent{}
-	ev, err := assembleEvent(buf, event, false, *header, replication.GTID_EVENT, latestPos, nil, payload.Bytes())
+	ev, err := assembleEvent(buf, event, false, *header, eventType, latestPos, nil, payload.Bytes())
 	return ev, err
 }
 

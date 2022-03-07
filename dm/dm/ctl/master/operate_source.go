@@ -22,21 +22,22 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // NewOperateSourceCmd creates a OperateSource command.
 func NewOperateSourceCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "operate-source <operate-type> [config-file ...] [--print-sample-config]",
+		Use:   "operate-source <operate-type> [config-file ...] [-w worker] [--print-sample-config]",
 		Short: "`create`/`update`/`stop`/`show` upstream MySQL/MariaDB source",
 		RunE:  operateSourceFunc,
 	}
 	cmd.Flags().BoolP("print-sample-config", "p", false, "print sample config file of source")
+	cmd.Flags().StringP("worker", "w", "", "specify bound worker for created source")
 	return cmd
 }
 
@@ -83,6 +84,20 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 	if op != pb.SourceOp_ShowSource && len(cmd.Flags().Args()) == 1 {
 		common.PrintLinesf("operate-source create/update/stop should specify config-file(s)")
 		return errors.New("please check output to see error")
+	}
+
+	var specifyWorker string
+	if op == pb.SourceOp_StartSource {
+		specifyWorker, err = cmd.Flags().GetString("worker")
+		if err != nil {
+			common.PrintLinesf("error in parse `--worker`")
+			return err
+		}
+		if specifyWorker != "" {
+			if len(cmd.Flags().Args()) > 2 {
+				common.PrintLinesf("operate-source create can't create multiple sources when specify worker")
+			}
+		}
 	}
 
 	contents := make([]string, 0, len(cmd.Flags().Args())-1)
@@ -132,9 +147,10 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 		ctx,
 		"OperateSource",
 		&pb.OperateSourceRequest{
-			Config:   contents,
-			Op:       op,
-			SourceID: sourceID,
+			Config:     contents,
+			Op:         op,
+			SourceID:   sourceID,
+			WorkerName: specifyWorker,
 		},
 		&resp,
 	)

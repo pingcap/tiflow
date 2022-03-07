@@ -14,20 +14,22 @@
 package codec
 
 import (
-	"context"
 	"fmt"
-	"log"
+	"math"
+	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	canal "github.com/pingcap/ticdc/proto/canal"
+	"github.com/pingcap/log"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	parser_types "github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -59,7 +61,7 @@ func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 
 // get the canal EventType according to the DDLEvent
 func convertDdlEventType(e *model.DDLEvent) canal.EventType {
-	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/ddl/DruidDdlParser.java
+	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/ddl/DruidDdlParser.java#L59-L178
 	switch e.Type {
 	case mm.ActionCreateSchema, mm.ActionDropSchema, mm.ActionShardRowID, mm.ActionCreateView,
 		mm.ActionDropView, mm.ActionRecoverTable, mm.ActionModifySchemaCharsetAndCollate,
@@ -69,7 +71,7 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 		return canal.EventType_QUERY
 	case mm.ActionCreateTable:
 		return canal.EventType_CREATE
-	case mm.ActionRenameTable:
+	case mm.ActionRenameTable, mm.ActionRenameTables:
 		return canal.EventType_RENAME
 	case mm.ActionAddIndex, mm.ActionAddForeignKey, mm.ActionAddPrimaryKey:
 		return canal.EventType_CINDEX
@@ -90,9 +92,7 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 }
 
 func isCanalDdl(t canal.EventType) bool {
-	// EventType_QUERY is not a ddl type in canal, but in cdc it is.
-	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/ddl/DruidDdlParser.java
-	// &   https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L278
+	// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L297
 	switch t {
 	case canal.EventType_CREATE,
 		canal.EventType_RENAME,
@@ -100,7 +100,8 @@ func isCanalDdl(t canal.EventType) bool {
 		canal.EventType_DINDEX,
 		canal.EventType_ALTER,
 		canal.EventType_ERASE,
-		canal.EventType_TRUNCATE:
+		canal.EventType_TRUNCATE,
+		canal.EventType_QUERY:
 		return true
 	}
 	return false
@@ -132,84 +133,178 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 	return h
 }
 
-// build the Column in the canal RowData
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	sqlType := MysqlToJavaType(c.Type)
-	mysqlType := parser_types.TypeStr(c.Type)
-	if c.Flag.IsBinary() {
-		if parser_types.IsTypeBlob(c.Type) {
-			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
-		} else if parser_types.IsTypeChar(c.Type) {
-			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
+func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType, err error) {
+	javaType := mySQLType2JavaType(c.Type, c.Flag.IsBinary())
+
+	switch javaType {
+	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
+		if strings.Contains(mysqlType, "text") {
+			return JavaSQLTypeCLOB, nil
 		}
+		return JavaSQLTypeBLOB, nil
 	}
+
+	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
+	if !c.Flag.IsUnsigned() {
+		return javaType, nil
+	}
+
+	// for year, to `int64`, others to `uint64`.
+	// no need to promote type for `year` and `bit`
+	if c.Type == mysql.TypeYear || c.Type == mysql.TypeBit {
+		return javaType, nil
+	}
+
+	if c.Type == mysql.TypeFloat || c.Type == mysql.TypeDouble || c.Type == mysql.TypeNewDecimal {
+		return javaType, nil
+	}
+
+	// for **unsigned** integral types, type would be `uint64` or `string`. see reference:
+	// https://github.com/pingcap/tiflow/blob/1e3dd155049417e3fd7bf9b0a0c7b08723b33791/cdc/entry/mounter.go#L501
+	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
+	if c.Value == nil {
+		return javaType, nil
+	}
+	var number uint64
+	switch v := c.Value.(type) {
+	case uint64:
+		number = v
+	case string:
+		a, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return javaType, err
+		}
+		number = a
+	default:
+		return javaType, errors.Errorf("unexpected type for unsigned value: %+v, column: %+v", reflect.TypeOf(v), c)
+	}
+
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
+	// For unsigned type, promote by the following rule:
+	// TinyInt,  1byte, [-128, 127], [0, 255], if a > 127
+	// SmallInt, 2byte, [-32768, 32767], [0, 65535], if a > 32767
+	// Int,      4byte, [-2147483648, 2147483647], [0, 4294967295], if a > 2147483647
+	// BigInt,   8byte, [-2<<63, 2 << 63 - 1], [0, 2 << 64 - 1], if a > 2 << 63 - 1
 	switch c.Type {
-	// Since we cannot get the signed/unsigned flag of the column in the RowChangedEvent currently,
-	// we promote the sqlTypes regardless of the flag.
 	case mysql.TypeTiny:
-		sqlType = JavaSQLTypeSMALLINT
+		if number > math.MaxInt8 {
+			javaType = JavaSQLTypeSMALLINT
+		}
 	case mysql.TypeShort:
-		sqlType = JavaSQLTypeINTEGER
-	case mysql.TypeInt24:
-		sqlType = JavaSQLTypeINTEGER
+		if number > math.MaxInt16 {
+			javaType = JavaSQLTypeINTEGER
+		}
 	case mysql.TypeLong:
-		sqlType = JavaSQLTypeBIGINT
+		if number > math.MaxInt32 {
+			javaType = JavaSQLTypeBIGINT
+		}
 	case mysql.TypeLonglong:
-		sqlType = JavaSQLTypeDECIMAL
-	}
-	switch sqlType {
-	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if c.Flag.IsBinary() {
-			sqlType = JavaSQLTypeBLOB
-		} else {
-			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
-			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
-			sqlType = JavaSQLTypeVARCHAR
+		if number > math.MaxInt64 {
+			javaType = JavaSQLTypeDECIMAL
 		}
 	}
 
-	isKey := c.Flag.IsPrimaryKey()
-	isNull := c.Value == nil
-	value := ""
-	if !isNull {
-		switch v := c.Value.(type) {
-		case int64:
-			value = strconv.FormatInt(v, 10)
-		case uint64:
-			value = strconv.FormatUint(v, 10)
-		case float32:
-			value = strconv.FormatFloat(float64(v), 'f', -1, 32)
-		case float64:
-			value = strconv.FormatFloat(v, 'f', -1, 64)
-		case string:
-			value = v
-		case []byte:
-			// special handle for text and blob
-			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-			switch sqlType {
-			case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
-				value = string(v)
-			default:
-				decoded, err := b.bytesDecoder.Bytes(v)
-				if err != nil {
-					return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
-				}
-				value = string(decoded)
-				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
-			}
+	return javaType, nil
+}
+
+// In the official canal-json implementation, value were extracted from binlog buffer.
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
+// all value will be represented in string type
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
+func (b *canalEntryBuilder) formatValue(value interface{}, javaType JavaSQLType) (result string, err error) {
+	// value would be nil, if no value insert for the column.
+	if value == nil {
+		return "", nil
+	}
+
+	switch v := value.(type) {
+	case int64:
+		result = strconv.FormatInt(v, 10)
+	case uint64:
+		result = strconv.FormatUint(v, 10)
+	case float32:
+		result = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		result = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		result = v
+	case []byte:
+		//  JavaSQLTypeVARCHAR / JavaSQLTypeCHAR / JavaSQLTypeBLOB / JavaSQLTypeCLOB /
+		// special handle for text and blob
+		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
+		switch javaType {
+		// for normal text
+		case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR, JavaSQLTypeCLOB:
+			result = string(v)
 		default:
-			value = fmt.Sprintf("%v", v)
+			// JavaSQLTypeBLOB
+			decoded, err := b.bytesDecoder.Bytes(v)
+			if err != nil {
+				return "", err
+			}
+			result = string(decoded)
 		}
+	default:
+		result = fmt.Sprintf("%v", v)
+	}
+	return result, nil
+}
+
+// when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
+// it should have the form `t unsigned`, such as `int unsigned`
+func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
+	if unsigned && mysqlType != "bit" && mysqlType != "year" {
+		return mysqlType + " unsigned"
+	}
+	return mysqlType
+}
+
+// when decoding the canal format, remove `unsigned` to get the original `mysql type`.
+func trimUnsignedFromMySQLType(mysqlType string) string {
+	return strings.TrimSuffix(mysqlType, " unsigned")
+}
+
+func getMySQLType(c *model.Column) string {
+	mysqlType := types.TypeStr(c.Type)
+	// make `mysqlType` representation keep the same as the canal official implementation
+	mysqlType = withUnsigned4MySQLType(mysqlType, c.Flag.IsUnsigned())
+
+	if !c.Flag.IsBinary() {
+		return mysqlType
+	}
+
+	if types.IsTypeBlob(c.Type) {
+		return strings.Replace(mysqlType, "text", "blob", 1)
+	}
+
+	if types.IsTypeChar(c.Type) {
+		return strings.Replace(mysqlType, "char", "binary", 1)
+	}
+
+	return mysqlType
+}
+
+// build the Column in the canal RowData
+// see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
+func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
+	mysqlType := getMySQLType(c)
+	javaType, err := getJavaSQLType(c, mysqlType)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	value, err := b.formatValue(c.Value, javaType)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	canalColumn := &canal.Column{
-		SqlType:       int32(sqlType),
+		SqlType:       int32(javaType),
 		Name:          colName,
-		IsKey:         isKey,
+		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
-		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
+		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
 		Value:         value,
 		MysqlType:     mysqlType,
 	}
@@ -316,12 +411,6 @@ type CanalEventBatchEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// AppendResolvedEvent appends a resolved event to the encoder
-// TODO TXN support
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
@@ -330,17 +419,17 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+		return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
@@ -373,12 +462,13 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	return newDDLMQMessage(ProtocolCanal, nil, b, e), nil
+	return newDDLMQMessage(config.ProtocolCanal, nil, b, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
-	if len(d.messages.Messages) == 0 {
+	rowCount := len(d.messages.Messages)
+	if rowCount == 0 {
 		return nil
 	}
 
@@ -391,15 +481,11 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	if err != nil {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(config.ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
 	return []*MQMessage{ret}
-}
-
-// MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Mixed Build only use for JsonEncoder")
 }
 
 // Size implements the EventBatchEncoder interface
@@ -410,17 +496,6 @@ func (d *CanalEventBatchEncoder) Size() int {
 		panic(err)
 	}
 	return proto.Size(d.packet)
-}
-
-// Reset implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Reset() {
-	panic("Reset only used for JsonEncoder")
-}
-
-// SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
-	// no op
-	return nil
 }
 
 // refreshPacketBody() marshals the messages to the packet body
@@ -458,20 +533,13 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 	return encoder
 }
 
-type canalEventBatchEncoderBuilder struct {
-	opts map[string]string
-}
+type canalEventBatchEncoderBuilder struct{}
 
 // Build a `CanalEventBatchEncoder`
-func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewCanalEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
+func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
+	return NewCanalEventBatchEncoder()
 }
 
-func newCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &canalEventBatchEncoderBuilder{opts: opts}
+func newCanalEventBatchEncoderBuilder() EncoderBuilder {
+	return &canalEventBatchEncoderBuilder{}
 }

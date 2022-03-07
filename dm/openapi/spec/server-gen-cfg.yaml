@@ -1,5 +1,5 @@
 output: openapi/gen.server.go
 generate:
-  - server
+  - gin
   - spec
 package: openapi

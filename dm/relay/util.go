@@ -16,9 +16,13 @@ package relay
 import (
 	"context"
 	"database/sql"
+	"io"
 	"strings"
 
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/errors"
+
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // isNewServer checks whether is connecting to a new server.
@@ -36,4 +40,35 @@ func isNewServer(ctx context.Context, prevUUID string, db *sql.DB, flavor string
 		return false, nil
 	}
 	return true, nil
+}
+
+// getNextUUID gets (the nextUUID and its suffix) after the current UUID.
+func getNextUUID(currUUID string, uuids []string) (string, string, error) {
+	for i := len(uuids) - 2; i >= 0; i-- {
+		if uuids[i] == currUUID {
+			nextUUID := uuids[i+1]
+			_, suffixInt, err := utils.ParseSuffixForUUID(nextUUID)
+			if err != nil {
+				return "", "", terror.Annotatef(err, "UUID %s", nextUUID)
+			}
+			return nextUUID, utils.SuffixIntToStr(suffixInt), nil
+		}
+	}
+	return "", "", nil
+}
+
+// isIgnorableParseError checks whether is a ignorable error for `BinlogParser.ParseFile`.
+func isIgnorableParseError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if strings.Contains(err.Error(), "err EOF") {
+		// NOTE: go-mysql returned err not includes caused err, but as message, ref: parser.go `parseSingleEvent`
+		return true
+	} else if errors.Cause(err) == io.EOF {
+		return true
+	}
+
+	return false
 }

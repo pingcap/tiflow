@@ -23,19 +23,18 @@ import (
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/httputil"
-	"github.com/pingcap/ticdc/pkg/security"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 var (
 	// minPDVersion is the version of the minimal compatible PD.
-	// TODO bump 5.2.0-alpha once PD releases.
 	minPDVersion *semver.Version = semver.New("5.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
@@ -43,16 +42,14 @@ var (
 	maxPDVersion *semver.Version = semver.New("9999.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
-	// TODO bump 5.2.0-alpha once TiKV releases.
 	MinTiKVVersion *semver.Version = semver.New("5.1.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiKVVersion *semver.Version = semver.New("9999.0.0")
 
-	// minTiCDCVersion is the version of the minimal compatible TiCDC.
-	// TODO bump 5.2.0-alpha once TiCDC releases.
-	minTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
+	// MinTiCDCVersion is the version of the minimal compatible TiCDC.
+	MinTiCDCVersion *semver.Version = semver.New("5.1.0-alpha")
 	// Compatible versions are in [MinTiCDCVersion, MaxTiCDCVersion)
 	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiCDCVersion *semver.Version = semver.New("9999.0.0")
@@ -110,32 +107,34 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		arg := fmt.Sprintf("response status: %s", resp.Status)
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
-	}
-
 	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var arg string
+		if err != nil {
+			arg = fmt.Sprintf("%s %s %s", resp.Status, content, err)
+		} else {
+			arg = fmt.Sprintf("%s %s", resp.Status, content)
+		}
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
 
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}
 
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
+		err = errors.Annotate(err, "invalid PD version")
 		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 
@@ -172,6 +171,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	for _, s := range stores {
 		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
+			err = errors.Annotate(err, "invalid TiKV version")
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		minOrd := ver.Compare(*MinTiKVVersion)
@@ -219,24 +219,35 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
+// ShouldRunCliWithAPIClientByDefault returns whether to run cmd cli with api client by default
+func (v *TiCDCClusterVersion) ShouldRunCliWithAPIClientByDefault() bool {
+	// we assume the unknown version to be the latest version
+	if v.Version == nil {
+		return true
+	}
+
+	return !v.LessThan(*semver.New("5.4.0")) || (v.Major == 5 && v.Minor == 4 && v.Patch == 0)
+}
+
 // TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
 var TiCDCClusterVersionUnknown = TiCDCClusterVersion{}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
-func GetTiCDCClusterVersion(captureInfos []*model.CaptureInfo) (TiCDCClusterVersion, error) {
-	if len(captureInfos) == 0 {
+func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error) {
+	if len(captureVersion) == 0 {
 		return TiCDCClusterVersionUnknown, nil
 	}
 	var minVer *semver.Version
-	for _, captureInfo := range captureInfos {
+	for _, versionStr := range captureVersion {
 		var ver *semver.Version
 		var err error
-		if captureInfo.Version != "" {
-			ver, err = semver.NewVersion(removeVAndHash(captureInfo.Version))
+		if versionStr != "" {
+			ver, err = semver.NewVersion(removeVAndHash(versionStr))
 		} else {
 			ver = defaultTiCDCVersion
 		}
 		if err != nil {
+			err = errors.Annotate(err, "invalid CDC cluster version")
 			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {
@@ -252,11 +263,11 @@ func CheckTiCDCClusterVersion(cdcClusterVer TiCDCClusterVersion) (unknown bool, 
 		return true, nil
 	}
 	ver := cdcClusterVer.Version
-	minOrd := ver.Compare(*minTiCDCVersion)
+	minOrd := ver.Compare(*MinTiCDCVersion)
 	if minOrd < 0 {
 		arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s"+
 			"try tiup ctl:%s cdc [COMMAND]",
-			ver, minTiCDCVersion, ver)
+			ver, MinTiCDCVersion, ver)
 		return false, cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	maxOrd := ver.Compare(*maxTiCDCVersion)

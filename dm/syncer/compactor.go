@@ -14,11 +14,16 @@
 package syncer
 
 import (
+	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 // compactor compacts multiple statements into one statement.
@@ -33,8 +38,9 @@ type compactor struct {
 	buffer []*job
 
 	// for metrics
-	task   string
-	source string
+	task               string
+	source             string
+	updateJobMetricsFn func(bool, string, *job)
 }
 
 // compactorWrap creates and runs a compactor instance.
@@ -43,14 +49,15 @@ func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
 	// TODO: implement ping-pong buffer.
 	bufferSize := syncer.cfg.QueueSize * syncer.cfg.WorkerCount / 4
 	compactor := &compactor{
-		inCh:       inCh,
-		outCh:      make(chan *job, bufferSize),
-		bufferSize: bufferSize,
-		logger:     syncer.tctx.Logger.WithFields(zap.String("component", "compactor")),
-		keyMap:     make(map[string]map[string]int),
-		buffer:     make([]*job, 0, bufferSize),
-		task:       syncer.cfg.Name,
-		source:     syncer.cfg.SourceID,
+		inCh:               inCh,
+		outCh:              make(chan *job, bufferSize),
+		bufferSize:         bufferSize,
+		logger:             syncer.tctx.Logger.WithFields(zap.String("component", "compactor")),
+		keyMap:             make(map[string]map[string]int),
+		buffer:             make([]*job, 0, bufferSize),
+		task:               syncer.cfg.Name,
+		source:             syncer.cfg.SourceID,
+		updateJobMetricsFn: syncer.updateJobMetrics,
 	}
 	go func() {
 		compactor.run()
@@ -61,47 +68,62 @@ func compactorWrap(inCh chan *job, syncer *Syncer) chan *job {
 
 // run runs a compactor instance.
 func (c *compactor) run() {
-	for j := range c.inCh {
-		metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
+	for {
+		select {
+		case j, ok := <-c.inCh:
+			if !ok {
+				return
+			}
+			metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
 
-		if j.tp == flush {
-			c.flushBuffer()
-			c.outCh <- j
-			continue
-		}
+			if j.tp == flush || j.tp == asyncFlush {
+				c.flushBuffer()
+				c.outCh <- j
+				continue
+			}
 
-		// set safeMode when receive first job
-		if len(c.buffer) == 0 {
-			c.safeMode = j.dml.safeMode
-		}
-		// if dml has no PK/NOT NULL UK, do not compact it.
-		if j.dml.identifyColumns() == nil {
-			c.buffer = append(c.buffer, j)
-			continue
-		}
+			if j.tp == gc {
+				c.outCh <- j
+				continue
+			}
 
-		// if update job update its identify keys, turn it into delete + insert
-		if j.dml.op == update && j.dml.updateIdentify() {
-			delDML, insertDML := updateToDelAndInsert(j.dml)
-			delJob := j.clone()
-			delJob.tp = del
-			delJob.dml = delDML
+			// set safeMode when receive first job
+			if len(c.buffer) == 0 {
+				c.safeMode = j.safeMode
+			}
+			// if dml has no PK/NOT NULL UK, do not compact it.
+			if !j.dml.HasNotNullUniqueIdx() {
+				c.buffer = append(c.buffer, j)
+				continue
+			}
 
-			insertJob := j.clone()
-			insertJob.tp = insert
-			insertJob.dml = insertDML
+			// if update job update its identify keys, turn it into delete + insert
+			if j.dml.IsIdentityUpdated() {
+				delDML, insertDML := j.dml.SplitUpdate()
+				delJob := j.clone()
+				delJob.dml = delDML
 
-			c.compactJob(delJob)
-			c.compactJob(insertJob)
-		} else {
-			c.compactJob(j)
-		}
+				insertJob := j.clone()
+				insertJob.dml = insertDML
 
-		failpoint.Inject("SkipFlushCompactor", func() {
-			failpoint.Continue()
-		})
-		// if no inner jobs, buffer is full or outer channel empty, flush the buffer
-		if len(c.inCh) == 0 || len(c.buffer) >= c.bufferSize || len(c.outCh) == 0 {
+				c.compactJob(delJob)
+				c.compactJob(insertJob)
+			} else {
+				c.compactJob(j)
+			}
+
+			failpoint.Inject("SkipFlushCompactor", func() {
+				failpoint.Continue()
+			})
+			// if the number of outer jobs is zero or buffer is full, flush the buffer
+			if len(c.outCh) == 0 || len(c.buffer) >= c.bufferSize {
+				c.flushBuffer()
+			}
+			// if no inner jobs and the number of outer jobs is zero, flush the buffer
+		case <-time.After(waitTime):
+			failpoint.Inject("SkipFlushCompactor", func() {
+				failpoint.Continue()
+			})
 			c.flushBuffer()
 		}
 	}
@@ -118,7 +140,7 @@ func (c *compactor) flushBuffer() {
 		if j != nil {
 			// set safemode for all jobs by first job in buffer.
 			// or safemode for insert(delete + insert = insert with safemode)
-			j.dml.safeMode = c.safeMode || j.dml.safeMode
+			j.safeMode = c.safeMode || j.safeMode
 			c.outCh <- j
 		}
 	}
@@ -138,14 +160,25 @@ func (c *compactor) flushBuffer() {
 // DELETE + UPDATE => X			_|
 // .
 func (c *compactor) compactJob(j *job) {
-	tableName := j.dml.targetTableID
+	tableName := j.dml.TargetTableID()
 	tableKeyMap, ok := c.keyMap[tableName]
 	if !ok {
-		c.keyMap[tableName] = make(map[string]int, c.bufferSize)
+		// do not alloc a large buffersize, otherwise if the downstream latency is low
+		// compactor will constantly flush the buffer and golang gc will affect performance
+		c.keyMap[tableName] = make(map[string]int)
 		tableKeyMap = c.keyMap[tableName]
 	}
 
-	key := j.dml.identifyKey()
+	key := j.dml.IdentityKey()
+
+	failpoint.Inject("DownstreamIdentifyKeyCheckInCompact", func(v failpoint.Value) {
+		value, err := strconv.Atoi(key)
+		upper := v.(int)
+		if err != nil || value > upper {
+			panic(fmt.Sprintf("downstream identifyKey check failed. key value %v should less than %v", value, upper))
+		}
+	})
+
 	prevPos, ok := tableKeyMap[key]
 	// if no such key in the buffer, add it
 	if !ok {
@@ -157,26 +190,24 @@ func (c *compactor) compactJob(j *job) {
 	prevJob := c.buffer[prevPos]
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
 
-	switch j.tp {
-	case update:
-		if prevJob.tp == insert {
-			// INSERT + UPDATE => INSERT
-			j.tp = insert
-			j.dml.oldValues = nil
-			j.dml.originOldValues = nil
-			j.dml.op = insert
-		} else if prevJob.tp == update {
-			// UPDATE + UPDATE => UPDATE
-			j.dml.oldValues = prevJob.dml.oldValues
-			j.dml.originOldValues = prevJob.dml.originOldValues
+	// adjust safemode
+	skipReduce := false
+	switch j.dml.Type() {
+	case sqlmodel.RowChangeUpdate:
+		if prevJob.dml.Type() == sqlmodel.RowChangeInsert {
+			// DELETE + INSERT + UPDATE => INSERT with safemode
+			j.safeMode = prevJob.safeMode
 		}
-	case insert:
-		if prevJob.tp == del {
+	case sqlmodel.RowChangeInsert:
+		if prevJob.dml.Type() == sqlmodel.RowChangeDelete {
 			// DELETE + INSERT => INSERT with safemode
-			j.dml.safeMode = true
+			j.safeMode = true
+			skipReduce = true
 		}
-	case del:
-		// do nothing because anything + DELETE => DELETE
+	}
+
+	if !skipReduce {
+		j.dml.Reduce(prevJob.dml)
 	}
 
 	// mark previous job as compacted(nil), add new job
@@ -184,4 +215,5 @@ func (c *compactor) compactJob(j *job) {
 	tableKeyMap[key] = len(c.buffer)
 	c.buffer = append(c.buffer, j)
 	c.logger.Debug("finish to compact", zap.Stringer("dml", j.dml))
+	c.updateJobMetricsFn(true, adminQueueName, newCompactJob(prevJob.targetTable))
 }

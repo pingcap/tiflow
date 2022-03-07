@@ -26,13 +26,13 @@ import (
 	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -119,7 +119,6 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	sourceCfg1, err := config.LoadFromFile(sourceSampleFile)
 	c.Assert(err, IsNil)
 	sourceCfg1.SourceID = sourceID1
-	sourceCfg1.EnableRelay = true
 	sourceCfg2 := *sourceCfg1
 	sourceCfg2.SourceID = sourceID2
 
@@ -132,18 +131,21 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(subtaskCfg21.Adjust(true), IsNil)
 	subtaskCfg22 := subtaskCfg21
 	subtaskCfg22.SourceID = sourceID2
+	subtaskCfg22.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}
 	c.Assert(subtaskCfg22.Adjust(true), IsNil)
 
 	// not started scheduler can't do anything.
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfg(sourceCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSourceCfgWithWorker(sourceCfg1, workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSourceCfg(sourceID1)), IsTrue)
-	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveSubTasks(taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.AddWorker(workerName1, workerAddr1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)), IsTrue)
+	c.Assert(terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(pb.Stage_Running, map[string]map[string]config.SubTaskConfig{})), IsTrue)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -251,21 +253,24 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 		return len(bounds) == 1 && bounds[0] == sourceID1
 	}), IsTrue)
 	// no subtask config exists before start.
-	c.Assert(s.AddSubTasks(false), IsNil) // can call without configs, return without error, but take no effect.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running), IsNil) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(c, s, taskName1, sourceID1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_InvalidStage)
+	t.downstreamMetaNotExist(c, s, taskName1)
 	// start the task.
-	c.Assert(s.AddSubTasks(false, subtaskCfg1), IsNil)
-	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, subtaskCfg1)), IsTrue) // add again.
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1), IsNil)
+	c.Assert(terror.ErrSchedulerSubTaskExist.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1)), IsTrue) // add again.
 	// subtask config and stage exist.
 	t.subTaskCfgExist(c, s, subtaskCfg1)
 	t.subTaskStageMatch(c, s, taskName1, sourceID1, pb.Stage_Running)
+	t.downstreamMetaExist(c, s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
+	t.downstreamMetaNotExist(c, s, taskName2)
 
 	// update source config when task already started will failed
 	c.Assert(terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)), IsTrue)
 
 	// try start a task with two sources, some sources not bound.
-	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22)), IsTrue)
+	c.Assert(terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)), IsTrue)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
@@ -281,10 +286,9 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, "", sourceID1), IsNil)
 	c.Assert(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1), IsNil)
 	t.relayStageMatch(c, s, sourceID1, pb.Stage_Running)
-	// update to non-(Running, Paused) stage is invalid.
+	// update to non-(New, Finished) stage is invalid.
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_InvalidStage, taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_New, taskName1, sourceID1)), IsTrue)
-	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName1, sourceID1)), IsTrue)
 	c.Assert(terror.ErrSchedulerSubTaskStageInvalidUpdate.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Finished, taskName1, sourceID1)), IsTrue)
 	// can't update stage with not existing sources now.
 	c.Assert(terror.ErrSchedulerSubTaskOpSourceNotExist.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1, sourceID2)), IsTrue)
@@ -407,24 +411,25 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.relayStageMatch(c, s, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
-	// CASE 4.4: start a task with two sources.
+	// CASE 4.4.1: start a task with two sources.
 	// can't add more than one tasks at a time now.
-	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, subtaskCfg1, subtaskCfg21)), IsTrue)
+	c.Assert(terror.ErrSchedulerMultiTask.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1, subtaskCfg21)), IsTrue)
 	// task2' config and stage not exists before.
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID1)
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	// start task2.
-	c.Assert(s.AddSubTasks(false, subtaskCfg21, subtaskCfg22), IsNil)
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22), IsNil)
 	// config added, stage become Running.
 	t.subTaskCfgExist(c, s, subtaskCfg21)
 	t.subTaskCfgExist(c, s, subtaskCfg22)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
-	// CASE 4.4.1 fail to stop any task.
+	// CASE 4.4.2 fail to stop any task.
 	// can call without tasks or sources, return without error, but take no effect.
 	c.Assert(s.RemoveSubTasks("", sourceID1), IsNil)
 	c.Assert(s.RemoveSubTasks(taskName1), IsNil)
@@ -468,9 +473,42 @@ func (t *testScheduler) testSchedulerProgress(c *C, restart int) {
 	t.subTaskCfgNotExist(c, s, taskName2, sourceID2)
 	t.subTaskStageMatch(c, s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
+	t.validatorStageMatch(c, s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
 	// CASE 4.7: remove source2.
+	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
+	c.Assert(s.RemoveSourceCfg(sourceID2), IsNil)
+	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.RemoveSourceCfg(sourceID2)), IsTrue) // already removed.
+	// source2 removed.
+	t.sourceCfgNotExist(c, s, sourceID2)
+	// worker2 become Free now.
+	t.workerFree(c, s, workerName2)
+	t.sourceBounds(c, s, []string{sourceID1}, []string{})
+	t.relayStageMatch(c, s, sourceID2, pb.Stage_InvalidStage)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.1: add source2 with specify worker1
+	// source2 not exist, worker1 is bound
+	t.sourceCfgNotExist(c, s, sourceID2)
+	t.workerBound(c, s, ha.NewSourceBound(sourceID1, workerName1))
+	c.Assert(terror.ErrSchedulerWorkerNotFree.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)), IsTrue)
+	// source2 is not created because expected worker1 is already bound
+	t.sourceCfgNotExist(c, s, sourceID2)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.2: add source2 with specify worker2
+	// source2 not exist, worker2 should be free
+	t.sourceCfgNotExist(c, s, sourceID2)
+	t.workerFree(c, s, workerName2)
+	c.Assert(s.AddSourceCfgWithWorker(&sourceCfg2, workerName2), IsNil)
+	t.workerBound(c, s, ha.NewSourceBound(sourceID2, workerName2))
+	t.sourceBounds(c, s, []string{sourceID1, sourceID2}, []string{})
+	c.Assert(s.StartRelay(sourceID2, []string{workerName2}), IsNil)
+	t.relayStageMatch(c, s, sourceID2, pb.Stage_Running)
+	rebuildScheduler(ctx)
+
+	// CASE 4.7.3: remove source2 again.
 	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
 	c.Assert(s.RemoveSourceCfg(sourceID2), IsNil)
 	c.Assert(terror.ErrSchedulerSourceCfgNotExist.Equal(s.RemoveSourceCfg(sourceID2)), IsTrue) // already removed.
@@ -597,6 +635,19 @@ func (t *testScheduler) subTaskCfgExist(c *C, s *Scheduler, expectCfg config.Sub
 	c.Assert(cfgM[expectCfg.Name], DeepEquals, expectCfg)
 }
 
+func (t *testScheduler) downstreamMetaNotExist(c *C, s *Scheduler, task string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, IsNil)
+	c.Assert(metaConfig, Equals, "")
+}
+
+func (t *testScheduler) downstreamMetaExist(c *C, s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
+	c.Assert(dbConfig, NotNil)
+	c.Assert(dbConfig, DeepEquals, &expectDBCfg)
+	c.Assert(metaConfig, Equals, expectMetaConfig)
+}
+
 func (t *testScheduler) workerNotExist(c *C, s *Scheduler, worker string) {
 	c.Assert(s.GetWorkerByName(worker), IsNil)
 	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
@@ -718,6 +769,35 @@ func (t *testScheduler) subTaskStageMatch(c *C, s *Scheduler, task, source strin
 	default:
 		c.Assert(eStageM, HasLen, 0)
 	}
+}
+
+func (t *testScheduler) validatorStageMatch(c *C, s *Scheduler, task, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, task)
+	var m map[string]ha.Stage
+	if v, ok := s.expectValidatorStages.Load(task); ok {
+		m = v.(map[string]ha.Stage)
+	}
+	if expectStage == pb.Stage_InvalidStage {
+		_, ok := m[source]
+		c.Assert(ok, IsFalse)
+	} else {
+		stageDeepEqualExcludeRev(c, m[source], stage)
+	}
+	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task, 0)
+	c.Assert(err, IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[task], stage)
+	default:
+		c.Assert(stageM, HasLen, 0)
+	}
+}
+
+func (t *testScheduler) validatorModeMatch(c *C, s *Scheduler, task, source string, expectMode string) {
+	cfg := s.getSubTaskCfgByTaskSource(task, source)
+	c.Assert(cfg, NotNil)
+	c.Assert(cfg.ValidatorCfg.Mode, Equals, expectMode)
 }
 
 func (t *testScheduler) TestRestartScheduler(c *C) {
@@ -903,7 +983,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	defer cancel()
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.cancel = cancel
 	s.etcdCli = etcdTestCli
 
@@ -987,7 +1067,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx2, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx2, startRev), IsNil)
 	}()
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
 	time.Sleep(time.Second)
@@ -1009,7 +1089,7 @@ func (t *testScheduler) TestWatchWorkerEventEtcdCompact(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeWorkerEvent(ctx3, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeWorkerEvent(ctx3, startRev), IsNil)
 	}()
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		bounds := s.BoundSources()
@@ -1045,7 +1125,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1086,7 +1166,7 @@ func (t *testScheduler) TestLastBound(c *C) {
 	c.Assert(bounded, IsFalse)
 
 	// after worker3 become offline, source2 should be bounded to worker2
-	s.updateStatusForUnbound(sourceID2)
+	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	c.Assert(ok, IsFalse)
 	worker3.ToOffline()
@@ -1115,7 +1195,7 @@ func (t *testScheduler) TestInvalidLastBound(c *C) {
 	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}
 
 	// step 1: start an empty scheduler without listening the worker event
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	// sourceID2 doesn't have a source config and not in unbound
@@ -1152,7 +1232,7 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1172,38 +1252,39 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	worker3.ToFree()
 	worker4.ToFree()
 
+	ctx := context.Background()
 	// test invalid transfer: source not exists
-	c.Assert(s.TransferSource("not-exist", workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, "not-exist", workerName3), NotNil)
 
 	// test valid transfer: source -> worker = bound -> free
-	c.Assert(s.TransferSource(sourceID1, workerName4), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName4), IsNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
 
 	// test valid transfer: source -> worker = unbound -> free
 	s.sourceCfgs[sourceID3] = &config.SourceConfig{}
 	s.unbounds[sourceID3] = struct{}{}
-	c.Assert(s.TransferSource(sourceID3, workerName3), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID3, workerName3), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test valid transfer: self
-	c.Assert(s.TransferSource(sourceID3, workerName3), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID3, workerName3), IsNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test invalid transfer: source -> worker = bound -> bound
-	c.Assert(s.TransferSource(sourceID1, workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName3), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 
 	// test invalid transfer: source -> worker = bound -> offline
 	worker1.ToOffline()
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 
 	// test invalid transfer: source -> worker = unbound -> bound
 	s.sourceCfgs[sourceID4] = &config.SourceConfig{}
 	s.unbounds[sourceID4] = struct{}{}
-	c.Assert(s.TransferSource(sourceID4, workerName3), NotNil)
+	c.Assert(s.TransferSource(ctx, sourceID4, workerName3), NotNil)
 	c.Assert(s.bounds[sourceID3], DeepEquals, worker3)
 	delete(s.unbounds, sourceID4)
 	delete(s.sourceCfgs, sourceID4)
@@ -1212,17 +1293,45 @@ func (t *testScheduler) TestTransferSource(c *C) {
 	// now we have (worker1, nil) (worker2, source2) (worker3, source3) (worker4, source1)
 
 	// test fail halfway won't left old worker unbound
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound", `return()`), IsNil)
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToReplaceSourceBound", `return()`), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), NotNil)
 	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
 	c.Assert(worker1.Stage(), Equals, WorkerFree)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToReplaceSourceBound"), IsNil)
 
-	// test can't transfer when there's any running task on the source
+	// set running tasks
 	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
-	c.Assert(s.TransferSource(sourceID1, workerName1), NotNil)
-	c.Assert(s.bounds[sourceID1], DeepEquals, worker4)
-	c.Assert(worker1.Stage(), Equals, WorkerFree)
+
+	// test can't transfer when running tasks not in sync unit
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("notInSyncUnit")`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus") //nolint:errcheck
+	c.Assert(terror.ErrSchedulerRequireRunningTaskInSyncUnit.Equal(s.TransferSource(ctx, sourceID1, workerName1)), IsTrue)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
+
+	// test can't transfer when query status met error
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("error")`), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), ErrorMatches, "failed to query worker.*")
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
+
+	// test can transfer when all running task is in sync unit
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep", `return()`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep") //nolint:errcheck
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus", `return("allTaskIsPaused")`), IsNil)
+
+	// we only retry 10 times, open a failpoint to make need retry more than 10 times, so this transfer will fail
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry", `return(11)`), IsNil)
+	c.Assert(terror.ErrSchedulerPauseTaskForTransferSource.Equal(s.TransferSource(ctx, sourceID1, workerName1)), IsTrue)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry"), IsNil)
+
+	// now we can transfer successfully after 2 times retry
+	s.expectSubTaskStages.Store("test", map[string]ha.Stage{sourceID1: {Expect: pb.Stage_Running}})
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry", `return(2)`), IsNil)
+	c.Assert(s.TransferSource(ctx, sourceID1, workerName1), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/batchOperateTaskOnWorkerMustRetry"), IsNil)
+	c.Assert(s.bounds[sourceID1], DeepEquals, worker1)
+	c.Assert(worker1.Stage(), Equals, WorkerBound)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateWorkerQueryStatus"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/skipBatchOperateTaskOnWorkerSleep"), IsNil)
 }
 
 func (t *testScheduler) TestStartStopRelay(c *C) {
@@ -1247,7 +1356,7 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1337,7 +1446,7 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	c.Assert(s.bounds[sourceID1].baseInfo.Name, Equals, workerName1)
 	c.Assert(s.bounds[sourceID2].baseInfo.Name, Equals, workerName2)
 
-	s.updateStatusForUnbound(sourceID2)
+	s.updateStatusToUnbound(sourceID2)
 	c.Assert(worker2.Stage(), Equals, WorkerRelay)
 	c.Assert(s.StopRelay(sourceID2, []string{workerName2}), IsNil)
 	c.Assert(worker2.Stage(), Equals, WorkerFree)
@@ -1352,6 +1461,82 @@ func (t *testScheduler) TestStartStopRelay(c *C) {
 	bound, err := s.tryBoundForSource(sourceID2)
 	c.Assert(err, IsNil)
 	c.Assert(bound, IsFalse)
+}
+
+func (t *testScheduler) TestRelayWithWithoutWorker(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		workerName2 = "dm-worker-2"
+	)
+
+	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}
+	worker2 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName2}}
+
+	// step 1: start an empty scheduler
+	s.started.Store(true)
+	s.etcdCli = etcdTestCli
+	s.workers[workerName1] = worker1
+	s.workers[workerName2] = worker2
+	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
+
+	worker1.ToFree()
+	c.Assert(s.boundSourceToWorker(sourceID1, worker1), IsNil)
+	worker2.ToFree()
+
+	// step 2: check when enable-relay = false, can start/stop relay without worker name
+	c.Assert(s.StartRelay(sourceID1, []string{}), IsNil)
+	c.Assert(s.sourceCfgs[sourceID1].EnableRelay, IsTrue)
+
+	c.Assert(s.StartRelay(sourceID1, []string{}), IsNil)
+	c.Assert(s.sourceCfgs[sourceID1].EnableRelay, IsTrue)
+
+	c.Assert(s.StopRelay(sourceID1, []string{}), IsNil)
+	c.Assert(s.sourceCfgs[sourceID1].EnableRelay, IsFalse)
+
+	c.Assert(s.StopRelay(sourceID1, []string{}), IsNil)
+	c.Assert(s.sourceCfgs[sourceID1].EnableRelay, IsFalse)
+
+	// step 3: check when enable-relay = false, can start/stop relay with worker name
+	c.Assert(s.StartRelay(sourceID1, []string{workerName1, workerName2}), IsNil)
+	c.Assert(s.sourceCfgs[sourceID1].EnableRelay, IsFalse)
+	c.Assert(worker1.Stage(), Equals, WorkerBound)
+	c.Assert(worker2.Stage(), Equals, WorkerRelay)
+
+	c.Assert(s.StopRelay(sourceID1, []string{workerName1}), IsNil)
+	c.Assert(worker1.Stage(), Equals, WorkerBound)
+	c.Assert(worker2.Stage(), Equals, WorkerRelay)
+
+	c.Assert(s.StopRelay(sourceID1, []string{workerName2}), IsNil)
+	c.Assert(worker1.Stage(), Equals, WorkerBound)
+	c.Assert(worker2.Stage(), Equals, WorkerFree)
+
+	// step 4: check when enable-relay = true, can't start/stop relay with worker name
+	c.Assert(s.StartRelay(sourceID1, []string{}), IsNil)
+
+	err := s.StartRelay(sourceID1, []string{workerName1})
+	c.Assert(terror.ErrSchedulerStartRelayOnBound.Equal(err), IsTrue)
+	err = s.StartRelay(sourceID1, []string{workerName2})
+	c.Assert(terror.ErrSchedulerStartRelayOnBound.Equal(err), IsTrue)
+
+	err = s.StopRelay(sourceID1, []string{workerName1})
+	c.Assert(terror.ErrSchedulerStopRelayOnBound.Equal(err), IsTrue)
+	err = s.StopRelay(sourceID1, []string{workerName2})
+	c.Assert(terror.ErrSchedulerStopRelayOnBound.Equal(err), IsTrue)
+
+	c.Assert(s.StopRelay(sourceID1, []string{}), IsNil)
+
+	// step5. check when started relay with workerName, can't turn on enable-relay
+	c.Assert(s.StartRelay(sourceID1, []string{workerName1}), IsNil)
+
+	err = s.StartRelay(sourceID1, []string{})
+	c.Assert(terror.ErrSchedulerStartRelayOnSpecified.Equal(err), IsTrue)
+	err = s.StopRelay(sourceID1, []string{})
+	c.Assert(terror.ErrSchedulerStopRelayOnSpecified.Equal(err), IsTrue)
 }
 
 func checkAllWorkersClosed(c *C, s *Scheduler, closed bool) {
@@ -1380,12 +1565,12 @@ func (t *testScheduler) TestCloseAllWorkers(c *C) {
 		c.Assert(err, IsNil)
 	}
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToRecoverWorkersBounds", "return"), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToRecoverWorkersBounds", "return"), IsNil)
 	// Test closed when fail to start
 	c.Assert(s.Start(ctx, etcdTestCli), ErrorMatches, "failToRecoverWorkersBounds")
 	c.Assert(s.workers, HasLen, 3)
 	checkAllWorkersClosed(c, s, true)
-	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/scheduler/failToRecoverWorkersBounds"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToRecoverWorkersBounds"), IsNil)
 
 	s.workers = map[string]*Worker{}
 	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
@@ -1414,7 +1599,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	// found source configs before bound
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
@@ -1443,7 +1628,7 @@ func (t *testScheduler) TestStartSourcesWithoutSourceConfigsInEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(bounded, IsTrue)
 
-	s.started = false
+	s.started.Store(false)
 	sbm, _, err := ha.GetSourceBound(etcdTestCli, "")
 	c.Assert(err, IsNil)
 	c.Assert(sbm, HasLen, 2)
@@ -1486,7 +1671,7 @@ func (t *testScheduler) TestTransferWorkerAndSource(c *C) {
 	worker4 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName4}}
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
@@ -1565,7 +1750,7 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	)
 
 	// step 1: start an empty scheduler
-	s.started = true
+	s.started.Store(true)
 	s.etcdCli = etcdTestCli
 
 	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}
@@ -1578,6 +1763,13 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	s.workers[workerName4] = worker4
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
 	s.sourceCfgs[sourceID2] = &config.SourceConfig{}
+	s.subTaskCfgs.Store(task1, map[string]config.SubTaskConfig{
+		sourceID1: {},
+	})
+	s.subTaskCfgs.Store(task2, map[string]config.SubTaskConfig{
+		sourceID1: {},
+		sourceID2: {},
+	})
 
 	worker1.ToFree()
 	c.Assert(s.boundSourceToWorker(sourceID1, worker1), IsNil)
@@ -1611,7 +1803,7 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.Assert(s.observeLoadTask(ctx1, etcdTestCli, startRev), IsNil)
+		c.Assert(s.observeLoadTask(ctx1, startRev), IsNil)
 	}()
 
 	// put task2, source1, worker1
@@ -1650,6 +1842,11 @@ func (t *testScheduler) TestWatchLoadTask(c *C) {
 	}), IsTrue)
 	c.Assert(s.bounds[sourceID2], DeepEquals, worker4)
 	c.Assert(worker2.stage, Equals, WorkerFree)
+
+	// after stop-task, hasLoadTaskByWorkerAndSource is no longer valid
+	c.Assert(s.hasLoadTaskByWorkerAndSource(workerName4, sourceID2), IsTrue)
+	s.subTaskCfgs.Delete(task2)
+	c.Assert(s.hasLoadTaskByWorkerAndSource(workerName4, sourceID2), IsFalse)
 
 	cancel1()
 	wg.Wait()
@@ -1697,9 +1894,9 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
 
 	// bootstrap
-	c.Assert(s.recoverSources(etcdTestCli), IsNil)
-	c.Assert(s.recoverRelayConfigs(etcdTestCli), IsNil)
-	_, err = s.recoverWorkersBounds(etcdTestCli)
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
 	c.Assert(err, IsNil)
 
 	// check
@@ -1711,4 +1908,143 @@ func (t *testScheduler) TestWorkerHasDiffRelayAndBound(c *C) {
 	c.Assert(worker.RelaySourceID(), Equals, sourceID2)
 	_, ok = s.unbounds[sourceID1]
 	c.Assert(ok, IsTrue)
+}
+
+func (t *testScheduler) TestUpgradeCauseConflictRelayType(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		workerName2 = "dm-worker-2"
+		keepAlive   = int64(3)
+	)
+
+	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	workerInfo2 := ha.WorkerInfo{Name: workerName2}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
+
+	// prepare etcd data
+	s.etcdCli = etcdTestCli
+	sourceCfg.EnableRelay = true
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName2)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo2)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName2, keepAlive)
+
+	// bootstrap
+	c.Assert(s.recoverSources(), IsNil)
+	c.Assert(s.recoverRelayConfigs(), IsNil)
+	_, err = s.recoverWorkersBounds()
+	c.Assert(err, IsNil)
+
+	// check when the relay config is conflicting with source config, relay config should be deleted
+	c.Assert(s.relayWorkers[sourceID1], HasLen, 0)
+	result, _, err := ha.GetAllRelayConfig(etcdTestCli)
+	c.Assert(err, IsNil)
+	c.Assert(result, HasLen, 0)
+
+	worker := s.workers[workerName1]
+	c.Assert(worker.Stage(), Equals, WorkerBound)
+	c.Assert(worker.RelaySourceID(), HasLen, 0)
+	c.Assert(s.workers[workerName2].Stage(), Equals, WorkerFree)
+}
+
+func (t *testScheduler) TestOperateValidatorTask(c *C) {
+	defer clearTestInfoOperation(c)
+
+	var (
+		logger      = log.L()
+		s           = NewScheduler(&logger, config.Security{})
+		sourceID1   = "mysql-replica-1"
+		workerName1 = "dm-worker-1"
+		taskName    = "task-1"
+		keepAlive   = int64(2)
+		subtaskCfg  config.SubTaskConfig
+	)
+	c.Assert(subtaskCfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	subtaskCfg.SourceID = sourceID1
+	subtaskCfg.Name = taskName
+	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
+	c.Assert(subtaskCfg.Adjust(true), IsNil)
+
+	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	bound := ha.SourceBound{
+		Source: sourceID1,
+		Worker: workerName1,
+	}
+	sourceCfg, err := config.LoadFromFile("../source.yaml")
+	c.Assert(err, IsNil)
+	s.etcdCli = etcdTestCli
+	sourceCfg.SourceID = sourceID1
+	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	c.Assert(err, IsNil)
+	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	c.Assert(err, IsNil)
+	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	c.Assert(err, IsNil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//nolint:errcheck
+	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	c.Assert(s.recoverSources(), IsNil)
+	_, err = s.recoverWorkersBounds()
+	c.Assert(err, IsNil)
+	c.Assert(s.Start(ctx, etcdTestCli), IsNil)
+	// CASE 1: start subtask without starting validation
+	c.Assert(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg), IsNil) // create new subtask without validation
+	t.subTaskCfgExist(c, s, subtaskCfg)
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
+	stCfgs := make(map[string]map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name] = make(map[string]config.SubTaskConfig)
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // start running validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // stage not changed
+
+	// CASE 2: stop running subtask
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
+	c.Assert(s.OperateValidationTask(pb.Stage_Stopped, stCfgs), IsNil)                  // stop stopped validator task with no error
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
+
+	// CASE 3: start subtask with fast mode
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
+
+	// CASE 4: set the mode of a running task, not succeed
+	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull
+	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                               // set new mode
+	c.Assert(s.OperateValidationTask(pb.Stage_Running, stCfgs), IsNil)                      // create validator task
+	t.validatorModeMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
+	t.validatorStageMatch(c, s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
 }

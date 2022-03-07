@@ -38,12 +38,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var (
@@ -232,20 +232,20 @@ func PrettyPrintResponseWithCheckTask(resp proto.Message, subStr string) bool {
 	)
 	switch chr := resp.(type) {
 	case *pb.StartTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)
 			}
 		}
 	case *pb.UpdateTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)
@@ -346,38 +346,5 @@ func GetTaskNameFromArgOrFile(arg string) string {
 func PrintCmdUsage(cmd *cobra.Command) {
 	if err := cmd.Usage(); err != nil {
 		fmt.Println("can't output command's usage:", err)
-	}
-}
-
-// SyncMasterEndpoints sync masters' endpoints.
-func SyncMasterEndpoints(ctx context.Context) {
-	lastClientUrls := []string{}
-	clientURLs := []string{}
-	updateF := func() {
-		clientURLs = clientURLs[:0]
-		resp, err := GlobalCtlClient.EtcdClient.MemberList(ctx)
-		if err != nil {
-			return
-		}
-
-		for _, m := range resp.Members {
-			clientURLs = append(clientURLs, m.GetClientURLs()...)
-		}
-		if utils.NonRepeatStringsEqual(clientURLs, lastClientUrls) {
-			return
-		}
-		GlobalCtlClient.EtcdClient.SetEndpoints(clientURLs...)
-		lastClientUrls = make([]string, len(clientURLs))
-		copy(lastClientUrls, clientURLs)
-	}
-
-	for {
-		updateF()
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(syncMasterEndpointsTime):
-		}
 	}
 }

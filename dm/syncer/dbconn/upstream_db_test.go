@@ -23,8 +23,8 @@ import (
 	"github.com/google/uuid"
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var _ = Suite(&testDBSuite{})
@@ -79,7 +79,7 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 		s.syncer.Close()
 	}
 
-	pos, _, err := utils.GetMasterStatus(context.Background(), s.db, "mysql")
+	pos, _, err := utils.GetPosAndGs(context.Background(), s.db, "mysql")
 	c.Assert(err, IsNil)
 
 	s.syncer = replication.NewBinlogSyncer(cfg)

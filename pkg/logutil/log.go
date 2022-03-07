@@ -48,6 +48,8 @@ type Config struct {
 	FileMaxDays int `toml:"max-days" json:"max-days"`
 	// Maximum number of old log files to retain.
 	FileMaxBackups int `toml:"max-backups" json:"max-backups"`
+	// ZapInternalErrOutput specify where the internal error of zap logger should be send to.
+	ZapInternalErrOutput string `toml:"error-output" json:"error-output"`
 }
 
 // Adjust adjusts config
@@ -91,6 +93,7 @@ func InitLogger(cfg *Config) error {
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
 		},
+		ErrorOutputPath: cfg.ZapInternalErrOutput,
 	}
 
 	var lg *zap.Logger
@@ -194,8 +197,8 @@ func initGRPCLogger(level zapcore.Level) error {
 	logger := log.L().With(zap.String("name", "grpc"))
 	// For gRPC 1.26.0, logging call stack:
 	//
-	// github.com/pingcap/ticdc/pkg/util.levelToFunc.func1
-	// github.com/pingcap/ticdc/pkg/util.(*grpcLoggerWriter).Write
+	// github.com/pingcap/tiflow/pkg/util.levelToFunc.func1
+	// github.com/pingcap/tiflow/pkg/util.(*grpcLoggerWriter).Write
 	// log.(*Logger).Output
 	// log.(*Logger).Printf
 	// google.golang.org/grpc/grpclog.(*loggerT).Infof

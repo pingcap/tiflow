@@ -19,10 +19,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/ctl/master"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/ctl/master"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/chzyer/readline"
 	"github.com/pingcap/errors"
@@ -50,6 +50,9 @@ func NewRootCmd() *cobra.Command {
 		Short:         "DM control",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 	// --worker worker1 -w worker2 --worker=worker3,worker4 -w=worker5,worker6
 	cmd.PersistentFlags().StringSliceVarP(&commandMasterFlags.workers, "source", "s", []string{}, "MySQL Source ID.")
@@ -80,6 +83,7 @@ func NewRootCmd() *cobra.Command {
 		master.NewShardDDLLockCmd(),
 		master.NewSourceTableSchemaCmd(),
 		master.NewConfigCmd(),
+		master.NewValidationCmd(),
 		newDecryptCmd(),
 		newEncryptCmd(),
 	)
@@ -151,7 +155,7 @@ func loop() error {
 			continue
 		}
 
-		args := strings.Fields(line)
+		args := common.SplitArgsRespectQuote(line)
 		c, err := Start(args)
 		if err != nil {
 			fmt.Println("fail to run:", args)

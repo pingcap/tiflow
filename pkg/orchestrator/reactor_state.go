@@ -19,10 +19,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/orchestrator/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
 
@@ -32,10 +32,15 @@ type GlobalReactorState struct {
 	Captures       map[model.CaptureID]*model.CaptureInfo
 	Changefeeds    map[model.ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]DataPatch
+
+	// onCaptureAdded and onCaptureRemoved are hook functions
+	// to be called when captures are added and removed.
+	onCaptureAdded   func(captureID model.CaptureID, addr string)
+	onCaptureRemoved func(captureID model.CaptureID)
 }
 
 // NewGlobalState creates a new global state
-func NewGlobalState() ReactorState {
+func NewGlobalState() *GlobalReactorState {
 	return &GlobalReactorState{
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
@@ -60,8 +65,13 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline", zap.String("capture-id", k.CaptureID))
+			log.Info("remote capture offline",
+				zap.String("captureID", k.CaptureID),
+				zap.Any("info", s.Captures[k.CaptureID]))
 			delete(s.Captures, k.CaptureID)
+			if s.onCaptureRemoved != nil {
+				s.onCaptureRemoved(k.CaptureID)
+			}
 			return nil
 		}
 
@@ -71,7 +81,11 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 
-		log.Info("remote capture online", zap.String("capture-id", k.CaptureID), zap.Any("info", newCaptureInfo))
+		log.Info("remote capture online",
+			zap.String("captureID", k.CaptureID), zap.Any("info", newCaptureInfo))
+		if s.onCaptureAdded != nil {
+			s.onCaptureAdded(k.CaptureID, newCaptureInfo.AdvertiseAddr)
+		}
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
@@ -100,6 +114,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 }
 
 // GetPatches implements the ReactorState interface
+// Every []DataPatch slice in [][]DataPatch slice is the patches of a ChangefeedReactorState
 func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 	pendingPatches := s.pendingPatches
 	for _, changefeedState := range s.Changefeeds {
@@ -107,6 +122,16 @@ func (s *GlobalReactorState) GetPatches() [][]DataPatch {
 	}
 	s.pendingPatches = nil
 	return pendingPatches
+}
+
+// SetOnCaptureAdded registers a function that is called when a capture goes online.
+func (s *GlobalReactorState) SetOnCaptureAdded(f func(captureID model.CaptureID, addr string)) {
+	s.onCaptureAdded = f
+}
+
+// SetOnCaptureRemoved registers a function that is called when a capture goes offline.
+func (s *GlobalReactorState) SetOnCaptureRemoved(f func(captureID model.CaptureID)) {
+	s.onCaptureRemoved = f
 }
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD
@@ -209,7 +234,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
-		if err := s.Info.VerifyAndFix(); err != nil {
+		if err := s.Info.VerifyAndComplete(); err != nil {
 			return errors.Trace(err)
 		}
 	}

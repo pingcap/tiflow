@@ -22,13 +22,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
@@ -150,8 +151,9 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
-	defer cli.Close()
+	regionCache := tikv.NewRegionCache(pdCli)
+
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
 
 	startTS := mustGetTimestamp(t, storage)
 
@@ -240,8 +242,8 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	defer cancel()
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool)
-	defer cli.Close()
+	regionCache := tikv.NewRegionCache(pdCli)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
 
 	startTS := mustGetTimestamp(t, storage)
 	lockresolver := txnutil.NewLockerResolver(storage)

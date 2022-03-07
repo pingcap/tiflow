@@ -1,0 +1,49 @@
+---
+name: test2
+task-mode: all
+is-sharding: false
+meta-schema: "dm_meta"
+
+target-database:
+  host: "127.0.0.1"
+  port: 4400
+  user: "root"
+  password: ""
+  security:
+    ssl-ca: "dir-placeholer/task-ca.pem"
+    ssl-cert: "dir-placeholer/dm.pem"
+    ssl-key: "dir-placeholer/dm.key"
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance"
+    route-rules: ["route-rule-1"]
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+
+black-white-list:
+  instance:
+    do-dbs: ["tls"]
+
+routes:
+  route-rule-1:
+    schema-pattern: "tls"
+    target-schema: "tls2"
+
+mydumpers:
+  global:
+    threads: 4
+    chunk-filesize: 0
+    skip-tz-utc: true
+    extra-args: "--statement-size=100"
+
+loaders:
+  global:
+    pool-size: 16
+    dir: "./dumped_data"
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100

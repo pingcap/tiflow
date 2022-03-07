@@ -28,9 +28,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/redo/common"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
@@ -47,13 +48,6 @@ const (
 const (
 	defaultFlushIntervalInMs = 1000
 	defaultS3Timeout         = 3 * time.Second
-)
-
-const (
-	// stopped defines the state value of a Writer which has been stopped
-	stopped bool = false
-	// started defines the state value of a Writer which is currently started
-	started bool = true
 )
 
 var (
@@ -119,7 +113,7 @@ type Writer struct {
 	commitTS atomic.Uint64
 	// the ts send with the event
 	eventCommitTS atomic.Uint64
-	state         atomic.Bool
+	running       atomic.Bool
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
@@ -127,6 +121,10 @@ type Writer struct {
 	uint64buf     []byte
 	storage       storage.ExternalStorage
 	sync.RWMutex
+
+	metricFsyncDuration    prometheus.Observer
+	metricFlushAllDuration prometheus.Observer
+	metricWriteBytes       prometheus.Gauge
 }
 
 // NewWriter return a file rotated writer, TODO: extract to a common rotate Writer
@@ -160,9 +158,13 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		op:        op,
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
+
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
 	}
 
-	w.state.Store(started)
+	w.running.Store(true)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
@@ -179,12 +181,14 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 
 		select {
 		case <-ctx.Done():
-			log.Info("runFlushToDisk got canceled", zap.Error(ctx.Err()))
-			return
+			err := w.Close()
+			if err != nil {
+				log.Error("runFlushToDisk close fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
+			}
 		case <-ticker.C:
 			err := w.Flush()
 			if err != nil {
-				log.Error("redo log flush error", zap.Error(err))
+				log.Error("redo log flush fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
@@ -226,6 +230,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	n, err := w.bw.Write(rawData)
+	w.metricWriteBytes.Add(float64(n))
 	w.size += int64(n)
 	return n, err
 }
@@ -237,7 +242,9 @@ func (w *Writer) AdvanceTs(commitTs uint64) {
 
 func (w *Writer) writeUint64(n uint64, buf []byte) error {
 	binary.LittleEndian.PutUint64(buf, n)
-	_, err := w.bw.Write(buf)
+	v, err := w.bw.Write(buf)
+	w.metricWriteBytes.Add(float64(v))
+
 	return err
 }
 
@@ -255,24 +262,25 @@ func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {
 
 // Close implements fileWriter.Close.
 func (w *Writer) Close() error {
+	w.Lock()
+	defer w.Unlock()
+	// always set to false when closed, since if having err may not get fixed just by retry
+	defer w.running.Store(false)
+
 	if !w.IsRunning() {
 		return nil
 	}
-	w.Lock()
-	defer w.Unlock()
 
-	err := w.close()
-	if err != nil {
-		return err
-	}
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.ChangeFeedID)
 
-	w.state.Store(stopped)
-	return nil
+	return w.close()
 }
 
 // IsRunning implement IsRunning interface
 func (w *Writer) IsRunning() bool {
-	return w.state.Load()
+	return w.running.Load()
 }
 
 func (w *Writer) isGCRunning() bool {
@@ -463,6 +471,10 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(w.cfg.Dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Warn("check removed log dir fail", zap.Error(err))
+			return []os.FileInfo{}, nil
+		}
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", w.cfg.Dir))
 	}
 
@@ -471,7 +483,7 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 		ret, err := w.shouldRemoved(checkPointTs, f)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("log file", f.Name()),
+				zap.String("logFile", f.Name()),
 				zap.Error(err))
 			continue
 		}
@@ -489,6 +501,7 @@ func (w *Writer) flushAll() error {
 		return nil
 	}
 
+	start := time.Now()
 	err := w.flush()
 	if err != nil {
 		return err
@@ -499,7 +512,11 @@ func (w *Writer) flushAll() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 	defer cancel()
-	return w.writeToS3(ctx, w.file.Name())
+
+	err = w.writeToS3(ctx, w.file.Name())
+	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
+
+	return err
 }
 
 // Flush implement Flush interface
@@ -515,22 +532,24 @@ func (w *Writer) flush() error {
 		return nil
 	}
 
-	err := w.bw.Flush()
+	n, err := w.bw.FlushN()
+	w.metricWriteBytes.Add(float64(n))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	return cerror.WrapError(cerror.ErrRedoFileOp, w.file.Sync())
+
+	start := time.Now()
+	err = w.file.Sync()
+	w.metricFsyncDuration.Observe(time.Since(start).Seconds())
+
+	return cerror.WrapError(cerror.ErrRedoFileOp, err)
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
-	log.Debug("writeToS3", zap.String("name", name))
-
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-
-	log.Debug("storage.WriteFile", zap.String("name", filepath.Base(name)), zap.Int("data size", len(fileData)))
 
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))

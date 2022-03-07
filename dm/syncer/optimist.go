@@ -22,9 +22,9 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // initOptimisticShardDDL initializes the shard DDL support in the optimistic mode.
@@ -191,7 +191,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 
 	qec.shardingDDLInfo = trackInfos[0]
 	job := newDDLJob(qec)
-	err = s.addJobFunc(job)
+	_, err = s.handleJobFunc(job)
 	if err != nil {
 		return err
 	}
@@ -217,19 +217,4 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 
 	s.tctx.L().Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 	return nil
-}
-
-// trackInitTableInfoOptimistic tries to get the initial table info (before modified by other tables) and track it in optimistic shard mode.
-func (s *Syncer) trackInitTableInfoOptimistic(sourceTable, targetTable *filter.Table) (*model.TableInfo, error) {
-	ti, err := s.optimist.GetTableInfo(targetTable.Schema, targetTable.Name)
-	if err != nil {
-		return nil, terror.ErrSchemaTrackerCannotGetTable.Delegate(err, sourceTable)
-	}
-	if ti != nil {
-		err = s.schemaTracker.CreateTableIfNotExists(sourceTable, ti)
-		if err != nil {
-			return nil, terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
-	}
-	return ti, nil
 }

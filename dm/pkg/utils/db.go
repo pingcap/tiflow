@@ -28,15 +28,14 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -56,7 +55,7 @@ func GetFlavor(ctx context.Context, db *sql.DB) (string, error) {
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	if check.IsMariaDB(value) {
+	if IsMariaDB(value) {
 		return gmysql.MariaDBFlavor, nil
 	}
 	return gmysql.MySQLFlavor, nil
@@ -103,6 +102,7 @@ func GetRandomServerID(ctx context.Context, db *sql.DB) (uint32, error) {
 
 // GetSlaveServerID gets all slave server id.
 func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, error) {
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
@@ -168,25 +168,55 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	return serverIDs, nil
 }
 
+// GetPosAndGs get binlog position and gtid.Set from `show master status`.
+func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
+	binlogPos gmysql.Position,
+	gs gtid.Set,
+	err error) {
+	binlogName, pos, _, _, gtidStr, err := GetMasterStatus(ctx, db, flavor)
+	if err != nil {
+		return
+	}
+	binlogPos = gmysql.Position{
+		Name: binlogName,
+		Pos:  pos,
+	}
+
+	gs, err = gtid.ParserGTID(flavor, gtidStr)
+	return
+}
+
+// GetBinlogDB get binlog_do_db and binlog_ignore_db from `show master status`.
+func GetBinlogDB(ctx context.Context, db *sql.DB, flavor string) (string, string, error) {
+	// nolint:dogsled
+	_, _, binlogDoDB, binlogIgnoreDB, _, err := GetMasterStatus(ctx, db, flavor)
+	return binlogDoDB, binlogIgnoreDB, err
+}
+
 // GetMasterStatus gets status from master.
 // When the returned error is nil, the gtid.Set must be not nil.
-func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (gmysql.Position, gtid.Set, error) {
+func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
+	string, uint32, string, string, string, error) {
 	var (
-		binlogPos gmysql.Position
-		gs        gtid.Set
+		binlogName     string
+		pos            uint32
+		binlogDoDB     string
+		binlogIgnoreDB string
+		gtidStr        string
+		err            error
 	)
-
+	// need REPLICATION SLAVE privilege
 	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
 	if err != nil {
-		return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
 	defer rows.Close()
 
-	rowColumns, err := rows.Columns()
-	if err != nil {
-		return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	if !rows.Next() {
+		err = terror.ErrNoMasterStatus.Generate()
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
-
 	// Show an example.
 	/*
 		MySQL [test]> SHOW MASTER STATUS;
@@ -210,53 +240,35 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (gmysql.Pos
 		| 0-1-2                    |
 		+--------------------------+
 	*/
-	var (
-		gtidStr    string
-		binlogName string
-		pos        uint32
-		nullPtr    interface{}
-	)
-	if !rows.Next() {
-		return binlogPos, gs, terror.ErrNoMasterStatus.Generate()
-	}
-
-	if len(rowColumns) == 5 {
-		err = rows.Scan(&binlogName, &pos, &nullPtr, &nullPtr, &gtidStr)
+	if flavor == gmysql.MySQLFlavor {
+		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB, &gtidStr)
 	} else {
-		err = rows.Scan(&binlogName, &pos, &nullPtr, &nullPtr)
+		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB)
 	}
 	if err != nil {
-		return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 	}
-
-	binlogPos = gmysql.Position{
-		Name: binlogName,
-		Pos:  pos,
-	}
-
-	gs, err = gtid.ParserGTID(flavor, gtidStr)
-	if err != nil {
-		return binlogPos, gs, err
-	}
-	if rows.Next() {
-		log.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
-	}
-
-	if rows.Close() != nil {
-		return binlogPos, gs, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-	if rows.Err() != nil {
-		return binlogPos, gs, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-
-	if flavor != gmysql.MySQLFlavor && (gs == nil || gs.String() == "") {
-		gs, err = GetMariaDBGTID(ctx, db)
+	if flavor == gmysql.MariaDBFlavor {
+		gtidStr, err = GetGlobalVariable(ctx, db, "gtid_binlog_pos")
 		if err != nil {
-			return binlogPos, gs, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		}
 	}
 
-	return binlogPos, gs, nil
+	if rows.Next() {
+		log.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
+	}
+	if rows.Close() != nil {
+		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+	}
+	if rows.Err() != nil {
+		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
+	}
+
+	return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 }
 
 // GetMariaDBGTID gets MariaDB's `gtid_binlog_pos`
@@ -619,4 +631,41 @@ func GetSQLModeStrBySQLMode(sqlMode tmysql.SQLMode) string {
 		}
 	}
 	return strings.Join(sqlModeStr, ",")
+}
+
+// GetTableCreateSQL gets table create sql by 'show create table schema.table'.
+func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql string, err error) {
+	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
+	var table, createStr string
+	row := conn.QueryRowContext(ctx, querySQL)
+	err = row.Scan(&table, &createStr)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	return createStr, nil
+}
+
+// GetMaxConnections gets max_connections for sql.DB which is suitable for session variable max_connections.
+func GetMaxConnections(ctx context.Context, db *sql.DB) (int, error) {
+	c, err := db.Conn(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer c.Close()
+	return GetMaxConnectionsForConn(ctx, c)
+}
+
+// GetMaxConnectionsForConn gets max_connections for sql.Conn which is suitable for session variable max_connections.
+func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) {
+	maxConnectionsStr, err := GetSessionVariable(ctx, conn, "max_connections")
+	if err != nil {
+		return 0, err
+	}
+	maxConnections, err := strconv.ParseUint(maxConnectionsStr, 10, 32)
+	return int(maxConnections), err
+}
+
+// IsMariaDB tells whether the version is mariadb.
+func IsMariaDB(version string) bool {
+	return strings.Contains(strings.ToUpper(version), "MARIADB")
 }

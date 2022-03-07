@@ -23,11 +23,11 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // GetJoinURLs gets the endpoints from the join address.
@@ -108,7 +108,8 @@ func (s *Server) KeepAlive() {
 		failpoint.Label("bypass")
 
 		// TODO: report the error.
-		err := s.stopWorker("", true)
+		// when lost keepalive, stop the worker without graceful. this is to fix https://github.com/pingcap/tiflow/issues/3737
+		err := s.stopSourceWorker("", true, false)
 		if err != nil {
 			log.L().Error("fail to stop worker", zap.Error(err))
 			return // return if failed to stop the worker.

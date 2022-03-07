@@ -25,10 +25,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
@@ -98,6 +98,8 @@ type Config struct {
 	// TODO: in the future dm-workers should share a same ttl from dm-master
 	KeepAliveTTL      int64 `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	RelayKeepAliveTTL int64 `toml:"relay-keepalive-ttl" json:"relay-keepalive-ttl"`
+
+	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// tls config
 	config.Security

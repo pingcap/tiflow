@@ -21,8 +21,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 const cmdGetTaskConfig = "get-task-config"
@@ -103,7 +103,7 @@ func sendGetConfigRequest(tp pb.CfgType, name, output string) error {
 	}
 
 	if resp.Result && len(output) != 0 {
-		err = os.WriteFile(output, []byte(resp.Cfg), 0o644)
+		err = os.WriteFile(output, []byte(resp.Cfg), 0o600)
 		if err != nil {
 			common.PrintLinesf("can not write config to file %s", output)
 			return err

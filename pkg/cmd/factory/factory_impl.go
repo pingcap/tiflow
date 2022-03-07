@@ -19,10 +19,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	cmdconetxt "github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/version"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
+	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
@@ -93,7 +95,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	}
 	logConfig.Level = logLevel
 
-	pdEndpoints := strings.Split(f.GetPdAddr(), ",")
+	pdAddr := f.GetPdAddr()
+	pdEndpoints := strings.Split(pdAddr, ",")
 
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Context:     ctx,
@@ -102,7 +105,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 		LogConfig:   &logConfig,
 		DialTimeout: 30 * time.Second,
 		// TODO(hi-rustin): add gRPC metrics to Options.
-		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673018537.
+		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673018537.
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -118,7 +121,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Annotatef(err,
+			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
 	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
@@ -141,7 +145,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
 		// TODO(hi-rustin): add gRPC metrics to Options.
-		// See also: https://github.com/pingcap/ticdc/pull/2341#discussion_r673032407.
+		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -156,7 +160,8 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 			}),
 		))
 	if err != nil {
-		return nil, errors.Annotatef(err, "fail to open PD client, pd=\"%s\"", pdAddr)
+		return nil, errors.Annotatef(err,
+			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
 	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints, credential, true)
@@ -165,4 +170,15 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	}
 
 	return pdClient, nil
+}
+
+func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
+	pdAddr := f.GetPdAddr()
+	credential := f.GetCredential()
+	kvStore, err := kv.CreateTiStore(pdAddr, credential)
+	if err != nil {
+		return nil, errors.Annotatef(err,
+			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
+	}
+	return kvStore, nil
 }

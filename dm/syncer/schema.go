@@ -24,12 +24,13 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/schema"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 // OperateSchema operates schema for an upstream table.
@@ -65,6 +66,24 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		// in other words, we can not get the schema if any DDL/DML has been replicated, or set a schema previously.
 		return s.schemaTracker.GetCreateTable(ctx, sourceTable)
 	case pb.SchemaOp_SetSchema:
+		// from source or target need get schema
+		if req.FromSource {
+			schema, err := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.fromConn, sourceTable.String())
+			if err != nil {
+				return "", err
+			}
+			req.Schema = schema
+		}
+
+		if req.FromTarget {
+			targetTable := s.route(sourceTable)
+			schema, err := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
+			if err != nil {
+				return "", err
+			}
+			req.Schema = schema
+		}
+
 		// for set schema, we must ensure it's a valid `CREATE TABLE` statement.
 		// now, we only set schema for schema-tracker,
 		// if want to update the one in checkpoint, it should wait for the flush of checkpoint.
@@ -119,7 +138,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 		if req.Flush {
 			log.L().Info("flush table info", zap.String("table info", newSQL))
-			err = s.checkpoint.FlushPointWithTableInfo(tcontext.NewContext(ctx, log.L()), sourceTable, ti)
+			err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
 			if err != nil {
 				return "", err
 			}

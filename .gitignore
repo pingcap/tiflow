@@ -20,7 +20,6 @@ _cgo_export.*
 _testmain.go
 
 *.exe
-*.test
 *.prof
 *.log
 
@@ -56,3 +55,13 @@ integration/integration
 syncer.meta
 relay_log/*
 dumped_data/*
+*-coverage.xml
+*-junit-report.xml
+dm/ui/dist
+dm/ui/src/routes.tsx
+dm/ui/src/mock.ts
+dm/ui/stats.html
+
+# npm dependencies
+node_modules
+

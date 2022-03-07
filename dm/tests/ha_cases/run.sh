@@ -138,7 +138,8 @@ function test_standalone_running() {
 	# test running, test2 fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status" \
-		"\"taskStatus\": \"Running\"" 1
+		"\"stage\": \"Running\"" 1 \
+		"\"worker\": \"source not bound\"" 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test2" \
@@ -204,10 +205,10 @@ function test_last_bound() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 4
@@ -240,10 +241,10 @@ function test_last_bound() {
 		grep 'source' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker3bound worker3" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker4bound worker4" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 4
@@ -290,7 +291,7 @@ function test_exclusive_relay() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 3
 
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -328,11 +329,11 @@ function test_exclusive_relay_2() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT

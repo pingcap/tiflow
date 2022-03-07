@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	"github.com/pingcap/ticdc/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +77,7 @@ func TestMailboxSendAndSendB(t *testing.T) {
 	err = mb.Send(message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
-	msg, ok := mb.tryReceive()
+	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
 	require.Equal(t, message.TickMessage(), msg)
 
@@ -100,7 +100,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	t.Parallel()
 	id := ID(0)
 	mb := NewMailbox(id, 1)
-	router := newRouter(t.Name())
+	router := NewRouter(t.Name())
 	err := router.insert(id, &proc{mb: mb})
 	require.Nil(t, err)
 	err = router.Send(id, message.TickMessage())
@@ -109,7 +109,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	err = router.Send(id, message.TickMessage())
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
-	msg, ok := mb.tryReceive()
+	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
 	require.Equal(t, message.TickMessage(), msg)
 
@@ -128,7 +128,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	require.Equal(t, context.Canceled, <-ch)
 }
 
-func wait(t *testing.T, timeout time.Duration, f func()) {
+func wait(t *testing.T, f func()) {
 	wait := make(chan int)
 	go func() {
 		f()
@@ -136,7 +136,8 @@ func wait(t *testing.T, timeout time.Duration, f func()) {
 	}()
 	select {
 	case <-wait:
-	case <-time.After(timeout):
+	case <-time.After(5 * time.Second):
+		// There may be a deadlock if f takes more than 5 seconds.
 		t.Fatal("Timed out")
 	}
 }
@@ -162,7 +163,7 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
 
-	wait(t, 2*time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -220,7 +221,7 @@ func TestActorSendReceive(t *testing.T) {
 		t.Fatal("Timed out")
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -257,7 +258,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -302,7 +303,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 	// Do not receive ch.
 	_ = ch
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -316,7 +317,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
-	size := defaultMsgBatchSizePerActor * 4
+	size := DefaultMsgBatchSizePerActor * 4
 	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,
@@ -354,7 +355,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		}
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -403,7 +404,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		syncCount: syncCount,
 	}
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	require.Nil(t, sys.Spawn(mb, fa))
 
 	// Test 5 seconds
@@ -418,7 +419,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		case acc := <-ch:
 			require.Equal(t, total, acc)
 		case <-timer:
-			wait(t, time.Second, func() {
+			wait(t, func() {
 				err := sys.Stop()
 				require.Nil(t, err)
 			})
@@ -446,7 +447,7 @@ func TestPollStoppedActor(t *testing.T) {
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
-	cap := defaultMsgBatchSizePerActor * 4
+	cap := DefaultMsgBatchSizePerActor * 4
 	mb := NewMailbox(id, cap)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
@@ -463,7 +464,7 @@ func TestPollStoppedActor(t *testing.T) {
 	case <-ch:
 		t.Fatal("must timeout")
 	}
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -476,7 +477,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
@@ -501,7 +502,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		}
 	}
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -531,7 +532,7 @@ func TestSendBeforeClose(t *testing.T) {
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, defaultMsgBatchSizePerActor)
+	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
 
@@ -565,7 +566,7 @@ func TestSendBeforeClose(t *testing.T) {
 	// Let send and close race
 	// sys.rd.Lock()
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
@@ -586,7 +587,7 @@ func TestSendAfterClose(t *testing.T) {
 
 	id := ID(777)
 	dropCount := 1
-	cap := defaultMsgBatchSizePerActor + dropCount
+	cap := DefaultMsgBatchSizePerActor + dropCount
 	mb := NewMailbox(id, cap)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
@@ -638,21 +639,21 @@ func TestSendAfterClose(t *testing.T) {
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
-	wait(t, time.Second, func() {
+	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
 	})
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/ticdc/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem(b.Name(), b)
 	sys.Start(ctx)
 
 	id := ID(777)
-	size := defaultMsgBatchSizePerActor * 4
+	size := DefaultMsgBatchSizePerActor * 4
 	ch := make(chan message.Message, size)
 	fa := &forwardActor{
 		ch: ch,
@@ -687,7 +688,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/ticdc/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem(b.Name(), b)

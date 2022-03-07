@@ -23,9 +23,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // TODO: much of the code in optimistic mode is very similar to pessimistic mode, we can try to combine them together.
@@ -298,15 +298,14 @@ func deleteInfoOp(info Info) clientv3.Op {
 		info.Task, info.Source, info.UpSchema, info.UpTable))
 }
 
-// ClearTestInfoOperationSchema is used to clear all shard DDL information in optimism mode.
+// ClearTestInfoOperationColumns is used to clear all shard DDL information in optimism mode.
 // it only used for testing now.
-func ClearTestInfoOperationSchema(cli *clientv3.Client) error {
+func ClearTestInfoOperationColumn(cli *clientv3.Client) error {
 	clearSource := clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Path(), clientv3.WithPrefix())
 	clearInfo := clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	clearOp := clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
-	clearISOp := clientv3.OpDelete(common.ShardDDLOptimismInitSchemaKeyAdapter.Path(), clientv3.WithPrefix())
 	clearColumns := clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Path(), clientv3.WithPrefix())
-	_, err := cli.Txn(context.Background()).Then(clearSource, clearInfo, clearOp, clearISOp, clearColumns).Commit()
+	_, err := cli.Txn(context.Background()).Then(clearSource, clearInfo, clearOp, clearColumns).Commit()
 	return err
 }
 

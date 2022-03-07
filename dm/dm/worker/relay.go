@@ -21,20 +21,19 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/relay"
-	"github.com/pingcap/ticdc/dm/relay/purger"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/streamer"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 // RelayHolder for relay unit.
 type RelayHolder interface {
 	// Init initializes the holder
-	Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error)
+	Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error)
 	// Start starts run the relay
 	Start()
 	// Close closes the holder
@@ -51,10 +50,8 @@ type RelayHolder interface {
 	Result() *pb.ProcessResult
 	// Update updates relay config online
 	Update(ctx context.Context, cfg *config.SourceConfig) error
-	// RegisterListener registers a relay listener
-	RegisterListener(el relay.Listener)
-	// UnRegisterListener unregisters a relay listener
-	UnRegisterListener(el relay.Listener)
+	// Relay returns relay object
+	Relay() relay.Process
 }
 
 // NewRelayHolder is relay holder initializer
@@ -94,11 +91,11 @@ func NewRealRelayHolder(sourceCfg *config.SourceConfig) RelayHolder {
 }
 
 // Init initializes the holder.
-func (h *realRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error) {
+func (h *realRelayHolder) Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error) {
 	h.closed.Store(false)
 
 	// initial relay purger
-	operators := []purger.RelayOperator{
+	operators := []relay.Operator{
 		h,
 		streamer.GetReaderHub(),
 	}
@@ -107,7 +104,7 @@ func (h *realRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeI
 		return nil, terror.Annotate(err, "initial relay unit")
 	}
 
-	return purger.NewPurger(h.cfg.Purge, h.cfg.RelayDir, operators, interceptors), nil
+	return relay.NewPurger(h.cfg.Purge, h.cfg.RelayDir, operators, interceptors), nil
 }
 
 // Start starts run the relay.
@@ -306,17 +303,13 @@ func (h *realRelayHolder) Update(ctx context.Context, sourceCfg *config.SourceCo
 	return nil
 }
 
-// EarliestActiveRelayLog implements RelayOperator.EarliestActiveRelayLog.
+// EarliestActiveRelayLog implements Operator.EarliestActiveRelayLog.
 func (h *realRelayHolder) EarliestActiveRelayLog() *streamer.RelayLogInfo {
 	return h.relay.ActiveRelayLog()
 }
 
-func (h *realRelayHolder) RegisterListener(el relay.Listener) {
-	h.relay.RegisterListener(el)
-}
-
-func (h *realRelayHolder) UnRegisterListener(el relay.Listener) {
-	h.relay.UnRegisterListener(el)
+func (h *realRelayHolder) Relay() relay.Process {
+	return h.relay
 }
 
 /******************** dummy relay holder ********************/
@@ -327,14 +320,16 @@ type dummyRelayHolder struct {
 	stage       pb.Stage
 	relayBinlog string
 
-	cfg *config.SourceConfig
+	cfg    *config.SourceConfig
+	relay2 relay.Process
 }
 
 // NewDummyRelayHolder creates a new RelayHolder.
 func NewDummyRelayHolder(cfg *config.SourceConfig) RelayHolder {
 	return &dummyRelayHolder{
-		cfg:   cfg,
-		stage: pb.Stage_New,
+		cfg:    cfg,
+		stage:  pb.Stage_New,
+		relay2: &relay.Relay{},
 	}
 }
 
@@ -355,13 +350,13 @@ func NewDummyRelayHolderWithInitError(cfg *config.SourceConfig) RelayHolder {
 }
 
 // Init implements interface of RelayHolder.
-func (d *dummyRelayHolder) Init(ctx context.Context, interceptors []purger.PurgeInterceptor) (purger.Purger, error) {
+func (d *dummyRelayHolder) Init(ctx context.Context, interceptors []relay.PurgeInterceptor) (relay.Purger, error) {
 	// initial relay purger
-	operators := []purger.RelayOperator{
+	operators := []relay.Operator{
 		d,
 	}
 
-	return purger.NewDummyPurger(d.cfg.Purge, d.cfg.RelayDir, operators, interceptors), d.initError
+	return relay.NewDummyPurger(d.cfg.Purge, d.cfg.RelayDir, operators, interceptors), d.initError
 }
 
 // Start implements interface of RelayHolder.
@@ -437,8 +432,6 @@ func (d *dummyRelayHolder) Stage() pb.Stage {
 	return d.stage
 }
 
-func (d *dummyRelayHolder) RegisterListener(el relay.Listener) {
-}
-
-func (d *dummyRelayHolder) UnRegisterListener(el relay.Listener) {
+func (d *dummyRelayHolder) Relay() relay.Process {
+	return d.relay2
 }

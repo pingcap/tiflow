@@ -17,11 +17,12 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"unsafe"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -261,13 +262,24 @@ type RowChangedEvent struct {
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
-	// approximate size of this event, calculate by tikv proto bytes size
-	ApproximateSize int64 `json:"-" msg:"-"`
+	// ApproximateDataSize is the approximate size of protobuf binary
+	// representation of this event.
+	ApproximateDataSize int64 `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
 func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
+}
+
+// IsInsert returns true if the row is an insert event
+func (r *RowChangedEvent) IsInsert() bool {
+	return len(r.PreColumns) == 0 && len(r.Columns) != 0
+}
+
+// IsUpdate returns true if the row is an update event
+func (r *RowChangedEvent) IsUpdate() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) != 0
 }
 
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
@@ -316,12 +328,44 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
+// ApproximateBytes returns approximate bytes in memory consumed by the event.
+func (r *RowChangedEvent) ApproximateBytes() int {
+	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
+	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
+	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
+	const sizeOfInt = int(unsafe.Sizeof(int(0)))
+
+	// Size of table name
+	size := len(r.Table.Schema) + len(r.Table.Table) + sizeOfTable
+	// Size of cols
+	for i := range r.Columns {
+		size += r.Columns[i].ApproximateBytes
+	}
+	// Size of pre cols
+	for i := range r.PreColumns {
+		if r.PreColumns[i] != nil {
+			size += r.PreColumns[i].ApproximateBytes
+		}
+	}
+	// Size of index columns
+	for i := range r.IndexColumns {
+		size += len(r.IndexColumns[i]) * sizeOfInt
+		size += sizeOfIndexes
+	}
+	// Size of an empty row event
+	size += sizeOfRowEvent
+	return size
+}
+
 // Column represents a column value in row changed event
 type Column struct {
 	Name  string         `json:"name" msg:"name"`
 	Type  byte           `json:"type" msg:"type"`
 	Flag  ColumnFlagType `json:"flag" msg:"-"`
 	Value interface{}    `json:"value" msg:"value"`
+
+	// ApproximateBytes is approximate bytes consumed by the column.
+	ApproximateBytes int `json:"-"`
 }
 
 // RedoColumn stores Column change
@@ -421,7 +465,17 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Query = job.Query
 	d.Type = job.Type
+	d.fillPreTableInfo(preTableInfo)
 
+	switch d.Type {
+	case model.ActionRenameTables:
+		// DDLs update multiple target tables, in which case `TableInfo` isn't meaningful.
+		// So we can skip to fill TableInfo for the event.
+		return
+	default:
+	}
+
+	// Fill TableInfo for the event.
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
@@ -435,7 +489,6 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		d.TableInfo.Table = tableName
 		d.TableInfo.TableID = job.TableID
 	}
-	d.fillPreTableInfo(preTableInfo)
 }
 
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {

@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/tidb/parser"
@@ -22,54 +23,61 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/tidb/parser/ast"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // HandleError handle error for syncer.
-func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) error {
+func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (string, error) {
 	pos := req.BinlogPos
 
 	if len(pos) == 0 {
 		startLocation, isQueryEvent := s.getErrLocation()
 		if startLocation == nil {
-			return fmt.Errorf("source '%s' has no error", s.cfg.SourceID)
+			return "", fmt.Errorf("source '%s' has no error", s.cfg.SourceID)
 		}
-		if !isQueryEvent {
-			return fmt.Errorf("only support to handle ddl error currently, see https://docs.pingcap.com/tidb-data-migration/stable/error-handling for other errors")
+
+		if !isQueryEvent && req.Op != pb.ErrorOp_Inject {
+			return "", fmt.Errorf("only support to handle ddl error currently, see https://docs.pingcap.com/tidb-data-migration/stable/error-handling for other errors")
 		}
 		pos = startLocation.Position.String()
 	} else {
 		startLocation, err := binlog.VerifyBinlogPos(pos)
 		if err != nil {
-			return err
+			return "", err
 		}
 		pos = startLocation.String()
 	}
 
-	events := make([]*replication.BinlogEvent, 0)
 	var err error
-	if req.Op == pb.ErrorOp_Replace {
-		events, err = s.genEvents(ctx, req.Sqls)
-		if err != nil {
-			return err
-		}
-	}
-
 	// remove outdated operators when add operator
 	err = s.errOperatorHolder.RemoveOutdated(s.checkpoint.FlushedGlobalPoint())
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	err = s.errOperatorHolder.Set(pos, req.Op, events)
-	if err != nil {
-		return err
+	if req.Op == pb.ErrorOp_List {
+		commands := s.errOperatorHolder.GetBehindCommands(pos)
+		commandsJSON, err1 := json.Marshal(commands)
+		if err1 != nil {
+			return "", err1
+		}
+		return string(commandsJSON), err1
 	}
 
-	return nil
+	events := make([]*replication.BinlogEvent, 0)
+
+	if req.Op == pb.ErrorOp_Replace || req.Op == pb.ErrorOp_Inject {
+		events, err = s.genEvents(ctx, req.Sqls)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	req.BinlogPos = pos
+	return "", s.errOperatorHolder.Set(req, events)
 }
 
 func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.BinlogEvent, error) {
@@ -101,7 +109,7 @@ func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.B
 			events = append(events, genQueryEvent([]byte(schema), []byte(sql)))
 		default:
 			// TODO: support DML
-			return nil, terror.ErrSyncerReplaceEvent.New("only support replace with DDL currently")
+			return nil, terror.ErrSyncerEvent.New("only support replace or inject with DDL currently")
 		}
 	}
 	return events, nil

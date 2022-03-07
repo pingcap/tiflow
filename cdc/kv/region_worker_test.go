@@ -17,32 +17,26 @@ import (
 	"math/rand"
 	"runtime"
 	"sync"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/stretchr/testify/require"
 )
 
-type regionWorkerSuite struct{}
-
-var _ = check.Suite(&regionWorkerSuite{})
-
-func (s *regionWorkerSuite) TestRegionStateManager(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRegionStateManager(t *testing.T) {
 	rsm := newRegionStateManager(4)
 
 	regionID := uint64(1000)
 	_, ok := rsm.getState(regionID)
-	c.Assert(ok, check.IsFalse)
+	require.False(t, ok)
 
 	rsm.setState(regionID, &regionFeedState{requestID: 2})
 	state, ok := rsm.getState(regionID)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(state.requestID, check.Equals, uint64(2))
+	require.True(t, ok)
+	require.Equal(t, uint64(2), state.requestID)
 }
 
-func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRegionStateManagerThreadSafe(t *testing.T) {
 	rsm := newRegionStateManager(4)
 	regionCount := 100
 	regionIDs := make([]uint64, regionCount)
@@ -62,9 +56,9 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 				idx := rand.Intn(regionCount)
 				regionID := regionIDs[idx]
 				s, ok := rsm.getState(regionID)
-				c.Assert(ok, check.IsTrue)
+				require.True(t, ok)
 				s.lock.RLock()
-				c.Assert(s.requestID, check.Equals, uint64(idx+1))
+				require.Equal(t, uint64(idx+1), s.requestID)
 				s.lock.RUnlock()
 			}
 		}()
@@ -79,7 +73,7 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 				}
 				regionID := regionIDs[rand.Intn(regionCount)]
 				s, ok := rsm.getState(regionID)
-				c.Assert(ok, check.IsTrue)
+				require.True(t, ok)
 				s.lock.Lock()
 				s.lastResolvedTs += 10
 				s.lock.Unlock()
@@ -92,29 +86,26 @@ func (s *regionWorkerSuite) TestRegionStateManagerThreadSafe(c *check.C) {
 	totalResolvedTs := uint64(0)
 	for _, regionID := range regionIDs {
 		s, ok := rsm.getState(regionID)
-		c.Assert(ok, check.IsTrue)
-		c.Assert(s.lastResolvedTs, check.Greater, uint64(1000))
+		require.True(t, ok)
+		require.Greater(t, s.lastResolvedTs, uint64(1000))
 		totalResolvedTs += s.lastResolvedTs
 	}
 	// 100 regions, initial resolved ts 1000;
 	// 2000 * resolved ts forward, increased by 10 each time, routine number is `concurrency`.
-	c.Assert(totalResolvedTs, check.Equals, uint64(100*1000+2000*10*concurrency))
+	require.Equal(t, uint64(100*1000+2000*10*concurrency), totalResolvedTs)
 }
 
-func (s *regionWorkerSuite) TestRegionStateManagerBucket(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRegionStateManagerBucket(t *testing.T) {
 	rsm := newRegionStateManager(-1)
-	c.Assert(rsm.bucket, check.GreaterEqual, minRegionStateBucket)
-	c.Assert(rsm.bucket, check.LessEqual, maxRegionStateBucket)
+	require.GreaterOrEqual(t, rsm.bucket, minRegionStateBucket)
+	require.LessOrEqual(t, rsm.bucket, maxRegionStateBucket)
 
 	bucket := rsm.bucket * 2
 	rsm = newRegionStateManager(bucket)
-	c.Assert(rsm.bucket, check.Equals, bucket)
+	require.Equal(t, bucket, rsm.bucket)
 }
 
-func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestRegionWorkerPoolSize(t *testing.T) {
 	conf := config.GetDefaultServerConfig()
 	conf.KVClient.WorkerPoolSize = 0
 	config.StoreGlobalServerConfig(conf)
@@ -125,13 +116,13 @@ func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
 		}
 		return b
 	}
-	c.Assert(size, check.Equals, min(runtime.NumCPU()*2, maxWorkerPoolSize))
+	require.Equal(t, min(runtime.NumCPU()*2, maxWorkerPoolSize), size)
 
 	conf.KVClient.WorkerPoolSize = 5
 	size = getWorkerPoolSize()
-	c.Assert(size, check.Equals, 5)
+	require.Equal(t, 5, size)
 
 	conf.KVClient.WorkerPoolSize = maxWorkerPoolSize + 1
 	size = getWorkerPoolSize()
-	c.Assert(size, check.Equals, maxWorkerPoolSize)
+	require.Equal(t, maxWorkerPoolSize, size)
 }

@@ -16,7 +16,7 @@ package master
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // NewStopTaskCmd creates a StopTask command.
@@ -32,5 +32,5 @@ func NewStopTaskCmd() *cobra.Command {
 
 // stopTaskFunc does stop task request.
 func stopTaskFunc(cmd *cobra.Command, _ []string) (err error) {
-	return operateTaskFunc(pb.TaskOp_Stop, cmd)
+	return operateTaskFunc(pb.TaskOp_Delete, cmd)
 }

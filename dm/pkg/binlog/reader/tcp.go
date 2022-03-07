@@ -15,28 +15,20 @@ package reader
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
-	"strconv"
 	"sync"
-	"sync/atomic"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/failpoint"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog/common"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
-
-var customID int64
 
 // TCPReader is a binlog event reader which read binlog events from a TCP stream.
 type TCPReader struct {
@@ -138,39 +130,8 @@ func (r *TCPReader) Close() error {
 		failpoint.Return(nil)
 	})
 
-	defer r.syncer.Close()
-	connID := r.syncer.LastConnectionID()
-	if connID > 0 {
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4",
-			r.syncerCfg.User, r.syncerCfg.Password, r.syncerCfg.Host, r.syncerCfg.Port)
-		if r.syncerCfg.TLSConfig != nil {
-			tlsName := "replicate" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
-			err := mysql.RegisterTLSConfig(tlsName, r.syncerCfg.TLSConfig)
-			if err != nil {
-				return terror.WithScope(
-					terror.Annotatef(terror.DBErrorAdapt(err, terror.ErrDBDriverError),
-						"fail to register tls config for master %s:%d", r.syncerCfg.Host, r.syncerCfg.Port), terror.ScopeUpstream)
-			}
-			dsn += "&tls=" + tlsName
-			defer mysql.DeregisterTLSConfig(tlsName)
-		}
-		db, err := sql.Open("mysql", dsn)
-		if err != nil {
-			return terror.WithScope(
-				terror.Annotatef(terror.DBErrorAdapt(err, terror.ErrDBDriverError),
-					"open connection to the master %s:%d", r.syncerCfg.Host, r.syncerCfg.Port), terror.ScopeUpstream)
-		}
-		defer db.Close()
-
-		// try to KILL the conn in default timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
-		defer cancel()
-		err = utils.KillConn(ctx, db, connID)
-		if err != nil {
-			return terror.WithScope(terror.Annotatef(err, "kill connection %d for master %s:%d", connID, r.syncerCfg.Host, r.syncerCfg.Port), terror.ScopeUpstream)
-		}
-	}
-
+	// unclosed conn bug already fixed in go-mysql, https://github.com/go-mysql-org/go-mysql/pull/411
+	r.syncer.Close()
 	r.stage = common.StageClosed
 	return nil
 }

@@ -20,9 +20,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/checker"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 )
 
 // NewCheckTaskCmd creates a CheckTask command.
@@ -34,6 +34,7 @@ func NewCheckTaskCmd() *cobra.Command {
 	}
 	cmd.Flags().Int64P("error", "e", common.DefaultErrorCnt, "max count of errors to display")
 	cmd.Flags().Int64P("warn", "w", common.DefaultWarnCnt, "max count of warns to display")
+	cmd.Flags().String("start-time", "", "specify the start time of binlog replication, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
 }
 
@@ -57,6 +58,10 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	startTime, err := cmd.Flags().GetString("start-time")
+	if err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -67,9 +72,10 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		ctx,
 		"CheckTask",
 		&pb.CheckTaskRequest{
-			Task:    string(content),
-			ErrCnt:  errCnt,
-			WarnCnt: warnCnt,
+			Task:      string(content),
+			ErrCnt:    errCnt,
+			WarnCnt:   warnCnt,
+			StartTime: startTime,
 		},
 		&resp,
 	)
@@ -78,7 +84,7 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if !common.PrettyPrintResponseWithCheckTask(resp, checker.ErrorMsgHeader) {
+	if !common.PrettyPrintResponseWithCheckTask(resp, checker.CheckTaskMsgHeader) {
 		common.PrettyPrintResponse(resp)
 	}
 	return nil

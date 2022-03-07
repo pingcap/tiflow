@@ -13,7 +13,11 @@
 
 package owner
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
 	changefeedCheckpointTsGauge = prometheus.NewGaugeVec(
@@ -28,7 +32,21 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "checkpoint_ts_lag",
-			Help:      "checkpoint ts lag of changefeeds",
+			Help:      "checkpoint ts lag of changefeeds in seconds",
+		}, []string{"changefeed"})
+	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "resolved_ts",
+			Help:      "resolved ts of changefeeds",
+		}, []string{"changefeed"})
+	changefeedResolvedTsLagGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "resolved_ts_lag",
+			Help:      "resolved ts lag of changefeeds in seconds",
 		}, []string{"changefeed"})
 	ownershipCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -43,7 +61,7 @@ var (
 			Subsystem: "owner",
 			Name:      "maintain_table_num",
 			Help:      "number of replicated tables maintained in owner",
-		}, []string{"changefeed", "capture", "type"})
+		}, []string{"changefeed", "type"})
 	changefeedStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -51,6 +69,22 @@ var (
 			Name:      "status",
 			Help:      "The status of changefeeds",
 		}, []string{"changefeed"})
+	changefeedTickDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "changefeed_tick_duration",
+			Help:      "Bucketed histogram of owner tick changefeed reactor time (s).",
+			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
+		}, []string{"changefeed"})
+	changefeedCloseDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "changefeed_close_duration",
+			Help:      "Bucketed histogram of owner close changefeed reactor time (s).",
+			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
+		})
 )
 
 const (
@@ -58,13 +92,22 @@ const (
 	maintainTableTypeTotal string = "total"
 	// tables that are dispatched to a processor and have not been finished yet
 	maintainTableTypeWip string = "wip"
+	// When heavy operations (such as network IO and serialization) take too much time, the program
+	// should print a warning log, and if necessary, the timeout should be exposed externally through
+	// monitor.
+	changefeedLogsWarnDuration = 1 * time.Second
+	schedulerLogsWarnDuration  = 1 * time.Second
 )
 
 // InitMetrics registers all metrics used in owner
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedCheckpointTsGauge)
+	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedCheckpointTsLagGauge)
+	registry.MustRegister(changefeedResolvedTsLagGauge)
 	registry.MustRegister(ownershipCounter)
 	registry.MustRegister(ownerMaintainTableNumGauge)
 	registry.MustRegister(changefeedStatusGauge)
+	registry.MustRegister(changefeedTickDuration)
+	registry.MustRegister(changefeedCloseDuration)
 }

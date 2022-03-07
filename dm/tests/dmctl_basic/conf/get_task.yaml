@@ -9,6 +9,7 @@ heartbeat-update-interval: 1
 heartbeat-report-interval: 10
 timezone: ""
 case-sensitive: false
+collation_compatible: loose
 target-database:
   host: 127.0.0.1
   port: 4000
@@ -17,7 +18,6 @@ target-database:
   max-allowed-packet: null
   session:
     tidb_txn_mode: optimistic
-    time_zone: "+00:00"
   security: null
 mysql-instances:
 - source-id: mysql-replica-01
@@ -41,6 +41,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 - source-id: mysql-replica-02
   meta: null
   filter-rules:
@@ -62,6 +63,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 online-ddl: false
 shadow-table-rules: []
 trash-table-rules: []
@@ -142,6 +144,8 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
+    import-mode: sql
+    on-duplicate: replace
 syncers:
   sync-01:
     meta-file: ""
@@ -157,7 +161,12 @@ syncers:
     disable-detect: false
     safe-mode: false
     enable-ansi-quotes: false
+validators:
+  validator-01:
+    mode: none
+    worker-count: 4
 clean-dump-file: true
 ansi-quotes: false
 remove-meta: false
-tidb: null
+experimental:
+  async-checkpoint-flush: false

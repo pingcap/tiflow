@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.0] 2021-11-30
+
+### Special Notes
+
+As of DM v2.0, DM uses a TiDB-independent version number; after DM v2.0, DM uses the same version number as TiDB. Therefore, the next version of DM v2.0 is DM v5.3. There are no compatibility changes from DM v2.0 to v5.3, and the upgrade process is no different from a normal upgrade, only an increase in version number.
+
+### Bug fixes
+
+- Fix the issue of high availability scheduling failure when configuring SSL certificates upstream and downstream [#1910](https://github.com/pingcap/dm/pull/1910)
+- Fix the issue that pausing tasks takes too much time [#1945](https://github.com/pingcap/dm/pull/1954)
+- Fix the issue that `handle-error revert` returns unclear error messages [#1969](https://github.com/pingcap/dm/pull/1969)
+- Fix the issue that a replication task fails when you use binlog filter to skip certain DDL [#1975](https://github.com/pingcap/dm/pull/1975)
+- Fix the issue that evict-leader fails in certain circumstances [#1986](https://github.com/pingcap/dm/pull/1986)
+- Fix the issue that dmctl returns unclear error messages [#2063](https://github.com/pingcap/dm/pull/2063)
+- Fix the issue of DM-worker scheduling failure when Relay Log is enabled [#2199](https://github.com/pingcap/dm/pull/2219)
+- Fix the issue that DM-worker fails to connect to the upstream database and to start when Relay Log is enabled [#2227](https://github.com/pingcap/dm/pull/2227)
+- Fix the issue of a meta file writing failure when Relay Log is enabled and upstream database switches [#3164](https://github.com/pingcap/tiflow/pull/3164)
+
+### Improvements
+
+- Reduce latency when Relay Log is enabled [#2225](https://github.com/pingcap/dm/pull/2225)
+- Compress/merge DML statements for incremental replication to reduce replication latency [#3162](https://github.com/pingcap/tiflow/pull/3162) [#3167](https://github.com/pingcap/tiflow/pull/3167)
+- Support OpenAPI feature to better manage DM clusters (experimental feature) [#1928](https://github.com/pingcap/dm/issues/1982)
+- Optimize the user experience of dmctl and add subcommands [#1746](https://github.com/pingcap/dm/pull/1746)
+- Support for maintaining transaction atomicity when stopping or pausing replication tasks [#1928](https://github.com/pingcap/dm/pull/1928)
+- Support for reading Relay Log files with file names longer than 999999 [#1933](https://github.com/pingcap/dm/pull/1933)
+- Load and sync units support more monitoring metrics [#1778](https://github.com/pingcap/dm/pull/1778)
+- Support for concurrently manipulating tasks via dmctl [#1995](https://github.com/pingcap/dm/pull/1955)
+- Optimize DML concurrency for incremental replication [#2043](https://github.com/pingcap/dm/pull/2043)
+- Prompt user when HTTP proxy-related environment variables are detected [#1960](https://github.com/pingcap/dm/pull/1960)
+- Optimize log display when handling RowEvent [#2006](https://github.com/pingcap/dm/pull/2006)
+- Optimize log display when SQL execution is too slow [#2024](https://github.com/pingcap/dm/pull/2024)
+- Optimize logic for fetching status data from upstream sources to reduce pressure on upstream [#2076](https://github.com/pingcap/dm/pull/2076)
+- Report errors and prompt users when encountering unsupported binlog formats [#2099](https://github.com/pingcap/dm/pull/2099)
+- Support for batch manipulation of all sync tasks in a data source via dmctl [#2166](https://github.com/pingcap/dm/pull/2166)
+- Support for automatic acquisition and configuration of upstream and downstream time zones [#3403](https://github.com/pingcap/tiflow/pull/3403)
+
+### Known issues
+
+[GitHub issues](https://github.com/pingcap/tiflow/issues?q=is%3Aissue+is%3Aopen+label%3Atype%2Fbug+label%3Aarea%2Fdm)
+
 ## [2.0.7] 2021-09-23
 
 ### Bug fixes

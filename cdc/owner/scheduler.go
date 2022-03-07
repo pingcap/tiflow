@@ -14,375 +14,340 @@
 package owner
 
 import (
-	"math"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/orchestrator"
+	"github.com/pingcap/tiflow/cdc/model"
+	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
-type schedulerJobType string
+// scheduler is an interface for scheduling tables.
+// Since in our design, we do not record checkpoints per table,
+// how we calculate the global watermarks (checkpoint-ts and resolved-ts)
+// is heavily coupled with how tables are scheduled.
+// That is why we have a scheduler interface that also reports the global watermarks.
+type scheduler interface {
+	// Tick is called periodically from the owner, and returns
+	// updated global watermarks.
+	Tick(
+		ctx context.Context,
+		state *orchestrator.ChangefeedReactorState,
+		currentTables []model.TableID,
+		captures map[model.CaptureID]*model.CaptureInfo,
+	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 
-const (
-	schedulerJobTypeAddTable    schedulerJobType = "ADD"
-	schedulerJobTypeRemoveTable schedulerJobType = "REMOVE"
-)
+	// MoveTable is used to trigger manual table moves.
+	MoveTable(tableID model.TableID, target model.CaptureID)
 
-type schedulerJob struct {
-	Tp      schedulerJobType
-	TableID model.TableID
-	// if the operation is a delete operation, boundaryTs is checkpoint ts
-	// if the operation is an add operation, boundaryTs is start ts
-	BoundaryTs    uint64
-	TargetCapture model.CaptureID
+	// Rebalance is used to trigger manual workload rebalances.
+	Rebalance()
+
+	// Close closes the scheduler and releases resources.
+	Close(ctx context.Context)
 }
 
-type moveTableJob struct {
-	tableID model.TableID
-	target  model.CaptureID
+type schedulerV2 struct {
+	*pscheduler.BaseScheduleDispatcher
+
+	messageServer *p2p.MessageServer
+	messageRouter p2p.MessageRouter
+
+	changeFeedID  model.ChangeFeedID
+	handlerErrChs []<-chan error
+
+	stats *schedulerStats
 }
 
-type scheduler struct {
-	state         *orchestrator.ChangefeedReactorState
-	currentTables []model.TableID
-	captures      map[model.CaptureID]*model.CaptureInfo
-
-	moveTableTargets      map[model.TableID]model.CaptureID
-	moveTableJobQueue     []*moveTableJob
-	needRebalanceNextTick bool
-	lastTickCaptureCount  int
+// NewSchedulerV2 creates a new schedulerV2
+func NewSchedulerV2(
+	ctx context.Context,
+	changeFeedID model.ChangeFeedID,
+	checkpointTs model.Ts,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+) (*schedulerV2, error) {
+	ret := &schedulerV2{
+		changeFeedID:  changeFeedID,
+		messageServer: messageServer,
+		messageRouter: messageRouter,
+		stats:         &schedulerStats{},
+	}
+	ret.BaseScheduleDispatcher = pscheduler.NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
+	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
+		return nil, err
+	}
+	log.Debug("scheduler created", zap.Uint64("checkpointTs", checkpointTs))
+	return ret, nil
 }
 
-func newScheduler() *scheduler {
-	return &scheduler{
-		moveTableTargets: make(map[model.TableID]model.CaptureID),
-	}
-}
-
-// Tick is the main function of scheduler. It dispatches tables to captures and handles move-table and rebalance events.
-// Tick returns a bool representing whether the changefeed's state can be updated in this tick.
-// The state can be updated only if all the tables which should be listened to have been dispatched to captures and no operations have been sent to captures in this tick.
-func (s *scheduler) Tick(state *orchestrator.ChangefeedReactorState, currentTables []model.TableID, captures map[model.CaptureID]*model.CaptureInfo) (shouldUpdateState bool, err error) {
-	s.state = state
-	s.currentTables = currentTables
-	s.captures = captures
-
-	s.cleanUpFinishedOperations()
-	pendingJob, err := s.syncTablesWithCurrentTables()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	s.dispatchToTargetCaptures(pendingJob)
-	if len(pendingJob) != 0 {
-		log.Debug("scheduler:generated pending job to be executed", zap.Any("pendingJob", pendingJob))
-	}
-	s.handleJobs(pendingJob)
-
-	// only if the pending job list is empty and no table is being rebalanced or moved,
-	// can the global resolved ts and checkpoint ts be updated
-	shouldUpdateState = len(pendingJob) == 0
-	shouldUpdateState = s.rebalance() && shouldUpdateState
-	shouldUpdateStateInMoveTable, err := s.handleMoveTableJob()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	shouldUpdateState = shouldUpdateStateInMoveTable && shouldUpdateState
-	s.lastTickCaptureCount = len(captures)
-	return shouldUpdateState, nil
-}
-
-func (s *scheduler) MoveTable(tableID model.TableID, target model.CaptureID) {
-	s.moveTableJobQueue = append(s.moveTableJobQueue, &moveTableJob{
-		tableID: tableID,
-		target:  target,
-	})
-}
-
-// handleMoveTableJob handles the move table job add be MoveTable function
-func (s *scheduler) handleMoveTableJob() (shouldUpdateState bool, err error) {
-	shouldUpdateState = true
-	if len(s.moveTableJobQueue) == 0 {
-		return
-	}
-	table2CaptureIndex, err := s.table2CaptureIndex()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	for _, job := range s.moveTableJobQueue {
-		source, exist := table2CaptureIndex[job.tableID]
-		if !exist {
-			return
-		}
-		s.moveTableTargets[job.tableID] = job.target
-		job := job
-		shouldUpdateState = false
-		// for all move table job, here just remove the table from the source capture.
-		// and the table removed by this function will be added to target capture by syncTablesWithCurrentTables in the next tick.
-		s.state.PatchTaskStatus(source, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			if status == nil {
-				// the capture may be down, just skip remove this table
-				return status, false, nil
-			}
-			if status.Operation != nil && status.Operation[job.tableID] != nil {
-				// skip removing this table to avoid the remove operation created by the rebalance function interfering with the operation created by another function
-				return status, false, nil
-			}
-			status.RemoveTable(job.tableID, s.state.Status.CheckpointTs, false)
-			return status, true, nil
-		})
-	}
-	s.moveTableJobQueue = nil
-	return
-}
-
-func (s *scheduler) Rebalance() {
-	s.needRebalanceNextTick = true
-}
-
-func (s *scheduler) table2CaptureIndex() (map[model.TableID]model.CaptureID, error) {
-	table2CaptureIndex := make(map[model.TableID]model.CaptureID)
-	for captureID, taskStatus := range s.state.TaskStatuses {
-		for tableID := range taskStatus.Tables {
-			if preCaptureID, exist := table2CaptureIndex[tableID]; exist && preCaptureID != captureID {
-				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(tableID, preCaptureID, captureID)
-			}
-			table2CaptureIndex[tableID] = captureID
-		}
-		for tableID := range taskStatus.Operation {
-			if preCaptureID, exist := table2CaptureIndex[tableID]; exist && preCaptureID != captureID {
-				return nil, cerror.ErrTableListenReplicated.GenWithStackByArgs(tableID, preCaptureID, captureID)
-			}
-			table2CaptureIndex[tableID] = captureID
-		}
-	}
-	return table2CaptureIndex, nil
-}
-
-// dispatchToTargetCaptures sets the TargetCapture of scheduler jobs
-// If the TargetCapture of a job is not set, it chooses a capture with the minimum workload(minimum number of tables)
-// and sets the TargetCapture to the capture.
-func (s *scheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
-	workloads := make(map[model.CaptureID]uint64)
-
-	for captureID := range s.captures {
-		workloads[captureID] = 0
-		taskWorkload := s.state.Workloads[captureID]
-		if taskWorkload == nil {
-			continue
-		}
-		for _, workload := range taskWorkload {
-			workloads[captureID] += workload.Workload
-		}
-	}
-
-	for _, pendingJob := range pendingJobs {
-		if pendingJob.TargetCapture == "" {
-			target, exist := s.moveTableTargets[pendingJob.TableID]
-			if !exist {
-				continue
-			}
-			pendingJob.TargetCapture = target
-			delete(s.moveTableTargets, pendingJob.TableID)
-			continue
-		}
-		switch pendingJob.Tp {
-		case schedulerJobTypeAddTable:
-			workloads[pendingJob.TargetCapture] += 1
-		case schedulerJobTypeRemoveTable:
-			workloads[pendingJob.TargetCapture] -= 1
-		default:
-			log.Panic("Unreachable, please report a bug",
-				zap.String("changefeed", s.state.ID), zap.Any("job", pendingJob))
-		}
-	}
-
-	getMinWorkloadCapture := func() model.CaptureID {
-		minCapture := ""
-		minWorkLoad := uint64(math.MaxUint64)
-		for captureID, workload := range workloads {
-			if workload < minWorkLoad {
-				minCapture = captureID
-				minWorkLoad = workload
-			}
-		}
-
-		if minCapture == "" {
-			log.Panic("Unreachable, no capture is found")
-		}
-		return minCapture
-	}
-
-	for _, pendingJob := range pendingJobs {
-		if pendingJob.TargetCapture != "" {
-			continue
-		}
-		minCapture := getMinWorkloadCapture()
-		pendingJob.TargetCapture = minCapture
-		workloads[minCapture] += 1
-	}
-}
-
-// syncTablesWithCurrentTables iterates all current tables to check whether it should be listened or not.
-// this function will return schedulerJob to make sure all tables will be listened.
-func (s *scheduler) syncTablesWithCurrentTables() ([]*schedulerJob, error) {
-	var pendingJob []*schedulerJob
-	allTableListeningNow, err := s.table2CaptureIndex()
+// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// This function is factored out to facilitate unit testing.
+func newSchedulerV2FromCtx(ctx context.Context, startTs uint64) (scheduler, error) {
+	changeFeedID := ctx.ChangefeedVars().ID
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ret, err := NewSchedulerV2(ctx, changeFeedID, startTs, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	globalCheckpointTs := s.state.Status.CheckpointTs
-	for _, tableID := range s.currentTables {
-		if _, exist := allTableListeningNow[tableID]; exist {
-			delete(allTableListeningNow, tableID)
-			continue
+	return ret, nil
+}
+
+func newScheduler(ctx context.Context, startTs uint64) (scheduler, error) {
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
+		return newSchedulerV2FromCtx(ctx, startTs)
+	}
+	return newSchedulerV1(), nil
+}
+
+func (s *schedulerV2) Tick(
+	ctx context.Context,
+	state *orchestrator.ChangefeedReactorState,
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (checkpoint, resolvedTs model.Ts, err error) {
+	if err := s.checkForHandlerErrors(ctx); err != nil {
+		return pscheduler.CheckpointCannotProceed, pscheduler.CheckpointCannotProceed, errors.Trace(err)
+	}
+	return s.BaseScheduleDispatcher.Tick(ctx, state.Status.CheckpointTs, currentTables, captures)
+}
+
+func (s *schedulerV2) DispatchTable(
+	ctx context.Context,
+	changeFeedID model.ChangeFeedID,
+	tableID model.TableID,
+	captureID model.CaptureID,
+	isDelete bool,
+) (done bool, err error) {
+	topic := model.DispatchTableTopic(changeFeedID)
+	message := &model.DispatchTableMessage{
+		OwnerRev: ctx.GlobalVars().OwnerRevision,
+		ID:       tableID,
+		IsDelete: isDelete,
+	}
+
+	ok, err := s.trySendMessage(ctx, captureID, topic, message)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
+	}
+
+	s.stats.RecordDispatch()
+	log.Debug("send message successfully",
+		zap.String("topic", topic),
+		zap.Any("message", message))
+
+	return true, nil
+}
+
+func (s *schedulerV2) Announce(
+	ctx context.Context,
+	changeFeedID model.ChangeFeedID,
+	captureID model.CaptureID,
+) (bool, error) {
+	topic := model.AnnounceTopic(changeFeedID)
+	message := &model.AnnounceMessage{
+		OwnerRev:     ctx.GlobalVars().OwnerRevision,
+		OwnerVersion: version.ReleaseSemver(),
+	}
+
+	ok, err := s.trySendMessage(ctx, captureID, topic, message)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
+	}
+
+	s.stats.RecordAnnounce()
+	log.Debug("send message successfully",
+		zap.String("topic", topic),
+		zap.Any("message", message))
+
+	return true, nil
+}
+
+func (s *schedulerV2) getClient(target model.CaptureID) (*p2p.MessageClient, bool) {
+	client := s.messageRouter.GetClient(target)
+	if client == nil {
+		log.Warn("scheduler: no message client found, retry later",
+			zap.String("target", target))
+		return nil, false
+	}
+	return client, true
+}
+
+func (s *schedulerV2) trySendMessage(
+	ctx context.Context,
+	target model.CaptureID,
+	topic p2p.Topic,
+	value interface{},
+) (bool, error) {
+	// TODO (zixiong): abstract this function out together with the similar method in cdc/processor/agent.go
+	// We probably need more advanced logic to handle and mitigate complex failure situations.
+
+	client, ok := s.getClient(target)
+	if !ok {
+		return false, nil
+	}
+
+	_, err := client.TrySendMessage(ctx, topic, value)
+	if err != nil {
+		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+			return false, nil
 		}
-		// For each table which should be listened but is not, add an adding-table job to the pending job list
-		pendingJob = append(pendingJob, &schedulerJob{
-			Tp:         schedulerJobTypeAddTable,
-			TableID:    tableID,
-			BoundaryTs: globalCheckpointTs,
-		})
-	}
-	// The remaining tables are the tables which should be not listened
-	tablesThatShouldNotBeListened := allTableListeningNow
-	for tableID, captureID := range tablesThatShouldNotBeListened {
-		opts := s.state.TaskStatuses[captureID].Operation
-		if opts != nil && opts[tableID] != nil && opts[tableID].Delete {
-			// the table is being removed, skip
-			continue
+		if cerror.ErrPeerMessageClientClosed.Equal(err) {
+			log.Warn("peer messaging client is closed while trying to send a message through it. "+
+				"Report a bug if this warning repeats",
+				zap.String("changefeed", s.changeFeedID),
+				zap.String("target", target))
+			return false, nil
 		}
-		pendingJob = append(pendingJob, &schedulerJob{
-			Tp:            schedulerJobTypeRemoveTable,
-			TableID:       tableID,
-			BoundaryTs:    globalCheckpointTs,
-			TargetCapture: captureID,
-		})
+		return false, errors.Trace(err)
 	}
-	return pendingJob, nil
+
+	return true, nil
 }
 
-func (s *scheduler) handleJobs(jobs []*schedulerJob) {
-	for _, job := range jobs {
-		job := job
-		s.state.PatchTaskStatus(job.TargetCapture, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			switch job.Tp {
-			case schedulerJobTypeAddTable:
-				if status == nil {
-					// if task status is not found, we can just skip adding the adding-table operation, since this table will be added in the next tick
-					log.Warn("task status of the capture is not found, may be the capture is already down. specify a new capture and redo the job", zap.Any("job", job))
-					return status, false, nil
-				}
-				status.AddTable(job.TableID, &model.TableReplicaInfo{
-					StartTs:     job.BoundaryTs,
-					MarkTableID: 0, // mark table ID will be set in processors
-				}, job.BoundaryTs)
-			case schedulerJobTypeRemoveTable:
-				failpoint.Inject("OwnerRemoveTableError", func() {
-					// just skip removing this table
-					failpoint.Return(status, false, nil)
-				})
-				if status == nil {
-					log.Warn("Task status of the capture is not found. Maybe the capture is already down. Specify a new capture and redo the job", zap.Any("job", job))
-					return status, false, nil
-				}
-				status.RemoveTable(job.TableID, job.BoundaryTs, false)
-			default:
-				log.Panic("Unreachable, please report a bug", zap.Any("job", job))
-			}
-			return status, true, nil
-		})
-	}
+func (s *schedulerV2) Close(ctx context.Context) {
+	log.Debug("scheduler closed", zap.String("changefeed", s.changeFeedID))
+	s.deregisterPeerMessageHandlers(ctx)
 }
 
-// cleanUpFinishedOperations clean up the finished operations.
-func (s *scheduler) cleanUpFinishedOperations() {
-	for captureID := range s.state.TaskStatuses {
-		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			changed := false
-			for tableID, operation := range status.Operation {
-				if operation.Status == model.OperFinished {
-					delete(status.Operation, tableID)
-					changed = true
-				}
-			}
-			return status, changed, nil
-		})
-	}
-}
-
-func (s *scheduler) rebalance() (shouldUpdateState bool) {
-	if !s.shouldRebalance() {
-		// if no table is rebalanced, we can update the resolved ts and checkpoint ts
-		return true
-	}
-	// we only support rebalance by table number for now
-	return s.rebalanceByTableNum()
-}
-
-func (s *scheduler) shouldRebalance() bool {
-	if s.needRebalanceNextTick {
-		s.needRebalanceNextTick = false
-		return true
-	}
-	if s.lastTickCaptureCount != len(s.captures) {
-		// a new capture online and no table distributed to the capture
-		// or some captures offline
-		return true
-	}
-	// TODO periodic trigger rebalance
-	return false
-}
-
-// rebalanceByTableNum removes tables from captures replicating an above-average number of tables.
-// the removed table will be dispatched again by syncTablesWithCurrentTables function
-func (s *scheduler) rebalanceByTableNum() (shouldUpdateState bool) {
-	totalTableNum := len(s.currentTables)
-	captureNum := len(s.captures)
-	upperLimitPerCapture := int(math.Ceil(float64(totalTableNum) / float64(captureNum)))
-	shouldUpdateState = true
-
-	log.Info("Start rebalancing",
-		zap.String("changefeed", s.state.ID),
-		zap.Int("table-num", totalTableNum),
-		zap.Int("capture-num", captureNum),
-		zap.Int("target-limit", upperLimitPerCapture))
-
-	for captureID, taskStatus := range s.state.TaskStatuses {
-		tableNum2Remove := len(taskStatus.Tables) - upperLimitPerCapture
-		if tableNum2Remove <= 0 {
-			continue
+func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret error) {
+	defer func() {
+		if ret != nil {
+			s.deregisterPeerMessageHandlers(ctx)
 		}
+	}()
 
-		// here we pick `tableNum2Remove` tables to delete,
-		// and then the removed tables will be dispatched by `syncTablesWithCurrentTables` function in the next tick
-		for tableID := range taskStatus.Tables {
-			tableID := tableID
-			if tableNum2Remove <= 0 {
-				break
-			}
-			shouldUpdateState = false
-			s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-				if status == nil {
-					// the capture may be down, just skip remove this table
-					return status, false, nil
-				}
-				if status.Operation != nil && status.Operation[tableID] != nil {
-					// skip remove this table to avoid the remove operation created by rebalance function to influence the operation created by other function
-					return status, false, nil
-				}
-				status.RemoveTable(tableID, s.state.Status.CheckpointTs, false)
-				log.Info("Rebalance: Move table",
-					zap.Int64("table-id", tableID),
-					zap.String("capture", captureID),
-					zap.String("changefeed-id", s.state.ID))
-				return status, true, nil
-			})
-			tableNum2Remove--
+	errCh, err := s.messageServer.SyncAddHandler(
+		ctx,
+		model.DispatchTableResponseTopic(s.changeFeedID),
+		&model.DispatchTableResponseMessage{},
+		func(sender string, messageI interface{}) error {
+			message := messageI.(*model.DispatchTableResponseMessage)
+			s.stats.RecordDispatchResponse()
+			s.OnAgentFinishedTableOperation(sender, message.ID)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.handlerErrChs = append(s.handlerErrChs, errCh)
+
+	errCh, err = s.messageServer.SyncAddHandler(
+		ctx,
+		model.SyncTopic(s.changeFeedID),
+		&model.SyncMessage{},
+		func(sender string, messageI interface{}) error {
+			message := messageI.(*model.SyncMessage)
+			s.stats.RecordSync()
+			s.OnAgentSyncTaskStatuses(
+				sender,
+				message.Running,
+				message.Adding,
+				message.Removing)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.handlerErrChs = append(s.handlerErrChs, errCh)
+
+	errCh, err = s.messageServer.SyncAddHandler(
+		ctx,
+		model.CheckpointTopic(s.changeFeedID),
+		&model.CheckpointMessage{},
+		func(sender string, messageI interface{}) error {
+			message := messageI.(*model.CheckpointMessage)
+			s.stats.RecordCheckpoint()
+			s.OnAgentCheckpoint(sender, message.CheckpointTs, message.ResolvedTs)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.handlerErrChs = append(s.handlerErrChs, errCh)
+
+	return nil
+}
+
+func (s *schedulerV2) deregisterPeerMessageHandlers(ctx context.Context) {
+	err := s.messageServer.SyncRemoveHandler(
+		ctx,
+		model.DispatchTableResponseTopic(s.changeFeedID))
+	if err != nil {
+		log.Error("failed to remove peer message handler", zap.Error(err))
+	}
+
+	err = s.messageServer.SyncRemoveHandler(
+		ctx,
+		model.SyncTopic(s.changeFeedID))
+	if err != nil {
+		log.Error("failed to remove peer message handler", zap.Error(err))
+	}
+
+	err = s.messageServer.SyncRemoveHandler(
+		ctx,
+		model.CheckpointTopic(s.changeFeedID))
+	if err != nil {
+		log.Error("failed to remove peer message handler", zap.Error(err))
+	}
+}
+
+func (s *schedulerV2) checkForHandlerErrors(ctx context.Context) error {
+	for _, errCh := range s.handlerErrChs {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case err := <-errCh:
+			return errors.Trace(err)
+		default:
 		}
 	}
-	return
+	return nil
+}
+
+type schedulerStats struct {
+	ChangefeedID model.ChangeFeedID
+
+	AnnounceSentCount            int64
+	SyncReceiveCount             int64
+	DispatchSentCount            int64
+	DispatchResponseReceiveCount int64
+	CheckpointReceiveCount       int64
+
+	// TODO add prometheus metrics
+}
+
+func (s *schedulerStats) RecordAnnounce() {
+	atomic.AddInt64(&s.AnnounceSentCount, 1)
+}
+
+func (s *schedulerStats) RecordSync() {
+	atomic.AddInt64(&s.SyncReceiveCount, 1)
+}
+
+func (s *schedulerStats) RecordDispatch() {
+	atomic.AddInt64(&s.DispatchSentCount, 1)
+}
+
+func (s *schedulerStats) RecordDispatchResponse() {
+	atomic.AddInt64(&s.DispatchResponseReceiveCount, 1)
+}
+
+func (s *schedulerStats) RecordCheckpoint() {
+	atomic.AddInt64(&s.CheckpointReceiveCount, 1)
 }

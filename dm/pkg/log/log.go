@@ -24,8 +24,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/pingcap/ticdc/dm/pkg/helper"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/helper"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -104,6 +104,7 @@ var (
 
 // InitLogger initializes DM's and also the TiDB library's loggers.
 func InitLogger(cfg *Config) error {
+	inDev := strings.ToLower(cfg.Level) == "debug"
 	// init DM logger
 	logger, props, err := pclog.InitLogger(&pclog.Config{
 		Level:  cfg.Level,
@@ -114,6 +115,7 @@ func InitLogger(cfg *Config) error {
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,
 		},
+		Development: inDev,
 	})
 	if err != nil {
 		return terror.ErrInitLoggerFail.Delegate(err)
@@ -125,7 +127,7 @@ func InitLogger(cfg *Config) error {
 	appLevel = props.Level
 	appProps = props
 	// init and set tidb slow query logger to stdout if log level is debug
-	if cfg.Level == "debug" {
+	if inDev {
 		slowQueryLogger := zap.NewExample()
 		slowQueryLogger = slowQueryLogger.With(zap.String("component", "slow query logger"))
 		logutil.SlowQueryLogger = slowQueryLogger

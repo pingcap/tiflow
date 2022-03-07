@@ -28,9 +28,11 @@ type Node interface {
 	// when the node receives a message, this function will be called
 	// you can call `ctx.Message()` to receive the message
 	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
+	// You SHOULD NOT pass the ctx to another goroutine or store it pass the
+	// lifetime of this function call.
 	Receive(ctx NodeContext) error
 
-	// Destory frees the resources in this node
+	// Destroy frees the resources in this node
 	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node
 	// but it will return nil if you try to call the `ctx.Message()`
 	Destroy(ctx NodeContext) error

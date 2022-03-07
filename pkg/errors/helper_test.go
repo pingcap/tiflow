@@ -24,19 +24,21 @@ import (
 func TestWrapError(t *testing.T) {
 	t.Parallel()
 	var (
-		rfcError  = ErrDecodeFailed
-		err       = errors.New("test")
+		err       = errors.New("cause error")
 		testCases = []struct {
+			rfcError *errors.Error
 			err      error
 			isNil    bool
 			expected string
+			args     []interface{}
 		}{
-			{nil, true, ""},
-			{err, false, "[CDC:ErrDecodeFailed]test: test"},
+			{ErrDecodeFailed, nil, true, "", nil},
+			{ErrDecodeFailed, err, false, "[CDC:ErrDecodeFailed]decode failed: args data: cause error", []interface{}{"args data"}},
+			{ErrWriteTsConflict, err, false, "[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil},
 		}
 	)
 	for _, tc := range testCases {
-		we := WrapError(rfcError, tc.err)
+		we := WrapError(tc.rfcError, tc.err, tc.args...)
 		if tc.isNil {
 			require.Nil(t, we)
 		} else {

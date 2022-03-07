@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/context"
+	"github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
 
@@ -51,7 +51,8 @@ func (r *nodeRunner) run(ctx context.Context) error {
 	defer func() {
 		err := r.node.Destroy(nodeCtx)
 		if err != nil && errors.Cause(err) != stdContext.Canceled {
-			log.Error("found an error when stopping node", zap.String("node name", r.name), zap.Error(err))
+			log.Error("found an error when stopping node",
+				zap.String("node", r.name), zap.Error(err))
 		}
 	}()
 	err := r.node.Init(nodeCtx)

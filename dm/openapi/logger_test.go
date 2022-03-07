@@ -18,7 +18,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/check"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -33,20 +33,19 @@ func TestZapLogger(t *testing.T) {
 }
 
 func (t *zapLoggerSuite) TestZapLogger(c *check.C) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/something", nil)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	h := func(ctx echo.Context) error {
-		return ctx.String(http.StatusOK, "")
-	}
+	r := gin.New()
 	obs, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(obs)
-	err := ZapLogger(logger)(h)(ctx)
-	c.Assert(err, check.IsNil)
+	r.Use(ZapLogger(logger))
+	r.GET("/something", func(c *gin.Context) {
+		c.String(http.StatusOK, "")
+	})
+
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/something", nil)
+	r.ServeHTTP(res, req)
 
 	logFields := logs.All()[0].ContextMap()
-
 	c.Assert(logFields["method"], check.Equals, "GET")
 	c.Assert(logFields["request"], check.Equals, "GET /something")
 	c.Assert(logFields["status"], check.Equals, int64(200))

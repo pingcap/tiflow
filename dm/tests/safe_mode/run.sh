@@ -32,6 +32,7 @@ function consistency_none() {
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	sleep 1
 	# make sure dumpling's metadata added empty line after two SHOW MASTER STATUS
 	empty_line=$(grep -cvE '\S' $WORK_DIR/worker1/dumped_data.test/metadata)
 	if [ $empty_line -ne 2 ]; then
@@ -54,8 +55,8 @@ function consistency_none() {
 	check_log_contain_with_retry "\[\"enable safe-mode for safe mode exit point, will exit at\"\] \[task=test\] \[unit=\"binlog replication\"\] \[location=\"position: ($name2, $pos2), gtid-set: $gtid2\"\]" $WORK_DIR/worker2/log/dm-worker.log
 
 	run_sql_source2 "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-	cleanup_data safe_mode_target
 	cleanup_process $*
+	cleanup_data safe_mode_target
 }
 
 function check_exit_safe_binlog() {
@@ -97,7 +98,7 @@ function safe_mode_recover() {
 		check_port_offline $WORKER1_PORT 20
 		check_port_offline $WORKER2_PORT 20
 
-		export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/SafeModeExit=return($i)"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeExit=return($i)"
 		run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -159,7 +160,7 @@ function safe_mode_recover() {
 		sleep 3
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"Running" 2
+			"Running" 3
 		echo "check sync diff after clean SafeModeExit failpoint"
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -181,8 +182,8 @@ function safe_mode_recover() {
 
 		echo "finish running run safe mode recover case $i"
 		((i += 1))
-		cleanup_data safe_mode_target
 		cleanup_process $*
+		cleanup_data safe_mode_target
 	done
 }
 
@@ -195,7 +196,7 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/ReSyncExit=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ReSyncExit=return(true)'
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -220,7 +221,7 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/ShardSyncedExecutionExit=return(true);github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(300)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ShardSyncedExecutionExit=return(true);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(300)'
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -242,7 +243,7 @@ function run() {
 		# DM-worker1 is sharding lock owner and exits
 		if [ "$(check_port_return $WORKER1_PORT)" == "0" ]; then
 			echo "DM-worker1 is sharding lock owner and detects it offline"
-			export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
+			export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
 			run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 			check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 			check_instance_id="1"
@@ -252,7 +253,7 @@ function run() {
 		# DM-worker2 is sharding lock owner and exits
 		if [ "$(check_port_return $WORKER2_PORT)" == "0" ]; then
 			echo "DM-worker2 is sharding lock owner and detects it offline"
-			export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
+			export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
 			run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 			check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 			check_instance_id="2"

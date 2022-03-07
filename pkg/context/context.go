@@ -15,16 +15,21 @@ package context
 
 import (
 	"context"
-	"log"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/version"
+	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -33,11 +38,22 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient    pd.Client
-	KVStorage   tidbkv.Storage
-	CaptureInfo *model.CaptureInfo
-	EtcdClient  *etcd.CDCEtcdClient
-	GrpcPool    kv.GrpcPool
+	PDClient         pd.Client
+	KVStorage        tidbkv.Storage
+	CaptureInfo      *model.CaptureInfo
+	EtcdClient       *etcd.CDCEtcdClient
+	GrpcPool         kv.GrpcPool
+	RegionCache      *tikv.RegionCache
+	PDClock          pdtime.Clock
+	TableActorSystem *system.System
+	SorterSystem     *ssystem.System
+
+	// OwnerRevision is the Etcd revision when the owner got elected.
+	OwnerRevision int64
+
+	// MessageServer and MessageRouter are for peer-messaging
+	MessageServer *p2p.MessageServer
+	MessageRouter p2p.MessageRouter
 }
 
 // ChangefeedVars contains some vars which can be used anywhere in a pipeline
@@ -176,14 +192,16 @@ func (ctx *throwContext) Throw(err error) {
 	}
 }
 
-// NewBackendContext4Test returns a new pipeline context for test
-func NewBackendContext4Test(withChangefeedVars bool) Context {
-	ctx := NewContext(context.Background(), &GlobalVars{
+// NewContext4Test returns a new pipeline context for test, and use the
+// given context as parent context.
+func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
+	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		PDClock: pdtime.NewClock4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
@@ -195,6 +213,12 @@ func NewBackendContext4Test(withChangefeedVars bool) Context {
 		})
 	}
 	return ctx
+}
+
+// NewBackendContext4Test returns a new pipeline context for test, and us
+// context.Background() as ethe parent context
+func NewBackendContext4Test(withChangefeedVars bool) Context {
+	return NewContext4Test(context.Background(), withChangefeedVars)
 }
 
 // ZapFieldCapture returns a zap field containing capture address

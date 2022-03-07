@@ -27,11 +27,11 @@ import (
 
 	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
 
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/worker"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/worker"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 func main() {
@@ -55,7 +55,6 @@ func main() {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
 	}
-	lightningLog.SetAppLogger(log.L().Logger)
 
 	utils.LogHTTPProxies(true)
 
@@ -65,6 +64,8 @@ func main() {
 	lg, r, _ := globalLog.InitLogger(conf)
 	lg = lg.With(zap.String("component", "ddl tracker"))
 	globalLog.ReplaceGlobals(lg, r)
+	lightningLogger := lg.With(zap.String("component", "lightning"))
+	lightningLog.SetAppLogger(lightningLogger)
 
 	utils.PrintInfo("dm-worker", func() {
 		log.L().Info("", zap.Stringer("dm-worker config", cfg))

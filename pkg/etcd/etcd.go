@@ -20,9 +20,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -88,14 +87,13 @@ type CDCEtcdClient struct {
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	metrics := map[string]prometheus.Counter{
-		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut, captureAddr),
-		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet, captureAddr),
-		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel, captureAddr),
-		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn, captureAddr),
-		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant, captureAddr),
-		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke, captureAddr),
+		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
+		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
+		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel),
+		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn),
+		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
+		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
 	return CDCEtcdClient{Client: Wrap(cli, metrics)}
 }
@@ -304,12 +302,15 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if err != nil {
 		return errors.Trace(err)
 	}
-	resp, err := c.Client.Txn(ctx).If(
+
+	cmps := []clientv3.Cmp{
 		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
 		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
-	).Then(
+	}
+	opsThen := []clientv3.Op{
 		clientv3.OpPut(infoKey, value),
-	).Commit()
+	}
+	resp, err := c.Client.Txn(ctx, cmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
@@ -504,10 +505,14 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 	}
 
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-	resp, err := c.Client.Txn(ctx).If(
+	cmps := []clientv3.Cmp{
 		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
 		clientv3.Compare(clientv3.Value(key), "=", data),
-	).Else(clientv3.OpPut(key, data)).Commit()
+	}
+	opsElse := []clientv3.Op{
+		clientv3.OpPut(key, data),
+	}
+	resp, err := c.Client.Txn(ctx, cmps, txnEmptyOpsThen, opsElse)
 	if err != nil {
 		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
@@ -558,6 +563,22 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 		return "", concurrency.ErrElectionNoLeader
 	}
 	return string(resp.Kvs[0].Value), nil
+}
+
+// GetOwnerRevision gets the Etcd revision for the elected owner.
+func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (rev int64, err error) {
+	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if len(resp.Kvs) == 0 {
+		return 0, cerror.ErrOwnerNotFound.GenWithStackByArgs()
+	}
+	// Checks that the given capture is indeed the owner.
+	if string(resp.Kvs[0].Value) != captureID {
+		return 0, cerror.ErrNotOwner.GenWithStackByArgs()
+	}
+	return resp.Kvs[0].ModRevision, nil
 }
 
 // getFreeListenURLs get free ports and localhost as url.

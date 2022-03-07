@@ -21,7 +21,7 @@ import (
 
 	. "github.com/pingcap/check"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = Suite(&testUtilSuite{})
@@ -41,6 +41,14 @@ func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 			[]byte{0, 0, 0, 0, 0},
 			map[byte][]byte{
 				0: {0, 0, 0, 0},
+			},
+			nil,
+		},
+		// only Q_CHARSET_CODE
+		{
+			[]byte{4, 33, 0, 33, 0, 8, 0},
+			map[byte][]byte{
+				4: {33, 0, 33, 0, 8, 0},
 			},
 			nil,
 		},

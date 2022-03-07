@@ -15,34 +15,27 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/pd/pkg/tsoutil"
 )
 
-type maxwellEventBatchEncoderBuilder struct {
-	opts map[string]string
+type maxwellEventBatchEncoderBuilder struct{}
+
+func newMaxwellEventBatchEncoderBuilder() EncoderBuilder {
+	return &maxwellEventBatchEncoderBuilder{}
 }
 
 // Build a `MaxwellEventBatchEncoder`
-func (b *maxwellEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewMaxwellEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
-}
-
-func newMaxwellEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &maxwellEventBatchEncoderBuilder{opts: opts}
+func (b *maxwellEventBatchEncoderBuilder) Build() EventBatchEncoder {
+	return NewMaxwellEventBatchEncoder()
 }
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
@@ -82,11 +75,6 @@ func (d *MaxwellEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage,
 	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
 	return nil, nil
-}
-
-// AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
 }
 
 func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwellMessage) {
@@ -175,19 +163,14 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	d.valueBuf.Write(value)
 	d.batchSize++
-	return EncoderNeedAsyncWrite, nil
-}
-
-// SetParams is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
 	return nil
 }
 
@@ -287,7 +270,7 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 		return nil, errors.Trace(err)
 	}
 
-	return newDDLMQMessage(ProtocolMaxwell, key, value, e), nil
+	return newDDLMQMessage(config.ProtocolMaxwell, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -296,14 +279,10 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(d.batchSize)
 	d.Reset()
 	return []*MQMessage{ret}
-}
-
-// MixedBuild implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	return nil
 }
 
 // Reset implements the EventBatchEncoder interface

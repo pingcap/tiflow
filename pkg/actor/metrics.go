@@ -14,7 +14,16 @@
 package actor
 
 import (
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
+)
+
+const (
+	slowPollThreshold = 100 * time.Millisecond
+	// Prometheus collects metrics every 15 seconds, we use a smaller interval
+	// to improve accuracy.
+	metricsInterval = 5 * time.Second
 )
 
 var (
@@ -36,24 +45,30 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
-			Name:      "workers_cpu_seconds_total",
-			Help:      "Total working time spent in seconds.",
-		}, []string{"name"})
-	batchSizeHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+			Name:      "worker_cpu_seconds_total",
+			Help:      "Total user and system CPU time spent by workers in seconds.",
+		}, []string{"name", "id"})
+	batchSizeCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
-			Name:      "batch",
-			Help:      "Bucketed histogram of batch size of an actor system.",
-			Buckets:   prometheus.ExponentialBuckets(1, 2, 10),
+			Name:      "batch_size_total",
+			Help:      "Total number of batch size of an actor system.",
 		}, []string{"name", "type"})
-	pollActorDuration = prometheus.NewHistogramVec(
+	pollCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "actor",
+			Name:      "poll_loop_total",
+			Help:      "Total number of poll loop count.",
+		}, []string{"name", "type"})
+	slowPollActorDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "actor",
-			Name:      "poll_duration_seconds",
+			Name:      "slow_poll_duration_seconds",
 			Help:      "Bucketed histogram of actor poll time (s).",
-			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 16),
+			Buckets:   prometheus.ExponentialBuckets(slowPollThreshold.Seconds(), 2, 16),
 		}, []string{"name"})
 	dropMsgCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -69,7 +84,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(totalWorkers)
 	registry.MustRegister(workingWorkers)
 	registry.MustRegister(workingDuration)
-	registry.MustRegister(batchSizeHistogram)
-	registry.MustRegister(pollActorDuration)
+	registry.MustRegister(batchSizeCounter)
+	registry.MustRegister(pollCounter)
+	registry.MustRegister(slowPollActorDuration)
 	registry.MustRegister(dropMsgCount)
 }

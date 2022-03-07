@@ -24,12 +24,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
@@ -145,11 +146,10 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		b.Error(err)
 	}
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	if err != nil {
 		b.Error(err)
 	}
-	kvStorage := newStorageWithCurVersionCache(tiStore, addrs[0])
 	defer kvStorage.Close() //nolint:errcheck
 
 	// we set each region has `storeNum` peers
@@ -190,7 +190,9 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -198,7 +200,6 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 
@@ -258,11 +259,10 @@ func prepareBench(b *testing.B, regionNum int) (
 		b.Error(err)
 	}
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	tiStore, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	if err != nil {
 		b.Error(err)
 	}
-	kvStorage := newStorageWithCurVersionCache(tiStore, addr1)
 	defer kvStorage.Close() //nolint:errcheck
 
 	storeID := uint64(1)
@@ -280,7 +280,9 @@ func prepareBench(b *testing.B, regionNum int) (
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -288,7 +290,6 @@ func prepareBench(b *testing.B, regionNum int) (
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
-		cdcClient.Close() //nolint:errcheck
 		wg.Done()
 	}()
 

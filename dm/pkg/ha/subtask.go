@@ -18,10 +18,10 @@ import (
 
 	"go.etcd.io/etcd/clientv3"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // GetSubTaskCfg gets the subtask config of the specified source and task name.
@@ -94,6 +94,28 @@ func deleteSubTaskCfgOp(cfgs ...config.SubTaskConfig) []clientv3.Op {
 	ops := make([]clientv3.Op, 0, len(cfgs))
 	for _, cfg := range cfgs {
 		ops = append(ops, clientv3.OpDelete(common.UpstreamSubTaskKeyAdapter.Encode(cfg.SourceID, cfg.Name)))
+	}
+	return ops
+}
+
+func putValidatorStageOps(stages ...Stage) ([]clientv3.Op, error) {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		value, err := stage.toJSON()
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, clientv3.OpPut(key, value))
+	}
+	return ops, nil
+}
+
+func deleteValidatorStageOps(stages ...Stage) []clientv3.Op {
+	ops := make([]clientv3.Op, 0, len(stages))
+	for _, stage := range stages {
+		key := common.StageValidatorKeyAdapter.Encode(stage.Source, stage.Task)
+		ops = append(ops, clientv3.OpDelete(key))
 	}
 	return ops
 }

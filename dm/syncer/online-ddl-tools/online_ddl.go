@@ -19,14 +19,14 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	parserpkg "github.com/pingcap/ticdc/dm/pkg/parser"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -129,19 +129,24 @@ func NewOnlineDDLStorage(logCtx *tcontext.Context, cfg *config.SubTaskConfig) *S
 func (s *Storage) Init(tctx *tcontext.Context) error {
 	onlineDB := s.cfg.To
 	onlineDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(tctx, s.cfg, onlineDB, 1)
+	db, dbConns, err := dbconn.CreateConns(tctx, s.cfg, &onlineDB, 1)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
 	s.db = db
 	s.dbConn = dbConns[0]
 
-	err = s.prepare(tctx)
-	if err != nil {
+	if err = s.prepare(tctx); err != nil {
+		s.Close()
 		return err
 	}
 
-	return s.Load(tctx)
+	if err = s.Load(tctx); err != nil {
+		s.Close()
+		return err
+	}
+
+	return nil
 }
 
 // Load loads information from storage.

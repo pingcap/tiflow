@@ -1,24 +1,26 @@
-[[check-tables]]
-schema = "import_goroutine_leak"
-tables = ["~t.*"]
+check-thread-count = 4
 
-[[table-config]]
-schema = "import_goroutine_leak"
-table = "t1"
+export-fix-sql = true
 
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "import_goroutine_leak"
-table  = "t1"
+check-struct-only = false
 
-[[source-db]]
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
+
+    source-instances = ["mysql1"]
+
+    target-instance = "tidb0"
+
+    target-check-tables = ["import_goroutine_leak.t?*"]
+
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

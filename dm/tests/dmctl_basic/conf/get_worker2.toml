@@ -9,6 +9,7 @@ advertise-addr = "127.0.0.1:8263"
 config-file = "/tmp/dm_test/dmctl_basic/worker2/dm-worker.toml"
 keepalive-ttl = 60
 relay-keepalive-ttl = 1800
+relay-dir = ""
 ssl-ca = ""
 ssl-cert = ""
 ssl-key = ""

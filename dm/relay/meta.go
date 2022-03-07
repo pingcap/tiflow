@@ -23,10 +23,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
 
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var (
@@ -212,7 +212,7 @@ func (lm *LocalMeta) Save(pos mysql.Position, gset gtid.Set) error {
 		lm.BinlogGTID = ""
 	} else {
 		lm.BinlogGTID = gset.String()
-		lm.gset = gset
+		lm.gset = gset.Clone() // need to clone and set, in order to avoid the local meta's gset and the input gset referencing the same object, causing contentions later
 	}
 
 	lm.dirty = true
@@ -328,7 +328,7 @@ func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID g
 	}
 
 	if newGTID != nil {
-		lm.gset = newGTID
+		lm.gset = newGTID.Clone() // need to clone and set, in order to avoid the local meta's gset and the input newGTID referencing the same object, causing contentions later
 		lm.BinlogGTID = newGTID.String()
 	} // if newGTID == nil, keep GTID not changed
 

@@ -3,7 +3,6 @@ name: test
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
-# enable-heartbeat: true
 
 target-database:
   host: "127.0.0.1"
@@ -11,13 +10,13 @@ target-database:
   user: "root"
   password: ""
   security:
-    ssl-ca: "dir-placeholer/ca.pem"
+    ssl-ca: "dir-placeholer/task-ca.pem"
     ssl-cert: "dir-placeholer/dm.pem"
     ssl-key: "dir-placeholer/dm.key"
 
 mysql-instances:
   - source-id: "mysql-replica-01"
-    black-white-list:  "instance"
+    black-white-list: "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"

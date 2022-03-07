@@ -20,14 +20,16 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/regionspan"
 	ticonfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -37,23 +39,36 @@ func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
-		values         [][]interface{}
+		// [] for rows, []infterface{} for columns.
+		values [][]interface{}
+		// [] for table partition if there is any,
+		// []int for approximateBytes of rows.
+		putApproximateBytes [][]int
+		delApproximateBytes [][]int
 	}{{
-		tableName:      "simple",
-		createTableDDL: "create table simple(id int primary key)",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "simple",
+		createTableDDL:      "create table simple(id int primary key)",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
+		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 	}, {
-		tableName:      "no_pk",
-		createTableDDL: "create table no_pk(id int not null unique key)",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "no_pk",
+		createTableDDL:      "create table no_pk(id int not null unique key)",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{345, 345, 345, 345, 345}},
+		delApproximateBytes: [][]int{{217, 217, 217, 217, 217}},
 	}, {
-		tableName:      "many_index",
-		createTableDDL: "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
-		values:         [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+		tableName:           "many_index",
+		createTableDDL:      "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
+		values:              [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+		putApproximateBytes: [][]int{{638, 638, 638, 638, 638}},
+		delApproximateBytes: [][]int{{254, 254, 254, 254, 254}},
 	}, {
-		tableName:      "default_value",
-		createTableDDL: "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
-		values:         [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		tableName:           "default_value",
+		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
+		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		putApproximateBytes: [][]int{{676, 676, 676, 676, 676}},
+		delApproximateBytes: [][]int{{353, 353, 353, 353, 353}},
 	}, {
 		tableName: "partition_table",
 		createTableDDL: `CREATE TABLE partition_table  (
@@ -78,6 +93,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{18, "aae", "bbf", 21, 14},
 			{15, "afa", "bbc", 11, 12},
 		},
+		putApproximateBytes: [][]int{{775}, {777}, {777}, {777, 777}},
+		delApproximateBytes: [][]int{{227}, {227}, {227}, {227, 227}},
 	}, {
 		tableName: "tp_int",
 		createTableDDL: `create table tp_int
@@ -98,6 +115,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{4, 127, 32767, 8388607, 2147483647, 9223372036854775807},
 			{5, -128, -32768, -8388608, -2147483648, -9223372036854775808},
 		},
+		putApproximateBytes: [][]int{{986, 626, 986, 986, 986}},
+		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 	}, {
 		tableName: "tp_text",
 		createTableDDL: `create table tp_text
@@ -116,7 +135,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_binary     binary(16)    null,
 			c_varbinary  varbinary(16) null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
@@ -138,6 +157,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{5, "你好", "我好", "大家好", "道路", "千万条", "安全", "第一条", "行车", "不规范", "亲人", "两行泪", "！"},
 			{6, "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "☺️", "😊", "😇", "🙂"},
 		},
+		putApproximateBytes: [][]int{{1019, 1459, 1411, 1323, 1398, 1369}},
+		delApproximateBytes: [][]int{{347, 347, 347, 347, 347, 347}},
 	}, {
 		tableName: "tp_time",
 		createTableDDL: `create table tp_time
@@ -149,12 +170,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_time      time      null,
 			c_year      year      null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
+		putApproximateBytes: [][]int{{627, 819}},
+		delApproximateBytes: [][]int{{347, 347}},
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
@@ -164,12 +187,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_double  double  null,
 			c_decimal decimal null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
 		},
+		putApproximateBytes: [][]int{{563, 551}},
+		delApproximateBytes: [][]int{{347, 347}},
 	}, {
 		tableName: "tp_other",
 		createTableDDL: `create table tp_other
@@ -180,12 +205,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 			c_bit  bit(64)            null,
 			c_json json               null,
 			constraint pk
-				primary key (id)
+			primary key (id)
 		);`,
 		values: [][]interface{}{
 			{1},
 			{2, "a", "a,c", 888, `{"aa":"bb"}`},
 		},
+		putApproximateBytes: [][]int{{636, 624}},
+		delApproximateBytes: [][]int{{348, 348}},
 	}, {
 		tableName:      "clustered_index1",
 		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
@@ -194,6 +221,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666},
 			{"世界🤪", 888},
 		},
+		putApproximateBytes: [][]int{{383, 446, 446}},
+		delApproximateBytes: [][]int{{311, 318, 318}},
 	}, {
 		tableName:      "clustered_index2",
 		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa), UNIQUE KEY (id, data, ddaa));",
@@ -201,6 +230,8 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{"你好😘", 666, "2020-11-20"},
 			{"世界🤪", 888, "2020-05-12"},
 		},
+		putApproximateBytes: [][]int{{592, 592}},
+		delApproximateBytes: [][]int{{592, 592}},
 	}}
 	for _, tc := range testCases {
 		testMounterDisableOldValue(t, tc)
@@ -208,9 +239,11 @@ func TestMounterDisableOldValue(t *testing.T) {
 }
 
 func testMounterDisableOldValue(t *testing.T, tc struct {
-	tableName      string
-	createTableDDL string
-	values         [][]interface{}
+	tableName           string
+	createTableDDL      string
+	values              [][]interface{}
+	putApproximateBytes [][]int
+	delApproximateBytes [][]int
 }) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -257,7 +290,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	mounter.tz = time.Local
 	ctx := context.Background()
 
-	mountAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+	// [TODO] check size and readd rowBytes
+	mountAndCheckRowInTable := func(tableID int64, _ []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
 		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
@@ -269,6 +303,9 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			rows++
 			require.Equal(t, row.Table.Table, tc.tableName)
 			require.Equal(t, row.Table.Schema, "test")
+			// [TODO] check size and reopen this check
+			// require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
+			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
@@ -284,19 +321,19 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		return rows
 	}
 
-	mountAndCheckRow := func(f func(key []byte, value []byte) *model.RawKVEntry) int {
+	mountAndCheckRow := func(rowsBytes [][]int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		partitionInfo := tableInfo.GetPartitionInfo()
 		if partitionInfo == nil {
-			return mountAndCheckRowInTable(tableInfo.ID, f)
+			return mountAndCheckRowInTable(tableInfo.ID, rowsBytes[0], f)
 		}
 		var rows int
-		for _, p := range partitionInfo.Definitions {
-			rows += mountAndCheckRowInTable(p.ID, f)
+		for i, p := range partitionInfo.Definitions {
+			rows += mountAndCheckRowInTable(p.ID, rowsBytes[i], f)
 		}
 		return rows
 	}
 
-	rows := mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+	rows := mountAndCheckRow(tc.putApproximateBytes, func(key []byte, value []byte) *model.RawKVEntry {
 		return &model.RawKVEntry{
 			OpType:  model.OpTypePut,
 			Key:     key,
@@ -307,7 +344,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	})
 	require.Equal(t, rows, len(tc.values))
 
-	rows = mountAndCheckRow(func(key []byte, value []byte) *model.RawKVEntry {
+	rows = mountAndCheckRow(tc.delApproximateBytes, func(key []byte, value []byte) *model.RawKVEntry {
 		return &model.RawKVEntry{
 			OpType:  model.OpTypeDelete,
 			Key:     key,
@@ -388,5 +425,515 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 		f(kvIter.Key(), kvIter.Value())
 		err = kvIter.Next()
 		require.Nil(t, err)
+	}
+}
+
+// Check following MySQL type, ref to:
+// https://github.com/pingcap/tidb/blob/master/parser/mysql/type.go
+type columnInfoAndResult struct {
+	ColInfo timodel.ColumnInfo
+	Res     interface{}
+}
+
+// We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
+// https://github.com/pingcap/tiflow/issues/4048
+// FIXME: OriginDefaultValue seems always to be string, and test more corner case
+// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
+func TestGetDefaultZeroValue(t *testing.T) {
+	colAndRess := []columnInfoAndResult{
+		// mysql flag null
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeTiny + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeTiny + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -1314,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(-1314),
+		},
+		// mysql.TypeTiny + notnull + default + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeTiny + notnull + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: uint64(1314),
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: uint64(1314),
+		},
+		// mysql.TypeTiny + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -1314,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: uint(0),
+				},
+			},
+			Res: int64(-1314),
+		},
+		// mysql.TypeTiny + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTiny,
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeShort, others testCases same as tiny
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeShort,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeLong, others testCases same as tiny
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLong,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeLonglong, others testCases same as tiny
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLonglong,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeInt24, others testCases same as tiny
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeInt24,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeFloat + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeFloat + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(-3.1415),
+		},
+		// mysql.TypeFloat + notnull + default + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: 3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: float64(3.1415),
+		},
+		// mysql.TypeFloat + notnull + unsigned
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeFloat + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: -3.1415,
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: uint(0),
+				},
+			},
+			Res: float64(-3.1415),
+		},
+		// mysql.TypeFloat + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeFloat,
+					Flag: uint(0),
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeDouble, other testCases same as float
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDouble,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: float64(0),
+		},
+		// mysql.TypeNewDecimal + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    mysql.NotNullFlag,
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: "0", // related with Flen and Decimal
+		},
+		// mysql.TypeNewDecimal + null + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    uint(0),
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeNewDecimal + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "-3.14", // no float
+				FieldType: types.FieldType{
+					Tp:      mysql.TypeNewDecimal,
+					Flag:    uint(0),
+					Flen:    5,
+					Decimal: 2,
+				},
+			},
+			Res: "-3.14",
+		},
+		// mysql.TypeNull
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp: mysql.TypeNull,
+				},
+			},
+			Res: nil,
+		},
+		// mysql.TypeTimestamp + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00 00:00:00",
+		},
+		// mysql.TypeTimestamp + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2020-11-19 12:12:12",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "2020-11-19 12:12:12",
+		},
+		// mysql.TypeTimestamp + null + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2020-11-19 12:12:12",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTimestamp,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "2020-11-19 12:12:12",
+		},
+		// mysql.TypeDate, other testCases same as TypeTimestamp
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDate,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00",
+		},
+		// mysql.TypeDuration, other testCases same as TypeTimestamp
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDuration,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "00:00:00",
+		},
+		// mysql.TypeDatetime, other testCases same as TypeTimestamp
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeDatetime,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "0000-00-00 00:00:00",
+		},
+		// mysql.TypeYear + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeYear,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: int64(0),
+		},
+		// mysql.TypeYear + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "2021",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeYear,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeYear default value will be a string and then translate to []byte
+			Res: "2021",
+		},
+		// mysql.TypeNewDate
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeNewDate,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: nil, // [TODO] seems not support by TiDB, need check
+		},
+		// mysql.TypeVarchar + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarchar,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeVarchar + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "e0",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarchar,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeVarchar default value will be a string and then translate to []byte
+			Res: "e0",
+		},
+		// mysql.TypeTinyBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeTinyBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeMediumBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeMediumBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeLongBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeLongBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeBlob
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeBlob,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeVarString
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeVarString,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeString
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeString,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: []byte{},
+		},
+		// mysql.TypeBit
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Flag: mysql.NotNullFlag,
+					Tp:   mysql.TypeBit,
+				},
+			},
+			Res: uint64(0),
+		},
+		// BLOB, TEXT, GEOMETRY or JSON column can't have a default value
+		// mysql.TypeJSON
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeJSON,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: "null",
+		},
+		// mysql.TypeEnum + notnull + nodefault
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:    mysql.TypeEnum,
+					Flag:  mysql.NotNullFlag,
+					Elems: []string{"e0", "e1"},
+				},
+			},
+			// TypeEnum value will be a string and then translate to []byte
+			// NotNull && no default will choose first element
+			Res: uint64(0),
+		},
+		// mysql.TypeEnum + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "e1",
+				FieldType: types.FieldType{
+					Tp:    mysql.TypeEnum,
+					Flag:  mysql.NotNullFlag,
+					Elems: []string{"e0", "e1"},
+				},
+			},
+			// TypeEnum default value will be a string and then translate to []byte
+			Res: "e1",
+		},
+		// mysql.TypeSet + notnull
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeSet,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: uint64(0),
+		},
+		// mysql.TypeSet + notnull + default
+		{
+			ColInfo: timodel.ColumnInfo{
+				OriginDefaultValue: "1,e",
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeSet,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			// TypeSet default value will be a string and then translate to []byte
+			Res: "1,e",
+		},
+		// mysql.TypeGeometry
+		{
+			ColInfo: timodel.ColumnInfo{
+				FieldType: types.FieldType{
+					Tp:   mysql.TypeGeometry,
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			Res: nil, // not support yet
+		},
+	}
+	testGetDefaultZeroValue(t, colAndRess)
+}
+
+func testGetDefaultZeroValue(t *testing.T, colAndRess []columnInfoAndResult) {
+	for _, colAndRes := range colAndRess {
+		val, _, _, _ := getDefaultOrZeroValue(&colAndRes.ColInfo)
+		require.Equal(t, colAndRes.Res, val)
 	}
 }

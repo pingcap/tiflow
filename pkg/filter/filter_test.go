@@ -16,7 +16,7 @@ package filter
 import (
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/stretchr/testify/require"
@@ -129,9 +129,39 @@ func TestShouldDiscardDDL(t *testing.T) {
 	}
 	filter, err := NewFilter(config)
 	require.Nil(t, err)
-	require.False(t, filter.ShouldDiscardDDL(model.ActionDropSchema))
 	require.False(t, filter.ShouldDiscardDDL(model.ActionAddForeignKey))
+
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropSchema))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionCreateTable))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropTable))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddColumn))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropColumn))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddIndex))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropIndex))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionTruncateTable))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionModifyColumn))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionRenameTable))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionRenameTables))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionSetDefaultValue))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionModifyTableComment))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionRenameIndex))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddTablePartition))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropTablePartition))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionCreateView))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionModifyTableCharsetAndCollate))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionTruncateTablePartition))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropView))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionRecoverTable))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionModifySchemaCharsetAndCollate))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddPrimaryKey))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropPrimaryKey))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionAddColumns))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionDropColumns))
+
+	// Discard sequence DDL.
 	require.True(t, filter.ShouldDiscardDDL(model.ActionCreateSequence))
+	require.True(t, filter.ShouldDiscardDDL(model.ActionAlterSequence))
+	require.True(t, filter.ShouldDiscardDDL(model.ActionDropSequence))
 }
 
 func TestShouldIgnoreDDL(t *testing.T) {

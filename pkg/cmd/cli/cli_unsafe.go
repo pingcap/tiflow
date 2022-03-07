@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 )
 
@@ -73,6 +73,7 @@ func newCmdUnsafe(f factory.Factory) *cobra.Command {
 	command.AddCommand(newCmdReset(f, commonOptions))
 	command.AddCommand(newCmdShowMetadata(f))
 	command.AddCommand(newCmdDeleteServiceGcSafepoint(f, commonOptions))
+	command.AddCommand(newCmdResolveLock(f))
 
 	return command
 }

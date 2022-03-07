@@ -38,7 +38,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# join master3
 	run_dm_master $WORK_DIR/master3 $MASTER_PORT3 $cur/conf/dm-master3.toml
@@ -64,7 +64,6 @@ function run() {
 
 	echo "use sync_diff_inspector to check increment data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	sleep 2
 
 	echo "pause task before kill and restart dm-worker"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -81,7 +80,7 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	sleep 8
 	echo "wait for the task to be scheduled and keep paused"
@@ -106,21 +105,11 @@ function run() {
 
 	# manually transfer a exist source to a newly started worker
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
-
-	# pause task first
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"transfer-source $SOURCE_ID1 worker3" \
-		"tasks \[test\] on source $SOURCE_ID1 should not be running" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task -s $SOURCE_ID1 test" \
-		"\"result\": true" 2
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"transfer-source $SOURCE_ID1 worker3" \
 		"\"result\": true" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task -s $SOURCE_ID1 test" \
-		"\"result\": true" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --name worker3" \

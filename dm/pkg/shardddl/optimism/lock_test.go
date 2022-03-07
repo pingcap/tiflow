@@ -14,8 +14,11 @@
 package optimism
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
@@ -24,9 +27,12 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"go.etcd.io/etcd/integration"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 type testLock struct{}
@@ -83,7 +89,7 @@ func (t *testLock) TestLockTrySyncNormal(c *C) {
 			newTargetTable(task, sources[1], downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			sources[0]: {
@@ -385,7 +391,7 @@ func (t *testLock) TestLockTrySyncIndex(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -469,7 +475,7 @@ func (t *testLock) TestLockTrySyncNullNotNull(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -540,7 +546,7 @@ func (t *testLock) TestLockTrySyncIntBigint(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -593,7 +599,7 @@ func (t *testLock) TestLockTrySyncNoDiff(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -636,7 +642,7 @@ func (t *testLock) TestLockTrySyncNewTable(c *C) {
 
 		tables = map[string]map[string]struct{}{db1: {tbl1: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source1, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 		vers   = map[string]map[string]map[string]int64{
 			source1: {
 				db1: {tbl1: 0},
@@ -749,7 +755,7 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -914,7 +920,7 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1036,7 +1042,7 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1224,7 +1230,7 @@ func (t *testLock) TestLockTrySyncMultipleChangeDDL(c *C) {
 			newTargetTable(task, sources[1], downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			sources[0]: {
@@ -1367,7 +1373,7 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbl1: struct{}{}, tbl2: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1437,6 +1443,103 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), IsFalse)
 }
 
+func (t *testLock) TestTryRemoveTableWithSources(c *C) {
+	var (
+		ID               = "test_lock_try_remove_table-`foo`.`bar`"
+		task             = "test_lock_try_remove_table"
+		source1          = "mysql-replica-1"
+		source2          = "mysql-replica-2"
+		downSchema       = "foo"
+		downTable        = "bar"
+		db               = "foo"
+		tbl1             = "bar1"
+		tbl2             = "bar2"
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		DDLs1            = []string{"ALTER TABLE bar DROP COLUMN c1"}
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+
+		tables = map[string]map[string]struct{}{db: {tbl1: struct{}{}, tbl2: struct{}{}}}
+		tts    = []TargetTable{newTargetTable(task, source1, downSchema, downTable, tables), newTargetTable(task, source2, downSchema, downTable, tables)}
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
+
+		vers = map[string]map[string]map[string]int64{
+			source1: {
+				db: {tbl1: 0, tbl2: 0},
+			},
+			source2: {
+				db: {tbl1: 0, tbl2: 0},
+			},
+		}
+	)
+
+	// only one table exists before TrySync.
+	t.checkLockSynced(c, l)
+	t.checkLockNoDone(c, l)
+
+	// TrySync for the first table.
+	info := newInfoWithVersion(task, source1, db, tbl1, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
+	DDLs, cols, err := l.TrySync(info, tts)
+	c.Assert(err, IsNil)
+	c.Assert(DDLs, DeepEquals, []string{})
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.versions, DeepEquals, vers)
+	ready := l.Ready()
+	c.Assert(ready, HasLen, 2)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsFalse)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+	c.Assert(ready[source2], HasLen, 1)
+	c.Assert(ready[source2][db], HasLen, 2)
+	c.Assert(ready[source2][db][tbl1], IsTrue)
+	c.Assert(ready[source2][db][tbl2], IsTrue)
+
+	// TryRemoveTableBySources with nil
+	c.Assert(len(l.TryRemoveTableBySources(nil)), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 2)
+
+	// TryRemoveTableBySources with wrong source
+	tts = tts[:1]
+	c.Assert(len(l.TryRemoveTableBySources([]string{"hahaha"})), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 2)
+
+	// TryRemoveTableBySources with source2
+	c.Assert(len(l.TryRemoveTableBySources([]string{source2})), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 1)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsFalse)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+	delete(vers, source2)
+	c.Assert(l.versions, DeepEquals, vers)
+	c.Assert(l.HasTables(), IsTrue)
+
+	// TrySync with second table
+	info = newInfoWithVersion(task, source1, db, tbl2, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
+	DDLs, cols, err = l.TrySync(info, tts)
+	c.Assert(err, IsNil)
+	c.Assert(DDLs, DeepEquals, DDLs1)
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.versions, DeepEquals, vers)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 1)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsTrue)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+
+	// TryRemoveTableBySources with source1,source2
+	cols = l.TryRemoveTableBySources([]string{source1})
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.HasTables(), IsFalse)
+}
+
 func (t *testLock) TestLockTryMarkDone(c *C) {
 	var (
 		ID               = "test_lock_try_mark_done-`foo`.`bar`"
@@ -1459,7 +1562,7 @@ func (t *testLock) TestLockTryMarkDone(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1567,7 +1670,7 @@ func (t *testLock) TestAddDifferentFieldLenColumns(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1609,7 +1712,7 @@ func (t *testLock) TestAddDifferentFieldLenColumns(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 
 	// case 2: add a column with a smaller field length
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 	// TrySync for the first table, no table has done the DDLs operation.
 	vers[source][db][tbls[0]]--
@@ -1657,7 +1760,7 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1853,7 +1956,7 @@ func (t *testLock) TestLockTrySyncDifferentIndex(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1908,4 +2011,63 @@ func (t *testLock) TestLockTrySyncDifferentIndex(c *C) {
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 	t.checkLockSynced(c, l)
+}
+
+func (t *testLock) TestFetchTableInfo(c *C) {
+	var (
+		meta             = "meta"
+		ID               = "test_lock_try_sync_index-`foo`.`bar`"
+		task             = "test_lock_try_sync_index"
+		source           = "mysql-replica-1"
+		downSchema       = "db"
+		downTable        = "bar"
+		schema           = "db"
+		tbls             = []string{"bar1", "bar2"}
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, UNIQUE INDEX idx_c1(c1))`)
+		tables           = map[string]map[string]struct{}{
+			schema: {tbls[0]: struct{}{}, tbls[1]: struct{}{}},
+		}
+		tts = []TargetTable{
+			newTargetTable(task, source, downSchema, downTable, tables),
+		}
+		query = fmt.Sprintf("SELECT table_info FROM `%s`.`%s` WHERE id = \\? AND cp_schema = \\? AND cp_table = \\?", meta, cputil.SyncerCheckpoint(task))
+	)
+
+	// nil downstream meta
+	l := NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
+	ti, err := l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// table info not exist
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrDBExecuteFailed.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// null table info
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow("null"))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// succeed
+	tiBytes, err := json.Marshal(ti0)
+	c.Assert(err, IsNil)
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(tiBytes))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(err, IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	c.Assert(ti, DeepEquals, ti0)
 }

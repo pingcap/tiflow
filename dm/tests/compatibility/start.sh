@@ -66,9 +66,9 @@ function run() {
 		"resume-task test" \
 		"\"result\": true" 3
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 3
 
 	echo "use sync_diff_inspector to check data second time"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

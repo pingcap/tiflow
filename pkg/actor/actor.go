@@ -16,8 +16,8 @@ package actor
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/pkg/actor/message"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/actor/message"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 var errMailboxFull = cerrors.ErrMailboxFull.FastGenByArgs()
@@ -54,9 +54,9 @@ type Mailbox interface {
 	// It may return context.Canceled or context.DeadlineExceeded.
 	SendB(ctx context.Context, msg message.Message) error
 
-	// Try to receive a message.
+	// Receive a message.
 	// It must be nonblocking and should only be called by System.
-	tryReceive() (message.Message, bool)
+	Receive() (message.Message, bool)
 	// Return the length of a mailbox.
 	// It should only be called by System.
 	len() int
@@ -99,7 +99,7 @@ func (m *mailbox) SendB(ctx context.Context, msg message.Message) error {
 	}
 }
 
-func (m *mailbox) tryReceive() (message.Message, bool) {
+func (m *mailbox) Receive() (message.Message, bool) {
 	select {
 	case msg, ok := <-m.ch:
 		return msg, ok

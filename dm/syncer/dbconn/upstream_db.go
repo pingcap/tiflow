@@ -15,6 +15,7 @@ package dbconn
 
 import (
 	"context"
+	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
@@ -23,13 +24,13 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // UpStreamConn connect to upstream DB
@@ -41,7 +42,7 @@ type UpStreamConn struct {
 }
 
 // NewUpStreamConn creates an UpStreamConn from config.
-func NewUpStreamConn(dbCfg config.DBConfig) (*UpStreamConn, error) {
+func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 	baseDB, err := CreateBaseDB(dbCfg)
 	if err != nil {
 		return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeUpstream)
@@ -51,7 +52,7 @@ func NewUpStreamConn(dbCfg config.DBConfig) (*UpStreamConn, error) {
 
 // GetMasterStatus returns binlog location that extracted from SHOW MASTER STATUS.
 func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, gtid.Set, error) {
-	pos, gtidSet, err := utils.GetMasterStatus(ctx, conn.BaseDB.DB, flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, conn.BaseDB.DB, flavor)
 
 	failpoint.Inject("GetMasterStatusFailed", func(val failpoint.Value) {
 		err = tmysql.NewErr(uint16(val.(int)))
@@ -69,6 +70,51 @@ func (conn *UpStreamConn) GetServerUUID(ctx context.Context, flavor string) (str
 // GetServerUnixTS returns the result of current timestamp in upstream.
 func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
 	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
+}
+
+// GetCharsetAndDefaultCollation returns charset and collation info.
+func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[string]string, map[int]string, error) {
+	charsetAndDefaultCollation := make(map[string]string)
+	idAndCollationMap := make(map[int]string)
+
+	// Show an example.
+	/*
+		mysql> SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS;
+		+----------------------------+--------------------+-----+------------+
+		| COLLATION_NAME             | CHARACTER_SET_NAME | ID  | IS_DEFAULT |
+		+----------------------------+--------------------+-----+------------+
+		| armscii8_general_ci        | armscii8           |  32 | Yes        |
+		| armscii8_bin               | armscii8           |  64 |            |
+		| ascii_general_ci           | ascii              |  11 | Yes        |
+		| ascii_bin                  | ascii              |  65 |            |
+		| big5_chinese_ci            | big5               |   1 | Yes        |
+		| big5_bin                   | big5               |  84 |            |
+		| binary                     | binary             |  63 | Yes        |
+		+----------------------------+--------------------+-----+------------+
+	*/
+
+	rows, err := conn.QuerySQL(tctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
+	if err != nil {
+		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+
+	defer rows.Close()
+	for rows.Next() {
+		var collation, charset, isDefault string
+		var id int
+		if scanErr := rows.Scan(&collation, &charset, &id, &isDefault); scanErr != nil {
+			return nil, nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+		}
+		idAndCollationMap[id] = strings.ToLower(collation)
+		if strings.ToLower(isDefault) == "yes" {
+			charsetAndDefaultCollation[strings.ToLower(charset)] = collation
+		}
+	}
+
+	if err = rows.Close(); err != nil {
+		return nil, nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+	}
+	return charsetAndDefaultCollation, idAndCollationMap, err
 }
 
 // GetParser returns the parser with correct flag for upstream.

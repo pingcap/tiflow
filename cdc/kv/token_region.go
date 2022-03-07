@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -47,7 +47,6 @@ type LimitRegionRouter interface {
 
 // srrMetrics keeps metrics of a Sized Region Router
 type srrMetrics struct {
-	capture    string
 	changefeed string
 	// mapping from id(TiKV store address) to token used
 	tokens map[string]prometheus.Gauge
@@ -56,10 +55,8 @@ type srrMetrics struct {
 }
 
 func newSrrMetrics(ctx context.Context) *srrMetrics {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeed := util.ChangefeedIDFromCtx(ctx)
 	return &srrMetrics{
-		capture:       captureAddr,
 		changefeed:    changefeed,
 		tokens:        make(map[string]prometheus.Gauge),
 		cachedRegions: make(map[string]prometheus.Gauge),
@@ -103,8 +100,7 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	} else {
 		r.buffer[id] = append(r.buffer[id], sri)
 		if _, ok := r.metrics.cachedRegions[id]; !ok {
-			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-			r.metrics.cachedRegions[id].Set(0)
+			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed)
 		}
 		r.metrics.cachedRegions[id].Inc()
 	}
@@ -118,8 +114,7 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-		r.metrics.tokens[id].Set(0)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -131,8 +126,7 @@ func (r *sizedRegionRouter) Release(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed, r.metrics.capture)
-		r.metrics.tokens[id].Set(0)
+		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
 	}
 	r.metrics.tokens[id].Dec()
 }
@@ -143,8 +137,8 @@ func (r *sizedRegionRouter) Run(ctx context.Context) error {
 		ticker.Stop()
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		for _, m := range r.metrics.cachedRegions {
-			m.Set(0)
+		for id, buf := range r.buffer {
+			r.metrics.cachedRegions[id].Sub(float64(len(buf)))
 		}
 	}()
 	for {

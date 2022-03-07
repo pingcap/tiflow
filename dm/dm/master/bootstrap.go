@@ -25,17 +25,17 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/upgrade"
-	"github.com/pingcap/ticdc/dm/pkg/v1dbschema"
-	"github.com/pingcap/ticdc/dm/pkg/v1workermeta"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/upgrade"
+	"github.com/pingcap/tiflow/dm/pkg/v1dbschema"
+	"github.com/pingcap/tiflow/dm/pkg/v1workermeta"
 )
 
 var (
@@ -333,7 +333,7 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 				return err
 			}
 			if targetDB == nil {
-				targetDB, err = conn.DefaultDBProvider.Apply(cfg2.To)
+				targetDB, err = conn.DefaultDBProvider.Apply(&cfg2.To)
 				if err != nil {
 					return err
 				}
@@ -350,12 +350,6 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 }
 
 // createSubtaskV1Import tries to create subtasks with the specified stage.
-// NOTE: now we only have two different APIs to:
-//   - create a new (running) subtask.
-//   - update the subtask to the specified stage.
-// in other words, if we want to create a `Paused` task,
-// we need to create a `Running` one first and then `Pause` it.
-// this is not a big problem now, but if needed we can refine it later.
 // NOTE: we do not stopping previous subtasks if any later one failed (because some side effects may have taken),
 // and let the user to check & fix the problem.
 // TODO(csuzhangxc): merge subtask configs to support `get-task-config`.
@@ -377,19 +371,12 @@ outerLoop:
 				tctx.Logger.Warn("skip to create subtask because only support to create subtasks with Running/Paused stage now", zap.Stringer("stage", stage))
 				continue
 			}
-			// create and update subtasks one by one (this should be quick enough because only updating etcd).
-			err = s.scheduler.AddSubTasks(false, *cfg2)
+			err = s.scheduler.AddSubTasks(false, stage, *cfg2)
 			if err != nil {
 				if terror.ErrSchedulerSubTaskExist.Equal(err) {
 					err = nil // reset error
 					tctx.Logger.Warn("subtask already exists", zap.String("task", taskName), zap.String("source", sourceID))
 				} else {
-					break outerLoop
-				}
-			}
-			if stage == pb.Stage_Paused { // no more operation needed for `Running`.
-				err = s.scheduler.UpdateExpectSubTaskStage(stage, taskName, sourceID)
-				if err != nil {
 					break outerLoop
 				}
 			}

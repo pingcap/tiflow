@@ -14,10 +14,9 @@
 package master
 
 import (
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/pb"
 
-	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +24,7 @@ import (
 func NewBinlogCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "binlog <command>",
-		Short: "manage upstream binlog operations",
+		Short: "manage or show binlog operations",
 	}
 	cmd.PersistentFlags().StringP("binlog-pos", "b", "", "position used to match binlog event if matched the binlog operation will be applied. The format like \"mysql-bin|000001.000003:3270\"")
 	cmd.AddCommand(
@@ -33,6 +32,7 @@ func NewBinlogCmd() *cobra.Command {
 		newBinlogReplaceCmd(),
 		newBinlogRevertCmd(),
 		newBinlogInjectCmd(),
+		newBinlogListCmd(),
 	)
 
 	return cmd
@@ -47,7 +47,32 @@ func newBinlogSkipCmd() *cobra.Command {
 				return cmd.Help()
 			}
 			taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
-			return sendHandleErrorRequest(cmd, pb.ErrorOp_Skip, taskName, nil)
+			request := &pb.HandleErrorRequest{
+				Op:   pb.ErrorOp_Skip,
+				Task: taskName,
+				Sqls: nil,
+			}
+			return sendHandleErrorRequest(cmd, request)
+		},
+	}
+	return cmd
+}
+
+func newBinlogListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list <task-name>",
+		Short: "list error handle command at binlog position (binlog-pos) or after binlog position (binlog-pos)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return cmd.Help()
+			}
+			taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
+			request := &pb.HandleErrorRequest{
+				Op:   pb.ErrorOp_List,
+				Task: taskName,
+				Sqls: nil,
+			}
+			return sendHandleErrorRequest(cmd, request)
 		},
 	}
 	return cmd
@@ -56,7 +81,7 @@ func newBinlogSkipCmd() *cobra.Command {
 func newBinlogReplaceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replace <task-name> <replace-sql1> <replace-sql2>...",
-		Short: "replace the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
+		Short: "replace the current error event or a specific binlog position (binlog-pos) with some ddls",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) <= 1 {
 				return cmd.Help()
@@ -66,7 +91,12 @@ func newBinlogReplaceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return sendHandleErrorRequest(cmd, pb.ErrorOp_Replace, taskName, sqls)
+			request := &pb.HandleErrorRequest{
+				Op:   pb.ErrorOp_Replace,
+				Task: taskName,
+				Sqls: sqls,
+			}
+			return sendHandleErrorRequest(cmd, request)
 		},
 	}
 	return cmd
@@ -81,20 +111,36 @@ func newBinlogRevertCmd() *cobra.Command {
 				return cmd.Help()
 			}
 			taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
-			return sendHandleErrorRequest(cmd, pb.ErrorOp_Revert, taskName, nil)
+			request := &pb.HandleErrorRequest{
+				Op:   pb.ErrorOp_Revert,
+				Task: taskName,
+				Sqls: nil,
+			}
+			return sendHandleErrorRequest(cmd, request)
 		},
 	}
 	return cmd
 }
 
-// FIXME: implement this later.
 func newBinlogInjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "inject <task-name> <inject-sql1> <inject-sql2>...",
-		Short:  "inject the current error event or a specific binlog position (binlog-pos) ddl event with some ddls",
-		Hidden: true,
+		Use:   "inject <task-name> <inject-sql1> <inject-sql2>...",
+		Short: "inject the current error event or a specific binlog position (binlog-pos) with some ddls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errors.Errorf("this function will be supported later")
+			if len(args) <= 1 {
+				return cmd.Help()
+			}
+			taskName := common.GetTaskNameFromArgOrFile(cmd.Flags().Arg(0))
+			sqls, err := common.ExtractSQLsFromArgs(cmd.Flags().Args()[1:])
+			if err != nil {
+				return err
+			}
+			request := &pb.HandleErrorRequest{
+				Op:   pb.ErrorOp_Inject,
+				Task: taskName,
+				Sqls: sqls,
+			}
+			return sendHandleErrorRequest(cmd, request)
 		},
 	}
 	return cmd

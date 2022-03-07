@@ -16,11 +16,13 @@ package binlog
 import (
 	"context"
 	"database/sql"
+	"path"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // in MySQL, we can set `max_binlog_size` to control the max size of a binlog file.
@@ -91,6 +93,22 @@ func (b FileSizes) After(fromFile gmysql.Position) int64 {
 	}
 
 	return total
+}
+
+func GetLocalBinaryLogs(dir string) (FileSizes, error) {
+	fileNames, err := ReadSortedBinlogFromDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]binlogSize, 0, len(fileNames))
+	for _, fileName := range fileNames {
+		size, err := utils.GetFileSize(path.Join(dir, fileName))
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, binlogSize{name: fileName, size: size})
+	}
+	return files, nil
 }
 
 // SourceStatus collects all information of upstream.

@@ -23,11 +23,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/workerpool"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 )
 
@@ -95,7 +95,6 @@ func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 
 // flush should only be called in the same goroutine where the heap is being written to.
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	var (
@@ -109,7 +108,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		return nil
 	}
 
-	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID).Observe(float64(h.heap.Len()))
+	sorterFlushCountHistogram.WithLabelValues(changefeedID).Observe(float64(h.heap.Len()))
 
 	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
 	// As an optimization, when the condition is true, we clear the heap and send an empty flush.
@@ -170,9 +169,9 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	failpoint.Inject("sorterDebug", func() {
 		tableID, tableName := util.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
-			zap.Int64("table-id", tableID),
-			zap.String("table-name", tableName),
-			zap.Int("heap-id", task.heapSorterID),
+			zap.Int64("tableID", tableID),
+			zap.String("tableName", tableName),
+			zap.Int("heapID", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs))
 	})
 
@@ -256,9 +255,9 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			failpoint.Inject("sorterDebug", func() {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
-					zap.Int("heap-id", task.heapSorterID),
-					zap.Int64("table-id", tableID),
-					zap.String("table-name", tableName),
+					zap.Int("heapID", task.heapSorterID),
+					zap.Int64("tableID", tableID),
+					zap.String("tableName", tableName),
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
 					zap.Uint64("data-size", dataSize),
 					zap.Int("size", eventCount))
@@ -317,7 +316,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 		}
 
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
-		state.heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 40
+		state.heapSizeBytesEstimate += event.RawKV.ApproximateDataSize() + 40
 		needFlush := state.heapSizeBytesEstimate >= int64(state.sorterConfig.ChunkSizeLimit) ||
 			(isResolvedEvent && state.rateCounter < flushRateLimitPerSecond)
 

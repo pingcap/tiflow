@@ -22,17 +22,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	cmdcontext "github.com/pingcap/ticdc/pkg/cmd/context"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/security"
-	ticdcutil "github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/ticdc/pkg/version"
 	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/security"
+	ticdcutil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -74,7 +74,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.serverConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.serverConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
 	// 80 is safe on most systems.
-	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPercentage, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPercentage, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.serverConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
 	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
@@ -91,11 +91,12 @@ func (o *options) addFlags(cmd *cobra.Command) {
 // run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
 	cancel := util.InitCmd(cmd, &logutil.Config{
-		File:           o.serverConfig.LogFile,
-		Level:          o.serverConfig.LogLevel,
-		FileMaxSize:    o.serverConfig.Log.File.MaxSize,
-		FileMaxDays:    o.serverConfig.Log.File.MaxDays,
-		FileMaxBackups: o.serverConfig.Log.File.MaxBackups,
+		File:                 o.serverConfig.LogFile,
+		Level:                o.serverConfig.LogLevel,
+		FileMaxSize:          o.serverConfig.Log.File.MaxSize,
+		FileMaxDays:          o.serverConfig.Log.File.MaxDays,
+		FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
+		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
 	})
 	defer cancel()
 
@@ -131,7 +132,7 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Annotate(err, "run server")
 	}
 	server.Close()
-	unified.UnifiedSorterCleanUp()
+	unified.CleanUp()
 	log.Info("cdc server exits successfully")
 
 	return nil
@@ -144,7 +145,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 	cfg := config.GetDefaultServerConfig()
 
 	if len(o.serverConfigFilePath) > 0 {
-		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg); err != nil {
+		// strict decode config file, but ignore debug item
+		if err := util.StrictDecodeFile(o.serverConfigFilePath, "TiCDC server", cfg, config.DebugConfigurationItem); err != nil {
 			return err
 		}
 
@@ -185,7 +187,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 		case "sorter-chunk-size-limit":
 			cfg.Sorter.ChunkSizeLimit = o.serverConfig.Sorter.ChunkSizeLimit
 		case "sorter-max-memory-percentage":
-			cfg.Sorter.MaxMemoryPressure = o.serverConfig.Sorter.MaxMemoryPressure
+			cfg.Sorter.MaxMemoryPercentage = o.serverConfig.Sorter.MaxMemoryPercentage
 		case "sorter-max-memory-consumption":
 			cfg.Sorter.MaxMemoryConsumption = o.serverConfig.Sorter.MaxMemoryConsumption
 		case "ca":

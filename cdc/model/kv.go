@@ -18,7 +18,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 )
 
 // OpType for the kv, delete or put
@@ -39,7 +39,7 @@ type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved *ResolvedSpan
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64
 }
 
@@ -79,7 +79,7 @@ type RawKVEntry struct {
 	// Commit or resolved TS
 	CRTs uint64 `msg:"crts"`
 
-	// Additonal debug info
+	// Additional debug info
 	RegionID uint64 `msg:"region_id"`
 }
 
@@ -88,7 +88,8 @@ func (v *RawKVEntry) String() string {
 		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs, v.RegionID)
 }
 
-// ApproximateSize calculate the approximate size of this event
-func (v *RawKVEntry) ApproximateSize() int64 {
+// ApproximateDataSize calculate the approximate size of protobuf binary
+// representation of this event.
+func (v *RawKVEntry) ApproximateDataSize() int64 {
 	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
 }

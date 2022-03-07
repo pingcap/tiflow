@@ -6,12 +6,12 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
-function run() {
+function run_with_prepared_source_config() {
 	# 1. test sync fetch binlog met error and reset binlog streamer with remote binlog
 
 	# with a 5 rows insert txn: 1 * FormatDesc + 1 * PreviousGTID + 1 * GTID + 1 * BEGIN + 5 * (Table_map + Write_rows) + 1 * XID
 	# here we fail at the third write rows event, sync should retry and auto recover without any duplicate event
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/GetEventErrorInTxn=13*return(3)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/GetEventErrorInTxn=return(3)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -22,7 +22,7 @@ function run() {
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
-	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/dm-task.yaml --remove-meta"
@@ -41,12 +41,11 @@ function run() {
 
 	# with a 5 rows insert txn: 1 * FormatDesc + 1 * PreviousGTID + 1 * GTID + 1 * BEGIN + 5 * (Table_map + Write_rows) + 1 * XID
 	# here we fail at the third write rows event, sync should retry and auto recover without any duplicate event
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/relay/RelayGetEventFailed=15*return(3);github.com/pingcap/ticdc/dm/relay/retry/RelayAllowRetry=return"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/RelayGetEventFailed=return(3);github.com/pingcap/tiflow/dm/relay/RelayAllowRetry=return"
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -61,15 +60,12 @@ function run() {
 	run_sql_source2 "flush logs;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID2" \
 		"\"relayCatchUpMaster\": true" 1
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-
-	check_log_contain_with_retry "retrying to read binlog" $WORK_DIR/worker2/log/dm-worker.log
-	check_log_contain_with_retry "discard duplicate event" $WORK_DIR/worker2/log/dm-worker.log
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_relay_config.toml
 
@@ -80,7 +76,29 @@ function run() {
 
 	server_uuid=$(tail -n 1 $WORK_DIR/worker2/relay-dir/server-uuid.index)
 	relay_log_size=$(ls -al $WORK_DIR/worker2/relay-dir/$server_uuid/$binlog_file | awk '{print $5}')
+	echo "binlog_pos: $binlog_pos relay_log_size: $relay_log_size"
 	[ "$binlog_pos" -eq "$relay_log_size" ]
+
+	echo "============== run_with_prepared_source_config success ==================="
+}
+
+function run() {
+	# test source enable gtid
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+
+	run_with_prepared_source_config
+
+	cleanup_process $*
+	cleanup_data dup_event1 dup_event_relay
+
+	# test source disable gtid
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source1.yaml
+	sed -i "s/enable-gtid: true/enable-gtid: false/g" $WORK_DIR/source2.yaml
+
+	run_with_prepared_source_config
 }
 
 # also cleanup dm processes in case of last run failed

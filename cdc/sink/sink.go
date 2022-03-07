@@ -18,11 +18,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/cdclog"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Sink options keys
@@ -33,30 +33,52 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error
-
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
+	//
+	// EmitRowChangedEvents is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+
+	// TryEmitRowChangedEvents is thread-safety and non-blocking.
+	TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
 
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
+	//
+	// EmitDDLEvent is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
-	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
-	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
+	// FlushRowChangedEvents flushes each row which of commitTs less than or
+	// equal to `resolvedTs` into downstream.
+	// TiCDC guarantees that all the Events whose commitTs is less than or
+	// equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	//
+	// FlushRowChangedEvents is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
+	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
 
-	// EmitCheckpointTs sends CheckpointTs to Sink
-	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
+	// EmitCheckpointTs sends CheckpointTs to Sink.
+	// TiCDC guarantees that all Events **in the cluster** which of commitTs
+	// less than or equal `checkpointTs` are sent to downstream successfully.
+	//
+	// EmitCheckpointTs is thread-safety.
+	// FIXME: some sink implementation is not thread-safety, but they should be.
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 
-	// Close closes the Sink
+	// Close closes the Sink.
+	//
+	// Close is thread-safe and idempotent.
 	Close(ctx context.Context) error
 
-	// Barrier is a synchronous function to wait all events to be flushed in underlying sink
-	// Note once Barrier is called, the resolved ts won't be pushed until the Barrier call returns.
-	Barrier(ctx context.Context) error
+	// Barrier is a synchronous function to wait all events to be flushed
+	// in underlying sink.
+	// Note once Barrier is called, the resolved ts won't be pushed until
+	// the Barrier call returns.
+	//
+	// Barrier is thread-safe.
+	Barrier(ctx context.Context, tableID model.TableID) error
 }
 
 var sinkIniterMap = make(map[string]sinkInitFunc)
@@ -67,7 +89,7 @@ func init() {
 	// register blackhole sink
 	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return newBlackHoleSink(ctx, opts), nil
+		return newBlackHoleSink(ctx), nil
 	}
 
 	// register mysql sink
@@ -92,18 +114,6 @@ func init() {
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
-
-	// register local sink
-	sinkIniterMap["local"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
-	}
-
-	// register s3 sink
-	sinkIniterMap["s3"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
-	}
 }
 
 // New creates a new sink with the sink-uri
@@ -126,6 +136,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 		return err
 	}
 	errCh := make(chan error)
+	ctx = util.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
 	s, err := New(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {

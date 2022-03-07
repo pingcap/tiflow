@@ -1,12 +1,12 @@
 name: "\U0001F608 Flaking Test"
-description: Report flaky tests or jobs in TiCDC CI
+description: Report flaky tests or jobs
 labels: ["component/test"]
 body:
   - type: markdown
     attributes:
       value: |
-        Please only use this template for submitting reports about flaky tests or jobs (pass or fail with no underlying change in code) in TiCDC CI.
-        Please link this report to https://github.com/pingcap/ticdc/issues/2246 as a subtask.
+        Please only use this template for submitting reports about flaky tests or jobs (pass or fail with no underlying change in code) in DM/TiCDC CI.
+        Please link this report to https://github.com/pingcap/tiflow/issues/2246 as a subtask.
   - type: textarea
     id: jobs
     attributes:

@@ -24,7 +24,7 @@ parsers:
       macro: no
 
 comment:
-  layout: "header, diff"
+  layout: "header, flags, diff"
   behavior: default
   require_changes: no
 
@@ -38,3 +38,16 @@ ignore:
   - "*.md"
   - "docs/.*"
   - "testing_utils/.*"
+
+flags:
+  cdc:
+    carryforward: true
+    paths:
+      - "cdc/"
+      - "cmd/"
+      - "pkg/"
+
+  dm:
+    carryforward: true
+    paths:
+      - "dm/"

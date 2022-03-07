@@ -18,6 +18,11 @@ func LoaderCheckpoint(task string) string {
 	return task + "_loader_checkpoint"
 }
 
+// LightningCheckpoint returns lightning's checkpoint table name.
+func LightningCheckpoint(task string) string {
+	return task + "_lightning_checkpoint_list"
+}
+
 // SyncerCheckpoint returns syncer's checkpoint table name.
 func SyncerCheckpoint(task string) string {
 	return task + "_syncer_checkpoint"

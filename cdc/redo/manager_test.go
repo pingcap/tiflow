@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,10 +55,10 @@ func TestConsistentConfig(t *testing.T) {
 		valid   bool
 	}{
 		{"local", true},
+		{"nfs", true},
 		{"s3", true},
 		{"blackhole", true},
 		{"Local", false},
-		{"nfs", false},
 		{"", false},
 	}
 	for _, sc := range storageCases {
@@ -70,6 +70,7 @@ func TestConsistentConfig(t *testing.T) {
 		s3Enabled bool
 	}{
 		{"local", false},
+		{"nfs", false},
 		{"s3", true},
 		{"blackhole", false},
 	}
@@ -92,7 +93,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
@@ -180,7 +181,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(consistentLevelEventual),
+		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	opts := &ManagerOptions{
@@ -191,5 +192,8 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
 	err = logMgr.EmitDDLEvent(ctx, ddl)
+	require.Nil(t, err)
+
+	err = logMgr.writer.DeleteAllLogs(ctx)
 	require.Nil(t, err)
 }

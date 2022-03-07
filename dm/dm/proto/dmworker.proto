@@ -29,6 +29,7 @@ enum TaskOp {
     Start = 4;
     Update = 5;
     AutoResume = 6;
+    Delete = 7;
 }
 
 message QueryStatusRequest {
@@ -101,6 +102,11 @@ message CheckStatus {
 // DumpStatus represents status for dump unit
 // add fields later
 message DumpStatus {
+    int64 totalTables = 1;
+    double completedTables = 2;
+    double finishedBytes = 3;
+    double finishedRows = 4;
+    double estimateTotalRows = 5;
 }
 
 // LoadStatus represents status for load unit
@@ -329,6 +335,8 @@ message OperateWorkerSchemaRequest {
     string schema = 6; // schema content, a `CREATE TABLE` statement
     bool flush = 7; // flush table info and checkpoint
     bool sync = 8; // sync the table info to master
+    bool fromSource = 9; // update schema from source schema
+    bool fromTarget = 10; // update schema from target schema
 }
 
 // copied `TaskMeta` from release-1.0 branch.
@@ -360,6 +368,8 @@ enum ErrorOp {
     Skip = 1; // skip the error event
     Replace = 2; // replace the error event with a specified SQL
     Revert = 3; // remove the error operator
+    Inject = 4; // inject a specified SQL
+    List = 5; // show handle error commands
 }
 
 message HandleWorkerErrorRequest {
@@ -374,4 +384,10 @@ message GetWorkerCfgRequest {
 
 message GetWorkerCfgResponse {
     string cfg = 1;
+}
+
+enum ValidatorOp {
+    InvalidValidatorOp = 0;
+    StartValidator = 1;
+    StopValidator = 2;
 }

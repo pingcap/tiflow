@@ -14,13 +14,12 @@
 package codec
 
 import (
-	"math"
-	"strconv"
-
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/timeutil"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type craftBatchSuite struct {
@@ -35,7 +34,7 @@ var _ = check.Suite(&craftBatchSuite{
 	resolvedTsCases: codecResolvedTSCases,
 })
 
-func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(value []byte) (EventBatchDecoder, error)) {
+func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, newDecoder func(value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
@@ -82,17 +81,13 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder := encoderBuilder.Build()
 	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
-
 		events := 0
 		for _, row := range cs {
-			op, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			events++
 			c.Assert(err, check.IsNil)
-			c.Assert(op, check.Equals, EncoderNoOperation)
 		}
 		// test normal decode
 		if len(cs) > 0 {
@@ -104,11 +99,8 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder = encoderBuilder.Build()
 	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
-
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -119,11 +111,8 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 		}
 	}
 
+	encoder = encoderBuilder.Build()
 	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
-		c.Assert(err, check.IsNil)
-
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -135,51 +124,10 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatc
 	}
 }
 
-func (s *craftBatchSuite) TestParamsEdgeCases(c *check.C) {
-	defer testleak.AfterTest(c)()
-	encoder := NewCraftEventBatchEncoder().(*CraftEventBatchEncoder)
-	err := encoder.SetParams(map[string]string{})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "0"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": "-1"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxInt32)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, DefaultMaxBatchSize)
-	c.Assert(encoder.maxMessageSize, check.Equals, math.MaxInt32)
-
-	err = encoder.SetParams(map[string]string{"max-message-bytes": strconv.Itoa(math.MaxUint32)})
-	c.Assert(err, check.NotNil)
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": "0"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": "-1"})
-	c.Assert(err, check.ErrorMatches, ".*invalid.*")
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint16)})
-	c.Assert(err, check.IsNil)
-	c.Assert(encoder.maxBatchSize, check.Equals, int(math.MaxUint16))
-	c.Assert(encoder.maxMessageSize, check.Equals, DefaultMaxMessageBytes)
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxInt32)})
-	c.Assert(err, check.NotNil)
-
-	err = encoder.SetParams(map[string]string{"max-batch-size": strconv.Itoa(math.MaxUint32)})
-	c.Assert(err, check.NotNil)
-}
-
 func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
-	c.Check(err, check.IsNil)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(256)
+	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -188,8 +136,7 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
@@ -201,9 +148,9 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 
 func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	defer testleak.AfterTest(c)()
-	encoder := NewCraftEventBatchEncoder()
-	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
-	c.Check(err, check.IsNil)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(10485760)
+	config.maxBatchSize = 64
+	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -212,8 +159,7 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		r, err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(r, check.Equals, EncoderNoOperation)
+		err := encoder.AppendRowChangedEvent(testEvent)
 		c.Check(err, check.IsNil)
 	}
 
@@ -243,8 +189,18 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 
 func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	defer testleak.AfterTest(c)()
-	s.testBatchCodec(c, func() EventBatchEncoder {
-		encoder := NewCraftEventBatchEncoder()
-		return encoder
-	}, NewCraftEventBatchDecoder)
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
+	config.maxBatchSize = 64
+	s.testBatchCodec(c, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
+}
+
+func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
+	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation())
+
+	builder := &craftEventBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build().(*CraftEventBatchEncoder)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
+	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
 }

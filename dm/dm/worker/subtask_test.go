@@ -18,15 +18,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/dumpling"
-	"github.com/pingcap/ticdc/dm/loader"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	"github.com/pingcap/ticdc/dm/pkg/streamer"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/dumpling"
+	"github.com/pingcap/tiflow/dm/loader"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -55,7 +55,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsFull, HasLen, 2)
 	_, ok := unitsFull[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsFull[1].(*loader.Loader)
+	_, ok = unitsFull[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 
 	cfg.Mode = config.ModeIncrement
@@ -69,7 +69,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsAll, HasLen, 3)
 	_, ok = unitsAll[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsAll[1].(*loader.Loader)
+	_, ok = unitsAll[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 	_, ok = unitsAll[2].(*syncer.Syncer)
 	c.Assert(ok, IsTrue)
@@ -118,11 +118,13 @@ func (m *MockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 func (m *MockUnit) Close() {}
 
+func (m *MockUnit) Kill() {}
+
 func (m MockUnit) Pause() {}
 
 func (m *MockUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) { m.Process(ctx, pr) }
 
-func (m *MockUnit) Update(_ *config.SubTaskConfig) error {
+func (m *MockUnit) Update(context.Context, *config.SubTaskConfig) error {
 	return m.errUpdate
 }
 
@@ -177,20 +179,20 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	defer func() {
 		createUnits = createRealUnits
 	}()
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return nil
 	}
-	st.Run(pb.Stage_Running)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 	c.Assert(strings.Contains(st.Result().Errors[0].String(), "has no dm units for mode"), IsTrue)
 
 	mockDumper := NewMockUnit(pb.UnitType_Dump)
 	mockLoader := NewMockUnit(pb.UnitType_Load)
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -223,13 +225,13 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 
 	// restore from pausing
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 
 	// update in running
-	c.Assert(st.Update(nil), NotNil)
+	c.Assert(st.Update(context.Background(), nil), NotNil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
@@ -243,7 +245,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	}
 
 	// update again
-	c.Assert(st.Update(&config.SubTaskConfig{Name: "updateSubtask"}), IsNil)
+	c.Assert(st.Update(context.Background(), &config.SubTaskConfig{Name: "updateSubtask"}), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
@@ -251,7 +253,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	}
 
 	// run again
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
@@ -265,7 +267,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	}
 
 	// run again
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Result(), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
@@ -297,11 +299,11 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	defer func() {
 		createUnits = createRealUnits
 	}()
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -334,7 +336,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	}
 
 	// resume
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -347,7 +349,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	}
 
 	// resume
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -374,12 +376,12 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	c.Assert(strings.Contains(st.Result().Errors[0].Message, "dumper process error"), IsTrue)
 
 	// resume twice
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
 
-	c.Assert(st.Resume(), NotNil)
+	c.Assert(st.Resume(nil), NotNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -401,7 +403,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
 
-	st.Run(pb.Stage_Finished)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
@@ -409,9 +411,11 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 
 func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	cfg := &config.SubTaskConfig{
-		Name: "testSubtaskScene",
-		Mode: config.ModeFull,
+		SourceID: "source",
+		Name:     "testSubtaskScene",
+		Mode:     config.ModeFull,
 	}
+	c.Assert(cfg.Adjust(false), IsNil)
 
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	c.Assert(st.Stage(), DeepEquals, pb.Stage_Paused)
@@ -421,7 +425,7 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	defer func() {
 		createUnits = createRealUnits
 	}()
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
@@ -431,7 +435,7 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	c.Assert(st.CurrUnit(), Equals, nil)
 	c.Assert(st.Result(), IsNil)
 
-	c.Assert(st.Resume(), IsNil)
+	c.Assert(st.Resume(nil), IsNil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -446,11 +450,11 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 
 	st = NewSubTaskWithStage(cfg, pb.Stage_Finished, nil, "worker")
 	c.Assert(st.Stage(), DeepEquals, pb.Stage_Finished)
-	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, notifier streamer.EventNotifier) []unit.Unit {
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Finished)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.CurrUnit(), Equals, nil)
 	c.Assert(st.Result(), IsNil)

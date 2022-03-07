@@ -28,21 +28,21 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	fr "github.com/pingcap/ticdc/dm/pkg/func-rollback"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/router"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -222,7 +222,7 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 				continue
 			}
 			// update finished offset after checkpoint updated
-			w.loader.finishedDataSize.Store(job.offset)
+			w.loader.finishedDataSize.Add(job.offset - job.lastOffset)
 			if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema]; ok {
 				if _, ok := w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable]; ok {
 					w.loader.dbTableDataFinishedSize[job.sourceSchema][job.sourceTable].Store(job.offset)
@@ -362,7 +362,8 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 				continue
 			}
 
-			if w.loader.columnMapping != nil {
+			// extend column also need use reassemble to write SQL and the table name has been renamed
+			if w.loader.columnMapping != nil || len(table.extendCol) > 0 {
 				// column mapping and route table
 				query, err = reassemble(data, table, w.loader.columnMapping)
 				if err != nil {
@@ -407,6 +408,8 @@ type tableInfo struct {
 	targetTable    string
 	columnNameList []string
 	insertHeadStmt string
+	extendCol      []string
+	extendVal      []string
 }
 
 // Loader can load your mydumper data into TiDB database.
@@ -427,7 +430,7 @@ type Loader struct {
 
 	fileJobQueue chan *fileJob
 
-	tableRouter   *router.Table
+	tableRouter   *router.RouteTable
 	baList        *filter.Filter
 	columnMapping *cm.Mapping
 
@@ -441,8 +444,8 @@ type Loader struct {
 	// to calculate remainingTimeGauge metric, map will be init in `l.prepare.prepareDataFiles`
 	dbTableDataTotalSize        map[string]map[string]*atomic.Int64
 	dbTableDataFinishedSize     map[string]map[string]*atomic.Int64
-	dbTableDataLastFinishedSize map[string]map[string]int64
-	dbTableDataLastUpdatedTime  time.Time
+	dbTableDataLastFinishedSize map[string]map[string]*atomic.Int64
+	dbTableDataLastUpdatedTime  atomic.Time
 
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
@@ -534,7 +537,15 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	if lcfg.To.Session == nil {
 		lcfg.To.Session = make(map[string]string)
 	}
-	lcfg.To.Session["time_zone"] = "+00:00"
+	timeZone := l.cfg.Timezone
+	if len(timeZone) == 0 {
+		var err1 error
+		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &lcfg.To)
+		if err1 != nil {
+			return err1
+		}
+	}
+	lcfg.To.Session["time_zone"] = timeZone
 
 	hasSQLMode := false
 	for k := range l.cfg.To.Session {
@@ -554,7 +565,7 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 
 	l.logger.Info("loader's sql_mode is", zap.String("sqlmode", lcfg.To.Session["sql_mode"]))
 
-	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, l.cfg.PoolSize)
+	l.toDB, l.toDBConns, err = createConns(tctx, lcfg, lcfg.Name, lcfg.SourceID, l.cfg.PoolSize)
 	if err != nil {
 		return err
 	}
@@ -570,7 +581,7 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	defer cancel()
 
 	l.newFileJobQueue()
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
@@ -752,7 +763,7 @@ func (l *Loader) Restore(ctx context.Context) error {
 				}
 			}
 			if l.cfg.CleanDumpFile {
-				cleanDumpFiles(l.cfg)
+				cleanDumpFiles(ctx, l.cfg)
 			}
 		}
 	} else if errors.Cause(err) != context.Canceled {
@@ -791,6 +802,12 @@ func (l *Loader) Close() {
 	l.checkPoint.Close()
 	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name)
 	l.closed.Store(true)
+}
+
+// Kill kill the loader without graceful.
+func (l *Loader) Kill() {
+	// TODO: implement kill
+	l.Close()
 }
 
 // stopLoad stops loading, now it used by Close and Pause
@@ -861,11 +878,11 @@ func (l *Loader) resetDBs(ctx context.Context) error {
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config
 // no binlog filter for loader need to update.
-func (l *Loader) Update(cfg *config.SubTaskConfig) error {
+func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *router.Table
+		oldTableRouter   *router.RouteTable
 		oldColumnMapping *cm.Mapping
 	)
 
@@ -893,7 +910,7 @@ func (l *Loader) Update(cfg *config.SubTaskConfig) error {
 
 	// update route, for loader, this almost useless, because schemas often have been restored
 	oldTableRouter = l.tableRouter
-	l.tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, cfg.RouteRules)
+	l.tableRouter, err = router.NewRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrLoadUnitGenTableRouter.Delegate(err)
 	}
@@ -913,7 +930,7 @@ func (l *Loader) Update(cfg *config.SubTaskConfig) error {
 }
 
 func (l *Loader) genRouter(rules []*router.TableRule) error {
-	l.tableRouter, _ = router.NewTableRouter(l.cfg.CaseSensitive, []*router.TableRule{})
+	l.tableRouter, _ = router.NewRouter(l.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range rules {
 		err := l.tableRouter.AddRule(rule)
 		if err != nil {
@@ -1045,12 +1062,12 @@ func (l *Loader) prepareDataFiles(files map[string]struct{}) error {
 		if _, ok := l.dbTableDataTotalSize[db]; !ok {
 			l.dbTableDataTotalSize[db] = make(map[string]*atomic.Int64)
 			l.dbTableDataFinishedSize[db] = make(map[string]*atomic.Int64)
-			l.dbTableDataLastFinishedSize[db] = make(map[string]int64)
+			l.dbTableDataLastFinishedSize[db] = make(map[string]*atomic.Int64)
 		}
 		if _, ok := l.dbTableDataTotalSize[db][table]; !ok {
 			l.dbTableDataTotalSize[db][table] = atomic.NewInt64(0)
 			l.dbTableDataFinishedSize[db][table] = atomic.NewInt64(0)
-			l.dbTableDataLastFinishedSize[db][table] = 0
+			l.dbTableDataLastFinishedSize[db][table] = atomic.NewInt64(0)
 		}
 		l.dbTableDataTotalSize[db][table].Add(size)
 
@@ -1075,7 +1092,7 @@ func (l *Loader) prepare() error {
 	l.finishedDataSize.Store(0) // reset before load from checkpoint
 	l.dbTableDataTotalSize = make(map[string]map[string]*atomic.Int64)
 	l.dbTableDataFinishedSize = make(map[string]map[string]*atomic.Int64)
-	l.dbTableDataLastFinishedSize = make(map[string]map[string]int64)
+	l.dbTableDataLastFinishedSize = make(map[string]map[string]*atomic.Int64)
 
 	// check if mydumper dir data exists.
 	if !utils.IsDirExists(l.cfg.Dir) {
@@ -1222,7 +1239,7 @@ func renameShardingSchema(query, srcSchema, dstSchema string, ansiquote bool) st
 	return SQLReplace(query, srcSchema, dstSchema, ansiquote)
 }
 
-func fetchMatchedLiteral(ctx *tcontext.Context, router *router.Table, schema, table string) (targetSchema string, targetTable string) {
+func fetchMatchedLiteral(ctx *tcontext.Context, router *router.RouteTable, schema, table string) (targetSchema string, targetTable string) {
 	if schema == "" {
 		// nothing change
 		return schema, table
@@ -1320,7 +1337,8 @@ func (q *jobQueue) startConsumers(handler func(ctx context.Context, job *restore
 							}
 						}(baseConn)
 						session = &DBConn{
-							cfg:      job.loader.cfg,
+							name:     job.loader.cfg.Name,
+							sourceID: job.loader.cfg.SourceID,
 							baseConn: baseConn,
 							resetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
 								return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")
@@ -1413,7 +1431,7 @@ tblSchemaLoop:
 		for table := range l.db2Tables[db] {
 			schemaFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql" // cache friendly
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
-				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode)
+				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, schemaFile, l.cfg.LoaderConfig.SQLMode, l.cfg.SourceID)
 				if err != nil {
 					err = terror.Annotatef(err, "parse table %s/%s", db, table)
 					break tblSchemaLoop

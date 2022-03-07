@@ -13,9 +13,9 @@
 
 package pipeline
 
-import "github.com/pingcap/ticdc/pkg/context"
+import "github.com/pingcap/tiflow/pkg/context"
 
-// NodeContext adds two functions from `coutext.Context` and created by pipeline
+// NodeContext adds two functions to `context.Context` and is created by pipeline
 type NodeContext interface {
 	context.Context
 
@@ -55,6 +55,11 @@ type messageContext struct {
 }
 
 func withMessage(ctx NodeContext, msg Message) NodeContext {
+	// Optimize for `nodeContext` to save one allocation.
+	if ctx, ok := ctx.(*nodeContext); ok {
+		ctx.msg = msg
+		return ctx
+	}
 	return messageContext{
 		NodeContext: ctx,
 		message:     msg,

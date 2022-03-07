@@ -28,8 +28,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // main starts to run the test case logic after MySQL, TiDB and DM have been set up.
@@ -106,7 +106,7 @@ func main() {
 	}
 
 	// set upstream and downstream instances state.
-	err = setInstancesState(ctx, cfg.Target, cfg.Source1, cfg.Source2, cfg.Source3)
+	err = setInstancesState(ctx, &cfg.Target, &cfg.Source1, &cfg.Source2, &cfg.Source3)
 	if err != nil {
 		log.L().Error("fail to set instances state", zap.Error(err))
 		code = 2

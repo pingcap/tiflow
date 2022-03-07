@@ -19,9 +19,11 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 func (s *testFilterSuite) TestSkipDMLByExpression(c *C) {
@@ -91,8 +93,9 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
 	for _, ca := range cases {
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -107,17 +110,21 @@ create table t (
 				InsertValueExpr: ca.exprStr,
 			},
 		}
-		g := NewExprFilterGroup(exprConfig)
+		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+		g := NewExprFilterGroup(sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
 
-		skip, err := SkipDMLByExpression(ca.skippedRow, expr, ti.Columns)
+		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
+		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
+
+		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, true)
 
-		skip, err = SkipDMLByExpression(ca.passedRow, expr, ti.Columns)
+		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, false)
 
@@ -348,9 +355,10 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
 	for _, ca := range cases {
 		c.Log(ca.tableStr)
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -365,17 +373,21 @@ create table t (
 				InsertValueExpr: ca.exprStr,
 			},
 		}
-		g := NewExprFilterGroup(exprConfig)
+		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+		g := NewExprFilterGroup(sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
 
-		skip, err := SkipDMLByExpression(ca.skippedRow, expr, ti.Columns)
+		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
+		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
+
+		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, true)
 
-		skip, err = SkipDMLByExpression(ca.passedRow, expr, ti.Columns)
+		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
 		c.Assert(skip, Equals, false)
 
@@ -398,7 +410,9 @@ create table t (
 );`
 		exprStr = "d > 1"
 	)
-	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, s.baseConn)
+
+	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)
@@ -413,7 +427,8 @@ create table t (
 			InsertValueExpr: exprStr,
 		},
 	}
-	g := NewExprFilterGroup(exprConfig)
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	g := NewExprFilterGroup(sessCtx, exprConfig)
 	exprs, err := g.GetInsertExprs(table, ti)
 	c.Assert(err, IsNil)
 	c.Assert(exprs, HasLen, 1)
@@ -421,10 +436,10 @@ create table t (
 	c.Assert(expr.String(), Equals, "0")
 
 	// skip nothing
-	skip, err := SkipDMLByExpression([]interface{}{0}, expr, ti.Columns)
+	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
-	skip, err = SkipDMLByExpression([]interface{}{2}, expr, ti.Columns)
+	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
 }

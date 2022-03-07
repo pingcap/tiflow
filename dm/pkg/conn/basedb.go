@@ -24,22 +24,23 @@ import (
 	"sync/atomic"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/failpoint"
-
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/retry"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var customID int64
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
-	Apply(config config.DBConfig) (*BaseDB, error)
+	Apply(config *config.DBConfig) (*BaseDB, error)
 }
 
 // DefaultDBProviderImpl is default DBProvider implement.
@@ -56,7 +57,7 @@ func init() {
 var mockDB sqlmock.Sqlmock
 
 // Apply will build BaseDB with DBConfig.
-func (d *DefaultDBProviderImpl) Apply(config config.DBConfig) (*BaseDB, error) {
+func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
@@ -148,11 +149,11 @@ type BaseDB struct {
 	Retry retry.Strategy
 
 	// this function will do when close the BaseDB
-	doFuncInClose func()
+	doFuncInClose []func()
 }
 
 // NewBaseDB returns *BaseDB object.
-func NewBaseDB(db *sql.DB, doFuncInClose func()) *BaseDB {
+func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
 	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
 }
@@ -182,6 +183,13 @@ func (d *BaseDB) CloseBaseConn(conn *BaseConn) error {
 	return conn.close()
 }
 
+// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error.
+func CloseBaseConnWithoutErr(d *BaseDB, conn *BaseConn) {
+	if err1 := d.CloseBaseConn(conn); err1 != nil {
+		log.L().Warn("close db connection failed", zap.Error(err1))
+	}
+}
+
 // Close release *BaseDB resource.
 func (d *BaseDB) Close() error {
 	if d == nil || d.DB == nil {
@@ -197,7 +205,9 @@ func (d *BaseDB) Close() error {
 		}
 	}
 	terr := d.DB.Close()
-	d.doFuncInClose()
+	for _, f := range d.doFuncInClose {
+		f()
+	}
 
 	if err == nil {
 		return terr

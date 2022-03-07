@@ -29,25 +29,19 @@ import (
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/syncer/dbconn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
-func ignoreDDLError(err error) bool {
-	err = errors.Cause(err)
-	mysqlErr, ok := err.(*mysql.MySQLError)
-	if !ok {
-		return false
-	}
-
-	errCode := errors.ErrCode(mysqlErr.Number)
-	switch errCode {
-	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
-		infoschema.ErrTableExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(),
-		infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNameDuplicate.Code(), tddl.ErrCantDropFieldOrKey.Code():
+// ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
+// upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
+func ignoreTrackerDDLError(err error) bool {
+	switch {
+	case infoschema.ErrDatabaseExists.Equal(err), infoschema.ErrDatabaseDropExists.Equal(err),
+		infoschema.ErrTableDropExists.Equal(err),
+		tddl.ErrCantDropFieldOrKey.Equal(err):
 		return true
 	default:
 		return false
@@ -63,7 +57,8 @@ func isDropColumnWithIndexError(err error) bool {
 	return (mysqlErr.Number == errno.ErrUnsupportedDDLOperation || mysqlErr.Number == tmysql.ErrUnknown) &&
 		strings.Contains(mysqlErr.Message, "drop column") &&
 		(strings.Contains(mysqlErr.Message, "with index") ||
-			strings.Contains(mysqlErr.Message, "with composite index"))
+			strings.Contains(mysqlErr.Message, "with composite index") ||
+			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
@@ -207,7 +202,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		}
 
 		tctx.L().Info("drop index success, now try to drop column", zap.Strings("index", idx2Drop))
-		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, ignoreDDLError, ddls[index:]); err2 != nil {
+		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddls[index:]); err2 != nil {
 			return err2
 		}
 

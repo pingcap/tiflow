@@ -15,13 +15,12 @@ package entry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/model"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -33,6 +32,8 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -129,8 +130,8 @@ func TestTable(t *testing.T) {
 				Length: 10,
 			},
 		},
-		Unique:  true,
-		Primary: true,
+		Unique:  false,
+		Primary: false,
 		State:   timodel.StatePublic,
 	}
 	// table info
@@ -376,6 +377,73 @@ func TestHandleDDL(t *testing.T) {
 	}
 }
 
+func TestHandleRenameTables(t *testing.T) {
+	// Initial schema: db_1.table_1 and db_2.table_2.
+	snap := newEmptySchemaSnapshot(true)
+	var i int64
+	for i = 1; i < 3; i++ {
+		dbInfo := &timodel.DBInfo{
+			ID:    i,
+			Name:  timodel.NewCIStr(fmt.Sprintf("db_%d", i)),
+			State: timodel.StatePublic,
+		}
+		err := snap.createSchema(dbInfo)
+		require.Nil(t, err)
+	}
+	for i = 1; i < 3; i++ {
+		tblInfo := &timodel.TableInfo{
+			ID:    10 + i,
+			Name:  timodel.NewCIStr(fmt.Sprintf("table_%d", i)),
+			State: timodel.StatePublic,
+		}
+		err := snap.createTable(model.WrapTableInfo(i, fmt.Sprintf("db_%d", i), 1, tblInfo))
+		require.Nil(t, err)
+	}
+
+	// rename table db1.table_1 to db2.x, db2.table_2 to db1.y
+	oldSchemaIDs := []int64{1, 2}
+	newSchemaIDs := []int64{2, 1}
+	oldTableIDs := []int64{11, 12}
+	newTableNames := []timodel.CIStr{timodel.NewCIStr("x"), timodel.NewCIStr("y")}
+	oldSchemaNames := []timodel.CIStr{timodel.NewCIStr("db_1"), timodel.NewCIStr("db_2")}
+	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames}
+	rawArgs, err := json.Marshal(args)
+	require.Nil(t, err)
+	var job *timodel.Job = &timodel.Job{
+		Type:       timodel.ActionRenameTables,
+		RawArgs:    rawArgs,
+		BinlogInfo: &timodel.HistoryInfo{},
+	}
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    13,
+			Name:  timodel.NewCIStr("x"),
+			State: timodel.StatePublic,
+		})
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    14,
+			Name:  timodel.NewCIStr("y"),
+			State: timodel.StatePublic,
+		})
+	testDoDDLAndCheck(t, snap, job, false)
+
+	var ok bool
+	_, ok = snap.TableByID(13)
+	require.True(t, ok)
+	_, ok = snap.TableByID(14)
+	require.True(t, ok)
+	_, ok = snap.TableByID(11)
+	require.False(t, ok)
+	_, ok = snap.TableByID(12)
+	require.False(t, ok)
+
+	t1 := model.TableName{Schema: "db_2", Table: "x"}
+	t2 := model.TableName{Schema: "db_1", Table: "y"}
+	require.Equal(t, snap.tableNameToID[t1], int64(13))
+	require.Equal(t, snap.tableNameToID[t2], int64(14))
+}
+
 func testDoDDLAndCheck(t *testing.T, snap *schemaSnapshot, job *timodel.Job, isErr bool) {
 	err := snap.handleDDL(job)
 	require.Equal(t, err != nil, isErr)
@@ -606,7 +674,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	_, exist = snap.TableByID(3)
 	require.False(t, exist)
 
-	storage.DoGC(0)
+	lastSchemaTs := storage.DoGC(0)
+	require.Equal(t, uint64(0), lastSchemaTs)
+
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist = snap.SchemaByID(1)
@@ -627,7 +697,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	_, exist = snap.TableByID(3)
 	require.False(t, exist)
 
-	storage.DoGC(155)
+	lastSchemaTs = storage.DoGC(155)
+	require.Equal(t, uint64(140), lastSchemaTs)
+
 	storage.AdvanceResolvedTs(185)
 
 	snap, err = storage.GetSnapshot(ctx, 180)
@@ -703,7 +775,7 @@ func TestSnapshotClone(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* explicitTables */)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* forceReplicate */)
 	require.Nil(t, err)
 
 	clone := snap.Clone()
@@ -712,7 +784,7 @@ func TestSnapshotClone(t *testing.T) {
 	require.Equal(t, clone.truncateTableID, snap.truncateTableID)
 	require.Equal(t, clone.ineligibleTableID, snap.ineligibleTableID)
 	require.Equal(t, clone.currentTs, snap.currentTs)
-	require.Equal(t, clone.explicitTables, snap.explicitTables)
+	require.Equal(t, clone.forceReplicate, snap.forceReplicate)
 	require.Equal(t, len(clone.tables), len(snap.tables))
 	require.Equal(t, len(clone.schemas), len(snap.schemas))
 	require.Equal(t, len(clone.partitionTable), len(snap.partitionTable))
@@ -746,13 +818,13 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
-	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* explicitTables */)
+	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
-	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* explicitTables */)
+	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
 	require.Nil(t, err)
-	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* explicitTables */)
+	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 
 	require.Equal(t, len(snap2.tables)-len(snap1.tables), 5)

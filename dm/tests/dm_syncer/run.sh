@@ -71,7 +71,7 @@ function run() {
 	run_dm_syncer $WORK_DIR/syncer2 $WORK_DIR/dm-syncer-2.toml $meta_file --syncer-config-format syncer2
 
 	# wait for dm_syncer to init and start
-	sleep 5
+	sleep 10
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_blalist.toml
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_route_rules.toml

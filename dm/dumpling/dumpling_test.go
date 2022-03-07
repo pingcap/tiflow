@@ -18,15 +18,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/docker/go-units"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
-
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/prometheus/client_golang/prometheus"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 var _ = Suite(&testDumplingSuite{})
@@ -44,11 +48,12 @@ type testDumplingSuite struct {
 	cfg *config.SubTaskConfig
 }
 
-func (d *testDumplingSuite) SetUpSuite(c *C) {
+func (t *testDumplingSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
-	d.cfg = &config.SubTaskConfig{
-		Name: "dumpling_ut",
-		From: config.GetDBConfigForTest(),
+	t.cfg = &config.SubTaskConfig{
+		Name:     "dumpling_ut",
+		Timezone: "UTC",
+		From:     config.GetDBConfigForTest(),
 		LoaderConfig: config.LoaderConfig{
 			Dir: dir,
 		},
@@ -63,8 +68,8 @@ func (d *testDumplingSuite) SetUpSuite(c *C) {
 	c.Assert(log.InitLogger(&log.Config{}), IsNil)
 }
 
-func (d *testDumplingSuite) TestDumpling(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDumpling(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -72,9 +77,9 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(err, IsNil)
 	resultCh := make(chan pb.ProcessResult, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
 	dumpling.Process(ctx, resultCh)
 	c.Assert(len(resultCh), Equals, 1)
@@ -82,11 +87,11 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.IsCanceled, IsFalse)
 	c.Assert(len(result.Errors), Equals, 0)
 	//nolint:errcheck
-	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessNoError")
+	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// return error
 	dumpling.Process(ctx, resultCh)
@@ -96,15 +101,15 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(len(result.Errors), Equals, 1)
 	c.Assert(result.Errors[0].Message, Equals, "unknown error")
 	// nolint:errcheck
-	failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessWithError")
+	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// cancel
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), IsNil)
 	// nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessCancel")
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel")
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever", `return(true)`), IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dumpling/dumpUnitProcessForever")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever")
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel2()
@@ -116,10 +121,82 @@ func (d *testDumplingSuite) TestDumpling(c *C) {
 	c.Assert(result.Errors[0].String(), Matches, ".*context deadline exceeded.*")
 }
 
-func (d *testDumplingSuite) TestDefaultConfig(c *C) {
-	dumpling := NewDumpling(d.cfg)
+func (t *testDumplingSuite) TestDefaultConfig(c *C) {
+	dumpling := NewDumpling(t.cfg)
 	ctx := context.Background()
 	c.Assert(dumpling.Init(ctx), IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, Not(Equals), export.UnspecifiedSize)
 	c.Assert(dumpling.dumpConfig.Rows, Not(Equals), export.UnspecifiedSize)
+}
+
+func (t *testDumplingSuite) TestCallStatus(c *C) {
+	m := NewDumpling(t.cfg)
+	ctx := context.Background()
+
+	dumpConf := export.DefaultConfig()
+	dumpConf.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
+	export.InitMetricsVector(dumpConf.Labels)
+
+	s := m.Status(nil).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
+
+	// NewDumper is the only way we can set conf to Dumper, but it will return error. so we just ignore the error
+	dumpling, _ := export.NewDumper(ctx, dumpConf)
+	m.core = dumpling
+
+	m.Close()
+	s = m.Status(nil).(*pb.DumpStatus)
+	c.Assert(s.CompletedTables, Equals, float64(0))
+	c.Assert(s.FinishedBytes, Equals, float64(0))
+	c.Assert(s.FinishedRows, Equals, float64(0))
+	c.Assert(s.EstimateTotalRows, Equals, float64(0))
+}
+
+func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *C) {
+	cfg := &config.SubTaskConfig{
+		Timezone: "UTC",
+	}
+	cfg.ChunkFilesize = "1"
+	rules := &filter.Rules{
+		DoDBs: []string{"unit_test"},
+	}
+	cfg.BAList = rules
+	// make sure we enter `parseExtraArgs`
+	cfg.ExtraArgs = "-s=4000 --consistency lock"
+
+	d := NewDumpling(cfg)
+	exportCfg, err := d.constructArgs(context.Background())
+	c.Assert(err, IsNil)
+
+	c.Assert(exportCfg.StatementSize, Equals, uint64(4000))
+	c.Assert(exportCfg.FileSize, Equals, uint64(1*units.MiB))
+
+	f, err2 := tfilter.ParseMySQLReplicationRules(rules)
+	c.Assert(err2, IsNil)
+	c.Assert(exportCfg.TableFilter, DeepEquals, tfilter.CaseInsensitive(f))
+
+	c.Assert(exportCfg.Consistency, Equals, "lock")
+}
+
+func (t *testDumplingSuite) TestConstructArgs(c *C) {
+	ctx := context.Background()
+
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+
+	cfg := &config.SubTaskConfig{}
+	cfg.ExtraArgs = `--statement-size=100 --where "t>10" --threads 8 -F 50B`
+	d := NewDumpling(cfg)
+	exportCfg, err := d.constructArgs(ctx)
+	c.Assert(err, IsNil)
+	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
+	c.Assert(exportCfg.Where, Equals, "t>10")
+	c.Assert(exportCfg.Threads, Equals, 8)
+	c.Assert(exportCfg.FileSize, Equals, uint64(50))
+	c.Assert(exportCfg.SessionParams, NotNil)
+	c.Assert(exportCfg.SessionParams["time_zone"], Equals, "+01:00")
 }

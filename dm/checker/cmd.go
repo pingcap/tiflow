@@ -15,18 +15,21 @@ package checker
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var (
-	// ErrorMsgHeader used as the header of the error message when checking config failed.
-	ErrorMsgHeader = "fail to check synchronization configuration with type"
+	// CheckTaskMsgHeader used as the header of the error/warning message when checking config failed.
+	CheckTaskMsgHeader = "fail to check synchronization configuration with type"
+
+	CheckTaskSuccess = "pre-check is passed. "
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
-	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error
+	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)
 )
 
 func init() {
@@ -34,44 +37,39 @@ func init() {
 }
 
 // CheckSyncConfig checks synchronization configuration.
-func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) error {
+func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
 	if len(cfgs) == 0 {
-		return nil
+		return "", nil
 	}
 
 	// all `IgnoreCheckingItems` and `Mode` of sub-task are same, so we take first one
 	// for ModeFull we don't need replication privilege; for ModeIncrement we don't need dump privilege
 	ignoreCheckingItems := cfgs[0].IgnoreCheckingItems
-	// we directly append ignore checking items here which may cause duplicate in ignoreCheckingItems
-	// but in config.FilterCheckingItems we only use this to delete map's keys so it is tolerable to append directly here
-	switch cfgs[0].Mode {
-	case config.ModeFull:
-		ignoreCheckingItems = append(ignoreCheckingItems, config.ReplicationPrivilegeChecking,
-			config.BinlogEnableChecking, config.BinlogFormatChecking, config.BinlogRowImageChecking, config.ServerIDChecking)
-	case config.ModeIncrement:
-		ignoreCheckingItems = append(ignoreCheckingItems, config.DumpPrivilegeChecking)
-	}
 	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
 	if len(checkingItems) == 0 {
-		return nil
+		return "", nil
 	}
 
 	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
 
 	if err := c.Init(ctx); err != nil {
-		return terror.Annotate(err, "fail to initial checker")
+		return "", terror.Annotate(err, "fail to initial checker")
 	}
 	defer c.Close()
 
 	pr := make(chan pb.ProcessResult, 1)
 	c.Process(ctx, pr)
-	for len(pr) > 0 {
+	if len(pr) > 0 {
 		r := <-pr
 		// we only want first error
 		if len(r.Errors) > 0 {
-			return terror.ErrTaskCheckSyncConfigError.Generate(ErrorMsgHeader, r.Errors[0].Message, string(r.Detail))
+			return "", terror.ErrTaskCheckSyncConfigError.Generate(CheckTaskMsgHeader, r.Errors[0].Message, string(r.Detail))
 		}
+		if len(r.Detail) == 0 {
+			return CheckTaskSuccess, nil
+		}
+		return fmt.Sprintf("%s: no errors but some warnings\n detail: %s", CheckTaskMsgHeader, string(r.Detail)), nil
 	}
 
-	return nil
+	return "", nil
 }

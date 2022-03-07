@@ -23,9 +23,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/dm/master/metrics"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 const (
@@ -185,6 +185,12 @@ func (s *Server) startLeaderComponent(ctx context.Context) bool {
 	err = s.optimist.Start(ctx, s.etcdClient)
 	if err != nil {
 		log.L().Error("optimist do not started", zap.Error(err))
+		return false
+	}
+
+	err = s.initClusterID(ctx)
+	if err != nil {
+		log.L().Error("init cluster id failed", zap.Error(err))
 		return false
 	}
 

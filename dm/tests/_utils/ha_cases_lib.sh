@@ -145,6 +145,7 @@ function start_multi_tasks_cluster() {
 }
 
 function cleanup() {
+	cleanup_process $*
 	cleanup_data $ha_test
 	cleanup_data $ha_test2
 	echo "clean source table"
@@ -154,13 +155,12 @@ function cleanup() {
 		$(mysql -h127.0.0.1 -p123456 -P${i} -uroot -e "drop database if exists ha_test2;")
 		sleep 1
 	done
-	cleanup_process $*
 }
 
 function isolate_master() {
 	port=${master_ports[$(($1 - 1))]}
 	if [ $2 = "isolate" ]; then
-		export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/master/FailToElect=return(\"master$1\")"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/FailToElect=return(\"master$1\")"
 	fi
 	echo "kill dm-master$1"
 	ps aux | grep dm-master$1 | awk '{print $2}' | xargs kill || true
@@ -172,7 +172,7 @@ function isolate_master() {
 function isolate_worker() {
 	port=${worker_ports[$(($1 - 1))]}
 	if [ $2 = "isolate" ]; then
-		export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/FailToKeepAlive=return(\"worker$1\")"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/FailToKeepAlive=return(\"worker$1\")"
 	fi
 	echo "kill dm-worker$1"
 	ps aux | grep dm-worker$1 | awk '{print $2}' | xargs kill || true

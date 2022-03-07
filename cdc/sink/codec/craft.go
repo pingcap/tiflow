@@ -14,14 +14,11 @@
 package codec
 
 import (
-	"context"
-	"math"
-	"strconv"
-
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec/craft"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // CraftEventBatchEncoder encodes the events into the byte of a batch into craft binary format.
@@ -30,15 +27,15 @@ type CraftEventBatchEncoder struct {
 	messageBuf       []*MQMessage
 
 	// configs
-	maxMessageSize int
-	maxBatchSize   int
+	maxMessageBytes int
+	maxBatchSize    int
 
 	allocator *craft.SliceAllocator
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
+	return newResolvedMQMessage(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
 func (e *CraftEventBatchEncoder) flush() {
@@ -46,26 +43,24 @@ func (e *CraftEventBatchEncoder) flush() {
 	ts := headers.GetTs(0)
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
-	e.messageBuf = append(e.messageBuf, NewMQMessage(ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table))
+	rowsCnt := e.rowChangedBuffer.RowsCount()
+	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
+	mqMessage.SetRowsCount(rowsCnt)
+	e.messageBuf = append(e.messageBuf, mqMessage)
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) (EncoderResult, error) {
+func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
-	if size > e.maxMessageSize || rows >= e.maxBatchSize {
+	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
 		e.flush()
 	}
-	return EncoderNoOperation, nil
-}
-
-// AppendResolvedEvent is no-op
-func (e *CraftEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
-	return newDDLMQMessage(ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
+	return newDDLMQMessage(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -79,48 +74,9 @@ func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Only JsonEncoder supports mixed build")
-}
-
 // Size implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.Size()
-}
-
-// Reset implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) Reset() {
-	e.rowChangedBuffer.Reset()
-}
-
-// SetParams reads relevant parameters for craft protocol
-func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
-	var err error
-
-	e.maxMessageSize = DefaultMaxMessageBytes
-	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
-		e.maxMessageSize, err = strconv.Atoi(maxMessageBytes)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
-	}
-	if e.maxMessageSize <= 0 || e.maxMessageSize > math.MaxInt32 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageSize))
-	}
-
-	e.maxBatchSize = DefaultMaxBatchSize
-	if maxBatchSize, ok := params["max-batch-size"]; ok {
-		e.maxBatchSize, err = strconv.Atoi(maxBatchSize)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
-	}
-	if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
-	}
-
-	return nil
 }
 
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
@@ -132,21 +88,19 @@ func NewCraftEventBatchEncoder() EventBatchEncoder {
 }
 
 type craftEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a CraftEventBatchEncoder
-func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *craftEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCraftEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
+	encoder.(*CraftEventBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
+	encoder.(*CraftEventBatchEncoder).maxBatchSize = b.config.maxBatchSize
+	return encoder
 }
 
-func newCraftEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &craftEventBatchEncoderBuilder{opts: opts}
+func newCraftEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &craftEventBatchEncoderBuilder{config: config}
 }
 
 // NewCraftEventBatchEncoderWithAllocator creates a new CraftEventBatchEncoder with given allocator.

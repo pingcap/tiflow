@@ -20,18 +20,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/unit"
-	"github.com/pingcap/ticdc/dm/pkg/binlog"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
-	"github.com/pingcap/ticdc/dm/syncer"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer"
 
 	"github.com/pingcap/errors"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
@@ -89,6 +89,7 @@ func NewServer(cfg *Config) *Server {
 }
 
 // Start starts to serving.
+// this function should only exit when can't dail DM-master, for other errors it should not exit.
 func (s *Server) Start() error {
 	log.L().Info("starting dm-worker server")
 	RegistryMetrics()
@@ -110,6 +111,7 @@ func (s *Server) Start() error {
 		DialKeepAliveTime:    keepaliveTime,
 		DialKeepAliveTimeout: keepaliveTimeout,
 		TLS:                  tls.TLSConfig(),
+		AutoSyncInterval:     syncMasterEndpointsTime,
 	})
 	if err != nil {
 		return err
@@ -120,12 +122,6 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go func() {
 		s.runBackgroundJob(s.ctx)
-		s.wg.Done()
-	}()
-
-	s.wg.Add(1)
-	go func() {
-		s.syncMasterEndpoints(s.ctx)
 		s.wg.Done()
 	}()
 
@@ -265,42 +261,6 @@ func (s *Server) restartKeepAlive() {
 	s.startKeepAlive()
 }
 
-func (s *Server) syncMasterEndpoints(ctx context.Context) {
-	lastClientUrls := []string{}
-	clientURLs := []string{}
-
-	updateF := func() {
-		clientURLs = clientURLs[:0]
-		resp, err := s.etcdClient.MemberList(ctx)
-		if err != nil {
-			log.L().Error("can't get etcd member list", zap.Error(err))
-			return
-		}
-
-		for _, m := range resp.Members {
-			clientURLs = append(clientURLs, m.GetClientURLs()...)
-		}
-		if utils.NonRepeatStringsEqual(clientURLs, lastClientUrls) {
-			log.L().Debug("etcd member list doesn't change", zap.Strings("client URLs", clientURLs))
-			return
-		}
-		log.L().Info("will sync endpoints to", zap.Strings("client URLs", clientURLs))
-		s.etcdClient.SetEndpoints(clientURLs...)
-		lastClientUrls = make([]string, len(clientURLs))
-		copy(lastClientUrls, clientURLs)
-	}
-
-	for {
-		updateF()
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(syncMasterEndpointsTime):
-		}
-	}
-}
-
 func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 	var wg sync.WaitGroup
 	for {
@@ -340,6 +300,10 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					rev = rev1
 					if relaySource == nil {
+						if w := s.getSourceWorker(true); w != nil && w.startedRelayBySourceCfg {
+							break
+						}
+						log.L().Info("didn't found relay config after etcd retryable error. Will stop relay now")
 						err = s.disableRelay("")
 						if err != nil {
 							log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
@@ -350,18 +314,18 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 							s.Lock()
 							defer s.Unlock()
 
-							if w := s.getWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
+							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
 								// we check if observeSourceBound has started a worker
 								// TODO: add a test for this situation
 								if !w.relayEnabled.Load() {
-									if err2 := w.EnableRelay(); err2 != nil {
+									if err2 := w.EnableRelay(false); err2 != nil {
 										return err2
 									}
 								}
 								return nil
 							}
-							err = s.stopWorker("", false)
+							err = s.stopSourceWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -387,6 +351,9 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 	}
 }
 
+// observeSourceBound will
+// 1. keep bound relation updated from DM-master
+// 2. keep enable-relay in source config updated. (TODO) This relies on DM-master re-put SourceBound after change it.
 func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 	var wg sync.WaitGroup
 	for {
@@ -436,7 +403,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 							s.Lock()
 							defer s.Unlock()
 
-							if w := s.getWorker(false); w != nil && w.cfg.SourceID == bound.Source {
+							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == bound.Source {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
 								// we check if observeRelayConfig has started a worker
 								// TODO: add a test for this situation
@@ -447,7 +414,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 								}
 								return nil
 							}
-							err = s.stopWorker("", false)
+							err = s.stopSourceWorker("", false, true)
 							if err != nil {
 								log.L().Error("fail to stop worker", zap.Error(err))
 								return err // return if failed to stop the worker.
@@ -474,30 +441,33 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	s.cancel()
-	// close server in advance, stop receiving source bound and relay bound
-	s.wg.Wait()
-
 	s.Lock()
 	defer s.Unlock()
+
 	if s.closed.Load() {
 		return
 	}
-	// close worker and wait for return
-	if w := s.getWorker(false); w != nil {
-		w.Close()
+	// stop server in advance, stop receiving source bound and relay bound
+	s.cancel()
+	s.wg.Wait()
+	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
+	if w := s.getSourceWorker(false); w != nil {
+		w.Stop(true)
 	}
 	s.closed.Store(true)
 }
 
 // Close close the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
+	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
-	s.doClose()
+	if s.etcdClient != nil {
+		s.etcdClient.Close()
+	}
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
-func (s *Server) getWorker(needLock bool) *SourceWorker {
+func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
@@ -530,7 +500,7 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 		defer s.Unlock()
 	}
 	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
-	if s.getWorker(false) == nil && source != "" {
+	if s.getSourceWorker(false) == nil && source != "" {
 		return
 	}
 	s.sourceStatus = pb.SourceStatus{
@@ -548,12 +518,12 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 
 // if sourceID is set to "", worker will be closed directly
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
-func (s *Server) stopWorker(sourceID string, needLock bool) error {
+func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	w := s.getWorker(false)
+	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has not been started, no need to stop", zap.String("source", sourceID))
 		return nil // no need to stop because not started yet
@@ -564,7 +534,7 @@ func (s *Server) stopWorker(sourceID string, needLock bool) error {
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Close()
+	w.Stop(graceful)
 	return nil
 }
 
@@ -669,6 +639,19 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	if err != nil {
 		return err
 	}
+
+	if sourceCfg.EnableRelay {
+		log.L().Info("will start relay by `enable-relay` in source config")
+		if err2 := w.EnableRelay(true); err2 != nil {
+			log.L().Error("found a `enable-relay: true` source, but failed to enable relay for DM worker",
+				zap.Error(err2))
+			return err2
+		}
+	} else if w.startedRelayBySourceCfg {
+		log.L().Info("will disable relay by `enable-relay: false` in source config")
+		w.DisableRelay()
+	}
+
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
 		s.setSourceStatus(sourceCfg.SourceID, err2, false)
 		return err2
@@ -679,16 +662,24 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 func (s *Server) disableHandleSubtasks(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getWorker(false)
+	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
 		return nil
 	}
+
 	w.DisableHandleSubtasks()
+
+	// now the worker is unbound, stop relay if it's started by source config
+	if w.cfg.EnableRelay && w.startedRelayBySourceCfg {
+		log.L().Info("stop relay because the source is unbound")
+		w.DisableRelay()
+	}
+
 	var err error
 	if !w.relayEnabled.Load() {
 		log.L().Info("relay is not enabled after disabling subtask, so stop worker")
-		err = s.stopWorker(source, false)
+		err = s.stopSourceWorker(source, false, true)
 	}
 	return err
 }
@@ -722,7 +713,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 		// because no re-assigned mechanism exists for keepalived DM-worker yet.
 		return err2
 	}
-	if err2 = w.EnableRelay(); err2 != nil {
+	if err2 = w.EnableRelay(false); err2 != nil {
 		s.setSourceStatus(sourceCfg.SourceID, err2, false)
 		return err2
 	}
@@ -733,7 +724,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 func (s *Server) disableRelay(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getWorker(false)
+	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableRelay", zap.Any("relaySource", source))
 		return nil
@@ -743,7 +734,7 @@ func (s *Server) disableRelay(source string) error {
 	var err error
 	if !w.subTaskEnabled.Load() {
 		log.L().Info("subtask is not enabled after disabling relay, so stop worker")
-		err = s.stopWorker(source, false)
+		err = s.stopSourceWorker(source, false, true)
 	}
 	return err
 }
@@ -759,7 +750,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		SourceStatus: &sourceStatus,
 	}
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call QueryStatus, because no mysql source is being handled in the worker")
 		resp.Result = false
@@ -781,7 +772,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 // PurgeRelay implements WorkerServer.PurgeRelay.
 func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req))
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call StartSubTask, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -798,7 +789,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -825,7 +816,7 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 		defer s.Unlock()
 	}
 
-	if w := s.getWorker(false); w != nil {
+	if w := s.getSourceWorker(false); w != nil {
 		if w.cfg.SourceID == cfg.SourceID {
 			log.L().Info("mysql source is being handled", zap.String("sourceID", s.worker.cfg.SourceID))
 			return w, nil
@@ -834,7 +825,7 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 	}
 
 	log.L().Info("will start a new worker", zap.String("sourceID", cfg.SourceID))
-	w, err := NewSourceWorker(cfg, s.etcdClient, s.cfg.Name)
+	w, err := NewSourceWorker(cfg, s.etcdClient, s.cfg.Name, s.cfg.RelayDir)
 	if err != nil {
 		return nil, err
 	}
@@ -916,18 +907,20 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
 
-	w := s.getWorker(true)
+	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call HandleError, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
 	}
 
-	if err := w.HandleError(ctx, req); err != nil {
+	msg, err := w.HandleError(ctx, req)
+	if err != nil {
 		return makeCommonWorkerResponse(err), nil
 	}
 	return &pb.CommonWorkerResponse{
 		Result: true,
 		Worker: s.cfg.Name,
+		Msg:    msg,
 	}, nil
 }
 

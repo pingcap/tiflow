@@ -17,11 +17,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-// DM definition checking items
-// refer github.com/pingcap/tidb-tools/pkg/check.
+// DM definition checking items.
 const (
 	AllChecking                  = "all"
 	DumpPrivilegeChecking        = "dump_privilege"
@@ -34,6 +33,8 @@ const (
 	TableSchemaChecking          = "table_schema"
 	ShardTableSchemaChecking     = "schema_of_shard_tables"
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
+	OnlineDDLChecking            = "online_ddl"
+	BinlogDBChecking             = "binlog_db"
 )
 
 // AllCheckingItems contains all checking items.
@@ -49,6 +50,8 @@ var AllCheckingItems = map[string]string{
 	TableSchemaChecking:          "table schema compatibility checking item",
 	ShardTableSchemaChecking:     "consistent schema of shard tables checking item",
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
+	OnlineDDLChecking:            "online ddl checking item",
+	BinlogDBChecking:             "binlog db checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

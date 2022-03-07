@@ -22,14 +22,14 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	tcontext "github.com/pingcap/ticdc/dm/pkg/context"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // upgrades records all functions used to upgrade from one version to the later version.
@@ -197,7 +197,7 @@ func upgradeToVer2(cli *clientv3.Client, uctx Context) error {
 	defer cancel()
 
 	for tableName, cfg := range dbConfigs {
-		targetDB, err := conn.DefaultDBProvider.Apply(cfg)
+		targetDB, err := conn.DefaultDBProvider.Apply(&cfg)
 		if err != nil {
 			logger.Error("target DB error when upgrading", zap.String("table name", tableName))
 			return err

@@ -19,8 +19,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 
-	"github.com/pingcap/ticdc/dm/openapi"
-	"github.com/pingcap/ticdc/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 )
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
@@ -274,7 +274,7 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
 	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
 
 	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
@@ -309,8 +309,8 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
 	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
-	subTaskConfigMap[task.Name][source2Name] = subTaskConfigList[1]
+	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
+	subTaskConfigMap[task.Name][source2Name] = *subTaskConfigList[1]
 
 	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)

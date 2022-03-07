@@ -26,9 +26,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -97,7 +97,7 @@ func prepareJoinEtcd(cfg *Config) error {
 	}
 
 	// try to join self, invalid
-	if cfg.Join == cfg.MasterAddr {
+	if cfg.Join == cfg.AdvertiseAddr {
 		return terror.ErrMasterJoinEmbedEtcdFail.Generate(fmt.Sprintf("join self %s is forbidden", cfg.Join))
 	}
 

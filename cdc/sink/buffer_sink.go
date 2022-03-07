@@ -22,112 +22,156 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
+const maxFlushBatchSize = 512
+
+// bufferSink buffers emitted events and checkpoints and flush asynchronously.
+// Note that it is a thread-safe Sink implementation.
 type bufferSink struct {
 	Sink
-	checkpointTs uint64
-	buffer       map[model.TableID][]*model.RowChangedEvent
-	bufferMu     sync.Mutex
-	flushTsChan  chan uint64
-	drawbackChan chan drawbackMsg
+	changeFeedCheckpointTs uint64
+	tableCheckpointTsMap   sync.Map
+	buffer                 map[model.TableID][]*model.RowChangedEvent
+	bufferMu               sync.Mutex
+	flushTsChan            chan flushMsg
+	drawbackChan           chan drawbackMsg
 }
 
+var _ Sink = (*bufferSink)(nil)
+
 func newBufferSink(
-	ctx context.Context,
-	backendSink Sink,
-	errCh chan error,
-	checkpointTs model.Ts,
-	drawbackChan chan drawbackMsg,
-) Sink {
+	backendSink Sink, checkpointTs model.Ts, drawbackChan chan drawbackMsg,
+) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
-		buffer:       make(map[model.TableID][]*model.RowChangedEvent),
-		checkpointTs: checkpointTs,
-		flushTsChan:  make(chan uint64, 128),
-		drawbackChan: drawbackChan,
+		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
+		changeFeedCheckpointTs: checkpointTs,
+		flushTsChan:            make(chan flushMsg, maxFlushBatchSize),
+		drawbackChan:           drawbackChan,
 	}
-	go sink.run(ctx, errCh)
 	return sink
+}
+
+type runState struct {
+	batch [maxFlushBatchSize]flushMsg
+
+	metricFlushDuration   prometheus.Observer
+	metricEmitRowDuration prometheus.Observer
+	metricTotalRows       prometheus.Counter
 }
 
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	advertiseAddr := util.CaptureAddrFromCtx(ctx)
-	metricFlushDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush")
-	metricEmitRowDuration := flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow")
-	metricBufferSize := bufferChanSizeGauge.WithLabelValues(advertiseAddr, changefeedID)
-	metricTotalRows := bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID)
+	state := runState{
+		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(changefeedID, "Flush"),
+		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(changefeedID, "EmitRow"),
+		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
+	}
 	defer func() {
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
-		bufferChanSizeGauge.DeleteLabelValues(advertiseAddr, changefeedID)
-		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+		flushRowChangedDuration.DeleteLabelValues(changefeedID, "Flush")
+		flushRowChangedDuration.DeleteLabelValues(changefeedID, "EmitRow")
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
+
 	for {
-		select {
-		case <-ctx.Done():
-			err := ctx.Err()
-			if err != nil && errors.Cause(err) != context.Canceled {
-				errCh <- err
-			}
+		keepRun, err := b.runOnce(ctx, &state)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			errCh <- err
 			return
-		case drawback := <-b.drawbackChan:
-			b.bufferMu.Lock()
-			delete(b.buffer, drawback.tableID)
-			b.bufferMu.Unlock()
-			close(drawback.callback)
-		case resolvedTs := <-b.flushTsChan:
-			b.bufferMu.Lock()
-			// find all rows before resolvedTs and emit to backend sink
-			for tableID, rows := range b.buffer {
-				i := sort.Search(len(rows), func(i int) bool {
-					return rows[i].CommitTs > resolvedTs
-				})
-				metricTotalRows.Add(float64(i))
-
-				start := time.Now()
-				err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
-				if err != nil {
-					b.bufferMu.Unlock()
-					if errors.Cause(err) != context.Canceled {
-						errCh <- err
-					}
-					return
-				}
-				dur := time.Since(start)
-				metricEmitRowDuration.Observe(dur.Seconds())
-
-				// put remaining rows back to buffer
-				// append to a new, fixed slice to avoid lazy GC
-				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
-			}
-			b.bufferMu.Unlock()
-
-			start := time.Now()
-			checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, resolvedTs)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					errCh <- err
-				}
-				return
-			}
-			atomic.StoreUint64(&b.checkpointTs, checkpointTs)
-
-			dur := time.Since(start)
-			metricFlushDuration.Observe(dur.Seconds())
-			if dur > 3*time.Second {
-				log.Warn("flush row changed events too slow",
-					zap.Duration("duration", dur), util.ZapFieldChangefeed(ctx))
-			}
-		case <-time.After(defaultMetricInterval):
-			metricBufferSize.Set(float64(len(b.buffer)))
+		}
+		if !keepRun {
+			return
 		}
 	}
+}
+
+func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error) {
+	batchSize, batch := 0, state.batch
+	push := func(event flushMsg) {
+		batch[batchSize] = event
+		batchSize++
+	}
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case drawback := <-b.drawbackChan:
+		b.bufferMu.Lock()
+		delete(b.buffer, drawback.tableID)
+		b.bufferMu.Unlock()
+		close(drawback.callback)
+	case event := <-b.flushTsChan:
+		push(event)
+	RecvBatch:
+		for batchSize < maxFlushBatchSize {
+			select {
+			case event := <-b.flushTsChan:
+				push(event)
+			default:
+				break RecvBatch
+			}
+		}
+	}
+
+	b.bufferMu.Lock()
+	startEmit := time.Now()
+	// find all rows before resolvedTs and emit to backend sink
+	for i := 0; i < batchSize; i++ {
+		tableID, resolvedTs := batch[i].tableID, batch[i].resolvedTs
+		rows := b.buffer[tableID]
+		i := sort.Search(len(rows), func(i int) bool {
+			return rows[i].CommitTs > resolvedTs
+		})
+		if i == 0 {
+			continue
+		}
+		state.metricTotalRows.Add(float64(i))
+
+		err := b.Sink.EmitRowChangedEvents(ctx, rows[:i]...)
+		if err != nil {
+			b.bufferMu.Unlock()
+			return false, errors.Trace(err)
+		}
+
+		// put remaining rows back to buffer
+		// append to a new, fixed slice to avoid lazy GC
+		b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
+	}
+	b.bufferMu.Unlock()
+	state.metricEmitRowDuration.Observe(time.Since(startEmit).Seconds())
+
+	startFlush := time.Now()
+	for i := 0; i < batchSize; i++ {
+		tableID, resolvedTs := batch[i].tableID, batch[i].resolvedTs
+		checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		b.tableCheckpointTsMap.Store(tableID, checkpointTs)
+	}
+	now := time.Now()
+	state.metricFlushDuration.Observe(now.Sub(startFlush).Seconds())
+	if now.Sub(startEmit) > time.Second {
+		log.Warn("flush row changed events too slow",
+			zap.Int("batchSize", batchSize),
+			zap.Duration("duration", now.Sub(startEmit)),
+			util.ZapFieldChangefeed(ctx))
+	}
+
+	return true, nil
+}
+
+func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := b.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -146,11 +190,32 @@ func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Ro
 	return nil
 }
 
-func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	select {
 	case <-ctx.Done():
-		return atomic.LoadUint64(&b.checkpointTs), ctx.Err()
-	case b.flushTsChan <- resolvedTs:
+		return b.getTableCheckpointTs(tableID), ctx.Err()
+	case b.flushTsChan <- flushMsg{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+	}:
 	}
-	return atomic.LoadUint64(&b.checkpointTs), nil
+	return b.getTableCheckpointTs(tableID), nil
+}
+
+type flushMsg struct {
+	tableID    model.TableID
+	resolvedTs uint64
+}
+
+func (b *bufferSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+	checkPoints, ok := b.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return checkPoints.(uint64)
+	}
+	return atomic.LoadUint64(&b.changeFeedCheckpointTs)
+}
+
+// UpdateChangeFeedCheckpointTs update the changeFeedCheckpointTs every processor tick
+func (b *bufferSink) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&b.changeFeedCheckpointTs, checkpointTs)
 }

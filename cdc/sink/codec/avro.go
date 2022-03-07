@@ -26,13 +26,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	tijson "github.com/pingcap/tidb/types/json"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -87,20 +86,20 @@ func (a *AvroEventBatchEncoder) SetTimeZone(tz *time.Location) {
 
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
-func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	mqMessage := NewMQMessage(ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
+func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+	mqMessage := NewMQMessage(config.ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 
 	if !e.IsDelete() {
 		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, a.tz)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
-			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+			return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
 		}
 
 		evlp, err := res.toEnvelope()
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
-			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+			return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 		}
 
 		mqMessage.Value = evlp
@@ -113,24 +112,20 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols, a.tz)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
-		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
 	}
 
 	evlp, err := res.toEnvelope()
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
-		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+		return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 	}
 
 	mqMessage.Key = evlp
+	mqMessage.IncRowsCount()
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
-	return EncoderNeedAsyncWrite, nil
-}
-
-// AppendResolvedEvent is no-op for Avro
-func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
+	return nil
 }
 
 // EncodeCheckpointEvent is no-op for now
@@ -150,16 +145,6 @@ func (a *AvroEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	return old
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	panic("Mixed Build only use for JsonEncoder")
-}
-
-// Reset implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) Reset() {
-	panic("Reset only used for JsonEncoder")
-}
-
 // Size is the current size of resultBuf
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.resultBuf == nil {
@@ -171,12 +156,6 @@ func (a *AvroEventBatchEncoder) Size() int {
 		sum += len(msg.Value)
 	}
 	return sum
-}
-
-// SetParams is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(params map[string]string) error {
-	// no op
-	return nil
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
@@ -366,7 +345,7 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeYear:
 		return "long", nil
 	default:
-		log.Panic("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
+		log.Panic("Unknown MySql type", zap.Reflect("mysqlType", col.Type))
 		return "", errors.New("Unknown Mysql type")
 	}
 }
@@ -452,7 +431,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		}
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
-		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
+		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
@@ -476,7 +455,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil
 	case mysql.TypeJSON:
-		return col.Value.(tijson.BinaryJSON).String(), "string", nil
+		return col.Value.(string), "string", nil
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
@@ -526,9 +505,10 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type avroEventBatchEncoderBuilder struct {
-	opts               map[string]string
+	config             *Config
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
+	tz                 *time.Location
 }
 
 const (
@@ -536,40 +516,32 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-func newAvroEventBatchEncoderBuilder(credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
-	registryURI, ok := opts["registry"]
-	if !ok {
-		return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
-	}
-
+func newAvroEventBatchEncoderBuilder(credential *security.Credential, config *Config) (EncoderBuilder, error) {
 	ctx := context.Background()
-	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, keySchemaSuffix)
+	keySchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, keySchemaSuffix)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, registryURI, valueSchemaSuffix)
+	valueSchemaManager, err := NewAvroSchemaManager(ctx, credential, config.avroRegistry, valueSchemaSuffix)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &avroEventBatchEncoderBuilder{
-		opts:               opts,
+		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
+		tz:                 config.tz,
 	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := newAvroEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
 	encoder.SetKeySchemaManager(b.keySchemaManager)
 	encoder.SetValueSchemaManager(b.valueSchemaManager)
-	encoder.SetTimeZone(util.TimezoneFromCtx(ctx))
+	encoder.SetTimeZone(b.tz)
 
-	return encoder, nil
+	return encoder
 }

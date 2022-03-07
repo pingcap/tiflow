@@ -14,14 +14,13 @@
 package codec
 
 import (
-	"context"
 	"encoding/binary"
-	"strings"
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -32,38 +31,25 @@ type EventBatchEncoder interface {
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
-	// AppendResolvedEvent appends a resolved event into the batch.
-	// This event is used to tell the encoder that no event prior to ts will be sent.
-	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	AppendRowChangedEvent(e *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
 	Build() []*MQMessage
-	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
-	// This is used for cdc log, to merge key and value into one byte slice
-	// when first create file, we should set withVersion to true, to tell us that
-	// the first 8 byte represents the encoder version
-	// TODO decouple it out
-	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
-	// Deprecated: Size is deprecated
 	Size() int
-	// Reset reset the kv buffer
-	Reset()
-	// SetParams provides the encoder with more info on the sink
-	SetParams(params map[string]string) error
 }
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
-	Key      []byte
-	Value    []byte
-	Ts       uint64              // reserved for possible output sorting
-	Schema   *string             // schema
-	Table    *string             // table
-	Type     model.MqMessageType // type
-	Protocol Protocol            // protocol
+	Key       []byte
+	Value     []byte
+	Ts        uint64              // reserved for possible output sorting
+	Schema    *string             // schema
+	Table     *string             // table
+	Type      model.MqMessageType // type
+	Protocol  config.Protocol     // protocol
+	rowsCount int                 // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -83,25 +69,41 @@ func (m *MQMessage) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
 }
 
-func newDDLMQMessage(proto Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
+// GetRowsCount returns the number of rows batched in one MQMessage
+func (m *MQMessage) GetRowsCount() int {
+	return m.rowsCount
+}
+
+// SetRowsCount set the number of rows
+func (m *MQMessage) SetRowsCount(cnt int) {
+	m.rowsCount = cnt
+}
+
+// IncRowsCount increase the number of rows
+func (m *MQMessage) IncRowsCount() {
+	m.rowsCount++
+}
+
+func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
 	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
 }
 
-func newResolvedMQMessage(proto Protocol, key, value []byte, ts uint64) *MQMessage {
+func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
 	return NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
 }
 
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
-func NewMQMessage(proto Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
+func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
 	ret := &MQMessage{
-		Key:      nil,
-		Value:    nil,
-		Ts:       ts,
-		Schema:   schema,
-		Table:    table,
-		Type:     ty,
-		Protocol: proto,
+		Key:       nil,
+		Value:     nil,
+		Ts:        ts,
+		Schema:    schema,
+		Table:     table,
+		Type:      ty,
+		Protocol:  proto,
+		rowsCount: 0,
 	}
 
 	if key != nil {
@@ -138,66 +140,32 @@ type EncoderResult uint8
 
 // Enum types of EncoderResult
 const (
-	EncoderNoOperation EncoderResult = iota
-	EncoderNeedAsyncWrite
+	EncoderNeedAsyncWrite EncoderResult = iota
 	EncoderNeedSyncWrite
 )
 
-// Protocol is the protocol of the mq message
-type Protocol int
-
-// Enum types of the Protocol
-const (
-	ProtocolDefault Protocol = iota
-	ProtocolCanal
-	ProtocolAvro
-	ProtocolMaxwell
-	ProtocolCanalJSON
-	ProtocolCraft
-)
-
-// FromString converts the protocol from string to Protocol enum type
-func (p *Protocol) FromString(protocol string) {
-	switch strings.ToLower(protocol) {
-	case "default":
-		*p = ProtocolDefault
-	case "canal":
-		*p = ProtocolCanal
-	case "avro":
-		*p = ProtocolAvro
-	case "maxwell":
-		*p = ProtocolMaxwell
-	case "canal-json":
-		*p = ProtocolCanalJSON
-	case "craft":
-		*p = ProtocolCraft
-	default:
-		*p = ProtocolDefault
-		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
-	}
-}
-
+// EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
-	Build(ctx context.Context) (EventBatchEncoder, error)
+	Build() EventBatchEncoder
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
-	switch p {
-	case ProtocolDefault:
-		return newJSONEventBatchEncoderBuilder(opts), nil
-	case ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(opts), nil
-	case ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, opts)
-	case ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(opts), nil
-	case ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(opts), nil
-	case ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(opts), nil
+func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
+	switch c.protocol {
+	case config.ProtocolDefault, config.ProtocolOpen:
+		return newJSONEventBatchEncoderBuilder(c), nil
+	case config.ProtocolCanal:
+		return newCanalEventBatchEncoderBuilder(), nil
+	case config.ProtocolAvro:
+		return newAvroEventBatchEncoderBuilder(credential, c)
+	case config.ProtocolMaxwell:
+		return newMaxwellEventBatchEncoderBuilder(), nil
+	case config.ProtocolCanalJSON:
+		return newCanalFlatEventBatchEncoderBuilder(c), nil
+	case config.ProtocolCraft:
+		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocol_value", int(p)))
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
+		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

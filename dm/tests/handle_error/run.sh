@@ -118,7 +118,7 @@ function DM_SKIP_ERROR_SHARDING_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 4
 
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 8"
 }
@@ -279,7 +279,7 @@ function DM_REPLACE_ERROR_SHARDING_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 4
 
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 8"
 }
@@ -298,6 +298,144 @@ function DM_REPLACE_ERROR_SHARDING() {
      run_sql_source2 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${db}.${tb2} (a int primary key, b int);\"" \
 		"clean_table" "optimistic"
+}
+
+# replace add column unique
+# one source, one table, no sharding
+function DM_INJECT_DDL_ERROR_CASE() {
+	run_sql_source1 "insert into ${db}.${tb1} values(1,1);"
+
+	# error in TiDB
+	run_sql_source1 "alter table ${db}.${tb1} add column c int default 100 unique not null;"
+	run_sql_source1 "insert into ${db}.${tb1} values(2,2,2);"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"unsupported add column .* constraint UNIQUE KEY" 1 \
+		"origin SQL: \[alter table ${db}.${tb1} add column c int default 100 unique not null\]" 1
+
+	# replace sql but there has a mistake which is use 'c' as pk
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog replace test alter table ${db}.${tb1} add column c int default 100; alter table ${db}.${tb1} add primary key (c);" \
+		"\"result\": true" 2
+
+	# error in TiDB
+	run_sql_source1 "alter table ${db}.${tb1} modify column c double;"
+	run_sql_source1 "insert into ${db}.${tb1} values(3,3,3.5);"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Unsupported modify column: this column has primary key flag" 1
+
+	# inject sql but length is 10
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog inject test alter table ${db}.${tb1} drop primary key; alter table ${db}.${tb1} add unique(c);" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c = 3.5;" "count(1): 1"
+}
+
+# inject dml can not run, because get position is invalid.
+function DM_INJECT_DML_ERROR_CASE() {
+	run_sql_source1 "insert into ${db}.${tb1} values(1,1);"
+
+	# error in TiDB
+	run_sql_source1 "alter table ${db}.${tb1} add column c varchar(10) unique;"
+	run_sql_source1 "insert into ${db}.${tb1} values(2,2,'22');"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"unsupported add column .* constraint UNIQUE KEY" 1 \
+		"origin SQL: \[alter table ${db}.${tb1} add column c varchar(10) unique\]" 1
+
+	# replace sql but there has a mistake which is add unque to column 'b'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog replace test alter table ${db}.${tb1} add column c varchar(10); alter table ${db}.${tb1} add unique (b);" \
+		"\"result\": true" 2
+
+	# error in TiDB
+	run_sql_source1 "insert into ${db}.${tb1} values(3,2,'33');"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Duplicate entry '2' for key 'b'" 1
+
+	# inject sql but length is 10
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog inject test alter table ${db}.${tb1} drop index b;alter table ${db}.${tb1} add unique(c);" \
+		"\"result\": true" 2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where b = 2;" "count(1): 2"
+}
+
+function DM_INJECT_ERROR() {
+	# inject at ddl
+	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
+		"clean_table" ""
+	# inject at dml
+	run_case INJECT_DML_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
+		"clean_table" ""
+}
+
+function DM_LIST_ERROR_CASE() {
+	run_sql_source1 "insert into ${db}.${tb1} values(1，1);"
+	run_sql_source1 "alter table ${db}.${tb1} add column c int default 100; alter table ${db}.${tb1} add primary key (c)"
+	run_sql_source1 "alter table ${db}.${tb1} modify c varchar(10);"
+	run_sql_source1 "alter table ${db}.${tb1} modify c varchar(20);"
+	run_sql_source1 "alter table ${db}.${tb1} modify c double;"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Unsupported modify column: this column has primary key flag" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog test" \
+		"\"msg\": \"\[\]\"" 1
+
+	first_pos1=$(get_start_pos 127.0.0.1:$MASTER_PORT $source1)
+	first_name1=$(get_start_name 127.0.0.1:$MASTER_PORT $source1)
+	second_pos1=$(get_next_query_pos $MYSQL_PORT1 $MYSQL_PASSWORD1 $first_pos1)
+	third_pos1=$(get_next_query_pos $MYSQL_PORT1 $MYSQL_PASSWORD1 $second_pos1)
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test -b $first_name1:$second_pos1" \
+		"\"result\": true" 2
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Unsupported modify column: this column has primary key flag" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog list test" \
+		'\"msg\": \"\[{\\\"op\\\":1,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${second_pos1}')\\\"}\]\"' 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog inject test -b $first_name1:$third_pos1 alter table ${db}.${tb1} drop primary key; alter table ${db}.${tb1} add unique (c);" \
+		"\"result\": true" 2
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Unsupported modify column: this column has primary key flag" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog list test" \
+		'\"msg\": \"\[{\\\"op\\\":1,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${second_pos1}')\\\"},{\\\"op\\\":4,\\\"task\\\":\\\"test\\\",\\\"binlogPos\\\":\\\"('${first_name1}', '${third_pos1}')\\\",\\\"sqls\\\":\[\\\"alter table handle_error.tb1 drop primary key;\\\",\\\" alter table handle_error.tb1 add unique (c);\\\"\]}\]\"' 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog skip test" \
+		"\"result\": true" 2
+
+	run_sql_source1 "insert into ${db}.${tb1} values(1,1,2.2);"
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c = 2.2;" "count(1): 1"
+}
+
+function DM_LIST_ERROR() {
+	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
+		"clean_table" ""
 }
 
 # test handle_error fail on second replace ddl
@@ -348,7 +486,7 @@ function DM_REPLACE_ERROR_MULTIPLE_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 4
 
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 2"
 }
@@ -399,7 +537,7 @@ function DM_SKIP_INCOMPATIBLE_DDL_CASE() {
 	run_sql_source1 "CREATE FUNCTION ${db}.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN CONCAT('Hello, ',s,'!');"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 1
+		"\"stage\": \"Running\"" 2
 
 	run_sql_source1 "/*!50003 drop function ${db}.hello*/;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -732,94 +870,12 @@ function DM_4213() {
 	run_case 4213 "single-source-no-sharding" "init_table 11" "clean_table" ""
 }
 
-function DM_SKIP_INCOMPATIBLE_DDL_CASE() {
-	run_sql_source1 "insert into ${db}.${tb1} values(1);"
-
-	run_sql_source1 "CREATE FUNCTION ${db}.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN CONCAT('Hello, ',s,'!');"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"stage\": \"Running\"" 1
-
-	run_sql_source1 "/*!50003 drop function ${db}.hello*/;"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"drop function $(hello)" 2 \
-		"Please confirm your DDL statement is correct and needed." 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2
-
-	run_sql_source1 "insert into ${db}.${tb1} values(2);"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-}
-
-function DM_SKIP_INCOMPATIBLE_DDL() {
-	run_case SKIP_INCOMPATIBLE_DDL "single-source-no-sharding" "init_table 11" "clean_table" ""
-}
-
-function DM_REPLACE_DEFAULT_VALUE_CASE() {
-	run_sql_source1 "insert into ${db}.${tb1} values(1);"
-	run_sql_source2 "insert into ${db}.${tb1} values(2);"
-	run_sql_source2 "insert into ${db}.${tb2} values(3);"
-
-	run_sql_source1 "alter table ${db}.${tb1} add new_col1 int default 1;"
-	run_sql_source1 "insert into ${db}.${tb1} values(4,4);"
-	run_sql_source2 "insert into ${db}.${tb1} values(5);"
-	run_sql_source2 "insert into ${db}.${tb2} values(6);"
-
-	# make sure order is source1.table1, source2.table1, source2.table2
-	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 6"
-
-	run_sql_source2 "alter table ${db}.${tb1} add new_col1 int default 2;"
-	run_sql_source1 "insert into ${db}.${tb1} values(7,7);"
-	run_sql_source2 "insert into ${db}.${tb1} values(8,8);"
-	run_sql_source2 "insert into ${db}.${tb2} values(9);"
-	run_sql_source2 "alter table ${db}.${tb2} add new_col1 int default 3;"
-	run_sql_source1 "insert into ${db}.${tb1} values(10,10);"
-	run_sql_source2 "insert into ${db}.${tb1} values(11,11);"
-	run_sql_source2 "insert into ${db}.${tb2} values(12,12);"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"because schema conflict detected" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb1} add new_col1 int default 1;" \
-		"\"result\": true" 2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"because schema conflict detected" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add new_col1 int default 1;" \
-		"\"result\": true" 2
-
-	run_sql_source1 "alter table ${db}.${tb1} add new_col2 int;"
-	run_sql_source2 "alter table ${db}.${tb1} add new_col2 int;"
-	run_sql_source2 "alter table ${db}.${tb2} add new_col2 int;"
-	run_sql_source1 "insert into ${db}.${tb1} values(13,13,13);"
-	run_sql_source2 "insert into ${db}.${tb1} values(14,14,14);"
-	run_sql_source2 "insert into ${db}.${tb2} values(15,15,15);"
-
-	# WARN: some data different
-	# all the value before alter table in TiDB will be 1, while upstream table is 1, 2 or 3
-	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 15"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"result\": true" 3
-}
-
-function DM_REPLACE_DEFAULT_VALUE() {
-	run_case REPLACE_DEFAULT_VALUE "double-source-optimistic" "init_table 11 21 22" "clean_table" ""
-}
-
 function run() {
 	init_cluster
 	init_database
 
+	DM_INJECT_ERROR
+	DM_LIST_ERROR
 	DM_SKIP_ERROR
 	DM_SKIP_ERROR_SHARDING
 	DM_REPLACE_ERROR

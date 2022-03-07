@@ -30,9 +30,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
 
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var (
@@ -262,4 +262,22 @@ func proxyFields() []zap.Field {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
 	}
 	return fields
+}
+
+// SetToSlice converts a map of struct{} value to a slice to pretty print.
+func SetToSlice(set map[string]struct{}) []string {
+	slice := make([]string, 0, len(set))
+	for key := range set {
+		slice = append(slice, key)
+	}
+	return slice
+}
+
+func NewStoppedTimer() *time.Timer {
+	// stopped timer should be Reset with correct duration, so use 0 here
+	t := time.NewTimer(0)
+	if !t.Stop() {
+		<-t.C
+	}
+	return t
 }

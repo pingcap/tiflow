@@ -16,13 +16,14 @@ package owner
 import (
 	"context"
 
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // StatusProvider provide some func to get meta-information from owner
+// The interface is thread-safe.
 type StatusProvider interface {
 	// GetAllChangeFeedStatuses returns all changefeeds' runtime status.
 	GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error)
@@ -49,37 +50,49 @@ type StatusProvider interface {
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 }
 
-type ownerQueryType int32
+// QueryType is the type of different queries.
+type QueryType int32
 
 const (
-	ownerQueryAllChangeFeedStatuses = iota
-	ownerQueryAllChangeFeedInfo
-	ownerQueryAllTaskStatuses
-	ownerQueryTaskPositions
-	ownerQueryProcessors
-	ownerQueryCaptures
+	// QueryAllChangeFeedStatuses query all changefeed status.
+	QueryAllChangeFeedStatuses QueryType = iota
+	// QueryAllChangeFeedInfo is the type of query all changefeed info.
+	QueryAllChangeFeedInfo
+	// QueryAllTaskStatuses is the type of query all task statuses.
+	QueryAllTaskStatuses
+	// QueryTaskPositions is the type of query task positions.
+	QueryTaskPositions
+	// QueryProcessors is the type of query processors.
+	QueryProcessors
+	// QueryCaptures is the type of query captures info.
+	QueryCaptures
 )
 
-type ownerQuery struct {
-	tp           ownerQueryType
-	changeFeedID model.ChangeFeedID
+// Query wraps query command and return results.
+type Query struct {
+	Tp           QueryType
+	ChangeFeedID model.ChangeFeedID
 
-	data interface{}
-	err  error
+	Data interface{}
+}
+
+// NewStatusProvider returns a new StatusProvider for the owner.
+func NewStatusProvider(owner Owner) StatusProvider {
+	return &ownerStatusProvider{owner: owner}
 }
 
 type ownerStatusProvider struct {
-	owner *Owner
+	owner Owner
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
-	query := &ownerQuery{
-		tp: ownerQueryAllChangeFeedStatuses,
+	query := &Query{
+		Tp: QueryAllChangeFeedStatuses,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
+	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
@@ -95,13 +108,13 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefee
 }
 
 func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
-	query := &ownerQuery{
-		tp: ownerQueryAllChangeFeedInfo,
+	query := &Query{
+		Tp: QueryAllChangeFeedInfo,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
@@ -117,64 +130,59 @@ func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedI
 }
 
 func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
-	query := &ownerQuery{
-		tp:           ownerQueryAllTaskStatuses,
-		changeFeedID: changefeedID,
+	query := &Query{
+		Tp:           QueryAllTaskStatuses,
+		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.CaptureID]*model.TaskStatus), nil
+	return query.Data.(map[model.CaptureID]*model.TaskStatus), nil
 }
 
 func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
-	query := &ownerQuery{
-		tp:           ownerQueryTaskPositions,
-		changeFeedID: changefeedID,
+	query := &Query{
+		Tp:           QueryTaskPositions,
+		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.(map[model.CaptureID]*model.TaskPosition), nil
+	return query.Data.(map[model.CaptureID]*model.TaskPosition), nil
 }
 
 func (p *ownerStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
-	query := &ownerQuery{
-		tp: ownerQueryProcessors,
+	query := &Query{
+		Tp: QueryProcessors,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.([]*model.ProcInfoSnap), nil
+	return query.Data.([]*model.ProcInfoSnap), nil
 }
 
 func (p *ownerStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error) {
-	query := &ownerQuery{
-		tp: ownerQueryCaptures,
+	query := &Query{
+		Tp: QueryCaptures,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.data.([]*model.CaptureInfo), nil
+	return query.Data.([]*model.CaptureInfo), nil
 }
 
-func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *ownerQuery) error {
-	doneCh := make(chan struct{})
-	job := &ownerJob{
-		tp:    ownerJobTypeQuery,
-		query: query,
-		done:  doneCh,
-	}
-	p.owner.pushOwnerJob(job)
+func (p *ownerStatusProvider) sendQueryToOwner(ctx context.Context, query *Query) error {
+	doneCh := make(chan error, 1)
+	p.owner.Query(query, doneCh)
 
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-doneCh:
+	case err := <-doneCh:
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	if query.err != nil {
-		return errors.Trace(query.err)
-	}
 	return nil
 }

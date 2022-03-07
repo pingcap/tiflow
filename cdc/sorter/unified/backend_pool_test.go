@@ -23,9 +23,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/filelock"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type backendPoolSuite struct{}
@@ -46,17 +47,17 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sortDir
-	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryPercentage = 90                       // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
-	backEndPool, err := newBackEndPool(sortDir, "")
+	backEndPool, err := newBackEndPool(sortDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -67,9 +68,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	fileName := backEnd.(*fileBackEnd).fileName
 	c.Assert(fileName, check.Not(check.Equals), "")
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
 	c.Assert(err, check.IsNil)
 
 	backEnd1, err := backEndPool.alloc(ctx)
@@ -79,9 +80,9 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	c.Assert(fileName1, check.Not(check.Equals), "")
 	c.Assert(fileName1, check.Not(check.Equals), fileName)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
 	c.Assert(err, check.IsNil)
 
 	backEnd2, err := backEndPool.alloc(ctx)
@@ -122,9 +123,9 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sortDir
-	conf.Sorter.MaxMemoryPressure = 0 // force using files
+	conf.Sorter.MaxMemoryPercentage = 0 // force using files
 
-	backEndPool, err := newBackEndPool(sortDir, "")
+	backEndPool, err := newBackEndPool(sortDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -156,15 +157,15 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
 	conf.Sorter.SortDir = sorterDir
-	conf.Sorter.MaxMemoryPressure = 90                         // 90%
+	conf.Sorter.MaxMemoryPercentage = 90                       // 90%
 	conf.Sorter.MaxMemoryConsumption = 16 * 1024 * 1024 * 1024 // 16G
 	config.StoreGlobalServerConfig(conf)
 
-	err = failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
 	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
 
-	backEndPool, err := newBackEndPool(sorterDir, "")
+	backEndPool, err := newBackEndPool(sorterDir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 
@@ -208,13 +209,13 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 type mockOtherProcess struct {
 	dir    string
 	prefix string
-	flock  *filelock.FileLock
+	flock  *fsutil.FileLock
 	files  []string
 }
 
 func newMockOtherProcess(c *check.C, dir string, prefix string) *mockOtherProcess {
 	prefixLockPath := fmt.Sprintf("%s/%s", dir, sortDirLockFileName)
-	flock, err := filelock.NewFileLock(prefixLockPath)
+	flock, err := fsutil.NewFileLock(prefixLockPath)
 	c.Assert(err, check.IsNil)
 
 	err = flock.Lock()
@@ -275,7 +276,7 @@ func (s *backendPoolSuite) TestCleanUpStaleBasic(c *check.C) {
 	mockP.unlock(c)
 	mockP.assertFilesExist(c)
 
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
@@ -289,12 +290,12 @@ func (s *backendPoolSuite) TestFileLockConflict(c *check.C) {
 	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 
-	backEndPool1, err := newBackEndPool(dir, "")
+	backEndPool1, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool1, check.NotNil)
 	defer backEndPool1.terminate()
 
-	backEndPool2, err := newBackEndPool(dir, "")
+	backEndPool2, err := newBackEndPool(dir)
 	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
 	c.Assert(backEndPool2, check.IsNil)
 }
@@ -312,7 +313,7 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 	// set a bad permission
 	mockP.changeLockPermission(c, 0o000)
 
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.ErrorMatches, ".*permission denied.*")
 	c.Assert(backEndPool, check.IsNil)
 
@@ -325,18 +326,20 @@ func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
 func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/sorter/unified/getMemoryPressureFails", "return(true)")
-	c.Assert(err, check.IsNil)
-	defer failpoint.Disable("github.com/pingcap/ticdc/cdc/sorter/unified/getMemoryPressureFails") //nolint:errcheck
+	origin := memory.MemTotal
+	defer func() {
+		memory.MemTotal = origin
+	}()
+	memory.MemTotal = func() (uint64, error) { return 0, nil }
 
 	dir := c.MkDir()
-	backEndPool, err := newBackEndPool(dir, "")
+	backEndPool, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 	c.Assert(backEndPool, check.NotNil)
 	defer backEndPool.terminate()
 
 	after := time.After(time.Second * 20)
-	tick := time.Tick(time.Second * 1)
+	tick := time.Tick(time.Millisecond * 100)
 	for {
 		select {
 		case <-after:
@@ -347,4 +350,17 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 			}
 		}
 	}
+}
+
+func (s *backendPoolSuite) TestCheckDataDirSatisfied(c *check.C) {
+	defer testleak.AfterTest(c)()
+	dir := c.MkDir()
+	conf := config.GetGlobalServerConfig()
+	conf.DataDir = dir
+	config.StoreGlobalServerConfig(conf)
+
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	err := checkDataDirSatisfied()
+	c.Assert(err, check.IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied"), check.IsNil)
 }

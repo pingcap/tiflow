@@ -1,43 +1,36 @@
 # diff Configuration.
 
-log-level = "info"
-
-chunk-size = 20
-
 check-thread-count = 4
 
-sample-percent = 100
+export-fix-sql = true
 
-use-checksum = true
+check-struct-only = false
 
-use-checkpoint = false
+[task]
+    output-dir = "/tmp/ticdc_dm_test/output"
 
-fix-sql-file = "fix.sql"
+    source-instances = ["mysql1"]
 
-# tables need to check.
-[[check-tables]]
-schema = "print_status"
-tables = ["~t.*"]
+    target-instance = "tidb0"
 
-[[table-config]]
-schema = "print_status"
-table = "t_1"
+    target-check-tables = ["print_status.t?*"]
+
+    target-configs= ["config1"]
+
+[table-configs]
+[table-configs.config1]
+target-tables = ["print_status.t_1"]
 # currently ignore check float and timestamp field
 ignore-columns = ["c5", "c9", "c11", "c15"]
 
-[[table-config.source-tables]]
-instance-id = "source-1"
-schema = "print_status"
-table  = "t_1"
-
-[[source-db]]
+[data-sources]
+[data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = "123456"
-instance-id = "source-1"
 
-[target-db]
+[data-sources.tidb0]
 host = "127.0.0.1"
 port = 4000
 user = "test"

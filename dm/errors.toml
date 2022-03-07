@@ -1084,6 +1084,66 @@ description = ""
 workaround = "Please update your `shadow-table-rules` or `trash-table-rules` in the configuration file."
 tags = ["internal", "high"]
 
+[error.DM-config-20050]
+message = "the openapi task config for '%s' already exist"
+description = ""
+workaround = "If you want to override it, please use the overwrite flag."
+tags = ["internal", "low"]
+
+[error.DM-config-20051]
+message = "the openapi task config for '%s' does not exist"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+[error.DM-config-20052]
+message = "collation compatible %s not supported"
+description = ""
+workaround = "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
+tags = ["internal", "medium"]
+
+[error.DM-config-20053]
+message = "invalid load mode '%s'"
+description = ""
+workaround = "Please choose a valid value in ['sql', 'loader']"
+tags = ["internal", "medium"]
+
+[error.DM-config-20054]
+message = "invalid load on-duplicate '%s'"
+description = ""
+workaround = "Please choose a valid value in ['replace', 'error', 'ignore']"
+tags = ["internal", "medium"]
+
+[error.DM-config-20055]
+message = "invalid validation mode"
+description = ""
+workaround = "Please check `validation-mode` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20056]
+message = "mysql-instance(%d)'s continuous validator config %s not exist"
+description = ""
+workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+tags = ["internal", "medium"]
+
+[error.DM-config-20057]
+message = "start-time %s is too late, no binlog location matches it"
+description = ""
+workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
+[error.DM-config-20058]
+message = "loader's dir %s is invalid"
+description = ""
+workaround = "Please check the `dir` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20059]
+message = "loader's dir %s is s3 dir, but s3 is not supported"
+description = ""
+workaround = "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
+tags = ["internal", "high"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
@@ -1255,7 +1315,7 @@ tags = ["internal", "high"]
 [error.DM-relay-unit-30008]
 message = "dirpath is empty"
 description = ""
-workaround = "Please check the `relay-dir` config in source config file."
+workaround = "Please check the `relay-dir` config in source config file or dm-worker config file."
 tags = ["internal", "high"]
 
 [error.DM-relay-unit-30009]
@@ -1604,12 +1664,6 @@ tags = ["internal", "high"]
 message = "inconsistent checkpoints between loader and target database"
 description = ""
 workaround = "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command."
-tags = ["internal", "high"]
-
-[error.DM-functional-34019]
-message = "DM do not support backend %s "
-description = ""
-workaround = "If you do not understand the configure `tidb.backend` you can just delete it."
 tags = ["internal", "high"]
 
 [error.DM-sync-unit-36001]
@@ -2003,7 +2057,7 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-sync-unit-36066]
-message = "replace event not exist, location: %s"
+message = "replace or inject event not exist, location: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -2197,7 +2251,7 @@ tags = ["internal", "high"]
 [error.DM-dm-master-38029]
 message = ""
 description = ""
-workaround = ""
+workaround = "Please use list-member command to see if the some workers are offline."
 tags = ["internal", "high"]
 
 [error.DM-dm-master-38030]
@@ -2352,6 +2406,18 @@ tags = ["internal", "high"]
 
 [error.DM-dm-master-38055]
 message = "table-info-before not exist in optimistic ddls: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38056]
+message = "downstream database config and meta for task %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38057]
+message = "invalid cluster id: %v"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -2830,6 +2896,12 @@ description = ""
 workaround = "Please try again later"
 tags = ["internal", "low"]
 
+[error.DM-dm-worker-40080]
+message = "table %s.%s matches more than one rule"
+description = ""
+workaround = "please check the route rules in the task config"
+tags = ["internal", "high"]
+
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
@@ -2980,6 +3052,30 @@ description = ""
 workaround = ""
 tags = ["downstream", "high"]
 
+[error.DM-schema-tracker-44016]
+message = "failed to set default downstream sql_mode %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44017]
+message = "failed to init downstream parser by sql_mode %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44018]
+message = "failed to mock downstream table by create table statement %v in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-schema-tracker-44019]
+message = "failed to fetch downstream table %v by show create table statement in schema tracker"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-scheduler-46001]
 message = "the scheduler has not started"
 description = ""
@@ -3089,7 +3185,7 @@ workaround = "Please use `query-status` command to see tasks."
 tags = ["internal", "medium"]
 
 [error.DM-scheduler-46019]
-message = "tasks %v on source %s should not be running"
+message = "running tasks %v to be transferred on source %s should in sync unit"
 description = ""
 workaround = "Please use `pause-task [-s source ...] task` to pause them first."
 tags = ["internal", "high"]
@@ -3141,6 +3237,42 @@ message = "require DM worker [%s] to be bound to source [%s], but it has been st
 description = ""
 workaround = "If you intend to bind the source with worker, you can stop-relay for current source."
 tags = ["internal", "medium"]
+
+[error.DM-scheduler-46028]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now"
+description = ""
+workaround = "Please stop all relay workers first, or specify worker name for `start-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46029]
+message = "the source has `start-relay` with worker name for workers %v, so it can't `stop-relay` without worker name now"
+description = ""
+workaround = "Please specify worker names for `stop-relay`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46030]
+message = "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now"
+description = ""
+workaround = "Please stop relay by `stop-relay` without worker name first."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46031]
+message = "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now"
+description = ""
+workaround = "Please use `stop-relay` without worker name."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46032]
+message = "failed to auto pause tasks %s when transfer-source"
+description = ""
+workaround = "Please pause task by `dmctl pause-task`."
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46033]
+message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
 message = "can not create grpc connection"

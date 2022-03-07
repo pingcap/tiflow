@@ -17,9 +17,10 @@ import (
 	"crypto/tls"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/cmd/util"
-	"github.com/pingcap/ticdc/pkg/etcd"
-	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
@@ -30,6 +31,7 @@ type Factory interface {
 	ClientGetter
 	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
+	KvStorage() (kv.Storage, error)
 }
 
 // ClientGetter defines the client getter.

@@ -17,7 +17,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/tiflow/dm/relay"
 )
 
 // subTaskHolder holds subtask instances.
@@ -50,7 +50,7 @@ func (h *subTaskHolder) removeSubTask(name string) {
 }
 
 // resetAllSubTasks does Close, change cfg.UseRelay then Init the subtasks.
-func (h *subTaskHolder) resetAllSubTasks(useRelay bool) {
+func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
@@ -58,8 +58,8 @@ func (h *subTaskHolder) resetAllSubTasks(useRelay bool) {
 		st.Close()
 		// TODO: make a st.reset
 		st.ctx, st.cancel = context.WithCancel(context.Background())
-		st.cfg.UseRelay = useRelay
-		st.Run(stage)
+		st.cfg.UseRelay = relay != nil
+		st.Run(stage, st.getValidatorStage(), relay)
 	}
 }
 
@@ -69,6 +69,16 @@ func (h *subTaskHolder) closeAllSubTasks() {
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
 		st.Close()
+	}
+	h.subTasks = make(map[string]*SubTask)
+}
+
+// killAllSubTasks kill and stop all subtask instances.
+func (h *subTaskHolder) killAllSubTasks() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, st := range h.subTasks {
+		st.Kill()
 	}
 	h.subTasks = make(map[string]*SubTask)
 }
@@ -89,15 +99,4 @@ func (h *subTaskHolder) getAllSubTasks() map[string]*SubTask {
 		result[name] = st
 	}
 	return result
-}
-
-// OnEvent implements relay.Listener
-// only syncer unit of subtask need to be notified, but it's much simpler and less error-prone to manage it here
-// as relay event need to broadcast to every syncer(most subtask have a syncer).
-func (h *subTaskHolder) OnEvent(e *replication.BinlogEvent) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for _, s := range h.subTasks {
-		s.relayNotify()
-	}
 }

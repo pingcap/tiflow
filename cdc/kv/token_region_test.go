@@ -17,21 +17,17 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 	"golang.org/x/sync/errgroup"
 )
 
-type tokenRegionSuite struct{}
-
-var _ = check.Suite(&tokenRegionSuite{})
-
-func (s *tokenRegionSuite) TestRouter(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRouter(t *testing.T) {
+	t.Parallel()
 	store := "store-1"
 	limit := 10
 	r := NewSizedRegionRouter(context.Background(), limit)
@@ -43,31 +39,31 @@ func (s *tokenRegionSuite) TestRouter(c *check.C) {
 	for i := 0; i < limit; i++ {
 		select {
 		case sri := <-r.Chan():
-			c.Assert(sri.ts, check.Equals, uint64(i))
+			require.Equal(t, uint64(i), sri.ts)
 			r.Acquire(store)
 			regions = append(regions, sri)
 		default:
-			c.Error("expect region info from router")
+			t.Error("expect region info from router")
 		}
 	}
-	c.Assert(r.tokens[store], check.Equals, limit)
+	require.Equal(t, limit, r.tokens[store])
 	for range regions {
 		r.Release(store)
 	}
-	c.Assert(r.tokens[store], check.Equals, 0)
+	require.Equal(t, 0, r.tokens[store])
 }
 
-func (s *tokenRegionSuite) TestRouterWithFastConsumer(c *check.C) {
-	defer testleak.AfterTest(c)()
-	s.testRouterWithConsumer(c, func() {})
+func TestRouterWithFastConsumer(t *testing.T) {
+	t.Parallel()
+	testRouterWithConsumer(t, func() {})
 }
 
-func (s *tokenRegionSuite) TestRouterWithSlowConsumer(c *check.C) {
-	defer testleak.AfterTest(c)()
-	s.testRouterWithConsumer(c, func() { time.Sleep(time.Millisecond * 15) })
+func TestRouterWithSlowConsumer(t *testing.T) {
+	t.Parallel()
+	testRouterWithConsumer(t, func() { time.Sleep(time.Millisecond * 15) })
 }
 
-func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) {
+func testRouterWithConsumer(t *testing.T, funcDoSth func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -118,13 +114,12 @@ func (s *tokenRegionSuite) testRouterWithConsumer(c *check.C, funcDoSth func()) 
 	}
 
 	err := wg.Wait()
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	c.Assert(r.tokens[store], check.Equals, 0)
+	require.Equal(t, context.Canceled, errors.Cause(err))
+	require.Equal(t, 0, r.tokens[store])
 }
 
-func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestRouterWithMultiStores(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -173,8 +168,8 @@ func (s *tokenRegionSuite) TestRouterWithMultiStores(c *check.C) {
 	}
 
 	err := wg.Wait()
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	require.Equal(t, context.Canceled, errors.Cause(err))
 	for _, store := range stores {
-		c.Assert(r.tokens[store], check.Equals, 0)
+		require.Equal(t, 0, r.tokens[store])
 	}
 }

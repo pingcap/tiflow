@@ -20,7 +20,10 @@ max-request-bytes = 1572864
 auto-compaction-mode = "periodic"
 auto-compaction-retention = "1h"
 quota-backend-bytes = 2147483648
+openapi = false
 v1-sources-path = ""
 ssl-ca = ""
 ssl-cert = ""
 ssl-key = ""
+
+[experimental]

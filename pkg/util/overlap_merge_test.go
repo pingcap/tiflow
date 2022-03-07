@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type overlapSuite struct{}

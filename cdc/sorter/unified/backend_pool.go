@@ -24,15 +24,16 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	sorterencoding "github.com/pingcap/ticdc/cdc/sorter/encoding"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerrors "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/filelock"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	sorterencoding "github.com/pingcap/tiflow/cdc/sorter/encoding"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -57,7 +58,7 @@ type backEndPool struct {
 	filePrefix        string
 
 	// to prevent `dir` from being accidentally used by another TiCDC server process.
-	fileLock *filelock.FileLock
+	fileLock *fsutil.FileLock
 
 	// cancelCh needs to be unbuffered to prevent races
 	cancelCh chan struct{}
@@ -66,7 +67,7 @@ type backEndPool struct {
 	isTerminating bool
 }
 
-func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
+func newBackEndPool(dir string) (*backEndPool, error) {
 	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
@@ -93,10 +94,18 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		ticker := time.NewTicker(backgroundJobInterval)
 		defer ticker.Stop()
 
-		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
-		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
-		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
+		id := "0" // A placeholder for ID label in metrics.
+		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(id)
+		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(id)
+		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(id)
 
+		// TODO: The underlaying implementation only recognizes cgroups set by
+		// containers, we need to support cgroups set by systemd or manually.
+		// See https://github.com/pingcap/tidb/issues/22132
+		totalMemory, err := memory.MemTotal()
+		if err != nil {
+			log.Panic("read memory stat failed", zap.Error(err))
+		}
 		for {
 			select {
 			case <-ret.cancelCh:
@@ -110,14 +119,8 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 			metricSorterOpenFileCountGauge.Set(float64(atomic.LoadInt64(&openFDCount)))
 
 			// update memPressure
-			m, err := memory.Get()
-
-			failpoint.Inject("getMemoryPressureFails", func() {
-				m = nil
-				err = errors.New("injected get memory pressure failure")
-			})
-
-			if err != nil {
+			usedMemory, err := memory.MemUsed()
+			if err != nil || totalMemory == 0 {
 				failpoint.Inject("sorterDebug", func() {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
 				})
@@ -128,7 +131,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 				// encountered, we can fail gracefully.
 				atomic.StoreInt32(&ret.memPressure, 100)
 			} else {
-				memPressure := m.Used * 100 / m.Total
+				memPressure := usedMemory * 100 / totalMemory
 				atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			}
 
@@ -162,7 +165,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
-		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
+		p.memoryPressure() < int32(sorterConfig.MaxMemoryPercentage) {
 
 		ret := newMemoryBackEnd()
 		return ret, nil
@@ -187,10 +190,10 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.Int64("table-id", tableID),
-		zap.String("table-name", tableName))
+		zap.Int64("tableID", tableID),
+		zap.String("tableName", tableName))
 
-	if err := util.CheckDataDirSatisfied(); err != nil {
+	if err := checkDataDirSatisfied(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -293,7 +296,8 @@ func (p *backEndPool) terminate() {
 		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
-			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
+			log.Warn("Unified Sorter clean-up failed: failed to remove",
+				zap.String("fileName", file), zap.Error(err))
 		}
 	}
 
@@ -316,7 +320,7 @@ func (p *backEndPool) memoryPressure() int32 {
 
 func (p *backEndPool) lockSortDir() error {
 	lockFileName := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
-	fileLock, err := filelock.NewFileLock(lockFileName)
+	fileLock, err := fsutil.NewFileLock(lockFileName)
 	if err != nil {
 		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
 	}
@@ -328,7 +332,7 @@ func (p *backEndPool) lockSortDir() error {
 				"Make sure that another instance of TiCDC, or any other program, is not using the directory. "+
 				"If you believe you should not see this error, try deleting the lock file and resume the changefeed. "+
 				"Report a bug or contact support if the problem persists.",
-				zap.String("lock-file", lockFileName))
+				zap.String("lockFile", lockFileName))
 			return errors.Trace(err)
 		}
 		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
@@ -349,7 +353,7 @@ func (p *backEndPool) unlockSortDir() error {
 func (p *backEndPool) cleanUpStaleFiles() error {
 	if p.dir == "" {
 		// guard against programmer error. Must be careful when we are deleting user files.
-		log.Panic("unexpected sort-dir", zap.String("sort-dir", p.dir))
+		log.Panic("unexpected sort-dir", zap.String("sortDir", p.dir))
 	}
 
 	files, err := filepath.Glob(filepath.Join(p.dir, fmt.Sprintf("%s-*", sortDirDataFileMagicPrefix)))
@@ -373,6 +377,28 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 				log.Panic("panicking", zap.Error(err))
 			})
 		}
+	}
+
+	return nil
+}
+
+// checkDataDirSatisfied check if the data-dir meet the requirement during server running
+// the caller should guarantee that dir exist
+func checkDataDirSatisfied() error {
+	const dataDirAvailLowThreshold = 10 // percentage
+
+	conf := config.GetGlobalServerConfig()
+	diskInfo, err := fsutil.GetDiskInfo(conf.DataDir)
+	if err != nil {
+		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, err)
+	}
+	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
+		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
+			log.Info("inject check data dir satisfied error")
+			failpoint.Return(nil)
+		})
+		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
+			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
 	}
 
 	return nil

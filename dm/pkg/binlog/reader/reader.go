@@ -19,7 +19,7 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/ticdc/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 // Reader is a binlog event reader, it may read binlog events from a TCP stream, binlog files or any other in-memory buffer.

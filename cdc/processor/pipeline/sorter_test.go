@@ -18,31 +18,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sorter/memory"
-	"github.com/pingcap/ticdc/cdc/sorter/unified"
-	"github.com/pingcap/ticdc/pkg/config"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	"github.com/pingcap/ticdc/pkg/leakutil"
-	"github.com/pingcap/ticdc/pkg/pipeline"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(
-		m,
-		goleak.IgnoreTopFunction("github.com/pingcap/ticdc/cdc/sorter/unified.newBackEndPool.func1"),
-	)
-}
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	dir := t.TempDir()
-	captureAddr := "0.0.0.0:0"
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0)
 	require.Nil(t, err)
 
 	unified.ResetGlobalPoolWithoutCleanup()
@@ -56,7 +48,9 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
-	sn := newSorterNode("tableName", 1, 1, nil, nil)
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
+		Consistent: &config.ConsistentConfig{},
+	})
 	sn.sorter = memory.NewEntrySorter()
 	require.EqualValues(t, 1, sn.ResolvedTs())
 	nctx := pipeline.NewNodeContext(
@@ -67,4 +61,98 @@ func TestSorterResolvedTs(t *testing.T) {
 	err := sn.Receive(nctx)
 	require.Nil(t, err)
 	require.EqualValues(t, 2, sn.ResolvedTs())
+}
+
+type checkSorter struct {
+	ch chan *model.PolymorphicEvent
+}
+
+var _ sorter.EventSorter = (*checkSorter)(nil)
+
+func (c *checkSorter) Run(ctx context.Context) error {
+	return nil
+}
+
+func (c *checkSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+	c.ch <- entry
+}
+
+func (c *checkSorter) TryAddEntry(
+	ctx context.Context, entry *model.PolymorphicEvent,
+) (bool, error) {
+	select {
+	case c.ch <- entry:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
+	return c.ch
+}
+
+func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
+	t.Parallel()
+	sch := make(chan *model.PolymorphicEvent, 1)
+	s := &checkSorter{ch: sch}
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
+		Consistent: &config.ConsistentConfig{},
+	})
+	sn.sorter = s
+
+	ch := make(chan pipeline.Message, 1)
+	require.EqualValues(t, 1, sn.ResolvedTs())
+
+	// Resolved ts must not regress even if there is no barrier ts message.
+	resolvedTs1 := pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
+	nctx := pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil), resolvedTs1, ch)
+	err := sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
+
+	// Advance barrier ts.
+	nctx = pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil),
+		pipeline.BarrierMessage(2),
+		ch,
+	)
+	err = sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, 2, sn.barrierTs)
+	// Barrier message must be passed to the next node.
+	require.EqualValues(t, pipeline.BarrierMessage(2), <-ch)
+
+	resolvedTs2 := pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
+	nctx = pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil), resolvedTs2, nil)
+	err = sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
+
+	resolvedTs3 := pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 3))
+	nctx = pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil), resolvedTs3, nil)
+	err = sn.Receive(nctx)
+	require.Nil(t, err)
+	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
+
+	resolvedTs4 := pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
+	sn.replConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
+	nctx = pipeline.NewNodeContext(
+		cdcContext.NewContext(context.Background(), nil), resolvedTs4, nil)
+	err = sn.Receive(nctx)
+	require.Nil(t, err)
+	resolvedTs4 = pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
+	require.EqualValues(t, resolvedTs4.PolymorphicEvent, <-s.Output())
+}
+
+func TestSorterUpdateBarrierTs(t *testing.T) {
+	t.Parallel()
+	s := &sorterNode{barrierTs: 1}
+	s.updateBarrierTs(model.Ts(2))
+	require.Equal(t, model.Ts(2), s.barrierTs)
+	s.updateBarrierTs(model.Ts(1))
+	require.Equal(t, model.Ts(2), s.barrierTs)
 }

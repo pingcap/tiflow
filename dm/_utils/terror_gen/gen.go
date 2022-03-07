@@ -88,7 +88,7 @@ func genFile(names []string) {
 	if err != nil {
 		panic(err)
 	}
-	err = os.WriteFile(generatedCheckerFile, genBuf.Bytes(), 0o644)
+	err = os.WriteFile(generatedCheckerFile, genBuf.Bytes(), 0o600)
 	if err != nil {
 		panic(err)
 	}

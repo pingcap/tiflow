@@ -56,3 +56,10 @@ function query_status_running_tasks() {
 		"\"result\": true" 3 \
 		"\"stage\": \"Running\"" 4
 }
+
+function query_status_with_offline_worker() {
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status" \
+		"\"result\": false" 2 \
+		"\"worker\": \"source not bound\"" 2
+}

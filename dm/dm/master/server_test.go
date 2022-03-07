@@ -44,24 +44,25 @@ import (
 	"go.etcd.io/etcd/integration"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/ticdc/dm/checker"
-	common2 "github.com/pingcap/ticdc/dm/dm/common"
-	"github.com/pingcap/ticdc/dm/dm/config"
-	"github.com/pingcap/ticdc/dm/dm/ctl/common"
-	"github.com/pingcap/ticdc/dm/dm/master/scheduler"
-	"github.com/pingcap/ticdc/dm/dm/master/shardddl"
-	"github.com/pingcap/ticdc/dm/dm/master/workerrpc"
-	"github.com/pingcap/ticdc/dm/dm/pb"
-	"github.com/pingcap/ticdc/dm/dm/pbmock"
-	"github.com/pingcap/ticdc/dm/pkg/conn"
-	"github.com/pingcap/ticdc/dm/pkg/cputil"
-	"github.com/pingcap/ticdc/dm/pkg/etcdutil"
-	"github.com/pingcap/ticdc/dm/pkg/ha"
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/ticdc/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/checker"
+	common2 "github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
+	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // use task config from integration test `sharding`.
@@ -243,8 +244,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 			expect = pb.Stage_Running
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
-		case pb.TaskOp_Stop:
-			expect = pb.Stage_Stopped
+		case pb.TaskOp_Delete:
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
@@ -271,7 +271,7 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 		}
 	case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
 		queryResp.SubTaskStatus = []*pb.SubTaskStatus{{}}
-		if expect == pb.Stage_Stopped {
+		if opTaskReq, ok := masterReq.(*pb.OperateTaskRequest); ok && opTaskReq.Op == pb.TaskOp_Delete {
 			queryResp.SubTaskStatus[0].Status = &pb.SubTaskStatus_Msg{
 				Msg: fmt.Sprintf("no sub task with name %s has started", taskName),
 			}
@@ -573,6 +573,61 @@ func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
 	}
 }
 
+func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
+	taskName := "test-stop-task"
+	responeses := [][]*pb.QueryStatusResponse{{
+		&pb.QueryStatusResponse{
+			SubTaskStatus: []*pb.SubTaskStatus{
+				{
+					Name: taskName,
+					Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
+						UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
+					}},
+				},
+			},
+		},
+		&pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{}},
+	}, {
+		&pb.QueryStatusResponse{
+			SubTaskStatus: []*pb.SubTaskStatus{
+				{
+					Name: taskName,
+					Status: &pb.SubTaskStatus_Sync{Sync: &pb.SyncStatus{
+						UnresolvedGroups: []*pb.ShardingGroup{{Target: "`db`.`tbl`", Unsynced: []string{"table1"}}},
+					}},
+				},
+			},
+		},
+		&pb.QueryStatusResponse{SubTaskStatus: []*pb.SubTaskStatus{
+			{
+				Name:   taskName,
+				Status: &pb.SubTaskStatus_Msg{Msg: common2.NoSubTaskMsg(taskName)},
+			},
+		}},
+	}}
+	req := &pb.OperateTaskRequest{
+		Op:   pb.TaskOp_Delete,
+		Name: taskName,
+	}
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	ctx := context.Background()
+	s := &Server{cfg: &Config{RPCTimeout: time.Second}}
+
+	for _, item := range responeses {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().QueryStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(item[0], nil).Return(item[1], nil).MaxTimes(2)
+		mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
+		ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, taskName, "", req)
+		c.Assert(err, check.IsNil)
+		c.Assert(ok, check.IsTrue)
+		c.Assert(msg, check.HasLen, 0)
+	}
+}
+
 func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 	var (
 		logger  = log.L()
@@ -801,6 +856,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	defer ctrl.Finish()
 
 	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
 	// s.generateSubTask with error
@@ -856,8 +912,8 @@ func (t *testMaster) TestStartTask(c *check.C) {
 
 	// test start task, but the first step check-task fails
 	bakCheckSyncConfigFunc := checker.CheckSyncConfigFunc
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) error {
-		return errors.New(errCheckSyncConfig)
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*config.SubTaskConfig, _, _ int64) (string, error) {
+		return "", errors.New(errCheckSyncConfig)
 	}
 	defer func() {
 		checker.CheckSyncConfigFunc = bakCheckSyncConfigFunc
@@ -871,7 +927,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, errCheckSyncConfigReg)
+	c.Assert(resp.CheckResult, check.Matches, errCheckSyncConfigReg)
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
 
@@ -903,7 +959,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 
 	var (
 		DDLs          = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
@@ -930,6 +986,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock := conn.InitMockDB(c)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerShardMeta(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -987,7 +1044,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
-	server.optimist = shardddl.NewOptimist(&logger)
+	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 
 	var (
 		p           = parser.New()
@@ -1022,6 +1079,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock = conn.InitMockDB(c)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerShardMeta(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1080,6 +1138,7 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
 	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
 	// test operate-task with invalid task name
@@ -1108,12 +1167,12 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 		Name: taskName,
 	}
 	stopReq1 := &pb.OperateTaskRequest{
-		Op:      pb.TaskOp_Stop,
+		Op:      pb.TaskOp_Delete,
 		Name:    taskName,
 		Sources: []string{sources[0]},
 	}
 	stopReq2 := &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
@@ -1152,13 +1211,13 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	resp, err = server.OperateTask(context.Background(), stopReq1)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(server.getTaskResources(taskName), check.DeepEquals, []string{sources[1]})
+	c.Assert(server.getTaskSourceNameList(taskName), check.DeepEquals, []string{sources[1]})
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}})
 	// 5. test stop task successfully, remove all workers
 	resp, err = server.OperateTask(context.Background(), stopReq2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(server.getTaskResources(taskName)), check.Equals, 0)
+	c.Assert(len(server.getTaskSourceNameList(taskName)), check.Equals, 0)
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[1]}})
 	t.clearSchedulerEnv(c, cancel, &wg)
 }
@@ -1306,40 +1365,51 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 }
 
 func (t *testMaster) TestServer(c *check.C) {
+	var err error
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
 	cfg.PeerUrls = "http://127.0.0.1:8294"
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg.AdvertiseAddr = cfg.MasterAddr
 
-	s := NewServer(cfg)
+	basicServiceCheck := func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
+		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
+	}
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		basicServiceCheck(c, cfg)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+		// try to start another server with the same address.  Expect it to fail
+		dupServer := NewServer(cfg)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		err1 := dupServer.Start(ctx)
+		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
+		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+	})
 
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.MasterAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.MasterAddr), []byte("Types of profiles available"))
-	// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
-	// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.MasterAddr), []byte("task test-task has no source or not exist"))
-
-	dupServer := NewServer(cfg)
-	err := dupServer.Start(ctx)
-	c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err.Error(), check.Matches, ".*bind: address already in use.*")
-
-	// close
-	cancel()
-	s.Close()
-
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.closed.Load()
-	}), check.IsTrue)
+	// test the listen address is 0.0.0.0
+	masterAddrStr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddrStr)
+	c.Assert(err, check.IsNil)
+	cfg2 := NewConfig()
+	*cfg2 = *cfg
+	cfg2.MasterAddr = fmt.Sprintf("0.0.0.0:%s", masterPort)
+	cfg2.AdvertiseAddr = masterAddrStr
+	t.testNormalServerLifecycle(c, cfg2, basicServiceCheck)
 }
 
 func (t *testMaster) TestMasterTLS(c *check.C) {
+	var err error
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	peerAddr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddr)
+	c.Assert(err, check.IsNil)
+	_, peerPort, err := net.SplitHostPort(peerAddr)
+	c.Assert(err, check.IsNil)
 
 	// all with `https://` prefix
 	cfg := NewConfig()
@@ -1487,17 +1557,40 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
 	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
 	t.testTLSPrefix(c, cfg)
+
+	// listen address set to 0.0.0.0
+	cfg = NewConfig()
+	c.Assert(cfg.Parse([]string{
+		"--name=master-tls",
+		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--master-addr=0.0.0.0:%s", masterPort),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
+		fmt.Sprintf("--peer-urls=0.0.0.0:%s", peerPort),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
+		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
+		"--ssl-ca=./tls_for_test/ca.pem",
+		"--ssl-cert=./tls_for_test/dm.pem",
+		"--ssl-key=./tls_for_test/dm.key",
+	}), check.IsNil)
+	t.testTLSPrefix(c, cfg)
 }
 
 func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	})
+}
+
+func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C, *Config)) {
+	var err error
 	s := NewServer(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+	err = s.Start(ctx)
+	c.Assert(err, check.IsNil)
 
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	checkLogic(c, cfg)
 
 	// close
 	cancel()
@@ -1534,6 +1627,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -1553,6 +1647,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1587,6 +1682,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg3.Name = "dm-master-3"
 	cfg3.DataDir = c.MkDir()
 	cfg3.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg3.AdvertiseAddr = cfg3.MasterAddr
 	cfg3.PeerUrls = tempurl.Alloc()
 	cfg3.AdvertisePeerUrls = cfg3.PeerUrls
 	cfg3.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1629,7 +1725,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg1.AdvertiseAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -1712,35 +1808,30 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	// 5. start workers, the unbounded sources should be bounded
 	var wg sync.WaitGroup
-	ctx1, cancel1 := context.WithCancel(ctx)
-	ctx2, cancel2 := context.WithCancel(ctx)
-	ctx3, cancel3 := context.WithCancel(ctx)
 	workerName1 := "worker1"
 	workerName2 := "worker2"
 	workerName3 := "worker3"
 	defer func() {
-		t.clearSchedulerEnv(c, cancel1, &wg)
-		t.clearSchedulerEnv(c, cancel2, &wg)
-		t.clearSchedulerEnv(c, cancel3, &wg)
+		t.clearSchedulerEnv(c, cancel, &wg)
 	}()
 	c.Assert(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx1, workerName1)
+	}(ctx, workerName1)
 	c.Assert(s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx2, workerName2)
+	}(ctx, workerName2)
 	c.Assert(s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"), check.IsNil)
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
-	}(ctx3, workerName3)
+	}(ctx, workerName3)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
@@ -1979,15 +2070,28 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	c.Assert(resp1.Result, check.IsTrue)
 	c.Assert(strings.Contains(resp1.Cfg, "name: test"), check.IsTrue)
 
-	// wrong task name
+	// not exist task name
+	taskName2 := "wrong"
 	req2 := &pb.GetCfgRequest{
-		Name: "haha",
+		Name: taskName2,
 		Type: pb.CfgType_TaskType,
 	}
 	resp2, err := server.GetCfg(context.Background(), req2)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp2.Result, check.IsFalse)
 	c.Assert(resp2.Msg, check.Equals, "task not found")
+
+	// generate a template named `wrong`, test get this task template
+	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
+	c.Assert(err, check.IsNil)
+	openapiTask.Name = taskName2
+	c.Assert(ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: taskName2, Type: pb.CfgType_TaskTemplateType})
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp2.Result, check.IsTrue)
+	c.Assert(strings.Contains(resp2.Cfg, fmt.Sprintf("name: %s", taskName2)), check.IsTrue)
 
 	// test restart master
 	server.scheduler.Close()
@@ -2074,12 +2178,12 @@ func (t *testMaster) subTaskStageMatch(c *check.C, s *scheduler.Scheduler, task,
 }
 
 func (t *testMaster) TestGRPCLongResponse(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/LongRPCResponse", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/master/LongRPCResponse")
-	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/LongRPCResponse")
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
 	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/ticdc/dm/dm/ctl/common/SkipUpdateMasterClient")
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/ctl/common/SkipUpdateMasterClient")
 
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	lis, err := net.Listen("tcp", masterAddr)
@@ -2101,4 +2205,138 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	resp := &pb.StartTaskResponse{}
 	err = common.SendRequest(ctx, "StartTask", &pb.StartTaskRequest{}, &resp)
 	c.Assert(err, check.IsNil)
+}
+
+func (t *testMaster) TestStartStopValidion(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq))
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1.1 start validation
+	validatorStartReq := &pb.StartValidationRequest{
+		Mode:     config.ValidationFull,
+		TaskName: taskName,
+	}
+	startResp, err := server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
+
+	// 1.2 start existed validaion task
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue) // return with no error
+
+	// 1.3 start non-existed subtask's validator
+	validatorStartReq.TaskName = "not-exist-name"
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsFalse)
+	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStartReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 2.1 stop validation
+	validatorStopReq := &pb.StopValidationRequest{
+		TaskName: taskName,
+	}
+	stopResp, err := server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 2.2 re-stop stopped task
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue) // return with no error
+
+	// 2.3 stop non-existed subtask's validator
+	validatorStopReq.TaskName = "not-exist-name"
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsFalse)
+	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config.*")
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
+	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
+
+	// 3.1 start validation with mode fast
+	validatorStartReq.TaskName = taskName
+	validatorStartReq.Mode = config.ValidationFast
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
+	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
+
+	// 4.1 stop all tasks
+	validatorStopReq.TaskName = ""
+	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stopResp.Result, check.IsTrue)
+	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
+
+	// 4.2 start all tasks
+	validatorStartReq.TaskName = ""
+	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(startResp.Result, check.IsTrue)
+}
+
+func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
+	stage := ha.NewValidatorStage(expectStage, source, taskName)
+
+	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, taskName, 0)
+	c.Assert(err, check.IsNil)
+	switch expectStage {
+	case pb.Stage_Running, pb.Stage_Stopped:
+		c.Assert(stageM, check.HasLen, 1)
+		stageDeepEqualExcludeRev(c, stageM[taskName], stage)
+	default:
+		c.Assert(stageM, check.HasLen, 0)
+	}
+}
+
+//nolint:unparam
+func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string, expectMode string) {
+	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
+	v, ok := cfgs[task]
+	c.Assert(ok, check.IsTrue)
+	cfg, ok := v[source]
+	c.Assert(ok, check.IsTrue)
+	c.Assert(cfg.ValidatorCfg.Mode, check.Equals, expectMode)
 }

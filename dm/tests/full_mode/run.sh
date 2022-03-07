@@ -7,7 +7,7 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function fail_acquire_global_lock() {
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -37,10 +37,6 @@ function fail_acquire_global_lock() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID2 worker2" \
-		"\"result\": true" 1
-
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i '/heartbeat-report-interval/i\ignore-checking-items: ["dump_privilege"]' $WORK_DIR/dm-task.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -56,11 +52,11 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 3 \
+		"\"stage\": \"Paused\"" 2 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
-	cleanup_data full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function escape_schema() {
@@ -68,7 +64,8 @@ function escape_schema() {
 	cp $cur/data/db2.prepare.sql $WORK_DIR/db2.prepare.sql
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\\\\\\\\\/mode/g" $WORK_DIR/diff_config.toml
+	sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml
 
 	run_sql_file $WORK_DIR/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
@@ -85,7 +82,7 @@ function escape_schema() {
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_count 'Query OK, 0 rows affected' 7
 
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -116,8 +113,8 @@ function escape_schema() {
 	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
 	check_metric $WORKER2_PORT 'dumpling_dump_finished_tables' 3 0 3
 
-	cleanup_data full/mode
 	cleanup_process $*
+	cleanup_data full/mode
 }
 
 function empty_data() {
@@ -131,6 +128,7 @@ function empty_data() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	sleep 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2 \
@@ -140,8 +138,8 @@ function empty_data() {
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "progress=\"100.00 %\""
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "progress=\"100.00 %\""
 
-	cleanup_data full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function run() {

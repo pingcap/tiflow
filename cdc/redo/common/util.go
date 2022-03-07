@@ -22,13 +22,13 @@ import (
 
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // InitS3storage init a storage used for s3,
 // s3URI should be like s3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-func InitS3storage(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	if len(uri.Host) == 0 {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, errors.Errorf("please specify the bucket for s3 in %v", uri))
 	}
@@ -49,7 +49,6 @@ func InitS3storage(ctx context.Context, uri url.URL) (storage.ExternalStorage, e
 	s3storage, err := storage.New(ctx, backend, &storage.ExternalStorageOptions{
 		SendCredentials: false,
 		HTTPClient:      nil,
-		SkipCheckPath:   true,
 	})
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrS3StorageInitialize, err)

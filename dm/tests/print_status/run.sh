@@ -14,14 +14,17 @@ function run() {
 	# TableMapEvent, QueryEvent, GTIDEvent, and a specific Event in each group.
 	# so we slow down 460 * 4 ms. Besides the log may be not flushed to disk asap,
 	# we need to add some retry mechanism
-	inject_points=("github.com/pingcap/ticdc/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
-		"github.com/pingcap/ticdc/dm/loader/LoadDataSlowDown=sleep(100)"
-		"github.com/pingcap/ticdc/dm/syncer/ProcessBinlogSlowDown=sleep(4)")
+	inject_points=("github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
+		"github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(100)"
+		"github.com/pingcap/tiflow/dm/syncer/ProcessBinlogSlowDown=sleep(4)")
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
+
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/dm-worker1.toml
+	sed -i "s%placeholder%$WORK_DIR/relay_by_worker%g" $WORK_DIR/dm-worker1.toml
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	# operate mysql config to worker
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
@@ -33,6 +36,8 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	ls $WORK_DIR/relay_by_worker/worker1/*
 
 	run_sql_file $cur/data/db.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -59,21 +64,9 @@ function check_print_status() {
 	echo "checking print status"
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
-	grep -oP "\[unit=load\] \[finished_bytes=[0-9]+\] \[total_bytes=59637\] \[total_file_count=3\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
-	#grep -oP "loader.*\Kfinished_bytes = [0-9]+, total_bytes = [0-9]+, total_file_count = [0-9]+, progress = .*" $WORK_DIR/worker1/log/dm-worker.log > $status_file
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59637\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
-	[ $status_count -ge 2 ]
-	count=0
-	cat $status_file | while read -r line; do
-		total_file_count=$(echo "$line" | awk '{print $(NF-2)}' | tr -d "[total_file_count=" | tr -d "]")
-		[ $total_file_count -eq 3 ]
-		count=$((count + 1))
-		if [ $count -eq $status_count ]; then
-			finished_bytes=$(echo "$line" | awk '{print $2}' | tr -d "[finished_bytes=" | tr -d "]")
-			total_bytes=$(echo "$line" | awk '{print $3}' | tr -d "[total_file_count" | tr -d "]")
-			[[ "$finished_bytes" -eq "$total_bytes" ]]
-		fi
-	done
+	[ $status_count -eq 1 ]
 	echo "check load unit print status success"
 
 	# check sync unit print status

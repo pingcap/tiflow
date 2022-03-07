@@ -15,7 +15,7 @@ function run() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/dm/worker/defaultKeepAliveTTL=return(1)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/defaultKeepAliveTTL=return(1)"
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -49,10 +49,10 @@ function run() {
 		grep 'source' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker2bound worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	# relay should be started after start-relay
 	sleep 2
@@ -125,10 +125,10 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $worker2bound worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
@@ -137,10 +137,10 @@ function run() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker1bound worker1" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $worker2bound worker2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	echo "start task in incremental mode"
 	cat $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
@@ -154,7 +154,7 @@ function run() {
 	sed -i "s/binlog-gtid-placeholder-2/$gtid2/g" $WORK_DIR/dm-task.yaml
 
 	# test graceful display error
-	export GO_FAILPOINTS='github.com/pingcap/ticdc/dm/syncer/GetEventError=return'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/GetEventError=return'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -170,7 +170,7 @@ function run() {
 	check_port_offline $WORKER2_PORT 20
 
 	# only mock pull binlog failed once
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/ticdc/dm/syncer/GetEventError=1*return"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/WaitUserCancel=return(8);github.com/pingcap/tiflow/dm/syncer/GetEventError=1*return"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -211,14 +211,16 @@ function run() {
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
 
-	export GO_FAILPOINTS="github.com/pingcap/ticdc/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/FlushCheckpointStage=return(100)" # for all stages
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	sleep 3
-	dmctl_start_task $WORK_DIR/dm-task.yaml
+	# start DM task. don't check error because it will meet injected error soon
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml"
 
 	# the task should paused by `FlushCheckpointStage` failpont before flush old checkpoint.
 	# `db2.increment.sql` has no DDL, so we check count of content as `1`.

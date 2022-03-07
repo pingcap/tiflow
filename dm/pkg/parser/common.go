@@ -15,10 +15,13 @@ package parser
 
 import (
 	"bytes"
+	"strings"
 
-	"github.com/pingcap/ticdc/dm/pkg/log"
-	"github.com/pingcap/ticdc/dm/pkg/terror"
-	"github.com/pingcap/ticdc/dm/pkg/utils"
+	"github.com/pingcap/tidb/parser/charset"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
@@ -34,6 +37,22 @@ const (
 	// https://github.com/pingcap/parser/pull/1021
 	SingleRenameTableNameNum = 2
 )
+
+func init() {
+	c := &charset.Charset{
+		Name:             charset.CharsetGBK,
+		DefaultCollation: "gbk_chinese_ci",
+		Collations:       make(map[string]*charset.Collation),
+		Desc:             "Chinese Internal Code Specification",
+		Maxlen:           2,
+	}
+	charset.AddCharset(c)
+	for _, coll := range charset.GetCollations() {
+		if strings.EqualFold(coll.CharsetName, c.Name) {
+			charset.AddCollation(coll)
+		}
+	}
+}
 
 // Parse wraps parser.Parse(), makes `parser` suitable for dm.
 func Parse(p *parser.Parser, sql, charset, collation string) (stmt []ast.StmtNode, err error) {
@@ -166,7 +185,7 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 	var b []byte
 	bf := bytes.NewBuffer(b)
 	err := stmt.Restore(&format.RestoreCtx{
-		Flags: format.DefaultRestoreFlags,
+		Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment,
 		In:    bf,
 	})
 	if err != nil {
@@ -184,7 +203,7 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 		schemaName = model.NewCIStr(schema) // fill schema name
 		bf         = new(bytes.Buffer)
 		ctx        = &format.RestoreCtx{
-			Flags: format.DefaultRestoreFlags,
+			Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment,
 			In:    bf,
 		}
 	)
@@ -334,4 +353,28 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 
 func genTableName(schema string, table string) *filter.Table {
 	return &filter.Table{Schema: schema, Name: table}
+}
+
+// CheckIsDDL checks input SQL whether is a valid DDL statement.
+func CheckIsDDL(sql string, p *parser.Parser) bool {
+	sql = utils.TrimCtrlChars(sql)
+
+	if utils.IsBuildInSkipDDL(sql) {
+		return false
+	}
+
+	// if parse error, treat it as not a DDL
+	stmts, err := Parse(p, sql, "", "")
+	if err != nil || len(stmts) == 0 {
+		return false
+	}
+
+	stmt := stmts[0]
+	switch stmt.(type) {
+	case ast.DDLNode:
+		return true
+	default:
+		// other thing this like `BEGIN`
+		return false
+	}
 }

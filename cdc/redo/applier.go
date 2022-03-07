@@ -16,8 +16,8 @@ package redo
 import (
 	"context"
 
-	"github.com/pingcap/ticdc/cdc/redo/reader"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tiflow/cdc/redo/reader"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // NewRedoReader creates a new redo log reader
@@ -25,7 +25,7 @@ func NewRedoReader(ctx context.Context, storage string, cfg *reader.LogReaderCon
 	switch consistentStorage(storage) {
 	case consistentStorageBlackhole:
 		rd = reader.NewBlackHoleReader()
-	case consistentStorageLocal, consistentStorageS3:
+	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		rd, err = reader.NewLogReader(ctx, cfg)
 	default:
 		err = cerror.ErrConsistentStorage.GenWithStackByArgs(storage)

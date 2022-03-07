@@ -18,11 +18,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/pdtime"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	cdcContext "github.com/pingcap/ticdc/pkg/context"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -87,49 +89,34 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	}
 }
 
-func (s *gcManagerSuite) TestTimeFromPD(c *check.C) {
-	defer testleak.AfterTest(c)()
-	mockPDClient := &MockPDClient{}
-	gcManager := NewManager(mockPDClient).(*gcManager)
-	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx.GlobalVars().PDClient = mockPDClient
-	t1, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(t1, check.Equals, gcManager.pdPhysicalTimeCache)
-
-	time.Sleep(50 * time.Millisecond)
-	// should return cached time
-	t2, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(t2, check.Equals, gcManager.pdPhysicalTimeCache)
-	c.Assert(t2, check.Equals, t1)
-
-	time.Sleep(50 * time.Millisecond)
-	// assume that the gc safe point updated one hour ago
-	gcManager.lastUpdatedPdTime = time.Now().Add(-time.Hour)
-	t3, err := gcManager.CurrentTimeFromPDCached(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(t3, check.Equals, gcManager.pdPhysicalTimeCache)
-	// should return new time
-	c.Assert(t3, check.Not(check.Equals), t2)
-}
-
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
 	gcManager := NewManager(mockPDClient).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
-	err := gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+
+	clock, err := pdtime.NewClock(context.Background(), mockPDClient)
+	c.Assert(err, check.IsNil)
+
+	go clock.Run(ctx)
+	time.Sleep(1 * time.Second)
+	defer clock.Stop()
+
+	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
+		PDClock: clock,
+	})
+
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }

@@ -103,7 +103,7 @@ campaign owner failed
 
 ["CDC:ErrCaptureNotExist"]
 error = '''
-capture not exists, key: %s
+capture not exists, %s
 '''
 
 ["CDC:ErrCaptureRegister"]
@@ -123,12 +123,12 @@ capture suicide
 
 ["CDC:ErrChangeFeedAlreadyExists"]
 error = '''
-changefeed already exists, key: %s
+changefeed already exists, %s
 '''
 
 ["CDC:ErrChangeFeedNotExists"]
 error = '''
-changefeed not exists, key: %s
+changefeed not exists, %s
 '''
 
 ["CDC:ErrChangefeedAbnormalState"]
@@ -143,7 +143,7 @@ changefeed update error: %s
 
 ["CDC:ErrCheckClusterVersionFromPD"]
 error = '''
-failed to request PD
+failed to request PD %s, please try again later
 '''
 
 ["CDC:ErrCheckDataDirSatisfied"]
@@ -216,11 +216,6 @@ error = '''
 decode row data to datum failed
 '''
 
-["CDC:ErrEmitCheckpointTsFailed"]
-error = '''
-emit checkpoint ts failed
-'''
-
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -241,6 +236,16 @@ error = '''
 the etcd txn should be aborted and retried immediately
 '''
 
+["CDC:ErrEtcdTxnOpsExceed"]
+error = '''
+patch ops:%d of a single changefeed exceed etcd txn max ops:%d
+'''
+
+["CDC:ErrEtcdTxnSizeExceed"]
+error = '''
+patch size:%d of a single changefeed exceed etcd txn max size:%d
+'''
+
 ["CDC:ErrEventFeedAborted"]
 error = '''
 single event feed aborted
@@ -259,21 +264,6 @@ exec DDL failed
 ["CDC:ErrFetchHandleValue"]
 error = '''
 can't find handle column, please check if the pk is handle
-'''
-
-["CDC:ErrFileSinkCreateDir"]
-error = '''
-file sink create dir
-'''
-
-["CDC:ErrFileSinkFileOp"]
-error = '''
-file sink file operation
-'''
-
-["CDC:ErrFileSinkMetaAlreadyExists"]
-error = '''
-file sink meta file already exists
 '''
 
 ["CDC:ErrFileSizeExceed"]
@@ -331,9 +321,9 @@ error = '''
 get tikv grpc context failed
 '''
 
-["CDC:ErrIllegalUnifiedSorterParameter"]
+["CDC:ErrIllegalSorterParameter"]
 error = '''
-illegal parameter for unified sorter: %s
+illegal parameter for sorter: %s
 '''
 
 ["CDC:ErrIndexKeyTableNotFound"]
@@ -361,9 +351,19 @@ error = '''
 bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
 '''
 
+["CDC:ErrInvalidDDLJob"]
+error = '''
+invalid ddl job(%d)
+'''
+
 ["CDC:ErrInvalidEtcdKey"]
 error = '''
 invalid key: %s
+'''
+
+["CDC:ErrInvalidHost"]
+error = '''
+host must be a URL or a host:port pair: %q
 '''
 
 ["CDC:ErrInvalidRecordKey"]
@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaCreateTopic"]
+error = '''
+kafka create topic failed
+'''
+
 ["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
@@ -456,6 +461,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrKafkaTopicExprInvalid"]
+error = '''
+invalid topic expression
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
@@ -466,6 +476,11 @@ error = '''
 owner lease timeout
 '''
 
+["CDC:ErrLevelDBSorterError"]
+error = '''
+leveldb error: %s
+'''
+
 ["CDC:ErrLoadTimezone"]
 error = '''
 load timezone
@@ -474,6 +489,16 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
+'''
+
+["CDC:ErrMQCodecInvalidConfig"]
+error = '''
+MQ Codec invalid config
+'''
+
+["CDC:ErrMQSinkUnknownProtocol"]
+error = '''
+unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -626,9 +651,89 @@ error = '''
 etcd api call error
 '''
 
+["CDC:ErrPeerMessageClientClosed"]
+error = '''
+peer-to-peer message client has been closed
+'''
+
+["CDC:ErrPeerMessageClientPermanentFail"]
+error = '''
+peer-to-peer message client has failed permanently, no need to reconnect: %s
+'''
+
+["CDC:ErrPeerMessageDataLost"]
+error = '''
+peer-to-peer message data lost, topic: %s, seq: %s
+'''
+
+["CDC:ErrPeerMessageDecodeError"]
+error = '''
+failed to decode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageDuplicateConnection"]
+error = '''
+peer-to-peer message duplicate connection: epoch %d
+'''
+
+["CDC:ErrPeerMessageEncodeError"]
+error = '''
+failed to encode peer-to-peer message
+'''
+
+["CDC:ErrPeerMessageIllegalClientVersion"]
+error = '''
+peer-to-peer message client reported illegal version: %s
+'''
+
 ["CDC:ErrPeerMessageIllegalMeta"]
 error = '''
 peer-to-peer message server received an RPC call with illegal metadata
+'''
+
+["CDC:ErrPeerMessageInjectedServerRestart"]
+error = '''
+peer-to-peer message server injected error
+'''
+
+["CDC:ErrPeerMessageInternalSenderClosed"]
+error = '''
+peer-to-peer message server tries to send to a closed stream. Internal only.
+'''
+
+["CDC:ErrPeerMessageReceiverMismatch"]
+error = '''
+peer-to-peer message receiver is a mismatch: expected %s, got %s
+'''
+
+["CDC:ErrPeerMessageSendTryAgain"]
+error = '''
+peer-to-peer message client has too many pending messages to send, try again later
+'''
+
+["CDC:ErrPeerMessageServerClosed"]
+error = '''
+peer-to-peer message server has closed connection: %s.
+'''
+
+["CDC:ErrPeerMessageStaleConnection"]
+error = '''
+peer-to-peer message stale connection: old-epoch %d, new-epoch %d
+'''
+
+["CDC:ErrPeerMessageTaskQueueCongested"]
+error = '''
+peer-to-peer message server has too many pending tasks
+'''
+
+["CDC:ErrPeerMessageToManyPeers"]
+error = '''
+peer-to-peer message server got too many peers: %d peers
+'''
+
+["CDC:ErrPeerMessageTopicCongested"]
+error = '''
+peer-to-peer message topic has congested, aborting all connections
 '''
 
 ["CDC:ErrPendingRegionCancel"]
@@ -641,14 +746,14 @@ error = '''
 pipeline is full, please try again. Internal use only, report a bug if seen externally
 '''
 
-["CDC:ErrPrepareAvroFailed"]
-error = '''
-prepare avro failed
-'''
-
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
+'''
+
+["CDC:ErrProcessorDuplicateOperations"]
+error = '''
+table processor duplicate operation, table-id: %d
 '''
 
 ["CDC:ErrProcessorEtcdWatch"]
@@ -736,19 +841,9 @@ error = '''
 resolve locks failed
 '''
 
-["CDC:ErrS3SinkInitialize"]
+["CDC:ErrRewindRequestBodyError"]
 error = '''
-new s3 sink
-'''
-
-["CDC:ErrS3SinkStorageAPI"]
-error = '''
-s3 sink storage api
-'''
-
-["CDC:ErrS3SinkWriteStorage"]
-error = '''
-write to storage
+failed to seek to the beginning of request body
 '''
 
 ["CDC:ErrS3StorageAPI"]
@@ -841,6 +936,16 @@ error = '''
 table %d not found in schema snapshot
 '''
 
+["CDC:ErrSorterClosed"]
+error = '''
+sorter is closed
+'''
+
+["CDC:ErrStartAStoppedLevelDBSystem"]
+error = '''
+start a stopped leveldb system
+'''
+
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
@@ -883,12 +988,12 @@ fail to create changefeed because target-ts %d is earlier than start-ts %d
 
 ["CDC:ErrTaskPositionNotExists"]
 error = '''
-task position not exists, key: %s
+task position not exists, %s
 '''
 
 ["CDC:ErrTaskStatusNotExists"]
 error = '''
-task status not exists, key: %s
+task status not exists, %s
 '''
 
 ["CDC:ErrTiKVEventFeed"]
@@ -906,6 +1011,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnexpectedSnapshot"]
+error = '''
+unexpected snapshot, table %d
+'''
+
 ["CDC:ErrUnifiedSorterBackendTerminating"]
 error = '''
 unified sorter backend is terminating
@@ -914,6 +1024,11 @@ unified sorter backend is terminating
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
 unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
+'''
+
+["CDC:ErrUnimplemented"]
+error = '''
+unimplemented %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]
@@ -969,6 +1084,11 @@ write ts conflict
 ["CDC:ErrWrongTableInfo"]
 error = '''
 wrong table info in unflatten, table id %d, index table id: %d
+'''
+
+["CDC:ErrZeroLengthResponseBody"]
+error = '''
+0-length response with status code: %d
 '''
 
 ["ErrConflictingFileLocks"]

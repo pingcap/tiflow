@@ -17,14 +17,12 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
-
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"go.uber.org/zap"
 )
 
 const (
@@ -139,7 +137,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
+	log.Debug("warped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
@@ -307,6 +305,11 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 
 // IsEligible returns whether the table is a eligible table
 func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
+	// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
+	// See https://github.com/pingcap/tiflow/issues/4559
+	if ti.IsSequence() {
+		return false
+	}
 	if forceReplicate {
 		return true
 	}

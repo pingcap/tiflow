@@ -18,14 +18,14 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 var (
@@ -258,7 +258,7 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble:
 		return datum, nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		t := types.NewTime(types.ZeroCoreTime, ft.Tp, int8(ft.Decimal))
+		t := types.NewTime(types.ZeroCoreTime, ft.Tp, ft.Decimal)
 		var err error
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
@@ -274,7 +274,7 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		datum.SetMysqlTime(t)
 		return datum, nil
 	case mysql.TypeDuration: // duration should read fsp from column meta data
-		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: int8(ft.Decimal)}
+		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: ft.Decimal}
 		datum.SetMysqlDuration(dur)
 		return datum, nil
 	case mysql.TypeEnum:

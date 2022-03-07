@@ -15,11 +15,12 @@ package codec
 
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util/testleak"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
 type codecInterfaceSuite struct{}
@@ -54,7 +55,7 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 		CommitTs: 5678,
 	}
 
-	msg := NewMQMessage(ProtocolDefault, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
+	msg := NewMQMessage(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
 
 	c.Assert(msg.Key, check.BytesEquals, []byte("key1"))
 	c.Assert(msg.Value, check.BytesEquals, []byte("value1"))
@@ -62,7 +63,7 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 	c.Assert(msg.Type, check.Equals, model.MqMessageTypeRow)
 	c.Assert(*msg.Schema, check.Equals, rowEvent.Table.Schema)
 	c.Assert(*msg.Table, check.Equals, rowEvent.Table.Table)
-	c.Assert(msg.Protocol, check.Equals, ProtocolDefault)
+	c.Assert(msg.Protocol, check.Equals, config.ProtocolOpen)
 
 	job := &timodel.Job{
 		ID:         1071,
@@ -100,21 +101,21 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 	ddlEvent := &model.DDLEvent{}
 	ddlEvent.FromJob(job, preTableInfo)
 
-	msg = newDDLMQMessage(ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
+	msg = newDDLMQMessage(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	c.Assert(msg.Key, check.IsNil)
 	c.Assert(msg.Value, check.BytesEquals, []byte("value1"))
 	c.Assert(msg.Ts, check.Equals, ddlEvent.CommitTs)
 	c.Assert(msg.Type, check.Equals, model.MqMessageTypeDDL)
 	c.Assert(*msg.Schema, check.Equals, ddlEvent.TableInfo.Schema)
 	c.Assert(*msg.Table, check.Equals, ddlEvent.TableInfo.Table)
-	c.Assert(msg.Protocol, check.Equals, ProtocolMaxwell)
+	c.Assert(msg.Protocol, check.Equals, config.ProtocolMaxwell)
 
-	msg = newResolvedMQMessage(ProtocolCanal, []byte("key1"), nil, 1234)
+	msg = newResolvedMQMessage(config.ProtocolCanal, []byte("key1"), nil, 1234)
 	c.Assert(msg.Key, check.BytesEquals, []byte("key1"))
 	c.Assert(msg.Value, check.IsNil)
 	c.Assert(msg.Ts, check.Equals, uint64(1234))
 	c.Assert(msg.Type, check.Equals, model.MqMessageTypeResolved)
 	c.Assert(msg.Schema, check.IsNil)
 	c.Assert(msg.Table, check.IsNil)
-	c.Assert(msg.Protocol, check.Equals, ProtocolCanal)
+	c.Assert(msg.Protocol, check.Equals, config.ProtocolCanal)
 }

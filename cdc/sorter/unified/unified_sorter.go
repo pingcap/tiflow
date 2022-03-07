@@ -15,16 +15,15 @@ package unified
 
 import (
 	"context"
-	"os"
 	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,13 +33,11 @@ const (
 	heapCollectChSize = 128 // this should be not be too small, to guarantee IO concurrency
 )
 
-// UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
-//nolint:revive
-type UnifiedSorter struct {
+// Sorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
+type Sorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *model.PolymorphicEvent
 	dir         string
-	pool        *backEndPool
 	metricsInfo *metricsInfo
 
 	closeCh chan struct{}
@@ -50,82 +47,41 @@ type metricsInfo struct {
 	changeFeedID model.ChangeFeedID
 	tableName    string
 	tableID      model.TableID
-	captureAddr  string
 }
 
 type ctxKey struct{}
 
-// UnifiedSorterCheckDir checks whether the directory needed exists and is writable.
-// If it does not exist, we try to create one.
-// parameter: cfSortDir - the directory designated in changefeed's setting,
-// which will be overridden by a non-empty local setting of `sort-dir`.
-// TODO better way to organize this function after we obsolete chanegfeed setting's `sort-dir`
-//nolint:revive
-func UnifiedSorterCheckDir(cfSortDir string) error {
-	dir := cfSortDir
-	sorterConfig := config.GetGlobalServerConfig().Sorter
-	if sorterConfig.SortDir != "" {
-		// Let the local setting override the changefeed setting
-		dir = sorterConfig.SortDir
-	}
-
-	err := util.IsDirAndWritable(dir)
-	if err != nil {
-		if os.IsNotExist(errors.Cause(err)) {
-			err = os.MkdirAll(dir, 0o755)
-			if err != nil {
-				return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
-			}
-		} else {
-			return errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
-		}
-	}
-
-	return nil
-}
-
-// NewUnifiedSorter creates a new UnifiedSorter
+// NewUnifiedSorter creates a new Sorter
 func NewUnifiedSorter(
-	dir string,
-	changeFeedID model.ChangeFeedID,
-	tableName string,
-	tableID model.TableID,
-	captureAddr string) (*UnifiedSorter, error) {
+	dir string, changeFeedID model.ChangeFeedID, tableName string, tableID model.TableID,
+) (*Sorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
 	if pool == nil {
-		sorterConfig := config.GetGlobalServerConfig().Sorter
-		if sorterConfig.SortDir != "" {
-			// Let the local setting override the changefeed setting
-			dir = sorterConfig.SortDir
-		}
 		var err error
-		pool, err = newBackEndPool(dir, captureAddr)
+		pool, err = newBackEndPool(dir)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 
 	lazyInitWorkerPool()
-	return &UnifiedSorter{
+	return &Sorter{
 		inputCh:  make(chan *model.PolymorphicEvent, inputChSize),
 		outputCh: make(chan *model.PolymorphicEvent, outputChSize),
 		dir:      dir,
-		pool:     pool,
 		metricsInfo: &metricsInfo{
 			changeFeedID: changeFeedID,
 			tableName:    tableName,
 			tableID:      tableID,
-			captureAddr:  captureAddr,
 		},
 		closeCh: make(chan struct{}, 1),
 	}, nil
 }
 
-// UnifiedSorterCleanUp cleans up the files that might have been used.
-//nolint:revive
-func UnifiedSorterCleanUp() {
+// CleanUp cleans up the files that might have been used.
+func CleanUp() {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -146,18 +102,17 @@ func ResetGlobalPoolWithoutCleanup() {
 }
 
 // Run implements the EventSorter interface
-func (s *UnifiedSorter) Run(ctx context.Context) error {
+func (s *Sorter) Run(ctx context.Context) error {
 	failpoint.Inject("sorterDebug", func() {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
 	})
 
 	defer close(s.closeCh)
 
-	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
+	finish, startCancel := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
 	ctx = context.WithValue(ctx, ctxKey{}, s)
-	ctx = util.PutCaptureAddrInCtx(ctx, s.metricsInfo.captureAddr)
 	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
 	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
@@ -202,6 +157,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 
 		select {
 		case <-subctx.Done():
+			startCancel()
 			return errors.Trace(subctx.Err())
 		case err := <-heapSorterErrCh:
 			return errors.Trace(err)
@@ -213,11 +169,9 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		captureAddr := util.CaptureAddrFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
-			"capture":    captureAddr,
 			"changefeed": changefeedID,
 		})
 
@@ -275,7 +229,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 }
 
 // AddEntry implements the EventSorter interface
-func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+func (s *Sorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
 	case <-ctx.Done():
 		return
@@ -284,8 +238,26 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	}
 }
 
+// TryAddEntry implements the EventSorter interface
+func (s *Sorter) TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error) {
+	// add two select to guarantee the done/close condition is checked first.
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-s.closeCh:
+		return false, cerror.ErrSorterClosed.GenWithStackByArgs()
+	default:
+	}
+	select {
+	case s.inputCh <- entry:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 // Output implements the EventSorter interface
-func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
+func (s *Sorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
 }
 
