@@ -75,7 +75,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
 	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 
-	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DM-master member")
+	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
+	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
 	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
 	fs.StringVar(&cfg.Etcd.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)

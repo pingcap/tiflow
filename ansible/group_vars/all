@@ -1,0 +1,11 @@
+cluster_name: hanfei
+
+master_port: 10240
+
+master_peer_port: 8291
+
+executor_port: 10241
+
+df_data_prefix: /data/df-data-{{ cluster_name }}
+df_bin_dir: "{{ df_data_prefix }}/bin"
+df_script_dir: "{{ df_data_prefix }}/script"

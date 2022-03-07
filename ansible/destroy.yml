@@ -1,0 +1,3 @@
+- hosts: all
+  tasks:
+  - shell: "rm -rf {{ df_data_prefix }}"

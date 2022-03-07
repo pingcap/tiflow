@@ -1,0 +1,2 @@
+- name: start master
+  shell: "nohup {{ df_script_dir }}/start_master.sh > /dev/null 2>&1 &"

@@ -1,0 +1,11 @@
+- hosts: all
+  roles:
+  - role: common
+
+- hosts: df_master_servers
+  roles:
+  - role: master
+
+- hosts: df_executor_servers
+  roles:
+  - role: executor

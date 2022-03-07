@@ -1,4 +1,5 @@
 bin
+*.bin
 tools/bin
 *.log
 .vscode/
