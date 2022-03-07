@@ -151,9 +151,7 @@ func (vw *validateWorker) validateTableChange() error {
 	vw.Lock()
 	defer vw.Unlock()
 
-	failedChanges := make(map[string]*tableChange)
-	allErrorRows := make([]*validateFailedRow, 0)
-	var failedRowCnt int64
+	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
 		for _, r := range tblChange.rows {
@@ -163,25 +161,17 @@ func (vw *validateWorker) validateTableChange() error {
 				insertUpdateChanges = append(insertUpdateChanges, r)
 			}
 		}
-		allFailedRows := make(map[string]*rowChange)
+		allFailedRows := make(map[string]*validateFailedRow, 0)
 		validateFunc := func(rows []*rowChange, isDelete bool) error {
 			if len(rows) == 0 {
 				return nil
 			}
-			failedRows, err := vw.validateRowChanges(tblChange.table, rows, false)
+			failedRows, err := vw.validateRowChanges(tblChange.table, rows, isDelete)
 			if err != nil {
 				return err
 			}
-			// todo: if row failed count > threshold, should mark it as data inconsistent error
-			for pk, val := range failedRows {
-				r := tblChange.rows[pk]
-				r.FailedCnt++
-				if r.FailedCnt >= vw.maxFailedCount {
-					val.srcRow = r
-					allErrorRows = append(allErrorRows, val)
-				} else {
-					allFailedRows[pk] = r
-				}
+			for key, val := range failedRows {
+				allFailedRows[key] = val
 			}
 			return nil
 		}
@@ -192,18 +182,44 @@ func (vw *validateWorker) validateTableChange() error {
 			return err
 		}
 		if len(allFailedRows) > 0 {
-			failedChanges[k] = &tableChange{
-				table: tblChange.table,
-				rows:  allFailedRows,
-			}
-			failedRowCnt += int64(len(allFailedRows))
+			failedChanges[k] = allFailedRows
 		}
 	}
-	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", failedRowCnt))
-	vw.pendingRowCount.Store(failedRowCnt)
-	vw.pendingChangesMap = failedChanges
-	vw.errorRows = append(vw.errorRows, allErrorRows...)
+
+	vw.updatePendingAndErrorRows(failedChanges)
 	return nil
+}
+
+func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map[string]*validateFailedRow) {
+	var newPendingCnt int64
+	allErrorRows := make([]*validateFailedRow, 0)
+	newPendingChanges := make(map[string]*tableChange)
+	for tblKey, rows := range failedChanges {
+		tblChange := vw.pendingChangesMap[tblKey]
+		newPendingRows := make(map[string]*rowChange)
+		for pk, row := range rows {
+			r := tblChange.rows[pk]
+			r.FailedCnt++
+			if r.FailedCnt >= vw.maxFailedCount {
+				row.srcRow = r
+				allErrorRows = append(allErrorRows, row)
+			} else {
+				newPendingRows[pk] = r
+			}
+		}
+		if len(newPendingRows) > 0 {
+			newPendingChanges[tblKey] = &tableChange{
+				table: tblChange.table,
+				rows:  newPendingRows,
+			}
+			newPendingCnt += int64(len(newPendingRows))
+		}
+	}
+
+	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", newPendingCnt))
+	vw.pendingRowCount.Store(newPendingCnt)
+	vw.pendingChangesMap = newPendingChanges
+	vw.errorRows = append(vw.errorRows, allErrorRows...)
 }
 
 func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
