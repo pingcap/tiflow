@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -210,7 +210,7 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	gRPCSvr := func(gs *grpc.Server) { pb.RegisterMasterServer(gs, s) }
 
 	// start embed etcd server, gRPC API server and HTTP (API, status and debug) server.
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, userHandles, etcdStartTimeout)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, userHandles, 10*time.Second)
 	if err != nil {
 		return
 	}
