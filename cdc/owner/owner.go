@@ -253,8 +253,14 @@ func (o *Owner) cleanUpChangefeed(state *model.ChangefeedReactorState) {
 }
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
+<<<<<<< HEAD
 func (o *Owner) Bootstrap(state *model.GlobalReactorState) {
 	log.Info("Start bootstrapping", zap.Any("state", state))
+=======
+func (o *ownerImpl) Bootstrap(state *orchestrator.GlobalReactorState) {
+	log.Info("Start bootstrapping")
+	o.cleanStaleMetrics()
+>>>>>>> 3698b6e19 (owner(cdc): clean up stale metrics (#4775))
 	fixChangefeedInfos(state)
 }
 
@@ -270,15 +276,67 @@ func fixChangefeedInfos(state *model.GlobalReactorState) {
 	}
 }
 
+<<<<<<< HEAD
 func (o *Owner) updateMetrics(state *model.GlobalReactorState) {
+=======
+func (o *ownerImpl) cleanStaleMetrics() {
+	// The gauge metrics of the Owner should be reset
+	// each time a new owner is launched, in case the previous owner
+	// has crashed and has not cleaned up the stale metrics values.
+	changefeedCheckpointTsGauge.Reset()
+	changefeedCheckpointTsLagGauge.Reset()
+	changefeedResolvedTsGauge.Reset()
+	changefeedResolvedTsLagGauge.Reset()
+	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
+}
+
+func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
+>>>>>>> 3698b6e19 (owner(cdc): clean up stale metrics (#4775))
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
 	now := time.Now()
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
+<<<<<<< HEAD
 	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
+=======
+	conf := config.GetGlobalServerConfig()
+
+	// TODO refactor this piece of code when the new scheduler is stabilized,
+	// and the old scheduler is removed.
+	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
+		for cfID, cf := range o.changefeeds {
+			if cf.state != nil && cf.state.Info != nil {
+				changefeedStatusGauge.WithLabelValues(cfID).Set(float64(cf.state.Info.State.ToInt()))
+			}
+
+			// The InfoProvider is a proxy object returning information
+			// from the scheduler.
+			infoProvider := cf.GetInfoProvider()
+			if infoProvider == nil {
+				// The scheduler has not been initialized yet.
+				continue
+			}
+
+			totalCounts := infoProvider.GetTotalTableCounts()
+			pendingCounts := infoProvider.GetPendingTableCounts()
+
+			for captureID, info := range o.captures {
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeTotal).
+					Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeWip).
+					Set(float64(pendingCounts[captureID]))
+			}
+		}
+		return
+	}
+
+>>>>>>> 3698b6e19 (owner(cdc): clean up stale metrics (#4775))
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
