@@ -1220,8 +1220,6 @@ func (s *Scheduler) BoundSources() []string {
 
 // UnboundSources returns all unbound source IDs in increasing order.
 func (s *Scheduler) UnboundSources() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	capIDs := len(s.sourceCfgs) - len(s.bounds)
 	IDs := make([]string, 0, capIDs)
 	// In most times capIDs should be zero, except for all workers are offline.
@@ -2134,7 +2132,6 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	}
 
 	unboundSources := s.UnboundSources()
-
 	if len(unboundSources) == 0 {
 		s.logger.Info("no unbound sources need to bound", zap.Stringer("worker", w.BaseInfo()))
 		return false, nil
