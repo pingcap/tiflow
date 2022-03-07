@@ -363,7 +363,8 @@ type CanalFlatEventBatchDecoder struct {
 	enableTiDBExtension bool
 }
 
-func newCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+// NewCanalFlatEventBatchDecoder return a decoder for canal-json
+func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,

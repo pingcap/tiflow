@@ -56,6 +56,9 @@ var (
 
 	downstreamURIStr string
 
+	protocol            string
+	enableTiDBExtension bool
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -144,6 +147,27 @@ func init() {
 		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
 	}
+
+	s = upstreamURI.Query().Get("protocol")
+	if s != "" {
+		protocol = s
+	}
+
+	s = upstreamURI.Query().Get("enable-tidb-extension")
+	if s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Fatal("invalid enable-tidb-extension of upstream-uri")
+		}
+		if strings.ToLower(protocol) != "canal-json" && b {
+			log.Fatal("enable-tidb-extension only work with canal-json")
+		}
+
+		enableTiDBExtension = b
+	}
+	log.Info("Starting a new TiCDC consumer", zap.Any("protocol", protocol),
+		zap.Bool("enable-tidb-extension", enableTiDBExtension))
+
 }
 
 func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
@@ -220,8 +244,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer")
-
 	/**
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
@@ -274,7 +296,7 @@ func main() {
 	}()
 
 	<-consumer.ready // Await till the consumer has been set up
-	log.Info("TiCDC open protocol consumer up and running!...")
+	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
@@ -313,6 +335,9 @@ type Consumer struct {
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	globalResolvedTs uint64
+
+	protocol            config.Protocol
+	enableTiDBExtension bool
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -331,6 +356,15 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
+
+	if err := c.protocol.FromString(protocol); err != nil {
+		return nil, errors.Trace(err)
+	}
+	c.enableTiDBExtension = enableTiDBExtension
+	if c.enableTiDBExtension && c.protocol != config.ProtocolCanalJSON {
+		log.Panic("TiDB extension should only work with Canal-JSON protocol")
+	}
+
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = util.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
@@ -388,14 +422,25 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	for message := range claim.Messages() {
 		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		var (
+			decoder codec.EventBatchDecoder
+			err     error
+		)
+		switch c.protocol {
+		case config.ProtocolDefault:
+			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		case config.ProtocolCanalJSON:
+			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
+		default:
+			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+		}
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		counter := 0
 		for {
-			tp, hasNext, err := batchDecoder.HasNext()
+			tp, hasNext, err := decoder.HasNext()
 			if err != nil {
 				log.Panic("decode message key failed", zap.Error(err))
 			}
@@ -412,13 +457,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			switch tp {
 			case model.MqMessageTypeDDL:
-				ddl, err := batchDecoder.NextDDLEvent()
+				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
-				row, err := batchDecoder.NextRowChangedEvent()
+				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
@@ -449,7 +494,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
 				}
 			case model.MqMessageTypeResolved:
-				ts, err := batchDecoder.NextResolvedEvent()
+				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
