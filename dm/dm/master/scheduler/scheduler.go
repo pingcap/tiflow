@@ -1071,8 +1071,7 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 		}
 	}
 
-	// check wheather all subtask is in sync unit and check the wheather this config can updated
-	// todo batch
+	// check by workers todo batch
 	for _, cfg := range cfgs {
 		worker := s.GetWorkerBySource(cfg.SourceID)
 		if worker == nil {
@@ -1093,7 +1092,7 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 	if err != nil {
 		return err
 	}
-	// 5. record the config and the expectant stage.
+	// record the config
 	for _, cfg := range cfgs {
 		v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
 		m := v.(map[string]config.SubTaskConfig)
