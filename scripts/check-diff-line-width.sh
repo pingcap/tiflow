@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-git diff master -U0 cdc pkg |
+# Run this scripts via `make limit-line-width`.
+
+set -e
+
+git --no-pager diff master -U0 cdc pkg |
 	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
 	awk '
