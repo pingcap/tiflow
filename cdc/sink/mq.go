@@ -217,6 +217,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, _ []model.Tabl
 	if msg == nil {
 		return nil
 	}
+	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
 	err = k.writeToProducer(ctx, msg, -1)
 	return errors.Trace(err)
 }
