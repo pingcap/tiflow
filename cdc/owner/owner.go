@@ -352,23 +352,29 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 			pendingCounts := infoProvider.GetPendingTableCounts()
 
 			for captureID, info := range o.captures {
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, info.AdvertiseAddr, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.WithLabelValues(
-					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeTotal).
+					Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.
+					WithLabelValues(cfID, info.AdvertiseAddr, maintainTableTypeWip).
+					Set(float64(pendingCounts[captureID]))
 			}
 		}
 		return
 	}
 
 	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID := range state.Captures {
+		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
 			if !exist {
 				continue
 			}
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeTotal).Set(float64(len(taskStatus.Tables)))
-			ownerMaintainTableNumGauge.WithLabelValues(changefeedID, maintainTableTypeWip).Set(float64(len(taskStatus.Operation)))
+			ownerMaintainTableNumGauge.
+				WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).
+				Set(float64(len(taskStatus.Tables)))
+			ownerMaintainTableNumGauge.
+				WithLabelValues(changefeedID, captureInfo.AdvertiseAddr, maintainTableTypeWip).
+				Set(float64(len(taskStatus.Operation)))
 			if changefeedState.Info != nil {
 				changefeedStatusGauge.WithLabelValues(changefeedID).Set(float64(changefeedState.Info.State.ToInt()))
 			}
