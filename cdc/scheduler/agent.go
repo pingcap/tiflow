@@ -483,6 +483,9 @@ func (a *BaseAgent) resetEpoch() {
 	a.epochMu.Lock()
 	defer a.epochMu.Unlock()
 
+	// We are using UUIDs because we only need uniqueness guarantee for the epoch,
+	// BUT NOT ordering guarantees. The reason is that the Sync messages are themselves
+	// barriers, so there is no need to accommodate messages from future epochs.
 	a.epoch = uuid.New().String()
 }
 
