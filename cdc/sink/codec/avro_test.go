@@ -24,6 +24,7 @@ import (
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -58,43 +59,98 @@ func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
 	stopHTTPInterceptForTestingRegistry()
 }
 
+func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
+	types.SetBinChsClnFlag(ft)
+	return ft
+}
+
+func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
+	types.SetTypeFlag(&ft.Flag, flag, true)
+	return ft
+}
+
+func setElems(ft *types.FieldType, elems []string) *types.FieldType {
+	ft.Elems = elems
+	return ft
+}
+
 func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	defer testleak.AfterTest(c)()
-	avroCodec, err := goavro.NewCodec(`
-        {
-          "type": "record",
-          "name": "test1",
-          "fields" : [
-            {"name": "id", "type": ["null", "int"], "default": null},
-			{"name": "myint", "type": ["null", "int"], "default": null},
-			{"name": "mybool", "type": ["null", "int"], "default": null},
-			{"name": "myfloat", "type": ["null", "float"], "default": null},
-			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
-          ]
-        }`)
-
-	c.Assert(err, check.IsNil)
 
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "TestAvroEncodeOnly",
 	}
 
-	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
+	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
-		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
+		{Name: "mybytes1", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeBlob},
+		{Name: "mybytes2", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeMediumBlob},
+		{Name: "mybytes3", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeTinyBlob},
+		{Name: "mybytes4", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeLongBlob},
+		{Name: "mybytes5", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeVarString},
+		{Name: "mybytes6", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeString},
+		{Name: "mybytes7", Value: []byte("Hello World"), Flag: model.BinaryFlag, Type: mysql.TypeVarchar},
+		{Name: "mystring1", Value: "Hello World", Type: mysql.TypeBlob},
+		{Name: "mystring2", Value: "Hello World", Type: mysql.TypeMediumBlob},
+		{Name: "mystring3", Value: "Hello World", Type: mysql.TypeTinyBlob},
+		{Name: "mystring4", Value: "Hello World", Type: mysql.TypeLongBlob},
+		{Name: "mystring5", Value: "Hello World", Type: mysql.TypeVarString},
+		{Name: "mystring6", Value: "Hello World", Type: mysql.TypeString},
+		{Name: "mystring7", Value: "Hello World", Type: mysql.TypeVarchar},
+		{Name: "myenum", Value: uint64(1), Type: mysql.TypeEnum},
+		{Name: "myset", Value: uint64(1), Type: mysql.TypeSet},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 		{Name: "myjson", Value: "{\"foo\": \"bar\"}", Type: mysql.TypeJSON},
-	}, time.Local)
+	}
+
+	colInfos := []rowcodec.ColInfo{
+		{ID: 1, IsPKHandle: true, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTiny)},
+		{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeFloat)},
+		{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeBlob))},
+		{ID: 6, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeMediumBlob))},
+		{ID: 7, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeTinyBlob))},
+		{ID: 8, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeLongBlob))},
+		{ID: 9, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeVarString))},
+		{ID: 10, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeString))},
+		{ID: 11, IsPKHandle: false, VirtualGenCol: false, Ft: setBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar))},
+		{ID: 12, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
+		{ID: 13, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeMediumBlob)},
+		{ID: 14, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTinyBlob)},
+		{ID: 15, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLongBlob)},
+		{ID: 16, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarString)},
+		{ID: 17, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
+		{ID: 18, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
+		{ID: 19, IsPKHandle: false, VirtualGenCol: false, Ft: setElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"})},
+		{ID: 20, IsPKHandle: false, VirtualGenCol: false, Ft: setElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"})},
+		{ID: 21, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTimestamp)},
+		{ID: 22, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeJSON)},
+	}
+
+	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
+	c.Assert(err, check.IsNil)
+	avroCodec, err := goavro.NewCodec(schema)
+	c.Assert(err, check.IsNil)
+
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, time.Local)
 	c.Assert(err, check.IsNil)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
 	c.Check(err, check.IsNil)
 	c.Check(res, check.NotNil)
+	for k, v := range res.(map[string]interface{}) {
+		if k == "myenum" || k == "myset" {
+			if vmap, ok := v.(map[string]interface{}); ok {
+				_, exists := vmap["string"]
+				c.Check(exists, check.IsTrue)
+			}
+		}
+	}
 
 	txt, err := avroCodec.TextualFromNative(nil, res)
 	c.Check(err, check.IsNil)
@@ -103,39 +159,40 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 
 func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	defer testleak.AfterTest(c)()
-	avroCodec, err := goavro.NewCodec(`
-        {
-          "type": "record",
-          "name": "test1",
-          "fields" : [
-            {"name": "id", "type": ["null", "int"], "default": null},
-			{"name": "myint", "type": ["null", "int"], "default": null},
-			{"name": "mybool", "type": ["null", "int"], "default": null},
-			{"name": "myfloat", "type": ["null", "float"], "default": null},
-			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
-          ]
-        }`)
-
-	c.Assert(err, check.IsNil)
 
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "TestAvroTimeZone",
 	}
 
 	location, err := time.LoadLocation("UTC")
 	c.Check(err, check.IsNil)
 
 	timestamp := time.Now()
-	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
+	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
 		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
 		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float64(3.14), Type: mysql.TypeFloat},
-		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
+		{Name: "mystring", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: timestamp.In(location).Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
-	}, location)
+	}
+
+	colInfos := []rowcodec.ColInfo{
+		{ID: 1, IsPKHandle: true, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTiny)},
+		{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeFloat)},
+		{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
+		{ID: 6, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTimestamp)},
+	}
+
+	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
+	c.Assert(err, check.IsNil)
+	avroCodec, err := goavro.NewCodec(schema)
+	c.Assert(err, check.IsNil)
+
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, location)
 	c.Assert(err, check.IsNil)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
@@ -150,7 +207,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
-          "name": "test2",
+          "name": "TestAvroEnvelope",
           "fields" : [
             {"name": "id", "type": "int", "default": 0}
           ]
@@ -198,6 +255,13 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			{Name: "tiny", Type: mysql.TypeTiny, Value: int64(255)},
 			{Name: "utiny", Type: mysql.TypeTiny, Flag: model.UnsignedFlag, Value: uint64(100)},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+		},
+		ColInfos: []rowcodec.ColInfo{
+			{ID: 1, IsPKHandle: true, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+			{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
+			{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTiny)},
+			{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: setFlag(types.NewFieldType(mysql.TypeTiny), uint(model.UnsignedFlag))},
+			{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
 		},
 	}
 

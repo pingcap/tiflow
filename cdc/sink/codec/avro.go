@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -90,7 +91,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	mqMessage := NewMQMessage(config.ProtocolAvro, nil, nil, e.CommitTs, model.MqMessageTypeRow, &e.Table.Schema, &e.Table.Table)
 
 	if !e.IsDelete() {
-		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, a.tz)
+		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns, e.ColInfos, a.tz)
 		if err != nil {
 			log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 			return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -109,7 +110,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	pkeyCols := e.HandleKeyColumns()
 
-	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols, a.tz)
+	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols, e.ColInfos, a.tz)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -158,7 +159,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return sum
 }
 
-func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, tz *time.Location) (*avroEncodeResult, error) {
+func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column, colInfos []rowcodec.ColInfo, tz *time.Location) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
 		schema, err := ColumnInfoToAvroSchema(table.Table, cols)
 		if err != nil {
@@ -173,7 +174,7 @@ func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
 	}
 
-	native, err := rowToAvroNativeData(cols, tz)
+	native, err := rowToAvroNativeData(cols, colInfos, tz)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to native failed")
 	}
@@ -244,13 +245,13 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 	return string(str), nil
 }
 
-func rowToAvroNativeData(cols []*model.Column, tz *time.Location) (interface{}, error) {
+func rowToAvroNativeData(cols []*model.Column, colInfos []rowcodec.ColInfo, tz *time.Location) (interface{}, error) {
 	ret := make(map[string]interface{}, len(cols))
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil {
 			continue
 		}
-		data, str, err := columnToAvroNativeData(col, tz)
+		data, str, err := columnToAvroNativeData(col, colInfos[i].Ft, tz)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +294,7 @@ func getAvroDataTypeFallback(v interface{}) (string, error) {
 var unsignedLongAvroType = avroLogicalType{
 	Type:        "bytes",
 	LogicalType: decimalType,
-	Precision:   8,
+	Precision:   64, // enough to hold all values and is the default precision of confluent schema registry
 	Scale:       0,
 }
 
@@ -305,6 +306,9 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeDouble:
 		return "double", nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		if col.Flag.IsBinary() {
+			return "bytes", nil
+		}
 		return "string", nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		return avroLogicalType{
@@ -317,9 +321,9 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 			LogicalType: timeMillis,
 		}, nil
 	case mysql.TypeEnum:
-		return unsignedLongAvroType, nil
+		return "string", nil
 	case mysql.TypeSet:
-		return unsignedLongAvroType, nil
+		return "string", nil
 	case mysql.TypeBit:
 		return unsignedLongAvroType, nil
 	case mysql.TypeNewDecimal:
@@ -341,7 +345,10 @@ func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
 	case mysql.TypeJSON:
 		return "string", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		return "bytes", nil
+		if col.Flag.IsBinary() {
+			return "bytes", nil
+		}
+		return "string", nil
 	case mysql.TypeYear:
 		return "long", nil
 	default:
@@ -355,7 +362,7 @@ var (
 	zeroDateStr = types.NewTime(types.ZeroCoreTime, mysql.TypeDate, 0).String()
 )
 
-func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, string, error) {
+func columnToAvroNativeData(col *model.Column, ft *types.FieldType, tz *time.Location) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
 	}
@@ -434,7 +441,7 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), fsp).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob, mysql.TypeBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		if col.Flag.IsBinary() {
 			switch val := col.Value.(type) {
 			case string:
@@ -459,9 +466,17 @@ func columnToAvroNativeData(col *model.Column, tz *time.Location) (interface{}, 
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
-		return handleUnsignedInt64()
+		enumVar, err := types.ParseEnumValue(ft.Elems, col.Value.(uint64))
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+		}
+		return enumVar.Name, "string", nil
 	case mysql.TypeSet:
-		return handleUnsignedInt64()
+		setVar, err := types.ParseSetValue(ft.Elems, col.Value.(uint64))
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+		}
+		return setVar.Name, "string", nil
 	case mysql.TypeBit:
 		return handleUnsignedInt64()
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:

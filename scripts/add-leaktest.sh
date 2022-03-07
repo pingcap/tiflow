@@ -30,5 +30,3 @@ for i in $@; do
 	fi
 	rm -f $i~
 done
-
-git --no-pager diff --exit-code

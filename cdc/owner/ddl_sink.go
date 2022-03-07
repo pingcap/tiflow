@@ -44,7 +44,7 @@ type DDLSink interface {
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
-	emitCheckpointTs(ctx cdcContext.Context, ts uint64)
+	emitCheckpointTs(ts uint64, tableNames []model.TableName)
 	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -58,7 +58,12 @@ type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
 	syncPointStore sink.SyncpointStore
 
-	checkpointTs  model.Ts
+	// It is used to record the checkpointTs and the names of the table at that time.
+	mu struct {
+		sync.Mutex
+		checkpointTs      model.Ts
+		currentTableNames []model.TableName
+	}
 	ddlFinishedTs model.Ts
 	ddlSentTs     model.Ts
 
@@ -144,12 +149,16 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				ctx.Throw(err)
 				return
 			case <-ticker.C:
-				checkpointTs := atomic.LoadUint64(&s.checkpointTs)
+				s.mu.Lock()
+				checkpointTs := s.mu.checkpointTs
 				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+					s.mu.Unlock()
 					continue
 				}
+				tables := s.mu.currentTableNames
+				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
-				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs); err != nil {
+				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
 					ctx.Throw(errors.Trace(err))
 					return
 				}
@@ -178,8 +187,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 	}()
 }
 
-func (s *ddlSinkImpl) emitCheckpointTs(ctx cdcContext.Context, ts uint64) {
-	atomic.StoreUint64(&s.checkpointTs, ts)
+func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.checkpointTs = ts
+	s.mu.currentTableNames = tableNames
 }
 
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {

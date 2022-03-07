@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -738,14 +738,14 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			}
 		}
 		// pause running tasks
-		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
+		if batchPauseErr := s.BatchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
 			return batchPauseErr
 		}
 		// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
 		// just logging this message and let user handle it manually
 		defer func() {
 			go func() {
-				if err := s.batchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
+				if err := s.BatchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
 					s.logger.Warn(
 						"auto resume task failed", zap.Any("tasks", runningTasks),
 						zap.String("source", source), zap.String("worker", worker), zap.Error(err))
@@ -779,8 +779,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	return nil
 }
 
-// batchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
-func (s *Scheduler) batchOperateTaskOnWorker(
+// BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
+func (s *Scheduler) BatchOperateTaskOnWorker(
 	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
@@ -847,7 +847,7 @@ func (s *Scheduler) AcquireSubtaskLatch(name string) (ReleaseFunc, error) {
 // AddSubTasks adds the information of one or more subtasks for one task.
 // use s.mu.RLock() to protect s.bound, and s.subtaskLatch to protect subtask related members.
 // setting `latched` to true means caller has acquired latch.
-func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) error {
+func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...config.SubTaskConfig) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -915,7 +915,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 			continue
 		}
 		newCfgs = append(newCfgs, cfg)
-		newStages = append(newStages, ha.NewSubTaskStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		newStages = append(newStages, ha.NewSubTaskStage(expectStage, cfg.SourceID, cfg.Name))
 		if cfg.ValidatorCfg.Mode != config.ValidationNone {
 			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
 		}
@@ -1596,37 +1596,37 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 
 // UpdateExpectSubTaskStage updates the current expect subtask stage.
 // now, only support updates:
-// - from `Running` to `Paused`.
-// - from `Paused` to `Running`.
+// - from `Running` to `Paused/Stopped`.
+// - from `Paused/Stopped` to `Running`.
 // NOTE: from `Running` to `Running` and `Paused` to `Paused` still update the data in etcd,
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
-func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sources ...string) error {
+func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, taskName string, sources ...string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
-	if task == "" || len(sources) == 0 {
+	if taskName == "" || len(sources) == 0 {
 		return nil // no subtask need to update, this should not happen.
 	}
 
 	// 1. check the new expectant stage.
 	switch newStage {
-	case pb.Stage_Running, pb.Stage_Paused:
+	case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
 	default:
 		return terror.ErrSchedulerSubTaskStageInvalidUpdate.Generate(newStage)
 	}
 
-	release, err := s.subtaskLatch.tryAcquire(task)
+	release, err := s.subtaskLatch.tryAcquire(taskName)
 	if err != nil {
-		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", task)
+		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", taskName)
 	}
 	defer release()
 
 	// 2. check the task exists.
-	v, ok := s.expectSubTaskStages.Load(task)
+	v, ok := s.expectSubTaskStages.Load(taskName)
 	if !ok {
-		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(task)
+		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(taskName)
 	}
 
 	var (
@@ -1641,7 +1641,7 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sou
 		} else {
 			currStagesM[currStage.Expect.String()] = struct{}{}
 		}
-		stages = append(stages, ha.NewSubTaskStage(newStage, source, task))
+		stages = append(stages, ha.NewSubTaskStage(newStage, source, taskName))
 	}
 	notExistSources := strMapToSlice(notExistSourcesM)
 	currStages := strMapToSlice(currStagesM)
