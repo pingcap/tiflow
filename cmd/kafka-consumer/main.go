@@ -579,7 +579,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback")
+			log.Panic("global ResolvedTs fallback",
+				zap.Any("lastGlobalResolvedTs", lastGlobalResolvedTs),
+				zap.Any("globalResolvedTs", globalResolvedTs))
 		}
 
 		if globalResolvedTs > lastGlobalResolvedTs {
