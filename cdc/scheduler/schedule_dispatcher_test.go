@@ -28,6 +28,11 @@ import (
 
 var _ ScheduleDispatcherCommunicator = (*mockScheduleDispatcherCommunicator)(nil)
 
+const (
+	defaultEpoch = "default-epoch"
+	nextEpoch    = "next-epoch"
+)
+
 type mockScheduleDispatcherCommunicator struct {
 	mock.Mock
 	addTableRecords    map[model.CaptureID][]model.TableID
@@ -56,20 +61,22 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 	tableID model.TableID,
 	captureID model.CaptureID,
 	isDelete bool,
+	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
 	if !m.isBenchmark {
 		log.Info("dispatch table called",
 			zap.String("changefeed", changeFeedID),
 			zap.Int64("tableID", tableID),
 			zap.String("captureID", captureID),
-			zap.Bool("isDelete", isDelete))
+			zap.Bool("isDelete", isDelete),
+			zap.String("epoch", epoch))
 		if !isDelete {
 			m.addTableRecords[captureID] = append(m.addTableRecords[captureID], tableID)
 		} else {
 			m.removeTableRecords[captureID] = append(m.removeTableRecords[captureID], tableID)
 		}
 	}
-	args := m.Called(ctx, changeFeedID, tableID, captureID, isDelete)
+	args := m.Called(ctx, changeFeedID, tableID, captureID, isDelete, epoch)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -109,12 +116,12 @@ func TestDispatchTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{}, []model.TableID{}, []model.TableID{})
-	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-1", defaultEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", defaultEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
 
 	communicator.Reset()
 	// Injects a dispatch table failure
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, false, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -123,11 +130,11 @@ func TestDispatchTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -152,7 +159,7 @@ func TestDispatchTable(t *testing.T) {
 
 	for captureID, tables := range communicator.addTableRecords {
 		for _, tableID := range tables {
-			dispatcher.OnAgentFinishedTableOperation(captureID, tableID)
+			dispatcher.OnAgentFinishedTableOperation(captureID, tableID, defaultEpoch)
 		}
 	}
 
@@ -194,24 +201,24 @@ func TestSyncCaptures(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
-	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{1, 2, 3}, []model.TableID{4, 5}, []model.TableID{6, 7})
+	dispatcher.OnAgentSyncTaskStatuses("capture-1", defaultEpoch, []model.TableID{1, 2, 3}, []model.TableID{4, 5}, []model.TableID{6, 7})
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3, 4, 5}, defaultMockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	communicator.Reset()
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 4)
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 5)
-	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID(nil), []model.TableID(nil), []model.TableID(nil))
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 4, defaultEpoch)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 5, defaultEpoch)
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", defaultEpoch, []model.TableID(nil), []model.TableID(nil), []model.TableID(nil))
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3, 4, 5}, defaultMockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	communicator.Reset()
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 6)
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 7)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 6, defaultEpoch)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 7, defaultEpoch)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3, 4, 5}, defaultMockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1500), checkpointTs)
@@ -229,7 +236,7 @@ func TestSyncUnknownCapture(t *testing.T) {
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{} // empty capture status
 
 	// Sends a sync from an unknown capture
-	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{1, 2, 3}, []model.TableID{4, 5}, []model.TableID{6, 7})
+	dispatcher.OnAgentSyncTaskStatuses("capture-1", defaultEpoch, []model.TableID{1, 2, 3}, []model.TableID{4, 5}, []model.TableID{6, 7})
 
 	// We expect the `Sync` to be ignored.
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3, 4, 5}, mockCaptureInfos)
@@ -249,11 +256,13 @@ func TestRemoveTable(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -278,7 +287,7 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, model.Ts(1500), resolvedTs)
 
 	// Inject a dispatch table failure
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), "capture-1", true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), "capture-1", true, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -287,7 +296,7 @@ func TestRemoveTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), "capture-1", true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), "capture-1", true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -295,7 +304,7 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 3)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 3, defaultEpoch)
 	communicator.Reset()
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -322,11 +331,13 @@ func TestCaptureGone(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -345,7 +356,7 @@ func TestCaptureGone(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-1", false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-1", false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -365,11 +376,13 @@ func TestCaptureRestarts(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1500,
+			Epoch:        defaultEpoch,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -388,8 +401,8 @@ func TestCaptureRestarts(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-2", false).
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", nextEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), "capture-2", false, nextEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1500, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -420,11 +433,13 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
 			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -444,7 +459,7 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 	})
 
 	dispatcher.MoveTable(1, "capture-2")
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -453,11 +468,11 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	delete(mockCaptureInfos, "capture-2")
-	dispatcher.OnAgentFinishedTableOperation("capture-1", 1)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 1, defaultEpoch)
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -492,16 +507,19 @@ func TestRebalance(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
 			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
 		},
 		"capture-3": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1400,
 			ResolvedTs:   1650,
+			Epoch:        defaultEpoch,
 		},
 	}
 	for i := 1; i <= 6; i++ {
@@ -513,7 +531,7 @@ func TestRebalance(t *testing.T) {
 	}
 
 	dispatcher.Rebalance()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -523,7 +541,7 @@ func TestRebalance(t *testing.T) {
 	communicator.AssertNumberOfCalls(t, "DispatchTable", 1)
 
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -633,11 +651,13 @@ func TestIgnoreUnsyncedCaptures(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
 			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncSent, // not synced
 			CheckpointTs: 1400,
 			ResolvedTs:   1500,
+			Epoch:        "garbage",
 		},
 	}
 
@@ -656,7 +676,7 @@ func TestIgnoreUnsyncedCaptures(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	communicator.Reset()
-	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{2, 4, 6}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", defaultEpoch, []model.TableID{2, 4, 6}, []model.TableID{}, []model.TableID{})
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, defaultMockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1300), checkpointTs)
@@ -675,11 +695,13 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
 			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
 		},
 	}
 	for i := 1; i <= 6; i++ {
@@ -690,7 +712,7 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 		})
 	}
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(7), "capture-2", false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(7), "capture-2", false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -706,9 +728,9 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7))
+	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7), defaultEpoch)
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -729,11 +751,13 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1300,
 			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
 		},
 		"capture-2": {
 			SyncStatus:   captureSyncFinished,
 			CheckpointTs: 1500,
 			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
 		},
 	}
 	dispatcher.tables.AddTableRecord(&util.TableRecord{
@@ -747,7 +771,7 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -761,9 +785,9 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
+	dispatcher.OnAgentFinishedTableOperation("capture-2", 1, defaultEpoch)
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -771,9 +795,9 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentFinishedTableOperation("capture-2", 1)
+	dispatcher.OnAgentFinishedTableOperation("capture-2", 1, defaultEpoch)
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-1", false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -817,15 +841,15 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	dispatcher.OnAgentSyncTaskStatuses("capture-1", []model.TableID{}, []model.TableID{}, []model.TableID{})
-	dispatcher.OnAgentSyncTaskStatuses("capture-2", []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-1", defaultEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-2", defaultEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
 
 	communicator.Reset()
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(2), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
-	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), mock.Anything, false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(3), mock.Anything, false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
 	require.NoError(t, err)
@@ -861,7 +885,7 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	communicator.ExpectedCalls = nil
-	dispatcher.OnAgentSyncTaskStatuses("capture-3", []model.TableID{}, []model.TableID{}, []model.TableID{})
+	dispatcher.OnAgentSyncTaskStatuses("capture-3", defaultEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
@@ -870,13 +894,13 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 
 	for captureID, tables := range communicator.addTableRecords {
 		for _, tableID := range tables {
-			dispatcher.OnAgentFinishedTableOperation(captureID, tableID)
+			dispatcher.OnAgentFinishedTableOperation(captureID, tableID, defaultEpoch)
 		}
 	}
 
 	communicator.Reset()
 	var removeTableFromCapture model.CaptureID
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(true, nil).Run(func(args mock.Arguments) {
 		removeTableFromCapture = args.Get(3).(model.CaptureID)
 	})
@@ -888,17 +912,91 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 
 	removedTableID := communicator.removeTableRecords[removeTableFromCapture][0]
 
-	dispatcher.OnAgentFinishedTableOperation(removeTableFromCapture, removedTableID)
+	dispatcher.OnAgentFinishedTableOperation(removeTableFromCapture, removedTableID, defaultEpoch)
 	dispatcher.OnAgentCheckpoint("capture-1", 1100, 1400)
 	dispatcher.OnAgentCheckpoint("capture-2", 1200, 1300)
 	communicator.ExpectedCalls = nil
-	communicator.On("DispatchTable", mock.Anything, "cf-1", removedTableID, "capture-3", false).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", removedTableID, "capture-3", false, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
+}
+
+func TestInvalidFinishedTableOperation(t *testing.T) {
+	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   2,
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   3,
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", model.TableID(1), "capture-2", false, defaultEpoch).
+		Return(true, nil)
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	// Invalid epoch
+	dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(1), "invalid-epoch")
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok := dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Invalid capture
+	dispatcher.OnAgentFinishedTableOperation("capture-invalid", model.TableID(1), defaultEpoch)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok = dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Invalid table
+	dispatcher.OnAgentFinishedTableOperation("capture-1", model.TableID(999), defaultEpoch)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	record, ok = dispatcher.tables.GetTableRecord(model.TableID(1))
+	require.True(t, ok)
+	require.Equal(t, record.Status, util.AddingTable)
+
+	// Capture not matching
+	require.Panics(t, func() {
+		dispatcher.OnAgentFinishedTableOperation("capture-1", model.TableID(1), defaultEpoch)
+	})
 }
 
 func BenchmarkAddTable(b *testing.B) {
