@@ -24,12 +24,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/clientv3util"
-	"go.etcd.io/etcd/embed"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.etcd.io/etcd/etcdserver/etcdserverpb"
-	"go.etcd.io/etcd/integration"
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/clientv3util"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -50,6 +50,7 @@ func (t *testEtcdUtilSuite) SetUpSuite(c *C) {
 }
 
 func TestSuite(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	// inject *testing.T to suite
 	s := etcdTestSuite.(*testEtcdUtilSuite)
 	s.testT = t
