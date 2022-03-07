@@ -382,7 +382,8 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 			} else if err == io.EOF {
 				log.L().Info("receive the eof")
 				s.mu.Lock()
-				for _, w := range s.fileWriterMap {
+				for _, fileName := range fileNames {
+					w := s.fileWriterMap[fileName]
 					w.Flush()
 				}
 				s.mu.Unlock()
