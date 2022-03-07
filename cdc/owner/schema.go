@@ -86,7 +86,6 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 }
 
 // AllTableNames returns the table names of all tables that are being replicated.
-// NOTICE: AllTableNames is not thread-safe.
 func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 	tables := s.schemaSnapshot.Tables()
 	names := make([]model.TableName, 0, len(tables))
