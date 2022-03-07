@@ -460,6 +460,7 @@ var testColumnsTable = []*testColumnTuple{
 
 func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
 	defer testleak.AfterTest(c)()
+	canalEntryBuilder := NewCanalEntryBuilder()
 	for _, item := range testColumnsTable {
 		obtainedMySQLType := getMySQLType(item.column)
 		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
@@ -467,5 +468,11 @@ func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
 		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
 		c.Assert(err, check.IsNil)
 		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
+
+		if !item.column.Flag.IsBinary() {
+			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
+			c.Assert(err, check.IsNil)
+			c.Assert(obtainedFinalValue, check.Equals, item.expectedValue)
+		}
 	}
 }
