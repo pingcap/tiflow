@@ -25,6 +25,13 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
+	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/mvcc"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -39,12 +46,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
