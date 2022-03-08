@@ -79,6 +79,8 @@ type canalFlatMessageInterface interface {
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
 	mqMessageType() model.MqMessageType
+	eventType() canal.EventType
+	pkNameSet() map[string]struct{}
 }
 
 // adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
@@ -160,6 +162,18 @@ func (c *canalFlatMessage) mqMessageType() model.MqMessageType {
 	}
 
 	return model.MqMessageTypeRow
+}
+
+func (c *canalFlatMessage) eventType() canal.EventType {
+	return canal.EventType(canal.EventType_value[c.EventType])
+}
+
+func (c *canalFlatMessage) pkNameSet() map[string]struct{} {
+	result := make(map[string]struct{}, len(c.PKNames))
+	for _, item := range c.PKNames {
+		result[item] = struct{}{}
+	}
+	return result
 }
 
 type tidbExtension struct {
@@ -467,16 +481,30 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	javaSQLType := flatMessage.getJavaSQLType()
 
 	var err error
+	if flatMessage.eventType() == canal.EventType_DELETE {
+		// for `DELETE` event, `data` contain the old data, set it as the `PreColumn`
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
+			mysqlType, javaSQLType)
+		result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
+		return result, err
+	}
+
+	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Column`
 	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
 		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(),
-		mysqlType, javaSQLType)
-	if err != nil {
-		return nil, err
+
+	// for `UPDATE`, `old` contain old data, set it as the `PreColumn`
+	if flatMessage.eventType() == canal.EventType_UPDATE {
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(),
+			mysqlType, javaSQLType)
+		if err != nil {
+			return nil, err
+		}
 	}
+	result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
 
 	return result, nil
 }
@@ -522,7 +550,7 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 	// we lost DDL type from canal flat json format, only got the DDL SQL.
 	result.Query = flatDDL.getQuery()
 
-	// hack the DDL Type to be compatible with mysql sink's logic
+	// hack the DDL Type to be compatible with MySQL sink's logic
 	// see https://github.com/pingcap/tiflow/blob/0578db337d783643cfab9f25ccb28a5dd0de5806
 	// /cdc/sink/mysql.go#L362-L370
 	result.Type = getDDLActionType(strings.ToLower(result.Query))
@@ -530,8 +558,8 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 }
 
 // return DDL ActionType by the prefix, query should be in lower case.
-// see https://github.com/pingcap/tidb/blob/6dbf2de2f05bbdeff6bde45d8cbad740a361dd6c
-// /parser/model/ddl.go#L101-L102
+// see https://github.com/pingcap/tidb/blob/6dbf2de2f05bbdeff6bde45d8cbad740a361dd6c/
+// parser/model/ddl.go#L101-L102
 func getDDLActionType(query string) timodel.ActionType {
 	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
 		return timodel.ActionCreateSchema
