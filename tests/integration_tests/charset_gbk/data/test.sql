@@ -4,6 +4,7 @@ CREATE DATABASE `charset_gbk_test0` CHARACTER SET utf8mb4;
 
 USE `charset_gbk_test0`;
 
+/* this is a test for columns which charset is gbk*/
 CREATE TABLE t0 (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -22,6 +23,7 @@ INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
+/* this is a test for table which charset is gbk*/
 CREATE TABLE t1 (
 	id INT,
 	name varchar(128),
@@ -40,6 +42,7 @@ INSERT INTO t1
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
+/* this is a test for db which charset is gbk*/
 DROP DATABASE IF EXISTS `charset_gbk_test1`;
 
 CREATE DATABASE `charset_gbk_test1` CHARACTER SET GBK;
