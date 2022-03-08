@@ -2903,7 +2903,7 @@ workaround = "please check the route rules in the task config"
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40081]
-message = "can only update task config for limited filed and this task must in sync unit, current task: %s current unit: %s"
+message = "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]

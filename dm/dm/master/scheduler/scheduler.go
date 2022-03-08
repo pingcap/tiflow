@@ -1036,6 +1036,8 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 
 // UpdateSubTasks update the information of one or more subtasks for one task.
 func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
@@ -1085,8 +1087,6 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("can not update because %s", resp.CheckSubtasksCanUpdate.Msg)
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	// put the configs and stages into etcd.
 	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
 	if err != nil {

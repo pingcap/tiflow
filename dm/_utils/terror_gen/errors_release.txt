@@ -475,7 +475,7 @@ ErrWorkerNoStart,[code=40070:class=dm-worker:scope=internal:level=high], "Messag
 ErrWorkerAlreadyStart,[code=40071:class=dm-worker:scope=internal:level=high], "Message: mysql source worker %s has already started with source %s, but get a request with source %s, Workaround: Please try restart this DM-worker"
 ErrWorkerSourceNotMatch,[code=40072:class=dm-worker:scope=internal:level=high], "Message: source of request does not match with source in worker"
 ErrWorkerWaitRelayCatchupGTID,[code=40078:class=dm-worker:scope=internal:level=high], "Message: cannot compare gtid between loader and relay, loader gtid: %s, relay gtid: %s"
-ErrWorkerUpdateSubTaskConfig,[code=40081:class=dm-worker:scope=internal:level=high], "Message: can only update task config for limited filed and this task must in sync unit, current task: %s current unit: %s"
+ErrWorkerUpdateSubTaskConfig,[code=40081:class=dm-worker:scope=internal:level=high], "Message: can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
 ErrWorkerFailToGetSubtaskConfigFromEtcd,[code=40073:class=dm-worker:scope=internal:level=medium], "Message: there is no relative subtask config for task %s in etcd"
 ErrWorkerFailToGetSourceConfigFromEtcd,[code=40074:class=dm-worker:scope=internal:level=medium], "Message: there is no relative source config for source %s in etcd"
 ErrWorkerDDLLockOpNotFound,[code=40075:class=dm-worker:scope=internal:level=high], "Message: missing shard DDL lock operation for shard DDL info (%s)"

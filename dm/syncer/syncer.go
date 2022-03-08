@@ -3562,6 +3562,9 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+// CheckCanUpdateCfg check if task config can be updated.
+// 1. task must not in a pessimistic ddl state.
+// 2. only balist, route/filter rules and syncerConfig can be update at this monent.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
