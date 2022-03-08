@@ -22,6 +22,7 @@ import {
   Collapse,
   Spin,
   Tabs,
+  Empty,
 } from '~/uikit'
 import {
   SearchOutlined,
@@ -348,15 +349,19 @@ const SourceList: React.FC = () => {
         {currentSource && !isFetchingTaskListData ? (
           <Tabs defaultActiveKey="1">
             <Tabs.TabPane tab={t('related task')} key="1">
-              <Collapse>
-                {taskListData?.data.map(item => (
-                  <Collapse.Panel
-                    showArrow={false}
-                    key={item.name}
-                    header={<SimpleTaskPanel task={item} preventClick />}
-                  />
-                ))}
-              </Collapse>
+              {taskListData && taskListData.data.length > 0 ? (
+                <Collapse>
+                  {taskListData?.data.map(item => (
+                    <Collapse.Panel
+                      showArrow={false}
+                      key={item.name}
+                      header={<SimpleTaskPanel task={item} preventClick />}
+                    />
+                  ))}
+                </Collapse>
+              ) : (
+                <Empty description={t('no related task')} />
+              )}
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('runtime config')} key="2">
               <SyntaxHighlighter style={ghcolors} language="json">
