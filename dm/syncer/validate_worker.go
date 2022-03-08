@@ -148,9 +148,6 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 }
 
 func (vw *validateWorker) validateTableChange() error {
-	vw.Lock()
-	defer vw.Unlock()
-
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
@@ -191,6 +188,9 @@ func (vw *validateWorker) validateTableChange() error {
 }
 
 func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map[string]*validateFailedRow) {
+	vw.Lock()
+	defer vw.Unlock()
+
 	var newPendingCnt int64
 	allErrorRows := make([]*validateFailedRow, 0)
 	newPendingChanges := make(map[string]*tableChange)
