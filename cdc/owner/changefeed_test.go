@@ -15,6 +15,8 @@ package owner
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -500,4 +502,73 @@ func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
 	c.Assert(func() {
 		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
 	}, check.Panics, "invalid ddlQuery statement size")
+}
+
+func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx := cdcContext.NewContext4Test(baseCtx, true)
+	info := ctx.ChangefeedVars().Info
+	dir := c.MkDir()
+	info.Config.Consistent = &config.ConsistentConfig{
+		Level:   "eventual",
+		Storage: filepath.Join("nfs://", dir),
+	}
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   ctx.ChangefeedVars().ID,
+		Info: info,
+	})
+	testChangefeedReleaseResource(c, ctx, cancel, dir, true /*expectedInitialized*/)
+}
+
+func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	ctx := cdcContext.NewContext4Test(baseCtx, true)
+	info := ctx.ChangefeedVars().Info
+	info.State = model.StateStopped
+	dir := c.MkDir()
+	info.Config.Consistent = &config.ConsistentConfig{
+		Level:   "eventual",
+		Storage: filepath.Join("nfs://", dir),
+	}
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID:   ctx.ChangefeedVars().ID,
+		Info: info,
+	})
+	testChangefeedReleaseResource(c, ctx, cancel, dir, false /*expectedInitialized*/)
+}
+
+func testChangefeedReleaseResource(
+	c *check.C,
+	ctx cdcContext.Context,
+	cancel context.CancelFunc,
+	redoLogDir string,
+	expectedInitialized bool,
+) {
+	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	c.Assert(cf.initialized, check.Equals, expectedInitialized)
+
+	// remove changefeed from state manager by admin job
+	cf.feedStateManager.PushAdminJob(&model.AdminJob{
+		CfID: cf.id,
+		Type: model.AdminRemove,
+	})
+	// changefeed tick will release resources
+	err := cf.tick(ctx, state, captures)
+	c.Assert(err, check.IsNil)
+	cancel()
+	// check redo log dir is deleted
+	_, err = os.Stat(redoLogDir)
+	c.Assert(os.IsNotExist(err), check.IsTrue)
 }
