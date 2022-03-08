@@ -60,7 +60,7 @@ type testMessage struct {
 }
 
 var clientConfigForUnitTesting = &MessageClientConfig{
-	SendChannelSize:         0,               // unbuffered channel to make tests more reliable
+	SendChannelSize:         1,
 	BatchSendInterval:       128 * time.Hour, // essentially disables flushing
 	MaxBatchBytes:           math.MaxInt64,
 	MaxBatchCount:           math.MaxInt64,
@@ -331,6 +331,9 @@ func TestClientSendAnomalies(t *testing.T) {
 
 	// Test point 1: ErrPeerMessageSendTryAgain
 	_, err := client.TrySendMessage(ctx, "test-topic", &testMessage{Value: 1})
+	require.NoError(t, err)
+
+	_, err = client.TrySendMessage(ctx, "test-topic", &testMessage{Value: 1})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrPeerMessageSendTryAgain.*", err.Error())
 

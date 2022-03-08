@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/p2p/internal"
+
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -58,7 +60,7 @@ type MessageClientConfig struct {
 // MessageClient is a client used to send peer messages.
 // `Run` must be running before sending any message.
 type MessageClient struct {
-	sendCh chan *p2p.MessageEntry
+	sendCh *internal.SendChan
 
 	topicMu sync.RWMutex
 	topics  map[string]*topicEntry
@@ -91,7 +93,7 @@ type topicEntry struct {
 // senderID is an identifier for the local node.
 func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClient {
 	return &MessageClient{
-		sendCh:   make(chan *p2p.MessageEntry, config.SendChannelSize),
+		sendCh:   internal.NewSendChan(int64(config.SendChannelSize)),
 		topics:   make(map[string]*topicEntry),
 		senderID: senderID,
 		closeCh:  make(chan struct{}),
@@ -227,48 +229,45 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 	batchSender := c.newSenderFn(stream)
 
 	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case msg, ok := <-c.sendCh:
-			if !ok {
-				// sendCh has been closed
-				return nil
-			}
-
-			c.topicMu.RLock()
-			tpk, ok := c.topics[msg.Topic]
-			c.topicMu.RUnlock()
-			if !ok {
-				// This line should never be reachable unless there is a bug in this file.
-				log.Panic("topic not found. Report a bug", zap.String("topic", msg.Topic))
-			}
-
-			// We want to assert that `msg.Sequence` is continuous within a topic.
-			if old := tpk.lastSent.Swap(msg.Sequence); old != initAck && msg.Sequence != old+1 {
-				log.Panic("unexpected seq of message",
-					zap.String("topic", msg.Topic),
-					zap.Int64("seq", msg.Sequence))
-			}
-
-			tpk.sentMessageMu.Lock()
-			tpk.sentMessages.PushBack(msg)
-			tpk.sentMessageMu.Unlock()
-
-			metricsClientMessageCount.Inc()
-
-			log.Debug("Sending Message",
-				zap.String("topic", msg.Topic),
-				zap.Int64("seq", msg.Sequence))
-			if err := batchSender.Append(msg); err != nil {
-				return errors.Trace(err)
-			}
-		case <-ticker.C:
+		msg, ok, err := c.sendCh.Receive(ctx, ticker.C)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if !ok {
 			// The implementation of batchSender guarantees that
 			// an empty flush does not send any message.
 			if err := batchSender.Flush(); err != nil {
 				return errors.Trace(err)
 			}
+			continue
+		}
+
+		c.topicMu.RLock()
+		tpk, ok := c.topics[msg.Topic]
+		c.topicMu.RUnlock()
+		if !ok {
+			// This line should never be reachable unless there is a bug in this file.
+			log.Panic("topic not found. Report a bug", zap.String("topic", msg.Topic))
+		}
+
+		// We want to assert that `msg.Sequence` is continuous within a topic.
+		if old := tpk.lastSent.Swap(msg.Sequence); old != initAck && msg.Sequence != old+1 {
+			log.Panic("unexpected seq of message",
+				zap.String("topic", msg.Topic),
+				zap.Int64("seq", msg.Sequence))
+		}
+
+		tpk.sentMessageMu.Lock()
+		tpk.sentMessages.PushBack(msg)
+		tpk.sentMessageMu.Unlock()
+
+		metricsClientMessageCount.Inc()
+
+		log.Debug("Sending Message",
+			zap.String("topic", msg.Topic),
+			zap.Int64("seq", msg.Sequence))
+		if err := batchSender.Append(msg); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
@@ -415,47 +414,30 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 		tpk = &topicEntry{
 			sentMessages: deque.NewDeque(),
 		}
-		// the sequence = 0 is reserved.
-		tpk.nextSeq.Store(1)
+		tpk.nextSeq.Store(0)
 		c.topicMu.Lock()
 		c.topics[topic] = tpk
 		c.topicMu.Unlock()
 	}
-
-	nextSeq := tpk.nextSeq.Load()
 
 	data, err := marshalMessage(value)
 	if err != nil {
 		return 0, cerrors.WrapError(cerrors.ErrPeerMessageEncodeError, err)
 	}
 
-	msg := &p2p.MessageEntry{
-		Topic:    topic,
-		Content:  data,
-		Sequence: nextSeq,
-	}
-
 	if nonblocking {
-		select {
-		case <-ctx.Done():
-			return 0, errors.Trace(ctx.Err())
-		case c.sendCh <- msg:
-		default:
+		ok, seq := c.sendCh.SendAsync(topic, data, tpk.nextSeq.Inc)
+		if !ok {
 			return 0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs()
 		}
-	} else {
-		// blocking
-		select {
-		case <-ctx.Done():
-			return 0, errors.Trace(ctx.Err())
-		case <-c.closeCh:
-			return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
-		case c.sendCh <- msg:
-		}
+		return seq, nil
 	}
-
-	tpk.nextSeq.Add(1)
-	return nextSeq, nil
+	// blocking
+	seq, err = c.sendCh.SendSync(ctx, topic, data, c.closeCh, tpk.nextSeq.Inc)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return seq, nil
 }
 
 // CurrentAck returns (s, true) if all messages with sequence less than or

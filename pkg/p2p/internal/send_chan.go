@@ -20,11 +20,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	proto "github.com/pingcap/tiflow/proto/p2p"
-	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
 
+// SendChan is a specialized channel used to implement
+// the asynchronous interface of the MessageClient.
+// SendChan is a MPSC channel.
 type SendChan struct {
 	mu      sync.Mutex
 	buf     []*proto.MessageEntry
@@ -33,35 +36,46 @@ type SendChan struct {
 
 	ready chan struct{}
 
-	nextSeq *atomic.Int64
-
 	cap int64
 }
 
-func NewSendChan(cap int64, nextSeq *atomic.Int64) *SendChan {
+// NewSendChan returns a new SendChan.
+func NewSendChan(cap int64) *SendChan {
 	return &SendChan{
-		buf:     make([]*proto.MessageEntry, cap),
-		ready:   make(chan struct{}, 1),
-		nextSeq: nextSeq,
-		cap:     cap,
+		buf:   make([]*proto.MessageEntry, cap),
+		ready: make(chan struct{}, 1),
+		cap:   cap,
 	}
 }
 
-func (c *SendChan) SendSync(ctx context.Context, topic string, value []byte) error {
+// SendSync sends a message synchronously.
+// NOTE SendSync employs busy waiting and is only suitable
+// for writing unit-tests.
+func (c *SendChan) SendSync(
+	ctx context.Context,
+	topic string,
+	value []byte,
+	closeCh <-chan struct{},
+	nextSeq func() int64,
+) (int64, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
+			return 0, errors.Trace(ctx.Err())
+		case <-closeCh:
+			return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
 		default:
 		}
 
-		if c.SendAsync(topic, value) {
-			return nil
+		if ok, seq := c.SendAsync(topic, value, nextSeq); ok {
+			return seq, nil
 		}
 	}
 }
 
-func (c *SendChan) SendAsync(topic string, value []byte) (ok bool) {
+// SendAsync tries to send a message. If the message is accepted, nextSeq will be called
+// once, and the returned value will be used as the Sequence number of the message.
+func (c *SendChan) SendAsync(topic string, value []byte, nextSeq func() int64) (ok bool, seq int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -71,14 +85,15 @@ func (c *SendChan) SendAsync(topic string, value []byte) (ok bool) {
 			zap.Int64("recvIndex", c.recvIdx))
 	}
 
-	if c.sendIdx == c.recvIdx {
-		return false
+	if c.sendIdx-c.recvIdx == c.cap {
+		return false, 0
 	}
 
-	c.buf[c.sendIdx] = &proto.MessageEntry{
+	seq = nextSeq()
+	c.buf[c.sendIdx%c.cap] = &proto.MessageEntry{
 		Topic:    topic,
 		Content:  value,
-		Sequence: c.getSeq(),
+		Sequence: seq,
 	}
 	c.sendIdx++
 
@@ -87,9 +102,11 @@ func (c *SendChan) SendAsync(topic string, value []byte) (ok bool) {
 	default:
 	}
 
-	return true
+	return true, seq
 }
 
+// Receive receives one message from the channel. If there is a tick, the function will return
+// (nil, false, nil).
 func (c *SendChan) Receive(ctx context.Context, tick <-chan time.Time) (*proto.MessageEntry, bool, error) {
 	select {
 	case <-ctx.Done():
@@ -128,10 +145,7 @@ func (c *SendChan) doReceive() *proto.MessageEntry {
 	}
 
 	var ret *proto.MessageEntry
-	ret, c.buf[c.recvIdx] = c.buf[c.recvIdx], nil
+	ret, c.buf[c.recvIdx%c.cap] = c.buf[c.recvIdx%c.cap], nil
+	c.recvIdx++
 	return ret
-}
-
-func (c *SendChan) getSeq() int64 {
-	return c.nextSeq.Inc()
 }
