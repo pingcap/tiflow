@@ -483,6 +483,8 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		// TEXT and BLOB are differentiated by charset.
+		// If charset is binary, then the real type is BLOB, else the real type is TEXT.
 		if col.Charset == charset.CharsetBinary {
 			b := datum.GetBytes()
 			if b == nil {
