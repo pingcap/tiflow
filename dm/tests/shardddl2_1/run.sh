@@ -224,8 +224,7 @@ function DM_056_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `c` INT FIRST' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			'because schema conflict detected' 2
 	fi
 }
 
@@ -548,6 +547,7 @@ function restart_worker() {
 function run() {
 	init_cluster
 	init_database
+	start=46
 	start=46
 	end=70
 	except=(052 053 054 055 060 061 069 070)
