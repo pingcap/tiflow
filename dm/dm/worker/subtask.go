@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"io/ioutil"
 	"sync"
 	"time"
 
@@ -150,7 +151,11 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
 	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
 		// NOTE: LoaderConfig.Dir is always not empty because we only dump certs when we use lightning.
-		if err := st.cfg.To.Security.DumpTLSContent(loader.TmpTlsConfigPath); err != nil {
+		dir, err := ioutil.TempDir("./", loader.TmpTlsConfigPath)
+		if err != nil {
+			return err
+		}
+		if err = st.cfg.To.Security.DumpTLSContent(dir); err != nil {
 			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
 		}
 	}
