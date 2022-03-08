@@ -85,6 +85,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -93,10 +94,11 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
+	defer cancel()
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -105,6 +107,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -113,6 +116,12 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
+
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
 
 	baseURL := "/api/v1/sources"
 	// list source from leader
@@ -128,7 +137,6 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	// list source not from leader will get a redirect
 	result2 := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s2.openapiHandles)
 	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
-	cancel()
 }
 
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
@@ -138,6 +146,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -151,7 +160,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	cancel()
+	defer cancel()
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
