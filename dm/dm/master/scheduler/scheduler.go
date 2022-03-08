@@ -1075,7 +1075,7 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 
 	// check by workers todo batch
 	for _, cfg := range cfgs {
-		worker := s.GetWorkerBySource(cfg.SourceID)
+		worker := s.bounds[cfg.SourceID]
 		if worker == nil {
 			return terror.ErrWorkerNoStart
 		}
