@@ -59,12 +59,13 @@ var (
 
 	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
-	ErrWorkerOffline              = errors.Normalize("worker is offline: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
+	ErrWorkerOffline              = errors.Normalize("worker is offline: workerID: %s, error message: %s", errors.RFCCodeText("DFLOW:ErrWorkerOffline"))
 	ErrWorkerTimedOut             = errors.Normalize("worker heartbeat timed out: workerID %s", errors.RFCCodeText("DFLOW:ErrWorkerTimedOut"))
 	ErrWorkerSuicide              = errors.Normalize("worker has committed suicide due to master(%s) having timed out", errors.RFCCodeText("DFLOW:ErrWorkerSuicide"))
 	ErrWorkerNoMeta               = errors.Normalize("worker metadata does not exist", errors.RFCCodeText("DFLOW:ErrWorkerNoMeta"))
 	ErrWorkerUpdateStatusTryAgain = errors.Normalize("worker should try again in updating the status", errors.RFCCodeText("DFLOW:ErrWorkerUpdateStatusTryAgain"))
 	ErrInvalidJobType             = errors.Normalize("invalid job type: %s", errors.RFCCodeText("DFLOW:ErrInvalidJobType"))
+	ErrWorkerFinish               = errors.Normalize("worker finished and exited", errors.RFCCodeText("DFLOW:ErrWorkerFinish"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))

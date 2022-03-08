@@ -20,13 +20,19 @@ import (
 var _ lib.Worker = (*dummyWorker)(nil)
 
 type (
-	Worker      = dummyWorker
+	Worker = dummyWorker
+
+	WorkerConfig struct {
+		TargetTick int64 `json:"target-tick"`
+	}
+
 	dummyWorker struct {
 		lib.BaseWorker
 
 		init   bool
 		closed int32
 		status *dummyWorkerStatus
+		config *WorkerConfig
 
 		statusRateLimiter *rate.Limiter
 	}
@@ -76,6 +82,11 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	if atomic.LoadInt32(&d.closed) == 1 {
 		return nil
 	}
+
+	if d.status.Tick >= d.config.TargetTick {
+		return d.Exit(ctx, d.Status(), nil)
+	}
+
 	return nil
 }
 
@@ -106,9 +117,14 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func NewDummyWorker(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, _ lib.WorkerConfig) lib.WorkerImpl {
+func NewDummyWorker(
+	ctx *dcontext.Context,
+	id lib.WorkerID, masterID lib.MasterID,
+	cfg lib.WorkerConfig,
+) lib.WorkerImpl {
 	return &dummyWorker{
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
 		status:            &dummyWorkerStatus{},
+		config:            cfg.(*WorkerConfig),
 	}
 }

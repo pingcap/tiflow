@@ -31,7 +31,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_online))
 
 	// OnWorkerOffline, Online -> Pending
-	fsm.JobOffline(worker)
+	fsm.JobOffline(worker, true /* needFailover */)
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_online))
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_pending))
 

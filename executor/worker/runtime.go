@@ -109,9 +109,11 @@ type Runtime struct {
 }
 
 func (r *Runtime) onTaskFinished(task *internal.RunnableContainer, err error) {
-	log.L().Warn("Task has finished",
-		zap.Any("worker-id", task.ID()),
-		zap.Error(err))
+	if err == nil || derror.ErrWorkerFinish.Equal(err) {
+		log.L().Info("task finished", zap.String("worker-id", task.ID()))
+	} else {
+		log.L().Warn("task failed", zap.String("worker-id", task.ID()), zap.Error(err))
+	}
 	task.OnStopped()
 
 	select {

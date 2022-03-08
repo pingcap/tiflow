@@ -112,6 +112,12 @@ func (m *testJobMasterImpl) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
+func (m *testJobMasterImpl) Status() WorkerStatus {
+	return WorkerStatus{
+		Code: WorkerStatusNormal,
+	}
+}
+
 func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 	params := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
@@ -176,6 +182,9 @@ func TestBaseJobMasterBasics(t *testing.T) {
 
 	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
+
+	err = jobMaster.Exit(ctx, jobMaster.Status(), nil)
+	require.Regexp(t, ".*DFLOW:ErrWorkerFinish.*", err)
 
 	err = jobMaster.Close(ctx)
 	require.NoError(t, err)

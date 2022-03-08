@@ -11,7 +11,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/errors"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -67,8 +67,9 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	meta := &lib.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
-		ID:     jm.uuidGen.NewString(),
-		Config: req.Config,
+		ID:         jm.uuidGen.NewString(),
+		Config:     req.Config,
+		StatusCode: lib.MasterStatusUninit,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
@@ -76,8 +77,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		extConfig := &cvs.Config{}
 		err = json.Unmarshal(req.Config, extConfig)
 		if err != nil {
-			err := errors.ErrBuildJobFailed.GenWithStack("failed to decode config: %s", req.Config)
-			resp.Err = errors.ToPBError(err)
+			err := derrors.ErrBuildJobFailed.GenWithStack("failed to decode config: %s", req.Config)
+			resp.Err = derrors.ToPBError(err)
 			return resp
 		}
 		meta.Tp = lib.CvsJobMaster
@@ -86,15 +87,15 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	case pb.JobType_FakeJob:
 		meta.Tp = lib.FakeJobMaster
 	default:
-		err := errors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
-		resp.Err = errors.ToPBError(err)
+		err := derrors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
+		resp.Err = derrors.ToPBError(err)
 		return resp
 	}
 
 	// Store job master meta data before creating it
 	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
-		resp.Err = errors.ToPBError(err)
+		resp.Err = derrors.ToPBError(err)
 		return resp
 	}
 
@@ -105,7 +106,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 
 	if err != nil {
 		log.L().Error("create job master met error", zap.Error(err))
-		resp.Err = errors.ToPBError(err)
+		resp.Err = derrors.ToPBError(err)
 		return resp
 	}
 	jm.JobFsm.JobDispatched(meta)
@@ -141,7 +142,7 @@ func NewJobManagerImplV2(
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
-	meta.Initialized = true
+	meta.StatusCode = lib.MasterStatusInit
 	err = lib.StoreMasterMeta(dctx, impl.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
@@ -192,6 +193,10 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
+		if job.StatusCode == lib.MasterStatusFinished {
+			log.L().Info("skip finished job", zap.Any("job", job))
+			continue
+		}
 		jm.JobFsm.JobDispatched(job)
 		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
 			return err
@@ -218,8 +223,14 @@ func (jm *JobManagerImplV2) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 // OnWorkerOffline implements lib.MasterImpl.OnWorkerOffline
 func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
-	jm.JobFsm.JobOffline(worker)
+	needFailover := true
+	if derrors.ErrWorkerFinish.Equal(reason) {
+		log.L().Info("job master finished", zap.String("id", worker.ID()))
+		needFailover = false
+	} else {
+		log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
+	}
+	jm.JobFsm.JobOffline(worker, needFailover)
 	return nil
 }
 

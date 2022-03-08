@@ -210,7 +210,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		}
 	}
 
-	if err := m.markInitializedInMetadata(ctx); err != nil {
+	if err := m.markStatusCodeInMetadata(ctx, MasterStatusInit); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -370,7 +370,14 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			err = m.Impl.OnWorkerOffline(tombstoneHandle, derror.ErrWorkerOffline.GenWithStackByArgs(workerInfo.ID))
+			var offlineError error
+			if status.Code == WorkerStatusFinished {
+				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
+			} else {
+				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID, err)
+			}
+
+			err = m.Impl.OnWorkerOffline(tombstoneHandle, offlineError)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -429,25 +436,22 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 
 	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	// TODO: consider to combine the state machine of master status with initialized
-	isInit = !masterMeta.Initialized
+	isInit = masterMeta.StatusCode == MasterStatusUninit
 
 	return
 }
 
-func (m *DefaultBaseMaster) markInitializedInMetadata(ctx context.Context) error {
+func (m *DefaultBaseMaster) markStatusCodeInMetadata(
+	ctx context.Context, code MasterStatusCode,
+) error {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	masterMeta.Initialized = true
-	if err := metaClient.Store(ctx, masterMeta); err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	masterMeta.StatusCode = code
+	return metaClient.Store(ctx, masterMeta)
 }
 
 func (m *DefaultBaseMaster) registerHandlerForWorker(ctx context.Context, workerID WorkerID) error {

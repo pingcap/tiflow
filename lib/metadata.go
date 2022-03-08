@@ -38,7 +38,8 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, err
 	if len(resp.Kvs) == 0 {
 		// TODO refine handling the situation where the mata key does not exist at this point
 		masterMeta := &MasterMetaKVData{
-			ID: c.masterID,
+			ID:         c.masterID,
+			StatusCode: MasterStatusUninit,
 		}
 		return masterMeta, nil
 	}

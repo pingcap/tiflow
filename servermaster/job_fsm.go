@@ -196,7 +196,7 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
-func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle) {
+func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -205,7 +205,9 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle) {
 		log.L().Warn("non-online worker offline, ignore it", zap.String("id", worker.ID()))
 		return
 	}
-	fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+	if needFailover {
+		fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
+	}
 	delete(fsm.onlineJobs, worker.ID())
 }
 

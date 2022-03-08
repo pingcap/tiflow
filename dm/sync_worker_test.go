@@ -72,10 +72,10 @@ func TestSyncWorker(t *testing.T) {
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
-		ID:          masterID,
-		NodeID:      nodeID,
-		Epoch:       1,
-		Initialized: true,
+		ID:         masterID,
+		NodeID:     nodeID,
+		Epoch:      1,
+		StatusCode: lib.MasterStatusInit,
 	})
 
 	err = worker.Init(ctx)

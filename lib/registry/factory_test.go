@@ -39,13 +39,13 @@ func TestNewSimpleWorkerFactory(t *testing.T) {
 	dummyConstructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.WorkerImpl {
 		return fake.NewDummyWorker(ctx, id, masterID, config)
 	}
-	fac := NewSimpleWorkerFactory(dummyConstructor, &dummyConfig{})
-	config, err := fac.DeserializeConfig([]byte(`{"Val":1}`))
+	fac := NewSimpleWorkerFactory(dummyConstructor, &fake.WorkerConfig{})
+	config, err := fac.DeserializeConfig([]byte(`{"target-tick":100}`))
 	require.NoError(t, err)
-	require.Equal(t, &dummyConfig{Val: 1}, config)
+	require.Equal(t, &fake.WorkerConfig{TargetTick: 100}, config)
 
 	ctx := makeCtxWithMockDeps(t)
-	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &dummyConfig{Val: 1})
+	newWorker, err := fac.NewWorkerImpl(ctx, "my-worker", "my-master", &fake.WorkerConfig{TargetTick: 100})
 	require.NoError(t, err)
 	require.IsType(t, &fake.Worker{}, newWorker)
 }

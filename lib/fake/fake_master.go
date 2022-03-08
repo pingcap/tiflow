@@ -23,6 +23,7 @@ import (
 type Config struct {
 	JobName     string `json:"job-name"`
 	WorkerCount int    `json:"worker-count"`
+	TargetTick  int    `json:"target-tick"`
 }
 
 var _ lib.BaseJobMaster = (*Master)(nil)
@@ -66,7 +67,8 @@ func (m *Master) InitImpl(ctx context.Context) error {
 }
 
 func (m *Master) createWorker(index int) error {
-	workerID, err := m.CreateWorker(lib.FakeTask, &Config{}, 1)
+	workerID, err := m.CreateWorker(
+		lib.FakeTask, &WorkerConfig{TargetTick: int64(m.config.TargetTick)}, 1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -123,6 +125,11 @@ func (m *Master) Tick(ctx context.Context) error {
 		return err
 	}
 
+	if len(m.finishedSet) == m.config.WorkerCount {
+		log.L().Info("FakeMaster: all worker finished, job master exits now")
+		return m.Exit(ctx, m.Status(), nil)
+	}
+
 	return nil
 }
 
@@ -163,10 +170,6 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	log.L().Info("FakeMaster: OnWorkerOffline",
-		zap.String("worker-id", worker.ID()),
-		zap.Error(reason))
-	status := worker.Status()
 	index := -1
 	for i, handle := range m.workerList {
 		if handle.ID() == worker.ID() {
@@ -177,9 +180,15 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	if index < 0 {
 		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
-	if status.Code == lib.WorkerStatusFinished {
+
+	if derrors.ErrWorkerFinish.Equal(reason) {
+		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
 		m.finishedSet[worker.ID()] = index
+		return nil
 	}
+
+	log.L().Info("FakeMaster: OnWorkerOffline",
+		zap.String("worker-id", worker.ID()), zap.Error(reason))
 	return m.createWorker(index)
 }
 

@@ -16,6 +16,8 @@ type (
 	WorkerStatusCode int32
 	WorkerType       int64
 
+	MasterStatusCode int32
+
 	Epoch        = int64
 	WorkerConfig = interface{}
 	MasterID     = string
@@ -32,6 +34,13 @@ const (
 	WorkerStatusInit
 	WorkerStatusError
 	WorkerStatusFinished
+)
+
+// Job master statuses
+const (
+	MasterStatusUninit = MasterStatusCode(iota + 1)
+	MasterStatusInit
+	MasterStatusFinished
 )
 
 const (
@@ -125,12 +134,12 @@ type WorkloadReportMessage struct {
 
 type (
 	MasterMetaKVData struct {
-		ID          MasterID   `json:"id"`
-		Addr        string     `json:"addr"`
-		NodeID      p2p.NodeID `json:"node-id"`
-		Epoch       Epoch      `json:"epoch"`
-		Initialized bool       `json:"initialized"`
-		Tp          WorkerType `json:"type"`
+		ID         MasterID         `json:"id"`
+		Addr       string           `json:"addr"`
+		NodeID     p2p.NodeID       `json:"node-id"`
+		Epoch      Epoch            `json:"epoch"`
+		StatusCode MasterStatusCode `json:"status"`
+		Tp         WorkerType       `json:"type"`
 
 		// Config holds business-specific data
 		Config []byte `json:"config"`

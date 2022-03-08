@@ -12,16 +12,12 @@ import (
 
 var (
 	_                 WorkerFactory = (*SimpleWorkerFactory)(nil)
-	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker, &dummyConfig{})
+	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker, &fake.WorkerConfig{})
 )
 
 const (
 	fakeWorkerType = lib.WorkerType(100)
 )
-
-type dummyConfig struct {
-	Val int
-}
 
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
@@ -31,7 +27,7 @@ func TestGlobalRegistry(t *testing.T) {
 		fakeWorkerType,
 		"worker-1",
 		"master-1",
-		[]byte(`{"Val":0}`))
+		[]byte(`{"target-tick":10}`))
 	require.NoError(t, err)
 	require.IsType(t, &lib.DefaultBaseWorker{}, worker)
 	impl := worker.(*lib.DefaultBaseWorker).Impl

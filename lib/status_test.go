@@ -34,10 +34,10 @@ func TestStatusSender(t *testing.T) {
 	})
 
 	putMasterMeta(ctx, t, metaClient, &MasterMetaKVData{
-		ID:          masterName,
-		NodeID:      masterNodeName,
-		Epoch:       1,
-		Initialized: true,
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		Epoch:      1,
+		StatusCode: MasterStatusInit,
 	})
 	err := masterClient.InitMasterInfoFromMeta(ctx)
 	require.NoError(t, err)

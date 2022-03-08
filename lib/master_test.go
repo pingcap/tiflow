@@ -36,8 +36,9 @@ type dummyConfig struct {
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfo := &MasterMetaKVData{
-		ID:     masterName,
-		NodeID: masterNodeName,
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		StatusCode: MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -66,7 +67,7 @@ func TestMasterInit(t *testing.T) {
 	var masterData MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
-	require.True(t, masterData.Initialized)
+	require.Equal(t, MasterStatusInit, masterData.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)

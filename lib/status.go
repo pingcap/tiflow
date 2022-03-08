@@ -98,6 +98,14 @@ func (s *StatusSender) setLastUnsentStatus(status *WorkerStatus) {
 	s.lastUnsentStatus = status
 }
 
+// SafeSendStatus persists status before sending it
+func (s *StatusSender) SafeSendStatus(ctx context.Context, status WorkerStatus) error {
+	if err := s.workerMetaClient.Store(ctx, s.workerID, &status); err != nil {
+		return err
+	}
+	return s.SendStatus(ctx, status)
+}
+
 // SendStatus is used by the business logic in a worker to notify its master
 // of a status change.
 // This function is non-blocking and if any error occurred during or after network IO,

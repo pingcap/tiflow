@@ -32,6 +32,12 @@ type BaseJobMaster interface {
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
 
+	// Exit should be called when job master (in user logic) wants to exit
+	// - If err is nil, it means job master exits normally
+	// - If err is not nil, it means job master meets error, and after it exits
+	//   it will be failover.
+	Exit(ctx context.Context, status WorkerStatus, err error) error
+
 	// IsMasterReady returns whether the master has received heartbeats for all
 	// workers after a fail-over. If this is the first time the JobMaster started up,
 	// the return value is always true.
@@ -111,7 +117,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 		if err := d.impl.InitImpl(ctx); err != nil {
 			return errors.Trace(err)
 		}
-		if err := d.master.markInitializedInMetadata(ctx); err != nil {
+		if err := d.master.markStatusCodeInMetadata(ctx, MasterStatusInit); err != nil {
 			return errors.Trace(err)
 		}
 	} else {
@@ -201,6 +207,17 @@ func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic,
 
 func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 	return d.master.IsMasterReady()
+}
+
+func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status WorkerStatus, err error) error {
+	// err == nil means job master finished and exited normally
+	if err == nil {
+		err1 := d.master.markStatusCodeInMetadata(ctx, MasterStatusFinished)
+		if err1 != nil {
+			return err1
+		}
+	}
+	return d.worker.Exit(ctx, status, err)
 }
 
 type jobMasterImplAsWorkerImpl struct {
