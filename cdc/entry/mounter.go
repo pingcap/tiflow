@@ -488,7 +488,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		// TEXT and BLOB are differentiated by charset.
 		// If charset is binary, then the real type is BLOB, else the real type is TEXT.
-		if col.Charset == charset.CharsetBinary {
+		if col.Charset == "" || col.Charset == charset.CharsetBin {
 			b := datum.GetBytes()
 			if b == nil {
 				b = emptyBytes
@@ -550,7 +550,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			// the default value is the first element of the enum list
 			d = types.NewDatum(col.FieldType.Elems[0])
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-			return emptyBytes, sizeOfEmptyBytes, "", nil
+			return "", sizeOfEmptyString, "", nil
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {

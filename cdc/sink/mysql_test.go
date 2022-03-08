@@ -1260,7 +1260,7 @@ func TestGBKSupported(t *testing.T) {
 	require.Nil(t, err)
 
 	// no warning log will be output because GBK charset is supported
-	require.Equal(t, logs.Len(), 0)
+	require.Equal(t, logs.Len(), 0, logs.TakeAll())
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)
