@@ -190,6 +190,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		subTaskCfg.MydumperConfig = DefaultMydumperConfig()
 		subTaskCfg.LoaderConfig = DefaultLoaderConfig()
 		if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil {
+			if fullCfg.Consistency != nil {
+				subTaskCfg.MydumperConfig.ExtraArgs = fmt.Sprintf("--consistency %s", *fullCfg.Consistency)
+			}
 			if fullCfg.ExportThreads != nil {
 				subTaskCfg.MydumperConfig.Threads = *fullCfg.ExportThreads
 			}
@@ -442,9 +445,14 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	// if ends with the task name, we remove to get user input dir.
 	oneSubtaskConfig.LoaderConfig.Dir = strings.TrimSuffix(oneSubtaskConfig.LoaderConfig.Dir, dirSuffix)
 	taskSourceConfig.FullMigrateConf = &openapi.TaskFullMigrateConf{
-		DataDir:       &oneSubtaskConfig.LoaderConfig.Dir,
 		ExportThreads: &oneSubtaskConfig.MydumperConfig.Threads,
+		DataDir:       &oneSubtaskConfig.LoaderConfig.Dir,
 		ImportThreads: &oneSubtaskConfig.LoaderConfig.PoolSize,
+	}
+	consistencyInTask := oneSubtaskConfig.MydumperConfig.ExtraArgs
+	consistency := strings.Replace(consistencyInTask, "--consistency ", "", 1)
+	if consistency != "" {
+		taskSourceConfig.FullMigrateConf.Consistency = &consistency
 	}
 	taskSourceConfig.IncrMigrateConf = &openapi.TaskIncrMigrateConf{
 		ReplBatch:   &oneSubtaskConfig.SyncerConfig.Batch,
@@ -551,10 +559,28 @@ func TaskConfigToOpenAPITask(c *TaskConfig, sourceCfgMap map[string]*SourceConfi
 			cfgs[source.SourceID] = cfg.From
 		}
 	}
+
+	// different sources can have different configurations in TaskConfig
+	// but currently OpenAPI formatted tasks do not support this
+	// user submitted TaskConfig will only set the configuration in TaskConfig.Syncers
+	// but setting this will not affect the configuration in TaskConfig.MySQLInstances
+	// so it needs to be handled in a special way
+	for _, cfg := range c.MySQLInstances {
+		if cfg.Mydumper != nil {
+			cfg.Mydumper = c.Mydumpers[cfg.MydumperConfigName]
+		}
+		if cfg.Loader != nil {
+			cfg.Loader = c.Loaders[cfg.LoaderConfigName]
+		}
+		if cfg.Syncer != nil {
+			cfg.Syncer = c.Syncers[cfg.SyncerConfigName]
+		}
+	}
 	SubTaskConfigList, err := TaskConfigToSubTaskConfigs(c, cfgs)
 	if err != nil {
 		return nil, err
 	}
+
 	task := SubTaskConfigsToOpenAPITask(SubTaskConfigList)
 	if err := task.Adjust(); err != nil {
 		return nil, err

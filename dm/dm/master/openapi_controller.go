@@ -44,7 +44,11 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 		sourceStatus := openapi.SourceStatus{SourceName: sourceName, WorkerName: workerStatus.SourceStatus.Worker}
 		if !workerStatus.Result {
 			sourceStatus.ErrorMsg = &workerStatus.Msg
-		} else if relayStatus := workerStatus.SourceStatus.GetRelayStatus(); relayStatus != nil {
+			sourceStatusList[i] = sourceStatus
+			continue
+		}
+
+		if relayStatus := workerStatus.SourceStatus.GetRelayStatus(); relayStatus != nil {
 			sourceStatus.RelayStatus = &openapi.RelayStatus{
 				MasterBinlog:       relayStatus.MasterBinlog,
 				MasterBinlogGtid:   relayStatus.MasterBinlogGtid,
@@ -53,6 +57,14 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 				RelayDir:           relayStatus.RelaySubDir,
 				Stage:              relayStatus.Stage.String(),
 			}
+		}
+		// add error if some error happen
+		if workerStatus.SourceStatus.Result != nil && len(workerStatus.SourceStatus.Result.Errors) > 0 {
+			var errorMsgs string
+			for _, err := range workerStatus.SourceStatus.Result.Errors {
+				errorMsgs += fmt.Sprintf("%s\n", err.Message)
+			}
+			sourceStatus.ErrorMsg = &errorMsgs
 		}
 		sourceStatusList[i] = sourceStatus
 	}
@@ -65,12 +77,17 @@ func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceReque
 		return nil, err
 	}
 
+	var err error
 	if req.WorkerName == nil {
-		if err := s.scheduler.AddSourceCfg(cfg); err != nil {
-			return nil, err
-		}
-	} else if err := s.scheduler.AddSourceCfgWithWorker(cfg, *req.WorkerName); err != nil {
+		err = s.scheduler.AddSourceCfg(cfg)
+	} else {
+		err = s.scheduler.AddSourceCfgWithWorker(cfg, *req.WorkerName)
+	}
+	if err != nil {
 		return nil, err
+	}
+	if cfg.EnableRelay {
+		return &req.Source, s.enableRelay(ctx, req.Source.SourceName, openapi.EnableRelayRequest{})
 	}
 	return &req.Source, nil
 }
@@ -186,7 +203,14 @@ func (s *Server) enableRelay(ctx context.Context, sourceName string, req openapi
 			return err
 		}
 	}
-	return s.scheduler.StartRelay(sourceName, req.WorkerNameList)
+	if req.WorkerNameList == nil {
+		worker := s.scheduler.GetWorkerBySource(sourceName)
+		if worker == nil {
+			return terror.ErrWorkerNoStart.Generate()
+		}
+		req.WorkerNameList = &openapi.WorkerNameList{worker.BaseInfo().Name}
+	}
+	return s.scheduler.StartRelay(sourceName, *req.WorkerNameList)
 }
 
 // nolint:unparam
@@ -195,7 +219,14 @@ func (s *Server) disableRelay(ctx context.Context, sourceName string, req openap
 	if sourceCfg == nil {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
-	return s.scheduler.StopRelay(sourceName, req.WorkerNameList)
+	if req.WorkerNameList == nil {
+		worker := s.scheduler.GetWorkerBySource(sourceName)
+		if worker == nil {
+			return terror.ErrWorkerNoStart.Generate()
+		}
+		req.WorkerNameList = &openapi.WorkerNameList{worker.BaseInfo().Name}
+	}
+	return s.scheduler.StopRelay(sourceName, *req.WorkerNameList)
 }
 
 func (s *Server) purgeRelay(ctx context.Context, sourceName string, req openapi.PurgeRelayRequest) error {
@@ -233,7 +264,7 @@ func (s *Server) enableSource(ctx context.Context, sourceName string) error {
 	}
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
-		return terror.ErrWorkerNoStart
+		return terror.ErrWorkerNoStart.Generate()
 	}
 	if cfg.Enable {
 		return nil
@@ -258,7 +289,8 @@ func (s *Server) disableSource(ctx context.Context, sourceName string) error {
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		// no need to stop task if the source is not running
-		return nil
+		cfg.Enable = false
+		return s.scheduler.UpdateSourceCfg(cfg)
 	}
 	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName, nil)
 	if err := s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Stopped, false); err != nil {
@@ -483,6 +515,14 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, req openapi
 				TotalTables:       dumpS.TotalTables,
 			}
 		}
+		// add error if some error happens
+		if subTaskStatus.Result != nil && len(subTaskStatus.Result.Errors) > 0 {
+			var errorMsgs string
+			for _, err := range subTaskStatus.Result.Errors {
+				errorMsgs += fmt.Sprintf("%s\n", err.Message)
+			}
+			openapiSubTaskStatus.ErrorMsg = &errorMsgs
+		}
 		subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
 	}
 	return subTaskStatusList, nil
@@ -561,7 +601,7 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 		}
 		if !cfg.Enable {
-			return terror.ErrMasterStartTask.Generate(taskName, fmt.Sprintf("source %s is not enabled", sourceName))
+			return terror.ErrMasterStartTask.Generate(taskName, fmt.Sprintf("source: %s is not enabled", sourceName))
 		}
 		needStartSubTaskList = append(needStartSubTaskList, subTaskCfg)
 	}
@@ -570,7 +610,6 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 	}
 
 	// TODO(ehco) support other start args after https://github.com/pingcap/tiflow/pull/4601 merged
-
 	if req.RemoveMeta != nil && *req.RemoveMeta {
 		// use same latch for remove-meta and start-task
 		release, err := s.scheduler.AcquireSubtaskLatch(taskName)

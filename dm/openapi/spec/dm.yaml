@@ -301,7 +301,7 @@ paths:
             example: "mysql-01"
       operationId: "DMAPIEnableRelay"
       requestBody:
-        required: true
+        required: false
         content:
           "application/json":
             schema:
@@ -330,7 +330,7 @@ paths:
             type: string
             example: "mysql-01"
       requestBody:
-        required: true
+        required: false
         content:
           "application/json":
             schema:
@@ -1447,7 +1447,7 @@ components:
         - "meta_binlog_gtid"
     SyncStatus:
       type: object
-      description: "status of sync uuit"
+      description: "status of sync unit"
       properties:
         total_events:
           type: integer
@@ -1935,16 +1935,12 @@ components:
           default: "./relay_log"
           description: "the directory where the relay log is stored"
           nullable: true
-      required:
-        - "worker_name_list"
     DisableRelayRequest:
       description: action to stop a relay request
       type: object
       properties:
         worker_name_list:
           $ref: "#/components/schemas/WorkerNameList"
-      required:
-        - "worker_name_list"
     PurgeRelayRequest:
       description: action to stop a relay request
       type: object
@@ -2072,19 +2068,19 @@ components:
           description: whether to remove meta database in downstream database
         source_name_list:
           $ref: "#/components/schemas/SourceNameList"
-        start_time:
-          type: string
-          example: "2006-01-02 15:04:05"
-          description: task start time
-        safe_mode_time_duration:
-          example: "1s"
-          description: time duration of safe mode
+        # start_time:
+        #   type: string
+        #   example: "2006-01-02 15:04:05"
+        #   description: task start time
+        # safe_mode_time_duration:
+        #   example: "1s"
+        #   description: time duration of safe mode
     StopTaskRequest:
       type: object
       properties:
-        timeout_duration:
-          example: "15s"
-          description: time duration waiting task stop
+        # timeout_duration:
+        #   example: "15s"
+        #   description: time duration waiting task stop
         source_name_list:
           $ref: "#/components/schemas/SourceNameList"
     UpdateTaskRequest:

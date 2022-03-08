@@ -323,8 +323,7 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 
 	// start relay
 	enableRelayURL := fmt.Sprintf("%s/relay/enable", source1URL)
-	openAPIEnableRelayReq := openapi.EnableRelayRequest{WorkerNameList: []string{workerName1}}
-	result = testutil.NewRequest().Post(enableRelayURL).WithJsonBody(openAPIEnableRelayReq).GoWithHTTPHandler(t.testT, s.openapiHandles)
+	result = testutil.NewRequest().Post(enableRelayURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	// check http status code
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err := s.scheduler.GetRelayWorkers(source1Name)
@@ -373,7 +372,7 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 
 	// test disable relay
 	disableRelayURL := fmt.Sprintf("%s/relay/disable", source1URL)
-	disableRelayReq := openapi.DisableRelayRequest{WorkerNameList: []string{workerName1}}
+	disableRelayReq := openapi.DisableRelayRequest{}
 	result = testutil.NewRequest().Post(disableRelayURL).WithJsonBody(disableRelayReq).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)
 	relayWorkers, err = s.scheduler.GetRelayWorkers(source1Name)

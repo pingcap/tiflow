@@ -167,8 +167,7 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 	// test with fake worker enable/disable/transfer/enable/disable/purge-relay
 	{
 		// enable on a free worker
-		err := server.enableSource(ctx, s.testSource.SourceName)
-		s.ErrorIs(err, terror.ErrWorkerNoStart) // no free worker now
+		s.True(terror.ErrWorkerNoStart.Equal(server.enableSource(ctx, s.testSource.SourceName))) // no free worker now
 
 		worker1Name := "worker1"
 		worker1Addr := "172.16.10.72:8262"
@@ -179,8 +178,7 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.Equal(worker1.Stage(), scheduler.WorkerBound)
 
 		// disable no task now,so no errorg
-		err = server.disableSource(ctx, s.testSource.SourceName)
-		s.NoError(err)
+		s.NoError(server.disableSource(ctx, s.testSource.SourceName))
 
 		// add worker 2 and transfer
 		worker2Name := "worker2"
@@ -188,21 +186,18 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.Nil(server.scheduler.AddWorker(worker2Name, worker2Addr))
 		worker2 := server.scheduler.GetWorkerByName(worker2Name)
 		worker2.ToFree()
-		err = server.transferSource(ctx, s.testSource.SourceName, worker2Name)
-		s.NoError(err)
+		s.NoError(server.transferSource(ctx, s.testSource.SourceName, worker2Name))
 		s.Equal(worker1.Stage(), scheduler.WorkerFree)
 		s.Equal(worker2.Stage(), scheduler.WorkerBound)
 
 		// enable relay with binlog name will trigger a update source
 		relayBinLogName := "mysql-bin.000001"
 		enableRelayReq := openapi.EnableRelayRequest{RelayBinlogName: &relayBinLogName}
-		err = server.enableRelay(ctx, s.testSource.SourceName, enableRelayReq)
-		s.NoError(err)
+		s.NoError(server.enableRelay(ctx, s.testSource.SourceName, enableRelayReq))
 
 		updatedSource, err := server.getSource(ctx, s.testSource.SourceName, openapi.DMAPIGetSourceParams{})
 		s.NoError(err)
 		s.Equal(*updatedSource.RelayConfig.RelayBinlogName, relayBinLogName)
-		s.True(*updatedSource.RelayConfig.EnableRelay)
 
 		// disable relay
 		disableRelayReq := openapi.DisableRelayRequest{}
@@ -331,8 +326,16 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 
 	// start and stop
 	{
-		s.Nil(server.startTask(ctx, s.testTask.Name, openapi.StartTaskRequest{}))
+		// can't start when source not enabled
+		req := openapi.StartTaskRequest{}
+		s.Nil(server.disableSource(ctx, s.testSource.SourceName))
+		s.True(terror.ErrMasterStartTask.Equal(server.startTask(ctx, s.testTask.Name, req)))
+		// start success
+		s.Nil(server.enableSource(ctx, s.testSource.SourceName))
+		s.Nil(server.startTask(ctx, s.testTask.Name, req))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
+
+		// stop success
 		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
 	}

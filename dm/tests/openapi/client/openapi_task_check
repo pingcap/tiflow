@@ -60,7 +60,6 @@ def create_noshard_task_success(task_name, tartget_table_name=""):
     task = {
         "name": task_name,
         "task_mode": "all",
-        "shard_mode": "pessimistic",
         "meta_schema": "dm-meta",
         "enhance_online_schema_change": True,
         "on_duplicate": "error",
@@ -135,6 +134,13 @@ def create_shard_task_success():
             },
         ],
         "source_config": {
+            "full_migrate_conf": {
+                "export_threads": 4,
+                "import_threads": 16,
+                "data_dir": "./exported_data",
+                "consistency": "auto",
+            },
+            "incr_migrate_conf": {"repl_threads": 16, "repl_batch": 100},
             "source_conf": [
                 {"source_name": SOURCE1_NAME},
                 {"source_name": SOURCE2_NAME},
@@ -457,6 +463,87 @@ def check_noshard_task_dump_status_success(task_name, total):
     assert data["data"][0]["dump_status"]["finished_bytes"] == int(total)
 
 
+def do_complex_operations(task_name):
+    source1_url = "http://127.0.0.1:8361/api/v1/sources/" + SOURCE1_NAME
+    task_url = "http://127.0.0.1:8361/api/v1/tasks/" + task_name
+    enable_source_url = source1_url + "/enable"
+    disable_source_url = source1_url + "/disable"
+
+    stop_url = task_url + "/stop"
+    start_url = task_url + "/start"
+    status_url = task_url + "/status"
+    migrate_targets_url = task_url + "/sources/" + SOURCE1_NAME + "/migrate_targets"
+
+    # get source
+    source = requests.get(source1_url).json()
+    # update source failed
+    update_source_req = {"source": source}
+    resp = requests.put(source1_url, json=update_source_req)
+    assert resp.status_code == 400
+
+    # get task
+    task = requests.get(task_url).json()
+    # update task failed
+    update_task_req = {"task": task}
+    resp = requests.put(task_url, json=update_task_req)
+    assert resp.status_code == 400
+
+    # stop task
+    resp = requests.post(stop_url)
+    status = requests.get(status_url).json()
+    for s in status["data"]:
+        assert s["stage"] == "Paused"
+
+    # update task success
+    task["source_config"]["incr_migrate_conf"]["repl_threads"] = 1
+    update_task_req = {"task": task}
+    resp = requests.put(task_url, json=update_task_req)
+    assert resp.status_code == 200
+    task_after_updated = requests.get(task_url).json()
+    assert task_after_updated["source_config"]["incr_migrate_conf"]["repl_threads"] == 1
+
+    # start again
+    resp = requests.post(start_url)
+    assert resp.status_code == 200
+    status = requests.get(status_url).json()
+    for s in status["data"]:
+        assert s["stage"] == "Running"
+
+    # disable source1, task on source is paused
+    resp = requests.post(disable_source_url)
+    assert resp.status_code == 200
+    status = requests.get(status_url).json()
+    for s in status["data"]:
+        if s["source_name"] == SOURCE1_NAME:
+            assert s["stage"] == "Paused"
+        else:
+            assert s["stage"] == "Running"
+
+    # enable source task will start again
+    resp = requests.post(enable_source_url)
+    assert resp.status_code == 200
+    status = requests.get(status_url).json()
+    for s in status["data"]:
+        assert s["stage"] == "Running"
+
+    # list migrate targets
+    source1_migrate_rules = []
+    for rule in task["table_migrate_rule"]:
+        if rule["source"]["source_name"] == SOURCE1_NAME:
+            source1_migrate_rules.append(rule)
+
+    resp = requests.get(migrate_targets_url)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == len(source1_migrate_rules)
+    assert (
+        data["data"][0]["source_schema"] == source1_migrate_rules[0]["source"]["schema"]
+    )
+    assert (
+        data["data"][0]["target_schema"] == source1_migrate_rules[0]["target"]["schema"]
+    )
+
+
 if __name__ == "__main__":
     FUNC_MAP = {
         "create_task_failed": create_task_failed,
@@ -482,6 +569,7 @@ if __name__ == "__main__":
         "update_task_template_success": update_task_template_success,
         "delete_task_template": delete_task_template,
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
+        "do_complex_operations": do_complex_operations,
     }
 
     func = FUNC_MAP[sys.argv[1]]

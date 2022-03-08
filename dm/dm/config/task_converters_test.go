@@ -340,21 +340,40 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 }
 
 func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
+	// one source task
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	require.NoError(t, err)
 
 	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	require.NoError(t, err)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
-	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = source1Name
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-
 	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, taskCfg)
 
-	newTask, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 	require.NoError(t, err)
-	require.NotNil(t, newTask)
-	require.EqualValues(t, newTask, &task)
+	require.NotNil(t, task1)
+	require.EqualValues(t, task1, &task)
+
+	// test update some fields in task
+	batch := 1000
+	task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	taskCfg1, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, batch, taskCfg1.MySQLInstances[0].Syncer.Batch)
+	for _, cfg := range taskCfg1.Syncers {
+		require.Equal(t, batch, cfg.Batch)
+	}
+
+	// test update some fields in taskConfig
+	batch = 1
+	for _, cfg := range taskCfg1.Syncers {
+		cfg.Batch = batch
+	}
+	task2, err := TaskConfigToOpenAPITask(taskCfg1, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, batch, *task2.SourceConfig.IncrMigrateConf.ReplBatch)
 }

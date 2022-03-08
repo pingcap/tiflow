@@ -102,7 +102,7 @@ type CreateTaskRequest struct {
 // action to stop a relay request
 type DisableRelayRequest struct {
 	// worker name list
-	WorkerNameList WorkerNameList `json:"worker_name_list"`
+	WorkerNameList *WorkerNameList `json:"worker_name_list,omitempty"`
 }
 
 // status of dump unit
@@ -126,7 +126,7 @@ type EnableRelayRequest struct {
 	RelayDir *string `json:"relay_dir"`
 
 	// worker name list
-	WorkerNameList WorkerNameList `json:"worker_name_list"`
+	WorkerNameList *WorkerNameList `json:"worker_name_list,omitempty"`
 }
 
 // operation error
@@ -360,23 +360,14 @@ type StartTaskRequest struct {
 	// whether to remove meta database in downstream database
 	RemoveMeta *bool `json:"remove_meta,omitempty"`
 
-	// time duration of safe mode
-	SafeModeTimeDuration *interface{} `json:"safe_mode_time_duration,omitempty"`
-
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
-
-	// task start time
-	StartTime *string `json:"start_time,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.
 type StopTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
-
-	// time duration waiting task stop
-	TimeoutDuration *interface{} `json:"timeout_duration,omitempty"`
 }
 
 // SubTaskStatus defines model for SubTaskStatus.
@@ -397,7 +388,7 @@ type SubTaskStatus struct {
 	SourceName string    `json:"source_name"`
 	Stage      TaskStage `json:"stage"`
 
-	// status of sync uuit
+	// status of sync unit
 	SyncStatus *SyncStatus `json:"sync_status,omitempty"`
 
 	// task unit type
@@ -408,7 +399,7 @@ type SubTaskStatus struct {
 	WorkerName string `json:"worker_name"`
 }
 
-// status of sync uuit
+// status of sync unit
 type SyncStatus struct {
 	BinlogType string `json:"binlog_type"`
 

@@ -3592,6 +3592,14 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	newCfg.To.Session = oldCfg.To.Session // session is adjused in `createDBs`
+	println("---------old------------")
+	println(oldCfg.String())
+	println("---------old------------")
+
+	println("---------new------------")
+	println(newCfg.String())
+	println("---------new------------")
 	if oldCfg.String() != newCfg.String() {
 		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
 	}
@@ -3693,6 +3701,8 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		s.timezone, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
 		return err
 	}
+	// update syncer config
+	s.cfg.SyncerConfig = cfg.SyncerConfig
 	return nil
 }
 
