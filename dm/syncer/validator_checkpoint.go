@@ -174,6 +174,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	var args [][]interface{}
 	nextRevision := c.revision + 1
 
+	c.tctx.L().Info("persist checkpoint and intermediate data")
+
 	// update checkpoint
 	queries = append(queries, `INSERT INTO `+c.checkpointTableName+
 		`(source, binlog_name, binlog_pos, binlog_gtid) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE

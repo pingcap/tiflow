@@ -62,8 +62,9 @@ const (
 	ValidationFast = "fast"
 	ValidationFull = "full"
 
-	DefaultValidatorWorkerCount   = 4
-	DefaultValidatorRowErrorDelay = 30 * time.Minute
+	DefaultValidatorWorkerCount       = 4
+	DefaultValidatorRowErrorDelay     = 30 * time.Minute
+	DefaultValidatorMetaFlushInterval = 1 * time.Minute
 )
 
 // default config item values.
@@ -341,9 +342,10 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode          string   `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount   int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
-	RowErrorDelay Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
 }
 
 func (v *ValidatorConfig) adjust() error {
@@ -358,6 +360,9 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.RowErrorDelay.Duration == 0 {
 		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
+	}
+	if v.MetaFlushInterval.Duration == 0 {
+		v.MetaFlushInterval.Duration = DefaultValidatorMetaFlushInterval
 	}
 	return nil
 }

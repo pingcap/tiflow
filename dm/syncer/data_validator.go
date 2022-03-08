@@ -44,6 +44,7 @@ import (
 const (
 	checkInterval           = 5 * time.Second
 	validationInterval      = 10 * time.Second
+	validatorStatusInterval = 30 * time.Second
 	checkpointFlushInterval = 1 * time.Minute
 
 	moreColumnInBinlogMsg     = "binlog has more columns than current table"
@@ -257,7 +258,7 @@ func (v *DataValidator) printStatusRoutine() {
 		select {
 		case <-v.ctx.Done():
 			return
-		case <-time.After(checkInterval):
+		case <-time.After(validatorStatusInterval):
 			// todo: status about pending row changes
 			v.L.Info("processed event status",
 				zap.Int64("insert", v.changeEventCount[rowInsert].Load()),
@@ -382,6 +383,7 @@ func (v *DataValidator) doValidate() {
 		}
 	}()
 
+	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
 	lastFlushCheckpointTime := time.Now()
 	for {
@@ -421,9 +423,9 @@ func (v *DataValidator) doValidate() {
 				return
 			}
 		case *replication.XIDEvent:
-			if time.Since(lastFlushCheckpointTime) > checkpointFlushInterval {
+			if time.Since(lastFlushCheckpointTime) > metaFlushInterval {
 				lastFlushCheckpointTime = time.Now()
-				if err = v.flushCheckpoint(currLoc); err != nil {
+				if err = v.flushCheckpointAndData(currLoc); err != nil {
 					v.L.Warn("failed to flush checkpoint: ", zap.Reflect("error", err))
 					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
 					return
@@ -620,32 +622,32 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			if afterKey != key {
 				// TODO: may reuse IsIdentityUpdated/SplitUpdate of RowChange in pkg/sqlmodel
 				v.dispatchRowChange(key, &rowChange{
-					table:      table,
-					Key:        key,
-					Data:       row,
-					Tp:         rowDeleted,
+					table: table,
+					Key:   key,
+					Data:  row,
+					Tp:    rowDeleted,
 				})
 				afterRowChangeType = rowInsert
 			}
 			v.dispatchRowChange(afterKey, &rowChange{
-				table:      table,
-				Key:        afterKey,
-				Data:       afterRow,
-				Tp:         afterRowChangeType,
+				table: table,
+				Key:   afterKey,
+				Data:  afterRow,
+				Tp:    afterRowChangeType,
 			})
 		} else {
 			v.dispatchRowChange(key, &rowChange{
-				table:      table,
-				Key:        key,
-				Data:       row,
-				Tp:         changeType,
+				table: table,
+				Key:   key,
+				Data:  row,
+				Tp:    changeType,
 			})
 		}
 	}
 	return nil
 }
 
-func (v *DataValidator) flushCheckpoint(loc binlog.Location) error {
+func (v *DataValidator) flushCheckpointAndData(loc binlog.Location) error {
 	var wg sync.WaitGroup
 	wg.Add(v.workerCnt)
 	flushJob := &rowChange{
