@@ -761,3 +761,23 @@ func updateChangeFeedPosition(c *check.C, tester *orchestrator.ReactorStateTeste
 
 	tester.MustUpdate(keyStr, valueBytes)
 }
+
+func (s *processorSuite) TestIgnorableError(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	testCases := []struct {
+		err       error
+		ignorable bool
+	}{
+		{nil, true},
+		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
+		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
+		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
+		{errors.Trace(context.Canceled), true},
+		{cerror.ErrProcessorTableNotFound.GenWithStackByArgs(), false},
+		{errors.New("test error"), false},
+	}
+	for _, tc := range testCases {
+		c.Assert(isProcessorIgnorableError(tc.err), check.Equals, tc.ignorable)
+	}
+}
