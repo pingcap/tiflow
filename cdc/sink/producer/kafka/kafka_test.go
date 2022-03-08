@@ -323,39 +323,6 @@ func (s *kafkaSuite) TestAdjustConfigMinInsyncReplicas(c *check.C) {
 	)
 }
 
-func (s *kafkaSuite) TestCreateTopic(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
-
-	// `auto-create-topic` enable, topic exist
-	config := NewConfig()
-	topicConfig := config.DeriveTopicConfig(adminClient.GetDefaultMockTopicName())
-	err := CreateTopic(adminClient, topicConfig)
-	c.Assert(err, check.IsNil)
-
-	// `auto-create-topic` enable, topic not exist
-	topicConfig = config.DeriveTopicConfig("not-exist-topic-1")
-	err = CreateTopic(adminClient, topicConfig)
-	c.Assert(err, check.IsNil)
-
-	topics, err := adminClient.ListTopics()
-	c.Assert(err, check.IsNil)
-	_, ok := topics["not-exist-topic-1"]
-	c.Assert(ok, check.IsTrue)
-
-	// `auto-create-topic` disable, topic not exist
-	config.AutoCreate = false
-	topicConfig = config.DeriveTopicConfig("not-exist-topic-2")
-	err = CreateTopic(adminClient, topicConfig)
-	c.Assert(errors.Cause(err),
-		check.ErrorMatches,
-		".*auto-create-topic` is false, and topic not found.*")
-}
-
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig()
