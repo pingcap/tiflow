@@ -147,8 +147,8 @@ func TestIndexValueDispatcher(t *testing.T) {
 			},
 		}, expectPartition: 2},
 	}
-	p := NewIndexValueDispatcher(16)
+	p := NewIndexValueDispatcher()
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
 	}
 }

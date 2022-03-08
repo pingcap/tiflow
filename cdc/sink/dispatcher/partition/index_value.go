@@ -20,21 +20,19 @@ import (
 
 // IndexValueDispatcher is a partition dispatcher which dispatches events based on the index value.
 type IndexValueDispatcher struct {
-	partitionNum int32
-	hasher       *hash.PositionInertia
+	hasher *hash.PositionInertia
 }
 
 // NewIndexValueDispatcher creates a IndexValueDispatcher.
-func NewIndexValueDispatcher(partitionNum int32) *IndexValueDispatcher {
+func NewIndexValueDispatcher() *IndexValueDispatcher {
 	return &IndexValueDispatcher{
-		partitionNum: partitionNum,
-		hasher:       hash.NewPositionInertia(),
+		hasher: hash.NewPositionInertia(),
 	}
 }
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
+func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
 	// FIXME(leoppro): if the row events includes both pre-cols and cols
@@ -53,5 +51,5 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
-	return int32(r.hasher.Sum32() % uint32(r.partitionNum))
+	return int32(r.hasher.Sum32() % uint32(partitionNum))
 }

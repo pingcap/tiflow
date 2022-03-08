@@ -18,6 +18,8 @@ definitions:
         items:
           type: string
         type: array
+      topic:
+        type: string
     type: object
   config.SinkConfig:
     properties:
