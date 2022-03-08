@@ -260,6 +260,7 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
+	log.Info("Starting a new TiCDC consumer", zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
 	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
