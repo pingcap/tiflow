@@ -19,16 +19,17 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
 const (
@@ -203,6 +204,7 @@ func TestAgentBasics(t *testing.T) {
 	case syncMsg := <-suite.syncCh:
 		require.Equal(t, &model.SyncMessage{
 			ProcessorVersion: version.ReleaseSemver(),
+			Epoch:            agent.CurrentEpoch(),
 			Running:          nil,
 			Adding:           nil,
 			Removing:         nil,
@@ -211,6 +213,7 @@ func TestAgentBasics(t *testing.T) {
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"), &model.DispatchTableMessage{
 		OwnerRev: 1,
+		Epoch:    agent.CurrentEpoch(),
 		ID:       1,
 		IsDelete: false,
 	})
@@ -263,7 +266,8 @@ func TestAgentBasics(t *testing.T) {
 			return false
 		case msg := <-suite.dispatchResponseCh:
 			require.Equal(t, &model.DispatchTableResponseMessage{
-				ID: 1,
+				ID:    1,
+				Epoch: agent.CurrentEpoch(),
 			}, msg)
 			return true
 		default:
@@ -317,6 +321,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 		case syncMsg := <-suite.syncCh:
 			require.Equal(t, &model.SyncMessage{
 				ProcessorVersion: version.ReleaseSemver(),
+				Epoch:            agent.CurrentEpoch(),
 				Running:          nil,
 				Adding:           nil,
 				Removing:         nil,
@@ -371,6 +376,7 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 	case syncMsg := <-suite.syncCh:
 		require.Equal(t, &model.SyncMessage{
 			ProcessorVersion: version.ReleaseSemver(),
+			Epoch:            agent.CurrentEpoch(),
 			Running:          nil,
 			Adding:           nil,
 			Removing:         nil,

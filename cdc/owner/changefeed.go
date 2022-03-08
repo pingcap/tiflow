@@ -59,6 +59,10 @@ type changefeed struct {
 	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
+	// currentTableNames is the table names that the changefeed is watching.
+	// And it contains only the tables of the ddl that have been processed.
+	// The ones that have not been executed yet do not have.
+	currentTableNames []model.TableName
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -189,7 +193,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.emitCheckpointTs(ctx, checkpointTs)
+	// This means that the cached DDL has been executed,
+	// and we need to use the latest table names.
+	if c.currentTableNames == nil {
+		c.currentTableNames = c.schema.AllTableNames()
+	}
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -522,6 +531,10 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
+		// We can't use the latest schema directly,
+		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
+		// So let's remember the name of the table before processing and cache the DDL.
+		c.currentTableNames = c.schema.AllTableNames()
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
@@ -549,6 +562,9 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	}
 	if done {
 		c.ddlEventCache = nil
+		// It has expired.
+		// We should use the latest table names now.
+		c.currentTableNames = nil
 	}
 	return done, nil
 }

@@ -399,6 +399,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		tableInfoVersion = tableInfo.TableInfoVersion
 	}
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -410,6 +412,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
+		ColInfos:            colInfos,
 		Columns:             cols,
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,

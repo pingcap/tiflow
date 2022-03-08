@@ -730,6 +730,9 @@ var doc = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "topic": {
+                    "type": "string"
                 }
             }
         },

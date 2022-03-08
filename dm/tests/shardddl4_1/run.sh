@@ -735,12 +735,9 @@ function DM_151_CASE {
 		run_sql_source2 "alter table ${shardddl1}.${tb2} modify column a double;"
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	else
-		# ddl: "modify column a double" is passed in optimistic mode and will be executed downstream.
-		# but changing the int column to a double column is not allowed, so task is paused
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'"stage": "Paused"' 1 \
-			"incompatible mysql type" 1
+			"because schema conflict detected" 1
 	fi
 
 }
