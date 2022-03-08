@@ -29,6 +29,12 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/br/pkg/httputil"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/pd/pkg/tempurl"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -37,11 +43,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	"golang.org/x/sync/errgroup"
 )
 
 type testServer struct {

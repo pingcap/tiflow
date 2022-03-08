@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

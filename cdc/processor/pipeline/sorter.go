@@ -108,12 +108,17 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.DBActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.DBRouter
+			ssystem := ctx.GlobalVars().SorterSystem
+			dbActorID := ssystem.DBActorID(uint64(n.tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter := leveldb.NewSorter(
-				ctx, n.tableID, startTs, router, actorID, compactScheduler,
-				config.GetGlobalServerConfig().Debug.DB)
+			levelSorter, err := leveldb.NewSorter(
+				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
+				ssystem.WriterSystem, ssystem.WriterRouter,
+				ssystem.ReaderSystem, ssystem.ReaderRouter,
+				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			n.cleanup = levelSorter.CleanupFunc()
 			eventSorter = levelSorter
 		} else {
@@ -146,12 +151,16 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 		defer metricsTicker.Stop()
 
 		for {
+			// We must call `sorter.Output` before receiving resolved events.
+			// Skip calling `sorter.Output` and caching output channel may fail
+			// to receive any events.
+			output := eventSorter.Output()
 			select {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg, ok := <-eventSorter.Output():
+			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
 					return nil
@@ -258,7 +267,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		}
 		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
-		if resolvedTs > n.barrierTs &&
+		if resolvedTs > n.BarrierTs() &&
 			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
 			// Do not send resolved ts events that is larger than
 			// barrier ts.
@@ -269,7 +278,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			// resolved ts, conflicts to this change.
 			// TODO: Remove redolog check once redolog decouples for global
 			//       resolved ts.
-			event = model.NewResolvedPolymorphicEvent(0, n.barrierTs)
+			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
 	}
 	n.sorter.AddEntry(ctx, event)
@@ -290,7 +299,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 }
 
 func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
-	if barrierTs > atomic.LoadUint64(&n.barrierTs) {
+	if barrierTs > n.BarrierTs() {
 		atomic.StoreUint64(&n.barrierTs, barrierTs)
 	}
 }
@@ -318,4 +327,9 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 
 func (n *sorterNode) ResolvedTs() model.Ts {
 	return atomic.LoadUint64(&n.resolvedTs)
+}
+
+// BarrierTs returns the sorter barrierTs
+func (n *sorterNode) BarrierTs() model.Ts {
+	return atomic.LoadUint64(&n.barrierTs)
 }

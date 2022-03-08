@@ -29,13 +29,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/redo/common"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
-	pioutil "go.etcd.io/etcd/pkg/ioutil"
+	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

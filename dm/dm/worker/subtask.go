@@ -22,7 +22,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -503,6 +503,20 @@ func (st *SubTask) setStageIfNotIn(oldStages []pb.Stage, newStage pb.Stage) bool
 	return true
 }
 
+// setStageIfNotIn sets stage to newStage if its current value is in oldStages.
+func (st *SubTask) setStageIfIn(oldStages []pb.Stage, newStage pb.Stage) bool {
+	st.Lock()
+	defer st.Unlock()
+	for _, s := range oldStages {
+		if st.stage == s {
+			st.stage = newStage
+			updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
+			return true
+		}
+	}
+	return false
+}
+
 // Stage returns the stage of the sub task.
 func (st *SubTask) Stage() pb.Stage {
 	st.RLock()
@@ -588,7 +602,7 @@ func (st *SubTask) Resume(relay relay.Process) error {
 		return nil
 	}
 
-	if !st.stageCAS(pb.Stage_Paused, pb.Stage_Resuming) {
+	if !st.setStageIfIn([]pb.Stage{pb.Stage_Paused, pb.Stage_Stopped}, pb.Stage_Resuming) {
 		return terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
 	}
 
