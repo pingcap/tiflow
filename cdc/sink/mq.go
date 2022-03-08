@@ -42,9 +42,6 @@ type resolvedTsEvent struct {
 }
 
 const (
-	// Depend on this size, every `partitionInputCh` will take
-	// approximately 16.3 KiB memory.
-	defaultPartitionInputChSize = 1024
 	// Depend on this size, `resolvedBuffer` will take
 	// approximately 2 KiB memory.
 	defaultResolvedTsEventBufferSize = 128
@@ -59,6 +56,8 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       config.Protocol
 
+	// TODO(hi-rustin): remove this after topic manager is ready.
+	partitionNum         int32
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
 	resolvedBuffer       chan resolvedTsEvent
@@ -79,15 +78,9 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewEventRouter(replicaConfig, partitionNum, defaultTopic)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	partitionInput := make([]chan mqEvent, partitionNum)
-	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
 	}
 
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -102,10 +95,11 @@ func newMqSink(
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
-		eventRouter:    d,
+		eventRouter:    eventRouter,
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
 		protocol:       encoderConfig.Protocol(),
+		partitionNum:   mqProducer.GetPartitionNum(),
 		flushWorker:    flushWorker,
 		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
 		statistics:     statistics,
@@ -149,7 +143,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 				zap.Any("role", k.role))
 			continue
 		}
-		_, partition := k.eventRouter.DispatchRowChangedEvent(row)
+		_, partition := k.eventRouter.DispatchRowChangedEvent(row, k.partitionNum)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -213,7 +207,8 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error
 	return nil
 }
 
-func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, _ []model.TableName) error {
+	// TODO(hi-rustin): Broadcast it to multiple tables after topic manager is ready.
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
@@ -222,6 +217,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
+	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
 	err = k.writeToProducer(ctx, msg, -1)
 	return errors.Trace(err)
 }
