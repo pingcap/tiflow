@@ -387,14 +387,6 @@ func collectAllColumns(groups []*testColumnTuple) []*model.Column {
 	return result
 }
 
-func collectExpectedEncodedValue(columns []*testColumnTuple) map[string]string {
-	result := make(map[string]string, len(columns))
-	for _, item := range columns {
-		result[item.column.Name] = item.expectedEncodedValue
-	}
-	return result
-}
-
 func collectExpectedDecodedValue(columns []*testColumnTuple) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
 	for _, item := range columns {

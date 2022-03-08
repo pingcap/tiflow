@@ -165,7 +165,6 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	//expectedEncodedValue := collectExpectedEncodedValue(testColumnsTable)
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
