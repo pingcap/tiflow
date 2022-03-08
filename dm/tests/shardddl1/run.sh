@@ -378,10 +378,10 @@ function DM_UpdateBARule_CASE() {
 
 	# source2 db2.tb1 do a unsupported DDL
 	run_sql_source2 "alter table ${shardddl2}.${tb1} rename column id to new_id;"
+  # TODO: fix this after DM worker supports redirect
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		'mysql-replica-02-`shardddl2`.`tb1`' 1 \
-		'ALTER TABLE `shardddl`.`tb` RENAME COLUMN `id` TO `new_id`' 1
+		"because schema conflict detected" 1
 
 	# user found error and then change block-allow-list, restart task
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
