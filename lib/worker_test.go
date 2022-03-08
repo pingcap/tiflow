@@ -315,3 +315,14 @@ func TestWorkerSuicide(t *testing.T) {
 
 	require.Regexp(t, ".*Suicide.*", exitErr.Error())
 }
+
+func TestCloseBeforeInit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+
+	worker.On("CloseImpl").Return(nil)
+	err := worker.Close(ctx)
+	require.NoError(t, err)
+}

@@ -234,8 +234,12 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doClose() {
 	w.cancelMu.Lock()
-	w.cancelBgTasks()
-	w.cancelPool()
+	if w.cancelBgTasks != nil {
+		w.cancelBgTasks()
+	}
+	if w.cancelPool != nil {
+		w.cancelPool()
+	}
 	w.cancelMu.Unlock()
 
 	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
