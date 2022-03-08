@@ -235,14 +235,7 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
-<<<<<<< HEAD
-	// Snapshot make a snapshot of current checkpoint
-=======
-	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
-	SaveGlobalPointForcibly(location binlog.Location)
-
 	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
->>>>>>> aacbbcf97 (syncer(dm): fix log flood and performance when frequently call Snapshot (#4744))
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
