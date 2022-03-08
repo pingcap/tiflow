@@ -16,6 +16,8 @@ package syncer
 import (
 	"fmt"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -88,6 +90,13 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		}
 
 		err = w.cp.FlushPointsExcept(ctx, task.snapshotInfo.id, task.exceptTables, task.shardMetaSQLs, task.shardMetaArgs)
+		failpoint.Inject("AsyncCheckpointFlushThrowError", func() {
+			if isAsyncFlush {
+				ctx.L().Warn("async checkpoint flush error triggered", zap.String("failpoint", "AsyncCheckpointFlushThrowError"))
+				err = errors.New("async checkpoint flush throw error")
+			}
+		})
+
 		if err != nil {
 			ctx.L().Warn(fmt.Sprintf("%s checkpoint snapshot failed, ignore this error", flushLogMsg), zap.Any("flushCpTask", task), zap.Error(err))
 			// async flush error will be skipped here but sync flush error will raised up
