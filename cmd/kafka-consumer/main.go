@@ -269,7 +269,7 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Panic("Error running consumer: %v", zap.Error(err))
+			log.Panic("Error running consumer", zap.Error(err))
 		}
 	}()
 
@@ -407,7 +407,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
 				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
+					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
 			}
 
 			switch tp {
@@ -424,12 +424,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Debug("RowChangedEvent fallback row, ignore it",
+					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition),
-						zap.ByteString("row", message.Key))
+						zap.Any("row", row))
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
@@ -454,7 +454,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				// `resolvedTs` should be monotonically increasing, it's allowed to receive redandunt one.
+				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
@@ -485,17 +485,19 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	if ddl.CommitTs <= c.maxDDLReceivedTs {
+		log.Info("ignore ddl event", zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs), zap.Any("ddl", ddl))
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 	if ddl.CommitTs < globalResolvedTs {
-		log.Panic("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		log.Panic("unexpected ddl event, commitTs < globalResolvedTs", zap.Any("ddl", ddl))
 	}
 	if ddl.CommitTs == globalResolvedTs {
-		log.Warn("receive redundant ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		log.Warn("ignore redundant ddl event, commitTs == globalResolvedTs", zap.Any("ddl", ddl))
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
+	log.Info("ddl event received", zap.Any("ddl", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
@@ -577,7 +579,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback")
+			log.Panic("global ResolvedTs fallback",
+				zap.Any("lastGlobalResolvedTs", lastGlobalResolvedTs),
+				zap.Any("globalResolvedTs", globalResolvedTs))
 		}
 
 		if globalResolvedTs > lastGlobalResolvedTs {
