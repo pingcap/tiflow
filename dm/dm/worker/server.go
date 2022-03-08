@@ -956,6 +956,12 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 		// nolint:nilerr
 		return resp, nil
 	}
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
 	resp.Success = true
 	return resp, nil
 }
