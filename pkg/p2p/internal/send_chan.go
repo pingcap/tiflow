@@ -49,8 +49,8 @@ func NewSendChan(cap int64) *SendChan {
 }
 
 // SendSync sends a message synchronously.
-// NOTE SendSync employs busy waiting and is only suitable
-// for writing unit-tests.
+// NOTE SendSync employs busy waiting and is ONLY suitable
+// for writing Unit-Tests.
 func (c *SendChan) SendSync(
 	ctx context.Context,
 	topic string,
@@ -70,6 +70,8 @@ func (c *SendChan) SendSync(
 		if ok, seq := c.SendAsync(topic, value, nextSeq); ok {
 			return seq, nil
 		}
+		// Used to reduce contention when race-detector is enabled
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 

@@ -18,13 +18,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/p2p/internal"
-
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/p2p/internal"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
@@ -380,6 +379,7 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 // SendMessage sends a message. It will block if the client is not ready to
 // accept the message for now. Once the function returns without an error,
 // the client will try its best to send the message, until `Run` is canceled.
+// NOTE The function involves busy-waiting, so DO NOT use it when you expect contention or congestion!
 func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, false)
 }
@@ -416,7 +416,11 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 		}
 		tpk.nextSeq.Store(0)
 		c.topicMu.Lock()
-		c.topics[topic] = tpk
+		if newTpk, ok := c.topics[topic]; !ok {
+			c.topics[topic] = tpk
+		} else {
+			tpk = newTpk
+		}
 		c.topicMu.Unlock()
 	}
 

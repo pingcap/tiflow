@@ -35,7 +35,7 @@ import (
 
 // read only
 var clientConfig4Testing = &MessageClientConfig{
-	SendChannelSize:         128,
+	SendChannelSize:         1024,
 	BatchSendInterval:       time.Millisecond * 1, // to accelerate testing
 	MaxBatchCount:           128,
 	MaxBatchBytes:           8192,
@@ -76,7 +76,7 @@ func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts ..
 	return
 }
 
-func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopics int) {
+func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopics int, clientConcurrency int) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -107,8 +107,10 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 			require.Equal(t, "test-client-1", senderID)
 			require.IsType(t, &testTopicContent{}, i)
 			content := i.(*testTopicContent)
-			require.Equal(t, content.Index-1, lastIndex)
-			lastIndex = content.Index
+			if clientConcurrency == 1 {
+				require.Equal(t, content.Index-1, lastIndex)
+				lastIndex = content.Index
+			}
 			return nil
 		})
 
@@ -135,9 +137,9 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 	}()
 
 	var wg1 sync.WaitGroup
-	wg1.Add(numTopics)
-	for j := 0; j < numTopics; j++ {
-		topicName := fmt.Sprintf("test-topic-%d", j)
+	wg1.Add(numTopics * clientConcurrency)
+	for j := 0; j < numTopics*clientConcurrency; j++ {
+		topicName := fmt.Sprintf("test-topic-%d", j%numTopics)
 		go func() {
 			defer wg1.Done()
 			var oldSeq Seq
@@ -145,8 +147,11 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 				content := &testTopicContent{Index: int64(i + 1)}
 				seq, err := client.SendMessage(ctx, topicName, content)
 				require.NoError(t, err)
-				require.Equal(t, oldSeq+1, seq)
-				oldSeq = seq
+
+				if clientConcurrency == 1 {
+					require.Equal(t, oldSeq+1, seq)
+					oldSeq = seq
+				}
 			}
 
 			require.Eventuallyf(t, func() bool {
@@ -154,7 +159,7 @@ func runP2PIntegrationTest(ctx context.Context, t *testing.T, size int, numTopic
 				if !ok {
 					return false
 				}
-				return seq >= Seq(size)
+				return seq >= Seq(size*clientConcurrency)
 			}, time.Second*40, time.Millisecond*20, "failed to wait for ack")
 		}()
 	}
@@ -168,14 +173,14 @@ func TestMessageClientBasic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 1)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 1, 4)
 }
 
 func TestMessageClientBasicMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 4)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 4, 16)
 }
 
 func TestMessageClientServerRestart(t *testing.T) {
@@ -187,7 +192,7 @@ func TestMessageClientServerRestart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 1)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 1, 1)
 }
 
 func TestMessageClientServerRestartMultiTopics(t *testing.T) {
@@ -199,7 +204,7 @@ func TestMessageClientServerRestartMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout*4)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4, 1)
 }
 
 func TestMessageClientRestart(t *testing.T) {
@@ -211,7 +216,7 @@ func TestMessageClientRestart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 1)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 1, 1)
 }
 
 func TestMessageClientRestartMultiTopics(t *testing.T) {
@@ -223,7 +228,7 @@ func TestMessageClientRestartMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4, 1)
 }
 
 func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
@@ -235,7 +240,7 @@ func TestMessageClientSenderErrorsMultiTopics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeSmall, 4, 1)
 }
 
 func TestMessageClientBasicNonblocking(t *testing.T) {
