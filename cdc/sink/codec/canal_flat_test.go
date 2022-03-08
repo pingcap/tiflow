@@ -114,13 +114,13 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 		obtainedValue, ok := obtainedDataMap[item.column.Name]
 		c.Assert(ok, check.IsTrue)
 		if !item.column.Flag.IsBinary() {
-			c.Assert(obtainedValue, check.Equals, item.expectedValue)
+			c.Assert(obtainedValue, check.Equals, item.expectedEncodedValue)
 			continue
 		}
 
 		// for `Column.Value` is nil, which mean's it is nullable, set the value to `""`
 		if obtainedValue == nil {
-			c.Assert(item.expectedValue, check.Equals, "")
+			c.Assert(item.expectedEncodedValue, check.Equals, "")
 			continue
 		}
 
@@ -131,7 +131,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 			continue
 		}
 
-		c.Assert(obtainedValue, check.Equals, item.expectedValue)
+		c.Assert(obtainedValue, check.Equals, item.expectedEncodedValue)
 	}
 
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
@@ -165,7 +165,8 @@ func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
 func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	expectedDecodedValues := collectDecodeValueByColumns(testColumnsTable)
+	//expectedEncodedValue := collectExpectedEncodedValue(testColumnsTable)
+	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		c.Assert(encoder, check.NotNil)
@@ -175,12 +176,10 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 
 		mqMessages := encoder.Build()
 		c.Assert(len(mqMessages), check.Equals, 1)
-
-		rawBytes, err := json.Marshal(mqMessages[0])
-		c.Assert(err, check.IsNil)
+		msg := mqMessages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := NewCanalFlatEventBatchDecoder(msg.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -198,13 +197,9 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C
 			}
 
 			for _, col := range consumed.Columns {
-				expected, ok := expectedDecodedValues[col.Name]
+				expected, ok := expectedDecodedValue[col.Name]
 				c.Assert(ok, check.IsTrue)
-				if col.Value == nil {
-					c.Assert(expected, check.Equals, "")
-				} else {
-					c.Assert(col.Value, check.Equals, expected)
-				}
+				c.Assert(col.Value, check.Equals, expected)
 
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
@@ -264,11 +259,8 @@ func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.NotNil)
 
-		rawBytes, err := json.Marshal(result)
-		c.Assert(err, check.IsNil)
-
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalFlatEventBatchDecoder(rawBytes, decodeEnable)
+			decoder := NewCanalFlatEventBatchDecoder(result.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			c.Assert(err, check.IsNil)
@@ -339,17 +331,14 @@ func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
 		c.Assert(err, check.IsNil)
-		if enable {
-			c.Assert(msg, check.NotNil)
-		} else {
+
+		if !enable {
 			c.Assert(msg, check.IsNil)
+			continue
 		}
 
-		rawBytes, err := json.Marshal(msg)
-		c.Assert(err, check.IsNil)
-		c.Assert(rawBytes, check.NotNil)
-
-		decoder := NewCanalFlatEventBatchDecoder(rawBytes, enable)
+		c.Assert(msg, check.NotNil)
+		decoder := NewCanalFlatEventBatchDecoder(msg.Value, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		c.Assert(err, check.IsNil)

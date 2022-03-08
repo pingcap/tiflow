@@ -103,7 +103,7 @@ func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model
 	}
 
 	if javaType == JavaSQLTypeBIT {
-		val, err := strconv.ParseInt(value, 10, 64)
+		val, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
 			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
 		}
