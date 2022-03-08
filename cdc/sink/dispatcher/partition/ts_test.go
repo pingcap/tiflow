@@ -70,8 +70,8 @@ func TestTsDispatcher(t *testing.T) {
 			CommitTs: 3,
 		}, expectPartition: 3},
 	}
-	p := &TsDispatcher{partitionNum: 16}
+	p := &TsDispatcher{}
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
 	}
 }

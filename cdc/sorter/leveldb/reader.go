@@ -98,9 +98,7 @@ func (r *reader) outputResolvedTs(rts model.Ts) {
 // outputBufferedResolvedEvents nonblocking output resolved events and
 // resolved ts that are buffered in outputBuffer.
 // It pops outputted events in the buffer and append their key to deleteKeys.
-func (r *reader) outputBufferedResolvedEvents(
-	buffer *outputBuffer, sendResolvedTsHint bool,
-) {
+func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 	hasRemainEvents := false
 	// Index of remaining output events
 	remainIdx := 0
@@ -124,7 +122,7 @@ func (r *reader) outputBufferedResolvedEvents(
 	buffer.shiftResolvedEvents(remainIdx)
 
 	// If all buffered resolved events are sent, send its resolved ts too.
-	if sendResolvedTsHint && lastCommitTs != 0 && !hasRemainEvents {
+	if lastCommitTs != 0 && !hasRemainEvents {
 		r.outputResolvedTs(lastCommitTs)
 	}
 }
@@ -143,8 +141,7 @@ func (r *reader) outputBufferedResolvedEvents(
 //
 // Note: outputBuffer must be empty.
 func (r *reader) outputIterEvents(
-	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer,
-	resolvedTs uint64,
+	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer, resolvedTs uint64,
 ) (bool, uint64, error) {
 	lenResolvedEvents, lenDeleteKeys := buffer.len()
 	if lenDeleteKeys > 0 || lenResolvedEvents > 0 {
@@ -186,14 +183,15 @@ func (r *reader) outputIterEvents(
 		if commitTs == 0 {
 			commitTs = event.CRTs
 		}
-		// Group resolved events that has the same commit ts.
+		// Read all resolved events that have the same commit ts.
 		if commitTs == event.CRTs {
 			buffer.appendResolvedEvent(event)
 			continue
 		}
-		// As a new event belongs to a new txn group, we need to output all
-		// buffered events before append the event.
-		r.outputBufferedResolvedEvents(buffer, true)
+
+		// Commit ts has changed, the new event belongs to a new txn group,
+		// we need to output all buffered events before append the event.
+		r.outputBufferedResolvedEvents(buffer)
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, skip append new event.
@@ -209,35 +207,25 @@ func (r *reader) outputIterEvents(
 	elapsed := time.Since(start)
 	r.metricIterReadDuration.Observe(elapsed.Seconds())
 
+	// When iter exhausts, buffer may never get a chance to output in the above
+	// for loop. We retry output buffer again.
+	r.outputBufferedResolvedEvents(buffer)
+
 	// Try shrink buffer to release memory.
 	buffer.maybeShrink()
 
-	// Events have not been sent, buffer them and output them later.
-	// Do not let outputBufferedResolvedEvents output resolved ts, instead we
-	// output resolved ts here.
-	sendResolvedTsHint := false
-	r.outputBufferedResolvedEvents(buffer, sendResolvedTsHint)
-	lenResolvedEvents, _ = buffer.len()
-
-	// Skip output resolved ts if there is any buffered resolved event.
-	if lenResolvedEvents != 0 {
-		return hasReadNext, 0, nil
+	// All resolved events whose commit ts are less or equal to the commitTs
+	// have read into buffer.
+	exhaustedResolvedTs := commitTs
+	if !hasNext {
+		// Iter is exhausted, it means resolved events whose commit ts are
+		// less or equal to the commitTs have read into buffer.
+		if resolvedTs != 0 {
+			exhaustedResolvedTs = resolvedTs
+		}
 	}
 
-	if !hasNext && resolvedTs != 0 {
-		// Iter is exhausted and there is no resolved event (up to max
-		// resolved ts), output max resolved ts and return an exhausted
-		// resolved ts.
-		r.outputResolvedTs(resolvedTs)
-		return hasReadNext, resolvedTs, nil
-	}
-	if commitTs != 0 {
-		// All buffered resolved events are outputted,
-		// output last commit ts.
-		r.outputResolvedTs(commitTs)
-	}
-
-	return hasReadNext, 0, nil
+	return hasReadNext, exhaustedResolvedTs, nil
 }
 
 // TODO: inline the struct to reader.
@@ -248,7 +236,7 @@ type pollState struct {
 	maxCommitTs uint64
 	// The maximum commit ts for all resolved ts events.
 	maxResolvedTs uint64
-	// All resolved events before the resolved ts are outputted.
+	// All resolved events before the resolved ts are read into buffer.
 	exhaustedResolvedTs uint64
 
 	// ID and router of the reader itself.
@@ -426,9 +414,8 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	// Length of buffered resolved events.
 	lenResolvedEvents, _ := r.state.outputBuf.len()
 	if lenResolvedEvents != 0 {
-		// No new received events, it means output channel is available.
-		// output resolved events as much as possible.
-		r.outputBufferedResolvedEvents(r.state.outputBuf, true)
+		// Try output buffered resolved events.
+		r.outputBufferedResolvedEvents(r.state.outputBuf)
 		lenResolvedEvents, _ = r.state.outputBuf.len()
 	}
 	// Build task for new events and delete sent keys.
@@ -446,7 +433,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	// 2. There are some events that can be resolved.
 	readIter = readIter && r.state.hasResolvedEvents()
 	if !readIter {
-		// No new events and no resolved events.
+		// No buffered resolved events, try to send resolved ts.
 		if !r.state.hasResolvedEvents() && r.state.maxResolvedTs != 0 {
 			// To avoid ping-pong busy loop, we only send resolved ts
 			// when it advances.

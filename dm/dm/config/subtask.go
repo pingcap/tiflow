@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -269,6 +270,10 @@ type SubTaskConfig struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 }
+
+// SampleSubtaskConfig is the content of subtask.toml in current folder.
+//go:embed subtask.toml
+var SampleSubtaskConfig string
 
 // NewSubTaskConfig creates a new SubTaskConfig.
 func NewSubTaskConfig() *SubTaskConfig {
