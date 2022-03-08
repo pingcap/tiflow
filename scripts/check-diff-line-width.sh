@@ -17,7 +17,7 @@
 set -e
 
 # The hash of the latest commit with a commit message matching
-# the pattern `\(#[0-9]+\)$`. It's usually be a master branch commit.
+# the pattern `\(#[0-9]+\)$`. It's usually a master branch commit.
 BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 
 git --no-pager diff $BASE_HASH -U0 -- cdc pkg |
