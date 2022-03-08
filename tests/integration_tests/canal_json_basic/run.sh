@@ -20,7 +20,7 @@ function run() {
 
 	cd $WORK_DIR
 
-    TOPIC_NAME="ticdc-canal-json-test"
+	TOPIC_NAME="ticdc-canal-json-test"
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
@@ -29,8 +29,8 @@ function run() {
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&kafka-version=${KAFKA_VERSION}"
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-    if [ "$SINK_TYPE" == "kafka" ]; then
-        run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&version=${KAFKA_VERSION}"
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&version=${KAFKA_VERSION}"
 	fi
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
