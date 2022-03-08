@@ -27,6 +27,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/infoschema"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -38,6 +39,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
@@ -464,6 +467,7 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
 				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
+
 	columns := []string{"Variable_name", "Value"}
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
@@ -473,6 +477,10 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	)
 	mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+	)
+	columns = []string{"Charset", "Description", "Default collation", "Maxlen"}
+	mock.ExpectQuery("show character set where charset = 'gbk';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese", "gbk_chinese_ci", 2),
 	)
 	mock.ExpectClose()
 	return db, nil
@@ -1208,4 +1216,52 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
+}
+
+func TestGBKSupported(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		require.Nil(t, err)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	zapcore, logs := observer.New(zap.WarnLevel)
+	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
+	_, r, _ := log.InitLogger(conf)
+	logger := zap.New(zapcore)
+	restoreFn := log.ReplaceGlobals(logger, r)
+	defer restoreFn()
+
+	ctx := context.Background()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	// no warning log will be output because GBK charset is supported
+	require.Equal(t, logs.Len(), 0)
+
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }

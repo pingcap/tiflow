@@ -16,6 +16,7 @@ package sink
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -67,6 +68,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 		require.Nil(t, err)
 		params := defaultParams.Clone()
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
+		fmt.Println(dsnStr)
 		require.Nil(t, err)
 		expectedParams := []string{
 			"tidb_txn_mode=optimistic",
@@ -74,6 +76,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
 			"transaction_isolation=%22READ-COMMITTED%22",
+			"charset=utf8mb4",
 		}
 		for _, param := range expectedParams {
 			require.True(t, strings.Contains(dsnStr, param))

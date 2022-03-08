@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/table"
@@ -323,7 +324,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var warn string
 		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
 			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
@@ -440,13 +441,13 @@ func sizeOfBytes(b []byte) int {
 }
 
 // formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
-func formatColVal(datum types.Datum, tp byte) (
+func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	value interface{}, size int, warn string, err error,
 ) {
 	if datum.IsNull() {
 		return nil, 0, "", nil
 	}
-	switch tp {
+	switch col.Tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
@@ -477,13 +478,22 @@ func formatColVal(datum types.Datum, tp byte) (
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
-		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		b := datum.GetBytes()
-		if b == nil {
-			b = emptyBytes
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		v := datum.GetString()
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), "", nil
+	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		if col.Charset == charset.CharsetBinary {
+			b := datum.GetBytes()
+			if b == nil {
+				b = emptyBytes
+			}
+			return b, sizeOfBytes(b), "", nil
+		} else {
+			v := datum.GetString()
+			const sizeOfV = unsafe.Sizeof(v)
+			return v, int(sizeOfV), "", nil
 		}
-		return b, sizeOfBytes(b), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
@@ -545,7 +555,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		}
 	}
 
-	return formatColVal(d, col.Tp)
+	return formatColVal(d, col)
 }
 
 // DecodeTableID decodes the raw key to a table ID

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -101,6 +102,7 @@ func newMySQLSink(
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
 	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
@@ -109,7 +111,7 @@ func newMySQLSink(
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -159,6 +161,16 @@ func newMySQLSink(
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	// check if GBK charset is supported by downstream
+	var gbkSupported bool
+	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !gbkSupported {
+		log.Warn("gbk charset is not supported by downstream, some types of DDL may fail to be executed",
+			zap.String("hostname", hostName), zap.String("port", port))
 	}
 	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
@@ -376,6 +388,28 @@ func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 	return
+}
+
+// check whether the target charset is supported
+func checkCharsetSupport(ctx context.Context, db *sql.DB, _ string) (bool, error) {
+	var (
+		charset          string
+		description      string
+		defaultCollation string
+		maxLen           int
+	)
+	err := db.QueryRowContext(ctx, "show character set where charset = 'gbk';").
+		Scan(&charset, &description, &defaultCollation, &maxLen)
+	fmt.Printf("charset support checking error:%v\n", err)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		} else {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
