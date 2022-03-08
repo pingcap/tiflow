@@ -20,6 +20,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/dustin/go-humanize"
@@ -61,7 +62,8 @@ const (
 	ValidationFast = "fast"
 	ValidationFull = "full"
 
-	DefaultValidatorWorkerCount = 4
+	DefaultValidatorWorkerCount   = 4
+	DefaultValidatorRowErrorDelay = 30 * time.Minute
 )
 
 // default config item values.
@@ -339,8 +341,9 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	Mode          string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount   int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	RowErrorDelay Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
 }
 
 func (v *ValidatorConfig) adjust() error {
@@ -352,6 +355,9 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.WorkerCount <= 0 {
 		v.WorkerCount = DefaultValidatorWorkerCount
+	}
+	if v.RowErrorDelay.Duration == 0 {
+		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
 	}
 	return nil
 }

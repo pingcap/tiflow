@@ -87,13 +87,16 @@ func newTableChange(table *validateTableInfo) *tableChange {
 // todo: this struct and some logic on it may reuse RowChange in pkg/sqlmodel
 // todo: maybe we can use reuse it later.
 type rowChange struct {
-	table      *validateTableInfo
-	Key        string        `json:"key"`
-	Data       []interface{} `json:"data"`
-	Tp         rowChangeType `json:"tp"`
-	wg         *sync.WaitGroup
-	LastMeetTS int64 `json:"last-meet-ts"` // the last meet timestamp(in seconds)
-	FailedCnt  int   `json:"failed-cnt"`   // failed count
+	table *validateTableInfo
+	Key   string        `json:"key"`
+	Data  []interface{} `json:"data"`
+	Tp    rowChangeType `json:"tp"`
+	wg    *sync.WaitGroup
+
+	// timestamp of first validation of this row
+	// will reset when merge row changes
+	FirstValidateTS int64 `json:"first-validate-ts"`
+	FailedCnt       int   `json:"failed-cnt"` // failed count
 }
 
 type tableValidateStatus struct {
@@ -141,7 +144,7 @@ type DataValidator struct {
 
 	// whether the validation progress ever reached syncer
 	// if it's false, we don't mark failed row change as error to reduce false-positive
-	reachedSyncer    atomic.Bool
+	reachedSyncer atomic.Bool
 
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
@@ -621,7 +624,6 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 					Key:        key,
 					Data:       row,
 					Tp:         rowDeleted,
-					LastMeetTS: int64(header.Timestamp),
 				})
 				afterRowChangeType = rowInsert
 			}
@@ -630,7 +632,6 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				Key:        afterKey,
 				Data:       afterRow,
 				Tp:         afterRowChangeType,
-				LastMeetTS: int64(header.Timestamp),
 			})
 		} else {
 			v.dispatchRowChange(key, &rowChange{
@@ -638,7 +639,6 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				Key:        key,
 				Data:       row,
 				Tp:         changeType,
-				LastMeetTS: int64(header.Timestamp),
 			})
 		}
 	}

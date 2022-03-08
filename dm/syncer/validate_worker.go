@@ -73,10 +73,12 @@ type validateWorker struct {
 	maxFailedCount    int
 	errorRows         []*validateFailedRow
 	sync.Mutex
+	rowErrorDelayInSec int64
 }
 
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
+	rowErrorDelayInSec := int64(v.cfg.ValidatorCfg.RowErrorDelay.Duration.Seconds())
 	return &validateWorker{
 		cfg:               v.cfg.ValidatorCfg,
 		ctx:               v.ctx,
@@ -88,7 +90,8 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		pendingChangesMap: make(map[string]*tableChange),
 		batchSize:         maxBatchSize,
 		// =600 if using default validate interval=10s
-		maxFailedCount: int(failedRowRetryDuration / v.validateInterval),
+		maxFailedCount:     int(failedRowRetryDuration / v.validateInterval),
+		rowErrorDelayInSec: rowErrorDelayInSec,
 	}
 }
 
@@ -139,7 +142,7 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 	if val, ok := change.rows[row.Key]; ok {
 		val.Data = row.Data
 		val.Tp = row.Tp
-		val.LastMeetTS = row.LastMeetTS
+		val.FirstValidateTS = 0
 		val.FailedCnt = 0 // clear failed count
 	} else {
 		change.rows[row.Key] = row
@@ -194,6 +197,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	var newPendingCnt int64
 	allErrorRows := make([]*validateFailedRow, 0)
 	newPendingChanges := make(map[string]*tableChange)
+	validateTS := time.Now().Unix()
 	for tblKey, rows := range failedChanges {
 		tblChange := vw.pendingChangesMap[tblKey]
 		newPendingRows := make(map[string]*rowChange)
@@ -201,7 +205,11 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 			r := tblChange.rows[pk]
 			if vw.validator.reachedSyncer.Load() {
 				r.FailedCnt++
-				if r.FailedCnt >= vw.maxFailedCount {
+				if r.FirstValidateTS == 0 {
+					r.FirstValidateTS = validateTS
+				}
+
+				if validateTS-r.FirstValidateTS >= vw.rowErrorDelayInSec {
 					row.srcRow = r
 					allErrorRows = append(allErrorRows, row)
 				} else {

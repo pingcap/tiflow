@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
@@ -63,21 +62,18 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		Key:        "1",
 		Data:       []interface{}{1, "a"},
 		Tp:         rowInsert,
-		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
 		Key:        "1",
 		Data:       []interface{}{1, "b"},
 		Tp:         rowUpdated,
-		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
 		Key:        "2",
 		Data:       []interface{}{2, "2b"},
 		Tp:         rowInsert,
-		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
@@ -112,14 +108,12 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		Key:        "a",
 		Data:       []interface{}{"a", "b"},
 		Tp:         rowDeleted,
-		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo3,
 		Key:        "aa",
 		Data:       []interface{}{"aa", "b"},
 		Tp:         rowDeleted,
-		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}))
@@ -159,21 +153,18 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		Key:        "1",
 		Data:       []interface{}{1, "a"},
 		Tp:         rowInsert,
-		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
 		Key:        "2",
 		Data:       []interface{}{2, "2b"},
 		Tp:         rowInsert,
-		LastMeetTS: time.Now().Unix(),
 	})
 	worker.updateRowChange(&rowChange{
 		table:      tableInfo1,
 		Key:        "3",
 		Data:       []interface{}{3, "3c"},
 		Tp:         rowInsert,
-		LastMeetTS: time.Now().Unix(),
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
