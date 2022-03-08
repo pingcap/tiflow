@@ -81,7 +81,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		id:               id,
 		scheduler:        newScheduler(),
 		barriers:         newBarriers(),
-		feedStateManager: new(feedStateManager),
+		feedStateManager: newFeedStateManager(),
 		gcManager:        gcManager,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -291,6 +291,7 @@ LOOP:
 
 func (c *changefeed) releaseResources(ctx context.Context) {
 	if !c.initialized {
+		c.redoManagerCleanup(ctx)
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
@@ -299,12 +300,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	if c.isRemoved && c.redoManager.Enabled() {
-		err := c.redoManager.Cleanup(ctx)
-		if err != nil {
-			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
-		}
-	}
+	c.redoManagerCleanup(ctx)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -324,6 +320,34 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
 	c.initialized = false
+}
+
+// redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
+func (c *changefeed) redoManagerCleanup(ctx context.Context) {
+	if c.isRemoved {
+		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
+			c.state.Info.Config.Consistent == nil {
+			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
+			return
+		}
+		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+			return
+		}
+		// when removing a paused changefeed, the redo manager is nil, create a new one
+		if c.redoManager == nil {
+			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
+			if err != nil {
+				log.Error("create redo manger failed", zap.String("changefeed", c.id), zap.Error(err))
+				return
+			}
+			c.redoManager = redoManager
+		}
+		err := c.redoManager.Cleanup(ctx)
+		if err != nil {
+			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
+		}
+	}
 }
 
 // preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
@@ -501,6 +525,9 @@ func (c *changefeed) updateStatus(currentTs int64, barrierTs model.Ts) {
 	}
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
+		if status == nil {
+			return nil, changed, nil
+		}
 		if status.ResolvedTs != resolvedTs {
 			status.ResolvedTs = resolvedTs
 			changed = true
