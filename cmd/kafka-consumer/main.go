@@ -461,7 +461,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
 				} else if ts > resolvedTs {
-					log.Debug("update sink resolved ts",
+					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
