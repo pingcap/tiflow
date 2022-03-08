@@ -79,7 +79,6 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 		pendingOptShardInfo := s.optimist.PendingInfo()
 		pendingOptShardOperation := s.optimist.PendingOperation()
 		if pendingOptShardOperation != nil && pendingOptShardOperation.ConflictStage == optimism.ConflictDetected {
-			st.BlockingDDLs = pendingOptShardInfo.DDLs
 			st.BlockDDLOwner = utils.GenDDLLockID(pendingOptShardInfo.Source, pendingOptShardInfo.UpSchema, pendingOptShardInfo.UpTable)
 			st.ConflictMsg = pendingOptShardOperation.ConflictMsg
 		}

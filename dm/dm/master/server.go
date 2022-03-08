@@ -927,6 +927,10 @@ func (s *Server) UnlockDDLLock(ctx context.Context, req *pb.UnlockDDLLockRequest
 	case config.ShardPessimistic:
 		err = s.pessimist.UnlockLock(ctx, req.ID, req.ReplaceOwner, req.ForceRemove)
 	case config.ShardOptimistic:
+		if len(req.Sources) != 1 {
+			resp.Msg = "optimistic locks should have only one source"
+			return resp, nil
+		}
 		err = s.optimist.UnlockLock(ctx, req.ID, req.Sources[0], req.Database, req.Table, req.Op)
 	}
 	if err != nil {

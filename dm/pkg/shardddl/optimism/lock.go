@@ -202,7 +202,8 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				metrics.ReportDDLPending(l.Task, metrics.DDLPendingUnSynced, metrics.DDLPendingSynced)
 			}
 		}
-		if len(newDDLs) > 0 || (err != nil && terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err)) {
+		if len(newDDLs) > 0 || (err != nil && (terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) ||
+			terror.ErrShardDDLOptimismTrySyncFail.Equal(err))) {
 			// revert the `done` status if need to wait for the new operation to be done.
 			// Now, we wait for the new operation to be done if any DDLs returned.
 			l.tryRevertDone(callerSource, callerSchema, callerTable)

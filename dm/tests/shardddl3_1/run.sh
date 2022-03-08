@@ -306,17 +306,10 @@ function different_field_flag_test() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column col1 $type2"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values (4,${val2});"
-	if [[ $locked == true ]]; then
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"query-status test" \
-			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
-	else
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"query-status test" \
-			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 2 \
-			"because schema conflict detected" 1
-	fi
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 1 \
+		"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(5);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column col1 $type3"
@@ -540,14 +533,16 @@ function DM_117_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
 		"add column b that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1
 
 	# try to fix data
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_tidb "update ${shardddl}.${tb} set b=null, c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
