@@ -151,7 +151,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
 	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
 		// NOTE: LoaderConfig.Dir is always not empty because we only dump certs when we use lightning.
-		dir, err := ioutil.TempDir("./", loader.TmpTlsConfigPath)
+		dir, err := ioutil.TempDir("./", loader.TmpTLSConfigPath)
 		if err != nil {
 			return err
 		}
