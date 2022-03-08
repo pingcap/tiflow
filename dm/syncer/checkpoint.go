@@ -235,7 +235,14 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
+<<<<<<< HEAD
 	// Snapshot make a snapshot of current checkpoint
+=======
+	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
+	SaveGlobalPointForcibly(location binlog.Location)
+
+	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
+>>>>>>> aacbbcf97 (syncer(dm): fix log flood and performance when frequently call Snapshot (#4744))
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
@@ -368,6 +375,7 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
+	cp.lastSnapshotCreationTime = time.Now()
 
 	tableCheckPoints := make(map[string]map[string]tablePoint, len(cp.points))
 	for s, tableCps := range cp.points {
@@ -404,7 +412,6 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	}
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	cp.lastSnapshotCreationTime = time.Now()
 	return &SnapshotInfo{
 		id:        id,
 		globalPos: globalPoint.location,
