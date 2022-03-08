@@ -16,7 +16,6 @@ package sink
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -68,7 +67,6 @@ func TestGenerateDSNByParams(t *testing.T) {
 		require.Nil(t, err)
 		params := defaultParams.Clone()
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
-		fmt.Println(dsnStr)
 		require.Nil(t, err)
 		expectedParams := []string{
 			"tidb_txn_mode=optimistic",
