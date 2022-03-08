@@ -199,10 +199,14 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 		newPendingRows := make(map[string]*rowChange)
 		for pk, row := range rows {
 			r := tblChange.rows[pk]
-			r.FailedCnt++
-			if r.FailedCnt >= vw.maxFailedCount {
-				row.srcRow = r
-				allErrorRows = append(allErrorRows, row)
+			if vw.validator.reachedSyncer.Load() {
+				r.FailedCnt++
+				if r.FailedCnt >= vw.maxFailedCount {
+					row.srcRow = r
+					allErrorRows = append(allErrorRows, row)
+				} else {
+					newPendingRows[pk] = r
+				}
 			} else {
 				newPendingRows[pk] = r
 			}

@@ -59,7 +59,6 @@ type validatorPersistHelper struct {
 func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHelper {
 	cfg := validator.cfg
 	c := &validatorPersistHelper{
-		tctx:      validator.tctx,
 		cfg:       cfg,
 		validator: validator,
 
@@ -72,13 +71,15 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 	return c
 }
 
-func (c *validatorPersistHelper) init() error {
-	tctx, cancelFunc := c.tctx.WithTimeout(unit.DefaultInitTimeout)
+func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
+	c.tctx = tctx
+
+	newCtx, cancelFunc := c.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
 
 	dbCfg := c.cfg.To
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	db, conns, err := dbconn.CreateConns(tctx, c.cfg, &dbCfg, 1)
+	db, conns, err := dbconn.CreateConns(newCtx, c.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
 	}
@@ -89,14 +90,14 @@ func (c *validatorPersistHelper) init() error {
 		if err == nil {
 			return
 		}
-		dbconn.CloseBaseDB(tctx, c.db)
+		dbconn.CloseBaseDB(newCtx, c.db)
 	}()
 
-	if err = c.createSchema(tctx); err != nil {
+	if err = c.createSchema(newCtx); err != nil {
 		return err
 	}
 
-	err = c.createTable(tctx)
+	err = c.createTable(newCtx)
 	return err
 }
 
@@ -125,12 +126,12 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			schema_name VARCHAR(128) NOT NULL,
 			table_name VARCHAR(128) NOT NULL,
-			key VARCHAR(512) NOT NULL,
+			row_pk VARCHAR(128) NOT NULL,
 			data JSON NOT NULL,
 			revision bigint NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, schema_name, table_name, key),
+			UNIQUE KEY uk_source_schema_table_key(source, schema_name, table_name, row_pk),
 			INDEX idx_revision(revision)
 		)`,
 		`CREATE TABLE IF NOT EXISTS ` + c.errorChangeTableName + ` (
@@ -138,7 +139,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			src_schema_name VARCHAR(128) NOT NULL,
 			src_table_name VARCHAR(128) NOT NULL,
-			key VARCHAR(512) NOT NULL,
+			row_pk VARCHAR(128) NOT NULL,
 			dst_schema_name VARCHAR(128) NOT NULL,
 			dst_table_name VARCHAR(128) NOT NULL,
 			data JSON NOT NULL,
@@ -147,7 +148,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			status int not null,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, key)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, row_pk)
 		)`,
 		`CREATE TABLE IF NOT EXISTS ` + c.tableStatusTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -192,12 +193,12 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 					return err
 				}
 				sql := `INSERT INTO ` + c.pendingChangeTableName + `
-						(source, schema_name, table_name, key, data, revision) VALUES (?, ?, ?, ?, ?, ?)
+						(source, schema_name, table_name, row_pk, data, revision) VALUES (?, ?, ?, ?, ?, ?)
 						ON DUPLICATE KEY UPDATE
 							source = VALUES(source),
 							schema_name = VALUES(schema_name),
 							table_name = VALUES(table_name),
-							key = VALUES(key),
+							row_pk = VALUES(row_pk),
 							data = VALUES(data),
 							revision = VALUES(revision)`
 				queries = append(queries, sql)
@@ -240,12 +241,12 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	for _, worker := range c.validator.workers {
 		for _, r := range worker.getErrorRows() {
 			sql := `INSERT INTO ` + c.errorChangeTableName + `
-					(source, src_schema_name, src_table_name, key, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
+					(source, src_schema_name, src_table_name, row_pk, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
 					VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
 					source = VALUES(source),
 					src_schema_name = VALUES(src_schema_name),
 					src_table_name = VALUES(src_table_name),
-					key = VALUES(key),
+					row_pk = VALUES(row_pk),
 					dst_schema_name = VALUES(dst_schema_name),
 					dst_table_name = VALUES(dst_table_name),
 					data = VALUES(data),
@@ -293,7 +294,9 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 }
 
 func (c *validatorPersistHelper) close() {
-	c.db.Close()
+	if c.db != nil {
+		c.db.Close()
+	}
 }
 
 func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, error) {
@@ -333,7 +336,7 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[string]*tableChange, int64, error) {
 	res := make(map[string]*tableChange)
 	rev := int64(1)
-	sql := "select schema_name, table_name, key, data, revision from " + c.pendingChangeTableName + " where source = ?"
+	sql := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName + " where source = ?"
 	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
 	if err != nil {
 		return nil, 0, err

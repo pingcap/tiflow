@@ -139,6 +139,10 @@ type DataValidator struct {
 	changeEventCount []atomic.Int64
 	workerCnt        int
 
+	// whether the validation progress ever reached syncer
+	// if it's false, we don't mark failed row change as error to reduce false-positive
+	reachedSyncer    atomic.Bool
+
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChange
@@ -163,11 +167,16 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 }
 
 func (v *DataValidator) initialize() error {
+	v.reachedSyncer.Store(false)
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.result.Reset()
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
+
+	if err := v.persistHelper.init(v.tctx); err != nil {
+		return err
+	}
 
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
 	defer cancelFunc()
@@ -202,10 +211,6 @@ func (v *DataValidator) initialize() error {
 
 	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone)
 	if err != nil {
-		return err
-	}
-
-	if err = v.persistHelper.init(); err != nil {
 		return err
 	}
 
@@ -279,6 +284,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	if utils.IsContextCanceledError(err) {
 		v.L.Info("filter out context cancelled error", log.ShortError(err))
 	} else {
+		v.L.Error("error during validation", zap.Error(err))
 		v.result.Errors = append(v.result.Errors, unit.NewProcessError(err))
 	}
 }
@@ -302,6 +308,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 		return nil
 	}
 
+	v.reachedSyncer.Store(true)
 	for {
 		select {
 		case <-v.ctx.Done():
