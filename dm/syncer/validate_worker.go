@@ -186,7 +186,7 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 			end = len(rows)
 		}
 		batch := rows[start:end]
-		failedRows, err := vw.validateRowChangesInner(table, batch, deleteChange)
+		failedRows, err := vw.batchValidateRowChanges(table, batch, deleteChange)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 	return res, nil
 }
 
-func (vw *validateWorker) validateRowChangesInner(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.pkValues)
