@@ -214,7 +214,7 @@ insert into tp_other(c_enum, c_set, c_bit, c_json)
 values ('b', 'b,c', b'1000001', '{
   "key1": "value1",
   "key2": "value2",
-  "key3": "123",
+  "key3": "123"
 }');
 
 update tp_other set c_enum = 'c' where c_set = 'b, c';
