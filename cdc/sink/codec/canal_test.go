@@ -417,10 +417,13 @@ var testColumnsTable = []*testColumnTuple{
 		"tinyint unsigned", JavaSQLTypeSMALLINT, "128", "128",
 	},
 
-	{&model.Column{
-		Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
-		Flag: model.UnsignedFlag,
-	}, "tinyint unsigned", JavaSQLTypeTINYINT, "0", "0"},
+	{
+		&model.Column{
+			Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
+			Flag: model.UnsignedFlag,
+		},
+		"tinyint unsigned", JavaSQLTypeTINYINT, "0", "0",
+	},
 
 	{
 		&model.Column{
@@ -606,10 +609,13 @@ var testColumnsTable = []*testColumnTuple{
 		&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")},
 		"char", JavaSQLTypeCHAR, "测试String", "测试String",
 	},
-	{&model.Column{
-		Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
-		Flag: model.BinaryFlag,
-	}, "binary", JavaSQLTypeBLOB, "测试Binary", "测试Binary"},
+	{
+		&model.Column{
+			Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
+			Flag: model.BinaryFlag,
+		},
+		"binary", JavaSQLTypeBLOB, "测试Binary", "测试Binary",
+	},
 	{
 		&model.Column{
 			Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
@@ -638,10 +644,13 @@ var testColumnsTable = []*testColumnTuple{
 		"longtext", JavaSQLTypeCLOB, "测试longtext", "测试longtext",
 	},
 
-	{&model.Column{
-		Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
-		Flag: model.BinaryFlag,
-	}, "tinyblob", JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob"},
+	{
+		&model.Column{
+			Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
+			Flag: model.BinaryFlag,
+		},
+		"tinyblob", JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
+	},
 	{
 		&model.Column{
 			Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
