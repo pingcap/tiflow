@@ -219,3 +219,38 @@ values ('b', 'b,c', b'1000001', '{
 
 update tp_other set c_enum = 'c' where c_set = 'b, c';
 delete from tp_other where c_enum = 'a';
+
+CREATE TABLE test_ddl1
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE test_ddl2
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
+
+RENAME TABLE test_ddl1 TO test_ddl;
+
+ALTER TABLE test_ddl
+    ADD INDEX test_add_index (c1);
+
+DROP INDEX test_add_index ON test_ddl;
+
+ALTER TABLE test_ddl
+    ADD COLUMN c2 INT NOT NULL;
+
+TRUNCATE TABLE test_ddl;
+
+DROP TABLE test_ddl2;
+
+CREATE TABLE test_ddl2
+(
+    id INT AUTO_INCREMENT,
+    c1 INT,
+    PRIMARY KEY (id)
+);
