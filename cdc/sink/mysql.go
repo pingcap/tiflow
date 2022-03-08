@@ -401,12 +401,11 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, _ string) (bool, error
 	err := db.QueryRowContext(ctx, "show character set where charset = 'gbk';").
 		Scan(&charset, &description, &defaultCollation, &maxLen)
 	fmt.Printf("charset support checking error:%v\n", err)
+	if err != nil && err != sql.ErrNoRows {
+		return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
 	if err != nil {
-		if err != sql.ErrNoRows {
-			return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
-		} else {
-			return false, nil
-		}
+		return false, nil
 	}
 
 	return true, nil

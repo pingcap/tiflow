@@ -489,11 +489,10 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 				b = emptyBytes
 			}
 			return b, sizeOfBytes(b), "", nil
-		} else {
-			v := datum.GetString()
-			const sizeOfV = unsafe.Sizeof(v)
-			return v, int(sizeOfV), "", nil
 		}
+		v := datum.GetString()
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
