@@ -17,11 +17,18 @@ create table tp_int
 insert into tp_int()
 values ();
 
+insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
+values (1, 2, 3, 4, 5);
+
 -- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 
-update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 32767;
+-- insert min value
+insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
+values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
+
+update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
 delete from tp_int where c_int = 0;
 
 -- unsigned int
@@ -41,14 +48,24 @@ values ();
 
 insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
                             c_unsigned_int, c_unsigned_bigint)
+values (1, 2, 3, 4, 5);
+
+-- insert max value
+insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
+                            c_unsigned_int, c_unsigned_bigint)
+values (255, 65535, 16777215, 4294967295, 18446744073709551615);
+
+-- insert signed max value
+insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
+                            c_unsigned_int, c_unsigned_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 
 insert into tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
                             c_unsigned_int, c_unsigned_bigint)
 values (128, 32768, 8388608, 2147483648, 9223372036854775808);
 
-update tp_unsigned_int set c_unsigned_tinyint = 125 where c_unsigned_int = 2147483647;
-delete from tp_unsigned_int where c_unsigned_tinyint = 125;
+update tp_unsigned_int set c_unsigned_int = 0, c_unsigned_tinyint = 0 where c_unsigned_smallint = 65535;
+delete from tp_unsigned_int where c_unsigned_int = 0;
 
 -- real
 create table tp_real
@@ -72,7 +89,6 @@ insert into tp_real(c_float, c_double, c_decimal, c_decimal_2)
 values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
-delete from tp_real where c_decimal = -8000;
 
 -- unsigned real
 create table tp_unsigned_real (
@@ -92,7 +108,6 @@ insert into tp_unsigned_real(c_unsigned_float, c_unsigned_double, c_unsigned_dec
 values (2020.0202, 2020.0303, 2020.0404, 2021.1208);
 
 update tp_unsigned_real set c_unsigned_double = 2020.0404 where c_unsigned_double = 2020.0303;
-delete from tp_unsigned_real where c_unsigned_double = 2020.0404;
 
 -- time
 create table tp_time
@@ -113,9 +128,11 @@ values ();
 insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
 values ('2020-02-20', '2020-02-20 02:20:20', '2020-02-20 02:20:20', '02:20:20', '2020');
 
+insert into tp_time(c_date, c_datetime, c_timestamp, c_time, c_year)
+values ('2022-02-22', '2022-02-22 22:22:22', '2020-02-20 02:20:20', '02:20:20', '2021');
+
 update tp_time set c_year = '2022' where c_year = '2020';
 update tp_time set c_date = '2022-02-22' where c_datetime = '2020-02-20 02:20:20';
-delete from tp_time where c_year = '2022';
 
 -- text
 create table tp_text
@@ -139,7 +156,6 @@ insert into tp_text(c_tinytext, c_text, c_mediumtext, c_longtext)
 values ('89504E470D0A1A0B', '89504E470D0A1A0B', '89504E470D0A1A0B', '89504E470D0A1A0B');
 
 update tp_text set c_text = '89504E470D0A1A0B' where c_mediumtext = '89504E470D0A1A0A';
-delete from tp_text where c_text = '89504E470D0A1A0B';
 
 -- blob
 create table tp_blob
@@ -163,7 +179,6 @@ insert into tp_blob(c_tinyblob, c_blob, c_mediumblob, c_longblob)
 values (x'89504E470D0A1A0B', x'89504E470D0A1A0B', x'89504E470D0A1A0B', x'89504E470D0A1A0B');
 
 update tp_blob set c_blob = x'89504E470D0A1A0B' where c_mediumblob = x'89504E470D0A1A0A';
-delete from tp_blob where c_blob = x'89504E470D0A1A0B';
 
 -- char / binary
 create table tp_char_binary
@@ -187,7 +202,6 @@ insert into tp_char_binary(c_char, c_varchar, c_binary, c_varbinary)
 values ('89504E470D0A1A0B', '89504E470D0A1A0B', x'89504E470D0A1A0B', x'89504E470D0A1A0B');
 
 update tp_char_binary set c_varchar = '89504E470D0A1A0B' where c_binary = x'89504E470D0A1A0A';
-delete from tp_char_binary where c_varchar = '89504E470D0A1A0B';
 
 -- other
 create table tp_other
@@ -218,7 +232,6 @@ values ('b', 'b,c', b'1000001', '{
 }');
 
 update tp_other set c_enum = 'c' where c_set = 'b, c';
-delete from tp_other where c_enum = 'a';
 
 CREATE TABLE test_ddl1
 (
@@ -253,4 +266,9 @@ CREATE TABLE test_ddl2
     id INT AUTO_INCREMENT,
     c1 INT,
     PRIMARY KEY (id)
+);
+
+create table finish_mark
+(
+    id int PRIMARY KEY
 );

@@ -398,7 +398,8 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 		}
 	}
 	if err := json.Unmarshal(b.data, msg); err != nil {
-		log.Info("canal-json decoder unmarshal data failed", zap.Error(err), zap.ByteString("data", b.data))
+		log.Info("canal-json decoder unmarshal data failed",
+			zap.Error(err), zap.ByteString("data", b.data))
 		return model.MqMessageTypeUnknown, false, err
 	}
 	b.msg = msg
@@ -426,7 +427,8 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
+		return nil, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("not found ddl event message")
 	}
 
 	result := canalFlatMessage2DDLEvent(b.msg)
@@ -438,7 +440,8 @@ func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
+		return 0, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("not found resolved event message")
 	}
 
 	withExtensionEvent, ok := b.msg.(*canalFlatMessageWithTiDBExtension)
@@ -460,12 +463,17 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		Table:  *flatMessage.getTable(),
 	}
 
+	mysqlType := flatMessage.getMySQLType()
+	javaSQLType := flatMessage.getJavaSQLType()
+
 	var err error
-	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
+		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
+	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(),
+		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
 	}
