@@ -142,26 +142,17 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
+
 			select {
 			case <-ctx.Done():
 				return
 			case err := <-s.errCh:
 				ctx.Throw(err)
 				return
-			case <-ticker.C:
-				s.mu.Lock()
-				checkpointTs := s.mu.checkpointTs
-				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
-					s.mu.Unlock()
-					continue
-				}
-				tables := s.mu.currentTableNames
-				s.mu.Unlock()
-				lastCheckpointTs = checkpointTs
-				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-					ctx.Throw(errors.Trace(err))
-					return
-				}
+			default:
+			}
+
+			select {
 			case ddl := <-s.ddlCh:
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
@@ -180,6 +171,22 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
 					zap.Reflect("ddl", ddl))
+				ctx.Throw(errors.Trace(err))
+				return
+			default:
+			}
+
+			<-ticker.C
+			s.mu.Lock()
+			checkpointTs := s.mu.checkpointTs
+			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+				s.mu.Unlock()
+				continue
+			}
+			tables := s.mu.currentTableNames
+			s.mu.Unlock()
+			lastCheckpointTs = checkpointTs
+			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
 				ctx.Throw(errors.Trace(err))
 				return
 			}
