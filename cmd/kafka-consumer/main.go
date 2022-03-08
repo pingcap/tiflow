@@ -56,7 +56,7 @@ var (
 
 	downstreamURIStr string
 
-	protocol            string
+	protocol            config.Protocol
 	enableTiDBExtension bool
 
 	logPath       string
@@ -108,14 +108,14 @@ func init() {
 	})
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
 
-	config, err := newSaramaConfig()
+	saramaConfig, err := newSaramaConfig()
 	if err != nil {
-		log.Panic("Error creating sarama config", zap.Error(err))
+		log.Panic("Error creating sarama saramaConfig", zap.Error(err))
 	}
 
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
+		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, saramaConfig)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
 		}
@@ -151,9 +151,11 @@ func init() {
 
 	s = upstreamURI.Query().Get("protocol")
 	if s != "" {
-		protocol = s
+		if err := protocol.FromString(s); err != nil {
+			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
+		}
 	}
-	log.Info("Setting protocol", zap.String("protocol", protocol))
+	log.Info("Setting protocol", zap.Any("protocol", protocol))
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
 	if s != "" {
@@ -161,7 +163,7 @@ func init() {
 		if err != nil {
 			log.Fatal("invalid enable-tidb-extension of upstream-uri")
 		}
-		if strings.ToLower(protocol) != "canal-json" && b {
+		if protocol != config.ProtocolCanalJSON && b {
 			log.Fatal("enable-tidb-extension only work with canal-json")
 		}
 
@@ -351,18 +353,13 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	c := new(Consumer)
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
-
-	if err := c.protocol.FromString(protocol); err != nil {
-		return nil, errors.Trace(err)
-	}
+	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
-	if c.enableTiDBExtension && c.protocol != config.ProtocolCanalJSON {
-		log.Panic("TiDB extension should only work with Canal-JSON protocol")
-	}
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
