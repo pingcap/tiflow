@@ -16,9 +16,9 @@ package errorutil
 import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbterror"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
@@ -39,7 +39,7 @@ func IsIgnorableMySQLDDLError(err error) bool {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(),
+		infoschema.ErrKeyNotExists.Code(), dbterror.ErrCantDropFieldOrKey.Code(),
 		mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
 		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
 		return true
