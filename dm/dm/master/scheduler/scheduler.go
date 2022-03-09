@@ -1554,11 +1554,6 @@ func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
-	return s.getRelayWorkers(source)
-}
-
-// getRelayWorkers get relay workers with no lock and check.
-func (s *Scheduler) getRelayWorkers(source string) ([]*Worker, error) {
 	workers := s.relayWorkers[source]
 	ret := make([]*Worker, 0, len(workers))
 	for w := range workers {
