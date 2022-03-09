@@ -412,7 +412,7 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 		}
 	}
 	if err := json.Unmarshal(b.data, msg); err != nil {
-		log.Info("canal-json decoder unmarshal data failed",
+		log.Error("canal-json decoder unmarshal data failed",
 			zap.Error(err), zap.ByteString("data", b.data))
 		return model.MqMessageTypeUnknown, false, err
 	}
@@ -483,8 +483,8 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	var err error
 	if flatMessage.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
-		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
-			mysqlType, javaSQLType)
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(
+			flatMessage.getData(), mysqlType, javaSQLType)
 		// canal-json encoder does not encode `Flag` information into the result,
 		// we have to set the `Flag` to make it can be handled by MySQL Sink.
 		// see https://github.com/pingcap/tiflow/blob/7bfce98/cdc/sink/mysql.go#L869-L888
