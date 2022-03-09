@@ -483,8 +483,8 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 	var err error
 	if flatMessage.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumn`
-		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
-			mysqlType, javaSQLType)
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(
+			flatMessage.getData(), mysqlType, javaSQLType)
 		result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
 		return result, err
 	}
