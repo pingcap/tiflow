@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { Form, Input, Select, Button } from '~/uikit'
-import { OnDuplicateBehavior, TaskMode, TaskShardMode } from '~/models/task'
+import { TaskMode, TaskShardMode } from '~/models/task'
 import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 
-const BasicInfo: StepCompnent = ({ initialValues }) => {
+const BasicInfo: StepCompnent = ({ initialValues, isEditing }) => {
   const [t] = useTranslation()
   const navigate = useNavigate()
 
@@ -30,7 +30,7 @@ const BasicInfo: StepCompnent = ({ initialValues }) => {
           },
         ]}
       >
-        <Input placeholder="task 1" />
+        <Input placeholder="task 1" disabled={isEditing} />
       </Form.Item>
 
       <Form.Item
@@ -42,7 +42,7 @@ const BasicInfo: StepCompnent = ({ initialValues }) => {
           </div>
         }
       >
-        <Select placeholder="all">
+        <Select placeholder="all" disabled={isEditing}>
           {Object.values(TaskMode).map(mode => (
             <Select.Option key={mode} value={mode}>
               {mode}
@@ -60,7 +60,7 @@ const BasicInfo: StepCompnent = ({ initialValues }) => {
           </div>
         }
       >
-        <Select placeholder="optimistic">
+        <Select placeholder={TaskShardMode.OPTIMISTIC}>
           {Object.values(TaskShardMode).map(mode => (
             <Select.Option key={mode} value={mode}>
               {mode}
@@ -74,17 +74,7 @@ const BasicInfo: StepCompnent = ({ initialValues }) => {
         name="meta_schema"
         tooltip={t('create task meta db tooltip')}
       >
-        <Input placeholder="dm_meta" />
-      </Form.Item>
-
-      <Form.Item label={t('on duplicate behavior')} name="on_duplicate">
-        <Select placeholder="overwrite">
-          {Object.values(OnDuplicateBehavior).map(mode => (
-            <Select.Option key={mode} value={mode}>
-              {mode}
-            </Select.Option>
-          ))}
-        </Select>
+        <Input placeholder="dm_meta" disabled={isEditing} />
       </Form.Item>
 
       <Form.Item>

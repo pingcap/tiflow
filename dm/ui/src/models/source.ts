@@ -109,22 +109,22 @@ const injectedRtkApi = api.injectEndpoints({
       void,
       {
         name: string
-        disableRelayRequest: {
+        payload?: {
           worker_name_list?: string[]
         }
       }
     >({
       query: queryArg => ({
-        url: `/api/v1/sources/${queryArg.name}/relay/disable`,
+        url: `/sources/${queryArg.name}/relay/disable`,
         method: 'POST',
-        body: queryArg.disableRelayRequest,
+        body: queryArg.payload,
       }),
     }),
     dmapiEnableRelay: build.mutation<
       void,
       {
         name: string
-        enableRelayRequest: {
+        payload?: {
           relay_binlog_gtid?: string | null
           relay_binlog_name?: string | null
           relay_dir?: string | null
@@ -133,9 +133,9 @@ const injectedRtkApi = api.injectEndpoints({
       }
     >({
       query: queryArg => ({
-        url: `/api/v1/sources/${queryArg.name}/relay/enable`,
+        url: `/sources/${queryArg.name}/relay/enable`,
         method: 'POST',
-        body: queryArg.enableRelayRequest,
+        body: queryArg.payload,
       }),
     }),
     dmapiPurgeRelay: build.mutation<
@@ -149,7 +149,7 @@ const injectedRtkApi = api.injectEndpoints({
       }
     >({
       query: queryArg => ({
-        url: `/api/v1/sources/${queryArg.name}/relay/purge`,
+        url: `/sources/${queryArg.name}/relay/purge`,
         method: 'POST',
         body: queryArg.purgeRelayRequest,
       }),

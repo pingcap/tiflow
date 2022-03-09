@@ -24,6 +24,7 @@ import {
   Breadcrumb,
   Tabs,
   Radio,
+  Select,
 } from '~/uikit'
 import {
   SearchOutlined,
@@ -36,6 +37,8 @@ import {
   DatabaseOutlined,
   FlagOutlined,
   PlusSquareOutlined,
+  DeploymentUnitOutlined,
+  ThunderboltOutlined,
 } from '~/uikit/icons'
 import {
   Task,
@@ -47,6 +50,7 @@ import {
   calculateTaskStatus,
   TaskStage,
   TaskUnit,
+  SubTaskStatus,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
@@ -78,7 +82,7 @@ const SourceTable: React.FC<{
       },
     },
     {
-      title: t('port'),
+      title: t('user name'),
       dataIndex: 'user',
     },
   ]
@@ -95,6 +99,112 @@ const SourceTable: React.FC<{
   )
 }
 
+const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
+  const [stage, setStage] = useState<TaskStage>()
+  const [unit, setUnit] = useState<TaskUnit>()
+  const [page, setPage] = useState(1)
+  const offset = useMemo(() => {
+    return {
+      start: (page - 1) * 10,
+      end: page * 10,
+    }
+  }, [page])
+  const data = useMemo(() => {
+    let data = subs
+    if (stage) {
+      data = data.filter(s => s.stage === stage)
+    }
+    if (unit) {
+      data = data.filter(s => s.unit === unit)
+    }
+    return data
+  }, [subs, stage, unit, offset])
+  const handlePageChange = (page: number) => {
+    setPage(page)
+  }
+
+  useEffect(() => {
+    // reset offste when filters changed
+    setPage(1)
+  }, [stage, unit])
+
+  return (
+    <>
+      <div className="mb-4">
+        <Space>
+          <Select
+            className="min-w-120px"
+            placeholder="Stage"
+            allowClear
+            value={stage}
+            onChange={setStage}
+          >
+            {Object.values(TaskStage).map(stage => (
+              <Select.Option key={stage} value={stage}>
+                {stage}
+              </Select.Option>
+            ))}
+          </Select>
+          <Select
+            className="min-w-100px"
+            placeholder="Unit"
+            allowClear
+            value={unit}
+            onChange={setUnit}
+          >
+            {Object.values(TaskUnit).map(i => (
+              <Select.Option key={i} value={i}>
+                {i}
+              </Select.Option>
+            ))}
+          </Select>
+        </Space>
+      </div>
+      <Collapse>
+        {data.slice(offset.start, offset.end).map(item => {
+          return (
+            <Collapse.Panel
+              key={item.name}
+              header={
+                <div className="flex-1 flex justify-between">
+                  <span>
+                    <DatabaseOutlined className="mr-2" />
+                    {item.source_name}
+                  </span>
+                  <span>
+                    <DeploymentUnitOutlined className="mr-2" />
+                    {item.unit}
+                  </span>
+                  <span>
+                    <FlagOutlined className="mr-2" />
+                    {item.stage}
+                  </span>
+                  <span>
+                    <ThunderboltOutlined className="mr-2" />
+                    {item.sync_status?.seconds_behind_master}s
+                  </span>
+                </div>
+              }
+            >
+              <SyntaxHighlighter style={ghcolors} language="json">
+                {JSON.stringify(item, null, 2)}
+              </SyntaxHighlighter>
+            </Collapse.Panel>
+          )
+        })}
+      </Collapse>
+      <div className="flex mt-4 justify-end">
+        <Pagination
+          current={page}
+          pageSize={10}
+          onChange={handlePageChange}
+          total={data.length}
+        />
+      </div>
+    </>
+  )
+}
+
 const TaskList: React.FC = () => {
   const [t] = useTranslation()
   const dispatch = useAppDispatch()
@@ -102,10 +212,6 @@ const TaskList: React.FC = () => {
   const [sourceDrawerVisible, setSourceDrawerVisible] = useState(false)
   const [currentTask, setCurrentTask] = useState<Task>()
   const [selectedSources, setSelectedSources] = useState<string[]>([])
-  const [displayedSubtaskOffset, setDisplayedSubtaskOffset] = useState({
-    start: 0,
-    end: 10,
-  })
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
   const selectedTask = useAppSelector(state => state.globals.preloadedTask)
@@ -192,10 +298,6 @@ const TaskList: React.FC = () => {
       handler: deleteTask,
     })
   }, [selectedSources, handleRequest])
-  const handlePageChange = useCallback((page: number, pageSize: number) => {
-    const start = (page - 1) * pageSize
-    setDisplayedSubtaskOffset({ start, end: start + pageSize })
-  }, [])
 
   const dataSource = data?.data
 
@@ -402,44 +504,7 @@ const TaskList: React.FC = () => {
         {currentTaskStatus ? (
           <Tabs defaultActiveKey="1">
             <Tabs.TabPane tab={t('subtask')} key="1">
-              <>
-                <Collapse>
-                  {currentTaskStatus.data
-                    .slice(
-                      displayedSubtaskOffset.start,
-                      displayedSubtaskOffset.end
-                    )
-                    .map(item => {
-                      return (
-                        <Collapse.Panel
-                          key={item.name}
-                          header={
-                            <div className="flex-1 flex justify-between">
-                              <span>
-                                <DatabaseOutlined className="mr-2" />
-                                {item.source_name}
-                              </span>
-                              <span>
-                                <FlagOutlined className="mr-2" />
-                                {item.stage}
-                              </span>
-                            </div>
-                          }
-                        >
-                          <SyntaxHighlighter style={ghcolors} language="json">
-                            {JSON.stringify(item, null, 2)}
-                          </SyntaxHighlighter>
-                        </Collapse.Panel>
-                      )
-                    })}
-                </Collapse>
-                <div className="flex mt-4 justify-end">
-                  <Pagination
-                    onChange={handlePageChange}
-                    total={currentTaskStatus.total}
-                  />
-                </div>
-              </>
+              <SubTaskTable subs={currentTaskStatus.data} />
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('runtime config')} key="2">
               <SyntaxHighlighter style={ghcolors} language="json">

@@ -2,29 +2,46 @@ import React, { useEffect, useState } from 'react'
 import { useLocalStorageState } from 'ahooks'
 import { useTranslation } from 'react-i18next'
 
-import { Alert, Modal, Skeleton, Form, Input } from '~/uikit'
+import { ControlOutlined } from '~/uikit/icons'
+import {
+  Alert,
+  Button,
+  Modal,
+  Skeleton,
+  Form,
+  Input,
+  Popover,
+  Select,
+} from '~/uikit'
+
+const standard =
+  '/d/canCEQgnk/dm-monitor-standard?orgId=1&refresh=1m&theme=light&from=now-12h&to=now&kiosk'
+const professional =
+  '/d/Ja68YqRnz/dm-monitor-professional?orgId=1&refresh=1m&theme=light&from=now-12h&to=now&kiosk'
 
 const Dashboard = () => {
   const [t] = useTranslation()
   const [config, setDashboardConfig] = useLocalStorageState<{
     port: string
     host: string
+    view: string
   }>('dashboard-config', {
     defaultValue: {
       port: '',
       host: '',
+      view: standard,
     },
   })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [form] = Form.useForm()
-  const { host, port } = config
+  const { host, port, view } = config
 
   const handleCancel = () => {
     setIsModalOpen(false)
   }
   const handleOk = () => {
     form.validateFields().then(values => {
-      setDashboardConfig(values)
+      setDashboardConfig(c => ({ ...c, ...values }))
       setIsModalOpen(false)
     })
   }
@@ -37,6 +54,63 @@ const Dashboard = () => {
 
   return (
     <div className="h-full w-full">
+      <Popover
+        arrowPointAtCenter={false}
+        placement="topRight"
+        content={
+          <div>
+            <div className="mt-4">
+              <Form
+                form={form}
+                initialValues={config}
+                onFinish={values =>
+                  setDashboardConfig(c => ({ ...c, ...values }))
+                }
+              >
+                <Form.Item label={t('host')} name="host">
+                  <Input />
+                </Form.Item>
+
+                <Form.Item label={t('port')} name="port">
+                  <Input />
+                </Form.Item>
+
+                <Form.Item label={t('dashboard view')} name="view">
+                  <Select>
+                    <Select.Option value={standard}>
+                      {t('dashboard standard')}
+                    </Select.Option>
+                    <Select.Option value={professional}>
+                      {t('dashboard professional')}
+                    </Select.Option>
+                  </Select>
+                </Form.Item>
+
+                <Button htmlType="submit">{t('save')}</Button>
+              </Form>
+            </div>
+          </div>
+        }
+      >
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            right: 40,
+            height: 50,
+            width: 50,
+            lineHeight: '50px',
+            textAlign: 'center',
+            borderRadius: '50%',
+            backgroundColor: '#fff',
+            cursor: 'pointer',
+            boxShadow:
+              '0 3px 6px -4px #0000001f,0 6px 16px #00000014,0 9px 28px 8px #0000000d',
+          }}
+        >
+          <ControlOutlined style={{ fontSize: '18px' }} />
+        </div>
+      </Popover>
       <Modal
         title={t('edit config')}
         visible={isModalOpen}
@@ -62,16 +136,11 @@ const Dashboard = () => {
           </Form>
         </div>
       </Modal>
-      {(!host || !port) && <Skeleton active />}
+      {(!host || !port) && <Skeleton active className="m-4" />}
       {port && host && (
         <iframe
-          id="dm-dashboard-grafana-iframe"
-          onLoad={() => {
-            // always re-open it on load
-            // because detecting cross origin iframe content is loaded is infeasible
-            setIsModalOpen(true)
-          }}
-          src={`//${config.host}:${config.port}/d/canCEQgnk/dm-monitor-standard?orgId=1&refresh=1m&theme=light&from=now-12h&to=now&kiosk`}
+          key={view}
+          src={`//${host}:${port}${view}`}
           className="h-full w-full"
           frameBorder="0"
         />

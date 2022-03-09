@@ -33,6 +33,8 @@ import {
   PauseCircleOutlined,
   DeleteOutlined,
   RedoOutlined,
+  DoubleRightOutlined,
+  VerticalLeftOutlined,
 } from '~/uikit/icons'
 import CreateOrUpdateSource from '~/components/CreateOrUpdateSource'
 import type { Source } from '~/models/source'
@@ -43,6 +45,8 @@ import {
   useDmapiEnableSourceMutation,
   useDmapiGetSourceListQuery,
   useDmapiUpdateSourceMutation,
+  useDmapiEnableRelayMutation,
+  useDmapiDisableRelayMutation,
 } from '~/models/source'
 import { useDmapiGetTaskListQuery } from '~/models/task'
 import i18n from '~/i18n'
@@ -75,6 +79,8 @@ const SourceList: React.FC = () => {
   const [removeSource] = useDmapiDeleteSourceMutation()
   const [disableSource] = useDmapiDisableSourceMutation()
   const [enableSource] = useDmapiEnableSourceMutation()
+  const [startRelay] = useDmapiEnableRelayMutation()
+  const [disableRelay] = useDmapiDisableRelayMutation()
 
   const handleAddNew = () => {
     setCurrentSource(null)
@@ -104,6 +110,18 @@ const SourceList: React.FC = () => {
         message.destroy(key)
       })
   }
+  const handleBatchSelection = (handler: (name: string) => Promise<any>) => {
+    if (selectedSources.length === 0) return
+    const key = Date.now()
+    message.loading({ content: t('requesting'), key })
+    Promise.all(selectedSources.map(name => handler(name))).then(res => {
+      if (res.some(r => (r as any).error)) {
+        message.destroy(key)
+      } else {
+        message.success({ content: t('request success'), key })
+      }
+    })
+  }
   const handleRemoveSource = async () => {
     if (selectedSources.length === 0) return
     const key = 'removeSource-' + Date.now()
@@ -127,28 +145,16 @@ const SourceList: React.FC = () => {
     })
   }
   const handleEnableSource = () => {
-    if (selectedSources.length === 0) return
-    const key = 'enableSource-' + Date.now()
-    message.loading({ content: t('requesting'), key })
-    Promise.all(selectedSources.map(name => enableSource(name))).then(res => {
-      if (res.some(r => (r as any).error)) {
-        message.destroy(key)
-      } else {
-        message.success({ content: t('request success'), key })
-      }
-    })
+    handleBatchSelection(name => enableSource(name))
   }
   const handleDisableSource = () => {
-    if (selectedSources.length === 0) return
-    const key = 'disableSource-' + Date.now()
-    message.loading({ content: t('requesting'), key })
-    Promise.all(selectedSources.map(name => disableSource(name))).then(res => {
-      if (res.some(r => (r as any).error)) {
-        message.destroy(key)
-      } else {
-        message.success({ content: t('request success'), key })
-      }
-    })
+    handleBatchSelection(name => disableSource(name))
+  }
+  const handleEnableRelay = () => {
+    handleBatchSelection(name => startRelay({ name }))
+  }
+  const handleDisableRelay = () => {
+    handleBatchSelection(name => disableRelay({ name }))
   }
   const dataSource = data?.data
 
@@ -300,6 +306,24 @@ const SourceList: React.FC = () => {
               <Button onClick={handleDisableSource}>
                 <PauseCircleOutlined />
                 {t('disable')} <DownOutlined />
+              </Button>
+            </Dropdown>
+            <Dropdown
+              overlay={
+                <Menu>
+                  <Menu.Item
+                    icon={<VerticalLeftOutlined />}
+                    key="1"
+                    onClick={handleDisableRelay}
+                  >
+                    {t('disable relay')}
+                  </Menu.Item>
+                </Menu>
+              }
+            >
+              <Button onClick={handleEnableRelay}>
+                <DoubleRightOutlined />
+                {t('enable relay')} <DownOutlined />
               </Button>
             </Dropdown>
           </Space>

@@ -138,27 +138,6 @@ const CreateOrUpdateSource: React.FC<{
             >
               <Switch defaultChecked={false} />
             </Form.Item>
-
-            <Form.Item
-              name={['relay_config', 'relay_binlog_name']}
-              label={t('binlog name')}
-            >
-              <Input placeholder={t('binlog name')} />
-            </Form.Item>
-
-            <Form.Item
-              name={['relay_config', 'relay_dir']}
-              label={t('binlog location')}
-            >
-              <Input placeholder="/location" />
-            </Form.Item>
-
-            <Form.Item
-              name={['relay_config', 'relay_binlog_gtid']}
-              label={t('gtid')}
-            >
-              <Input placeholder="gtid" />
-            </Form.Item>
           </section>
         </Col>
       </Row>

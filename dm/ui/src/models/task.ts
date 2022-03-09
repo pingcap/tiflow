@@ -264,6 +264,7 @@ export enum TaskShardMode {
 export enum OnDuplicateBehavior {
   OVERWRITE = 'overwrite',
   ERROR = 'error',
+  REPLACE = 'replace',
 }
 
 export type Task = {

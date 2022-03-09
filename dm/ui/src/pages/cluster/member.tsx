@@ -164,8 +164,6 @@ const WorkerTable: React.FC = () => {
       render(name: string) {
         return (
           <Space>
-            <Button type="link">{t('edit')}</Button>
-
             <Button
               type="link"
               danger

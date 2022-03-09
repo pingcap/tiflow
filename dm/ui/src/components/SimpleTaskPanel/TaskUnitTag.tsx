@@ -3,6 +3,16 @@ import React from 'react'
 import { Tag } from '~/uikit/'
 import { Task, TaskUnit } from '~/models/task'
 
+const colors: { [index: string]: string } = {
+  [TaskUnit.Load]: 'blue',
+  [TaskUnit.Dump]: 'cyan',
+  [TaskUnit.Sync]: 'green',
+}
+
+export const UnitTag: React.FC<{ unit: TaskUnit }> = ({ unit, children }) => {
+  return <Tag color={colors[unit]}>{children}</Tag>
+}
+
 const TaskUnitTag: React.FC<{
   status: Task['status_list']
 }> = ({ status }) => {
@@ -11,9 +21,9 @@ const TaskUnitTag: React.FC<{
   const loadCount = status?.filter(i => i.unit === TaskUnit.Load).length
   return (
     <>
-      <Tag color="cyan">{`Dump ${dumpCount}`}</Tag>
-      <Tag color="blue">{`Load ${loadCount}`}</Tag>
-      <Tag color="green">{`Sync ${syncCount}`}</Tag>
+      <UnitTag unit={TaskUnit.Dump}>{`Dump ${dumpCount}`}</UnitTag>
+      <UnitTag unit={TaskUnit.Load}>{`Load ${loadCount}`}</UnitTag>
+      <UnitTag unit={TaskUnit.Sync}>{`Sync ${syncCount}`}</UnitTag>
     </>
   )
 }

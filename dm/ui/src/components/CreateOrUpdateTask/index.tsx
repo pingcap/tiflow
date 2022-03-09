@@ -27,7 +27,7 @@ const defaultValue = {
   task_mode: TaskMode.ALL,
   meta_schema: '',
   enhance_online_schema_change: true,
-  on_duplicate: OnDuplicateBehavior.ERROR,
+  on_duplicate: OnDuplicateBehavior.REPLACE,
   target_config: {
     host: '',
     port: 3306,
@@ -105,6 +105,7 @@ const CreateTaskConfig: React.FC<{
       next: goNextStep,
       submit: handleSubmit,
       initialValues: taskData,
+      isEditing: Boolean(data),
     })
   }
 

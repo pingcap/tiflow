@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -10,9 +10,10 @@ import {
   Select,
   Card,
 } from '~/uikit'
-import { FileAddOutlined, CloseOutlined } from '~/uikit/icons'
+import { FileAddOutlined, CloseOutlined, RetweetOutlined } from '~/uikit/icons'
 import { useDmapiGetSourceListQuery } from '~/models/source'
 import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
+import { TaskMode } from '~/models/task'
 
 const formLayout = {
   labelCol: { span: 6 },
@@ -29,6 +30,18 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
   const { data, isFetching } = useDmapiGetSourceListQuery({
     with_status: false,
   })
+  const disableGtidOrBinlog = initialValues?.task_mode !== TaskMode.INCREMENTAL
+  const [gtidOrBinlogStatus, setGtidOrBinlogStatus] = useState<
+    Map<number, boolean>
+  >(new Map())
+
+  const toggle = (id: number) => {
+    setGtidOrBinlogStatus(prev => {
+      const newMap = new Map(prev)
+      newMap.set(id, !prev.get(id))
+      return newMap
+    })
+  }
 
   return (
     <Form {...formLayout} name="sourceInfo" initialValues={initialValues}>
@@ -125,37 +138,55 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                     </Select>
                   </Form.Item>
 
-                  <Form.Item
-                    {...itemLayout}
-                    label={t('binlog')}
-                    tooltip={t('create task binlog_name tooltip')}
-                  >
-                    <Input.Group compact>
-                      <Form.Item noStyle name={[field.name, 'binlog_name']}>
-                        <Input
-                          className="!mr-[5%]"
-                          style={{ width: '50%' }}
-                          placeholder="name"
-                        />
-                      </Form.Item>
+                  <div className="relative">
+                    <Form.Item
+                      className="flex-1"
+                      {...itemLayout}
+                      hidden={gtidOrBinlogStatus.get(field.name)}
+                      label={t('binlog')}
+                      tooltip={t('create task binlog_name tooltip')}
+                    >
+                      <Input.Group compact>
+                        <Form.Item noStyle name={[field.name, 'binlog_name']}>
+                          <Input
+                            className="!mr-4"
+                            disabled={disableGtidOrBinlog}
+                            style={{ maxWidth: '45%' }}
+                            placeholder="name"
+                          />
+                        </Form.Item>
 
-                      <Form.Item noStyle name={[field.name, 'binlog_pos']}>
-                        <InputNumber
-                          style={{ width: '45%' }}
-                          placeholder="position"
-                        />
-                      </Form.Item>
-                    </Input.Group>
-                  </Form.Item>
+                        <Form.Item noStyle name={[field.name, 'binlog_pos']}>
+                          <InputNumber
+                            style={{ width: '40%' }}
+                            disabled={disableGtidOrBinlog}
+                            placeholder="position"
+                          />
+                        </Form.Item>
+                      </Input.Group>
+                    </Form.Item>
 
-                  <Form.Item
-                    {...itemLayout}
-                    label={t('gtid')}
-                    name={[field.name, 'binlog_gtid']}
-                    fieldKey={[field.fieldKey, 'binlog_gtid']}
-                  >
-                    <Input />
-                  </Form.Item>
+                    <Form.Item
+                      className="flex-1"
+                      {...itemLayout}
+                      hidden={!gtidOrBinlogStatus.get(field.name)}
+                      label={t('gtid')}
+                      name={[field.name, 'binlog_gtid']}
+                      fieldKey={[field.fieldKey, 'binlog_gtid']}
+                    >
+                      <Input
+                        className="max-w-[90%]"
+                        disabled={disableGtidOrBinlog}
+                      />
+                    </Form.Item>
+
+                    <Button
+                      className="!absolute ml-2 top-0 right-0"
+                      onClick={() => toggle(field.name)}
+                    >
+                      <RetweetOutlined />
+                    </Button>
+                  </div>
                 </Card>
               ))}
 

@@ -20,24 +20,15 @@ import {
   useDmapiGetTaskMigrateTargetsQuery,
 } from '~/models/task'
 import { useDmapiGetSourceQuery } from '~/models/source'
+import { useFuseSearch } from '~/utils/search'
 
 const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
   const [currentTask, setCurrentTask] = useState<Task>()
-  const [currentSourceName, setCurrentSourceName] = useState('')
+  const [currentSourceName, setCurrentSourceName] = useState<string>()
+  const [dbName, setDbName] = useState('')
+  const [tableName, setTableName] = useState('')
   const currentTaskName = currentTask?.name ?? ''
-  const [dbPattern, tablePattern] = useMemo(() => {
-    const currentSourceRule = currentTask?.table_migrate_rule?.find(
-      i => i.source.source_name === currentSourceName
-    )
-    if (currentSourceRule) {
-      return [
-        currentSourceRule.source.schema,
-        currentSourceRule.source.table,
-      ] as const
-    }
-    return ['*', '*'] as const
-  }, [currentTask])
   const { data: taskList, isFetching: isFetchingTaskList } =
     useDmapiGetTaskListQuery({
       withStatus: true,
@@ -49,18 +40,30 @@ const ReplicationDetail: React.FC = () => {
   } = useDmapiGetTaskMigrateTargetsQuery(
     {
       taskName: currentTaskName,
-      sourceName: currentSourceName,
+      sourceName: currentSourceName ?? '',
     },
     { skip: !currentTask || !currentSourceName }
   )
   const { data: sourceData } = useDmapiGetSourceQuery(
-    { sourceName: currentSourceName },
+    { sourceName: currentSourceName ?? '' },
     { skip: !currentSourceName }
   )
   const loading = isFetchingTaskList || isFetchingMigrateTarget
 
-  const dataSource =
-    migrateTagetData?.data?.map((i, index) => ({ ...i, key: index })) ?? []
+  const dataSource = useMemo(() => {
+    return (
+      migrateTagetData?.data?.map((i, index) => ({
+        ...i,
+        key: index,
+        tag: i.source_schema + ' ' + i.source_table, // for fuse search
+      })) ?? []
+    )
+  }, [migrateTagetData])
+
+  const { result, setKeyword } = useFuseSearch(dataSource, {
+    keys: ['tag'],
+  })
+
   const columns: TableColumnsType<TaskMigrateTarget & { key: number }> = [
     {
       title: t('task name'),
@@ -104,6 +107,12 @@ const ReplicationDetail: React.FC = () => {
   ]
 
   useEffect(() => {
+    if (dbName || tableName) {
+      setKeyword(dbName + ' ' + tableName)
+    }
+  }, [dbName, tableName])
+
+  useEffect(() => {
     if (!currentTask && taskList && taskList.data[0]) {
       setCurrentTask(taskList.data[0])
       setCurrentSourceName(
@@ -125,6 +134,7 @@ const ReplicationDetail: React.FC = () => {
         <Col span={22}>
           <Space>
             <Select
+              placeholder="Select a task"
               value={currentTask?.name}
               className="min-w-100px"
               loading={loading}
@@ -135,6 +145,7 @@ const ReplicationDetail: React.FC = () => {
             />
 
             <Select
+              placeholder="Select a source"
               value={currentSourceName}
               className="min-w-100px"
               loading={loading}
@@ -144,8 +155,18 @@ const ReplicationDetail: React.FC = () => {
               }))}
             />
 
-            <Input addonBefore="database" value={dbPattern} disabled />
-            <Input addonBefore="table" value={tablePattern} disabled />
+            <Input
+              addonBefore="database"
+              value={dbName}
+              placeholder="source database"
+              onChange={e => setDbName(e.target.value)}
+            />
+            <Input
+              addonBefore="table"
+              value={tableName}
+              placeholder="source table"
+              onChange={e => setTableName(e.target.value)}
+            />
             <Button onClick={refetch}>{t('check')}</Button>
           </Space>
         </Col>
@@ -153,7 +174,7 @@ const ReplicationDetail: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={dataSource}
+        dataSource={result}
         columns={columns}
         loading={loading}
         rowKey="key"
