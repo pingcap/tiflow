@@ -12,12 +12,6 @@ const defaultFormValues: Partial<Source> = {
   enable_gtid: false,
   enable: false,
 
-  security: {
-    ssl_ca_content: '',
-    ssl_cert_content: '',
-    ssl_key_content: '',
-  },
-
   relay_config: {
     enable_relay: false,
   },
