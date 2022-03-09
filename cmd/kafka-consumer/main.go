@@ -497,7 +497,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("ddl event received", zap.Any("ddl", ddl))
+	log.Info("ddl event received", zap.Uint64("globalResolvedTs", globalResolvedTs), zap.Any("ddl", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
