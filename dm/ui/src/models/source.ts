@@ -205,6 +205,7 @@ export type Source = {
   purge?: Purge
   status_list?: SourceStatus[]
   relay_config?: RelayConfig
+  flavor: string
 }
 
 export const {

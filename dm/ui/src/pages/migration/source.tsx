@@ -91,6 +91,11 @@ const SourceList: React.FC = () => {
   }
   const handleConfirm = async (payload: Source) => {
     const isEditing = Boolean(currentSource)
+    if (isEditing) {
+      payload.enable = currentSource!.enable
+    } else {
+      payload.enable = false
+    }
     const key = 'createSource-' + Date.now()
     const emptyKeys = Object.keys(payload).filter(key =>
       isEmptyObject((payload as any)[key])
@@ -100,7 +105,9 @@ const SourceList: React.FC = () => {
     })
     message.loading({ content: t('requesting'), key })
     const handler = isEditing ? updateSource : createSource
-    handler({ source: payload })
+    handler({
+      source: payload,
+    })
       .unwrap()
       .then(() => {
         message.success({ content: t('request success'), key, duration: 6 })
@@ -178,6 +185,10 @@ const SourceList: React.FC = () => {
           </Button>
         )
       },
+    },
+    {
+      title: t('type'),
+      dataIndex: 'flavor',
     },
     {
       title: t('ip'),

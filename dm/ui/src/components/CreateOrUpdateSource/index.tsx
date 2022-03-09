@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next'
 import { Form, Row, Col, Button, Input, InputNumber, Switch } from '~/uikit'
 import { Source } from '~/models/source'
 
-const defaultFormValues = {
+const defaultFormValues: Partial<Source> = {
   source_name: '',
   host: '',
-  port: '',
+  port: 3306,
   password: '',
   enable_gtid: false,
+  enable: false,
 
   security: {
     ssl_ca_content: '',
@@ -18,9 +19,7 @@ const defaultFormValues = {
   },
 
   relay_config: {
-    relay_enable: false,
-    binlog_name: '',
-    binlog_location: '',
+    enable_relay: false,
   },
 }
 
