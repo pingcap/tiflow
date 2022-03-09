@@ -176,7 +176,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
-				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
+				// If DDL executing failed, and the error can not be ignored,
+				// throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
@@ -199,11 +200,15 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed", zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
+		log.Info("ddl already executed",
+			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl),
+			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
-		log.Info("ddl is not finished yet", zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl))
+		log.Info("ddl is not finished yet",
+			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl),
+			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -216,8 +221,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.Uint64("ddlSentTs", s.ddlSentTs),
-			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs),
-			zap.Any("DDL", ddl))
+			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl),
+			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}
