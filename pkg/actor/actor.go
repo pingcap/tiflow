@@ -43,7 +43,7 @@ type Actor interface {
 	// memory allocation.
 	Poll(ctx context.Context, msgs []message.Message) (running bool)
 
-	// Close is called after Poll retrurns false,
+	// Close is called after Poll returns false,
 	// or actor system is stopping and all message has been received.
 	//
 	// Close must be idempotent and nonblocking.

@@ -60,11 +60,11 @@ type procState uint64
 
 const (
 	// Running state, proc can be polled.
-	procStateRunning procState = 0
+	procStateRunning procState = iota
 	// Mailbox closed, proc is about to be closed.
-	procStateMailboxClosed procState = 1
+	procStateMailboxClosed
 	// Closed, both mailbox and actor is closed, proc can not be polled.
-	procStateClosed procState = 2
+	procStateClosed
 )
 
 // proc is wrapper of a running actor.

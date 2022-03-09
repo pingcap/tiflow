@@ -33,13 +33,11 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-func makeTestSystem(name string, t interface {
-	Fatalf(format string, args ...interface{})
-}) (*System, *Router) {
+func makeTestSystem(name string) (*System, *Router) {
 	return NewSystemBuilder(name).
 		WorkerNumber(2).
 		handleFatal(func(s string, i ID) {
-			t.Fatalf("%s actorID: %d", s, i)
+			panic(fmt.Sprintf("%s actorID: %d", s, i))
 		}).
 		Build()
 }
@@ -145,7 +143,7 @@ func wait(t *testing.T, f func()) {
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
 	err := sys.Stop()
 	require.Nil(t, err)
@@ -154,7 +152,7 @@ func TestSystemStartStop(t *testing.T) {
 func TestSystemSpawnDuplicateActor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := 1
@@ -195,7 +193,7 @@ func (f *forwardActor) Close() {}
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	// Send to a non-existing actor.
@@ -279,7 +277,7 @@ func TestBroadcast(t *testing.T) {
 func TestSystemStopCancelActors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -317,7 +315,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 func TestActorManyMessageOneSchedule(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -451,7 +449,7 @@ func (c *closedActor) Close() {}
 
 func TestPollStoppedActor(t *testing.T) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -482,7 +480,7 @@ func TestPollStoppedActor(t *testing.T) {
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -539,7 +537,7 @@ func (c *slowActor) Close() {}
 func TestSendBeforeClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -593,7 +591,7 @@ func TestSendBeforeClose(t *testing.T) {
 func TestSendAfterClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -672,7 +670,7 @@ func TestStopSystem(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	w := new(int64)
@@ -713,7 +711,7 @@ func TestSendAfterMailboxClosed(t *testing.T) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem(b.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -755,7 +753,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem(b.Name())
 	sys.Start(ctx)
 
 	actorCount := int(math.Exp2(15))
