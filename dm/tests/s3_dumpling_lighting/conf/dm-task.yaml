@@ -4,6 +4,7 @@ task-mode: all
 is-sharding: true
 meta-schema: "dm_meta"
 shard-mode: "optimistic"
+clean-dump-file: true
 
 target-database:
   host: "127.0.0.1"

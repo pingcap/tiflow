@@ -43,7 +43,7 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
-	TmpTLSConfigPath            = "tidb_lightning_tls_config"
+	TmpTLSConfigPath            = "lightning_tls"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.

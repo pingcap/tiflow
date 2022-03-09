@@ -82,18 +82,33 @@ func (s *Security) LoadTLSContent() error {
 func (s *Security) DumpTLSContent(baseDirPath string) error {
 	if s.SSLCA == "" || !utils.IsFileExists(s.SSLCA) {
 		s.SSLCA = path.Join(baseDirPath, "ca.pem")
+		if !utils.IsDirExists(baseDirPath) {
+			if err := os.MkdirAll(baseDirPath, 0o700); err != nil {
+				return err
+			}
+		}
 		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
 			return err
 		}
 	}
 	if s.SSLCert == "" || !utils.IsFileExists(s.SSLCert) {
 		s.SSLCert = path.Join(baseDirPath, "cert.pem")
+		if !utils.IsDirExists(baseDirPath) {
+			if err := os.MkdirAll(baseDirPath, 0o700); err != nil {
+				return err
+			}
+		}
 		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
 			return err
 		}
 	}
 	if s.SSLKey == "" || !utils.IsFileExists(s.SSLKey) {
 		s.SSLKey = path.Join(baseDirPath, "key.pem")
+		if !utils.IsDirExists(baseDirPath) {
+			if err := os.MkdirAll(baseDirPath, 0o700); err != nil {
+				return err
+			}
+		}
 		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
 			return err
 		}
