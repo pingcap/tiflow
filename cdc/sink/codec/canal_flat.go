@@ -555,13 +555,14 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 
 	// hack the DDL Type to be compatible with MySQL sink's logic
 	// see https://github.com/pingcap/tiflow/blob/0578db337d/cdc/sink/mysql.go#L362-L370
-	result.Type = getDDLActionType(strings.ToLower(result.Query))
+	result.Type = getDDLActionType(result.Query)
 	return result
 }
 
-// return DDL ActionType by the prefix, query should be in lower case.
+// return DDL ActionType by the prefix
 // see https://github.com/pingcap/tidb/blob/6dbf2de2f/parser/model/ddl.go#L101-L102
 func getDDLActionType(query string) timodel.ActionType {
+	query = strings.ToLower(query)
 	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
 		return timodel.ActionCreateSchema
 	}
