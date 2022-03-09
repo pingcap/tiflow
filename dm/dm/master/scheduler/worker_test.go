@@ -28,6 +28,8 @@ import (
 )
 
 func TestWorker(t *testing.T) {
+	t.Parallel()
+
 	var (
 		name    = "dm-worker-1"
 		info    = ha.NewWorkerInfo(name, "127.0.0.1:51803") // must ensure no worker listening one this address.
