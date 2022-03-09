@@ -476,7 +476,6 @@ func (o *Optimist) handleSourceTables(ctx context.Context, sourceCh <-chan optim
 						o.logger.Error("failed to delete etcd meta data for table", zap.String("lockID", lock.ID), zap.String("schema", routeTable.UpSchema), zap.String("table", routeTable.UpTable))
 					}
 				}
-
 			}
 			o.mu.Unlock()
 		}
