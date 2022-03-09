@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
@@ -155,6 +156,55 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	txt, err := avroCodec.TextualFromNative(nil, res)
 	c.Check(err, check.IsNil)
 	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
+}
+
+func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
+	defer testleak.AfterTest(c)()
+
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "TestAvroNull",
+	}
+
+	location, err := time.LoadLocation("UTC")
+	c.Check(err, check.IsNil)
+
+	cols := []*model.Column{
+		{Name: "id", Value: int64(1), Flag: model.HandleKeyFlag, Type: mysql.TypeLong},
+		{Name: "colNullable", Value: nil, Flag: model.NullableFlag, Type: mysql.TypeLong},
+		{Name: "colNotnull", Value: int64(0), Type: mysql.TypeLong},
+	}
+
+	colInfos := []rowcodec.ColInfo{
+		{ID: 1, IsPKHandle: true, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+		{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: setFlag(types.NewFieldType(mysql.TypeLong), uint(model.NullableFlag))},
+	}
+
+	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
+	c.Assert(err, check.IsNil)
+	var schemaObj avroSchemaTop
+	err = json.Unmarshal([]byte(schema), &schemaObj)
+	c.Assert(err, check.IsNil)
+	for _, v := range schemaObj.Fields {
+		if v["name"] == "colNullable" {
+			c.Assert(v["type"], check.DeepEquals, []interface{}{"null", "int"})
+		}
+		if v["name"] == "colNotnull" {
+			c.Assert(v["type"], check.Equals, "int")
+		}
+	}
+
+	native, err := rowToAvroNativeData(cols, colInfos, location)
+	c.Assert(err, check.IsNil)
+	for k, v := range native.(map[string]interface{}) {
+		if k == "colNullable" {
+			c.Check(v, check.IsNil)
+		}
+		if k == "colNotnull" {
+			c.Assert(v, check.Equals, int64(0))
+		}
+	}
 }
 
 func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
