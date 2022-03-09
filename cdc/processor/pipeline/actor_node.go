@@ -62,7 +62,8 @@ func (n *ActorNode) TryRun(ctx context.Context) error {
 
 		n.messageStash = nil
 		processedCount++
-		// processed too many messages, not block other tables
+		// processed too many messages may consume more than 1 second,
+		// return here to allow actor system poll other tables, and avoid dead loop
 		if processedCount >= defaultOutputChannelSize {
 			return nil
 		}
