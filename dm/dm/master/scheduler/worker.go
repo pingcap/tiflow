@@ -82,8 +82,7 @@ type Worker struct {
 	cli workerrpc.Client // the gRPC client proxy.
 
 	baseInfo ha.WorkerInfo             // the base information of the DM-worker instance.
-	bound    ha.SourceBound            // the source bound relationship, null value if not bounded.
-	bounds   map[string]ha.SourceBound // the source bound relationship, source-id -> bound.
+	bounds   map[string]ha.SourceBound // the source bounds relationship, source-id -> bound.
 	stage    WorkerStage               // the current stage.
 
 	// the sources from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
@@ -121,7 +120,6 @@ func (w *Worker) ToOffline() {
 	defer w.mu.Unlock()
 	w.stage = WorkerOffline
 	w.reportMetrics()
-	w.bound = nullBound
 	w.bounds = make(map[string]ha.SourceBound)
 }
 
@@ -146,7 +144,6 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 	}
 
 	w.reportMetrics()
-	w.bound = bound
 	w.bounds[bound.Source] = bound
 	return nil
 }
@@ -160,7 +157,6 @@ func (w *Worker) Unbound(source string) error {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a source %s that is not bound with worker %s.", source, w.baseInfo.Name)
 	}
 
-	w.bound = nullBound
 	delete(w.bounds, source)
 	w.reportMetrics()
 	return nil
@@ -202,14 +198,6 @@ func (w *Worker) Stage() WorkerStage {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.stage
-}
-
-// Bound returns the current source ID bounded to,
-// returns null value if not bounded.
-func (w *Worker) Bound() ha.SourceBound {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.bound
 }
 
 // Bounds returns the bounds info of the worker.

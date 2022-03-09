@@ -557,10 +557,10 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	// check if the swap is valid, to avoid we messing up metadata in etcd.
 	for i := range inputWorkers {
 		if inputWorkers[i] != "" {
-			got := workers[i].bound.Source
+			bounds := workers[i].Bounds()
 			expect := inputSources[i]
-			if got != expect {
-				return terror.ErrSchedulerWrongWorkerInput.Generate(inputWorkers[i], expect, got)
+			if _, ok := bounds[expect]; !ok {
+				return terror.ErrSchedulerWrongWorkerInput.Generate(inputWorkers[i], expect, bounds)
 			}
 		}
 	}
@@ -1269,7 +1269,7 @@ func (s *Scheduler) StartRelay(source string, workers []string) error {
 			return nil
 		}
 		stage := ha.NewRelayStage(pb.Stage_Running, source)
-		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, w.Bound())
+		_, err = ha.PutRelayStageSourceBound(s.etcdCli, stage, ha.NewSourceBound(source, w.BaseInfo().Name))
 		return err
 	} else if sourceCfg.EnableRelay {
 		// error when `enable-relay` and `start-relay` with worker name
@@ -1364,7 +1364,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 			return nil
 		}
 		// TODO: remove orphan relay stage
-		_, err = ha.PutSourceBound(s.etcdCli, w.Bound())
+		_, err = ha.PutSourceBound(s.etcdCli, ha.NewSourceBound(source, w.BaseInfo().Name))
 		return err
 	} else if sourceCfg.EnableRelay {
 		// error when `enable-relay` and `stop-relay` with worker name

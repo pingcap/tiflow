@@ -27,6 +27,12 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
+func exactlyOneBound(t *testing.T, bounds map[string]ha.SourceBound, bound ha.SourceBound) {
+	t.Helper()
+	require.Len(t, bounds, 1)
+	require.Equal(t, bound, bounds[bound.Source])
+}
+
 func TestWorker(t *testing.T) {
 	t.Parallel()
 
@@ -44,43 +50,43 @@ func TestWorker(t *testing.T) {
 	defer w.Close()
 	require.Equal(t, info, w.BaseInfo())
 	require.Equal(t, WorkerOffline, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Offline to Free.
 	w.ToFree()
 	require.Equal(t, WorkerFree, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Free to Bound.
 	require.NoError(t, w.ToBound(bound))
-	require.Equal(t, WorkerBound, w.Stage())
-	require.Equal(t, bound, w.Bound())
+	require.Equal(t, WorkerFree, w.Stage())
+	exactlyOneBound(t, w.Bounds(), bound)
 
 	// Bound to Free.
 	w.ToFree()
 	require.Equal(t, WorkerFree, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Free to Offline.
 	w.ToOffline()
 	require.Equal(t, WorkerOffline, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Offline to Bound, invalid.
 	require.True(t, terror.ErrSchedulerWorkerInvalidTrans.Equal(w.ToBound(bound)))
 	require.Equal(t, WorkerOffline, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Offline to Free to Bound again.
 	w.ToFree()
 	require.NoError(t, w.ToBound(bound))
 	require.Equal(t, WorkerBound, w.Stage())
-	require.Equal(t, bound, w.Bound())
+	exactlyOneBound(t, w.Bounds(), bound)
 
 	// Bound to Offline.
 	w.ToOffline()
 	require.Equal(t, WorkerOffline, w.Stage())
-	require.Equal(t, nullBound, w.Bound())
+	require.Len(t, w.Bounds(), 0)
 
 	// Offline to Free to Relay
 	w.ToFree()
@@ -97,7 +103,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, w.StartRelay(source1))
 	require.NoError(t, w.ToBound(bound))
 	require.Equal(t, WorkerBound, w.Stage())
-	require.Equal(t, bound, w.Bound())
+	exactlyOneBound(t, w.Bounds(), bound)
 	checkRelaySource(t, w.RelaySources(), source1)
 
 	// Bound turn off relay
@@ -118,7 +124,7 @@ func TestWorker(t *testing.T) {
 	// Bound to Relay
 	require.NoError(t, w.Unbound(source1))
 	require.Equal(t, WorkerRelay, w.Stage())
-	require.Equal(t, nullBound, w.bound)
+	require.Len(t, w.Bounds(), 0)
 	checkRelaySource(t, w.RelaySources(), source1)
 
 	// Relay to Offline

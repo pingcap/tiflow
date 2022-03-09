@@ -683,7 +683,7 @@ func (t *testSchedulerSuite) workerOffline(s *Scheduler, worker string) {
 	t.T().Helper()
 	w := s.GetWorkerByName(worker)
 	require.NotNil(t.T(), w)
-	require.Equal(t.T(), nullBound, w.Bound())
+	require.Len(t.T(), w.Bounds(), 0)
 	require.Equal(t.T(), WorkerOffline, w.Stage())
 	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
@@ -699,7 +699,7 @@ func (t *testSchedulerSuite) workerFree(s *Scheduler, worker string) {
 	t.T().Helper()
 	w := s.GetWorkerByName(worker)
 	require.NotNil(t.T(), w)
-	require.Equal(t.T(), nullBound, w.Bound())
+	require.Len(t.T(), w.Bounds(), 0)
 	require.Equal(t.T(), WorkerFree, w.Stage())
 	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
@@ -715,7 +715,7 @@ func (t *testSchedulerSuite) workerBound(s *Scheduler, bound ha.SourceBound) {
 	t.T().Helper()
 	w := s.GetWorkerByName(bound.Worker)
 	require.NotNil(t.T(), w)
-	boundDeepEqualExcludeRev(t.T(), w.Bound(), bound)
+	boundDeepEqualExcludeRev(t.T(), w.Bounds()[bound.Source], bound)
 	require.Equal(t.T(), WorkerBound, w.Stage())
 	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
@@ -745,7 +745,7 @@ func (t *testSchedulerSuite) sourceBounds(s *Scheduler, expectBounds, expectUnbo
 		require.NotNil(t.T(), sToB[source])
 		require.NotNil(t.T(), s.GetWorkerBySource(source))
 		require.Equal(t.T(), WorkerBound, s.GetWorkerBySource(source).Stage())
-		boundDeepEqualExcludeRev(t.T(), sToB[source], s.GetWorkerBySource(source).Bound())
+		boundDeepEqualExcludeRev(t.T(), sToB[source], s.GetWorkerBySource(source).Bounds()[source])
 	}
 
 	for _, source := range expectUnbounds {
@@ -976,8 +976,8 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 1)
 	w := s.workers[workerName2]
-	require.Equal(t.T(), WorkerBound, w.stage)
-	require.Equal(t.T(), sourceID1, w.bound.Source)
+	require.Equal(t.T(), WorkerFree, w.stage)
+	require.Contains(t.T(), w.Bounds(), sourceID1)
 	unbounds = s.UnboundSources()
 	require.Len(t.T(), unbounds, 0)
 }
