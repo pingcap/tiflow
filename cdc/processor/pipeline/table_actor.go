@@ -298,7 +298,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
-	var messageProcessFunc asyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var messageProcessFunc asyncMessageProcessorFunc = func(
+		ctx context.Context,
+		msg pipeline.Message) (bool, error) {
 		return actorSinkNode.HandleMessage(sdtTableContext, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
@@ -334,7 +336,9 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 		}
 
 		// construct cyclic actor node if it's enabled, it gets message from sortNode
-		var messageProcessFunc asyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+		var messageProcessFunc asyncMessageProcessorFunc = func(
+			ctx context.Context,
+			msg pipeline.Message) (bool, error) {
 			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
 		}
 		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))

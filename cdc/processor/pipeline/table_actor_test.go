@@ -246,7 +246,8 @@ func TestPollDataFailed(t *testing.T) {
 			BarrierTs: 1,
 		}
 	}
-	var dp asyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var dp asyncMessageProcessorFunc = func(ctx context.Context,
+		msg pipeline.Message) (bool, error) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
@@ -284,12 +285,14 @@ func TestNewTableActor(t *testing.T) {
 		_ = sys.Stop()
 	}()
 
-	cctx := cdcContext.WithChangefeedVars(cdcContext.NewContext(ctx, globalVars), &cdcContext.ChangefeedVars{
-		ID: "changefeed-1",
-		Info: &model.ChangeFeedInfo{
-			Config: config.GetDefaultReplicaConfig(),
-		},
-	})
+	cctx := cdcContext.WithChangefeedVars(
+		cdcContext.NewContext(ctx, globalVars),
+		&cdcContext.ChangefeedVars{
+			ID: "changefeed-1",
+			Info: &model.ChangeFeedInfo{
+				Config: config.GetDefaultReplicaConfig(),
+			},
+		})
 
 	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
