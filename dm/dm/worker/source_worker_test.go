@@ -24,7 +24,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -128,7 +128,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	}), IsTrue)
 	// start task
 	var subtaskCfg config.SubTaskConfig
-	c.Assert(subtaskCfg.DecodeFile("./subtask.toml", true), IsNil)
+	c.Assert(subtaskCfg.Decode(config.SampleSubtaskConfig, true), IsNil)
 	c.Assert(err, IsNil)
 	subtaskCfg.Mode = "full"
 	subtaskCfg.Timezone = "UTC"
@@ -223,7 +223,7 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 	sourceCfg.EnableRelay = false
 
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 
 	// start worker
@@ -410,7 +410,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	}), IsTrue)
 	// step 2: Put a subtask config and subtask stage to this source, then delete it
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
@@ -530,7 +530,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	//
 	// step 2: Put a subtask config and subtask stage to this source, then delete it
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}

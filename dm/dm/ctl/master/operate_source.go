@@ -65,7 +65,7 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 	}
 
 	if printSampleConfig {
-		fmt.Println(config.SampleConfigFile)
+		fmt.Println(config.SampleSourceConfig)
 		return nil
 	}
 

@@ -17,14 +17,15 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/tests/v3/integration"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	mode "github.com/pingcap/tiflow/dm/syncer/safe-mode"
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/integration"
-	"go.uber.org/zap"
 )
 
 type mockCheckpointForSafeMode struct {
@@ -38,6 +39,7 @@ func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
 }
 
 func TestEnableSafeModeInitializationPhase(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 	etcdTestCli := mockCluster.RandClient()

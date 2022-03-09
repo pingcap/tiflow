@@ -85,6 +85,21 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
+// AllTableNames returns the table names of all tables that are being replicated.
+func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
+	tables := s.schemaSnapshot.Tables()
+	names := make([]model.TableName, 0, len(tables))
+	for _, tblInfo := range tables {
+		if s.shouldIgnoreTable(tblInfo) {
+			continue
+		}
+
+		names = append(names, tblInfo.TableName)
+	}
+
+	return names
+}
+
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
 		return nil

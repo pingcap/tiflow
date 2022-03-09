@@ -790,6 +790,12 @@ description = ""
 workaround = "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used."
 tags = ["upstream", "high"]
 
+[error.DM-functional-11127]
+message = "receive conflict DDL for the optimistic shard ddl lock %s: %s"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
 description = ""

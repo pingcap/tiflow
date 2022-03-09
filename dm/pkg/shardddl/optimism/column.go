@@ -16,7 +16,7 @@ package optimism
 import (
 	"encoding/json"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -67,17 +67,21 @@ func GetAllDroppedColumns(cli *clientv3.Client) (map[string]map[string]map[strin
 	return colm, rev, nil
 }
 
-// PutDroppedColumn puts the partially dropped column name into ectd.
+// PutDroppedColumn puts the partially dropped column names into ectd.
 // When we drop a column, we save this column's name in etcd.
-func PutDroppedColumn(cli *clientv3.Client, lockID, column, source, upSchema, upTable string, done DropColumnStage) (rev int64, putted bool, err error) {
-	key := common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID, column, source, upSchema, upTable)
-	val, err := json.Marshal(done)
-	if err != nil {
-		return 0, false, err
+func PutDroppedColumns(cli *clientv3.Client, lockID, source, upSchema, upTable string, cols []string, done DropColumnStage) (int64, bool, error) {
+	ops := make([]clientv3.Op, 0, len(cols))
+	for _, column := range cols {
+		key := common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID, column, source, upSchema, upTable)
+		val, err := json.Marshal(done)
+		if err != nil {
+			return 0, false, err
+		}
+		op := clientv3.OpPut(key, string(val))
+		ops = append(ops, op)
 	}
-	op := clientv3.OpPut(key, string(val))
 
-	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	if err != nil {
 		return 0, false, err
 	}

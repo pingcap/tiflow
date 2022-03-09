@@ -65,7 +65,7 @@ type Sink interface {
 	//
 	// EmitCheckpointTs is thread-safety.
 	// FIXME: some sink implementation is not thread-safety, but they should be.
-	EmitCheckpointTs(ctx context.Context, ts uint64) error
+	EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
 
 	// Close closes the Sink.
 	//

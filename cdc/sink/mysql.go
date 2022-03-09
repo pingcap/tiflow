@@ -281,7 +281,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 	}
 }
 
-func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (s *mysqlSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// do nothing
 	return nil
 }
