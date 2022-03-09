@@ -106,6 +106,17 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		UID:     w.uid,
 		TableID: w.tableID,
 		ReadTs: message.ReadTs{
+			// The maxCommitTs and maxResolvedTs must be sent together,
+			// otherwise reader may output resolved ts wrongly.
+			// As reader employs maxCommitTs and maxResolvedTs to skip taking
+			// iterators when maxResolvedTs > maxCommitTs and
+			// exhaustedResolvedTs >= maxCommitTs.
+			//
+			// If maxCommitTs and maxResolvedTs are sent separately,
+			// data in (exhaustedResolvedTs, actaul maxCommitTs] is lost:
+			//        --------------------------------------------->
+			// writer:                          ^ actaul maxCommitTs
+			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
 			MaxCommitTs:   w.maxCommitTs,
 			MaxResolvedTs: w.maxResolvedTs,
 		},
