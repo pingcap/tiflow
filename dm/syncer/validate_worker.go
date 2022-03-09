@@ -46,7 +46,7 @@ const (
 type validateFailedType int
 
 const (
-	hasDeletedRow validateFailedType = iota
+	deletedRowExists validateFailedType = iota
 	rowNotExist
 	rowDifferent
 )
@@ -71,12 +71,13 @@ type validateWorker struct {
 }
 
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
+	workerLog := v.L.WithFields(zap.Int("id", id))
 	return &validateWorker{
 		cfg:               v.cfg.ValidatorCfg,
 		ctx:               v.ctx,
 		interval:          v.validateInterval,
 		validator:         v,
-		L:                 v.L,
+		L:                 workerLog,
 		conn:              v.toDBConns[id],
 		rowChangeCh:       make(chan *rowChange, workerChannelSize),
 		pendingChangesMap: make(map[string]*tableChange),
@@ -173,6 +174,7 @@ func (vw *validateWorker) validateTableChange() error {
 			failedRowCnt += int64(len(rows))
 		}
 	}
+	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", failedRowCnt))
 	vw.pendingRowCount.Store(failedRowCnt)
 	vw.pendingChangesMap = failedChanges
 	return nil
@@ -230,7 +232,7 @@ func (vw *validateWorker) validateDeletedRows(cond *Cond) (map[string]*validateF
 
 	failedRows := make(map[string]*validateFailedRow, len(targetRows))
 	for key, val := range targetRows {
-		failedRows[key] = &validateFailedRow{tp: hasDeletedRow, dstData: val}
+		failedRows[key] = &validateFailedRow{tp: deletedRowExists, dstData: val}
 	}
 	return failedRows, nil
 }

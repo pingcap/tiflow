@@ -206,10 +206,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go func() {
-		defer v.wg.Done()
-		v.doValidate()
-	}()
+	go v.doValidate()
 
 	v.wg.Add(1)
 	go v.printStatusRoutine()
@@ -312,6 +309,8 @@ func (v *DataValidator) waitSyncerRunning() error {
 
 // doValidate: runs in a separate goroutine.
 func (v *DataValidator) doValidate() {
+	defer v.wg.Done()
+
 	if err := v.waitSyncerRunning(); err != nil {
 		v.errChan <- terror.Annotate(err, "failed to wait syncer running")
 		return
