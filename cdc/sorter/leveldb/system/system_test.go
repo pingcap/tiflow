@@ -16,7 +16,11 @@ package system
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -70,5 +74,39 @@ func TestDBActorID(t *testing.T) {
 	id2 := sys.DBActorID(1)
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
+	require.Nil(t, sys.Stop())
+}
+
+// Slow actor should not block system.Stop() forever.
+func TestSystemStopSlowly(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 2
+
+	sys := NewSystem(t.TempDir(), 1, cfg)
+	require.Nil(t, sys.Start(ctx))
+	msg := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
+	sys.DBRouter.Broadcast(ctx, actormsg.SorterMessage(msg))
+	require.Nil(t, sys.Stop())
+}
+
+// Mailbox full should not cause system.Stop() being blocked forever.
+func TestSystemStopMailboxFull(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg.Count = 2
+
+	sys := NewSystem(t.TempDir(), 1, cfg)
+	require.Nil(t, sys.Start(ctx))
+	msg := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
+	sys.DBRouter.Broadcast(ctx, actormsg.SorterMessage(msg))
+	for {
+		err := sys.DBRouter.Send(actor.ID(1), actormsg.TickMessage())
+		if err != nil {
+			break
+		}
+	}
 	require.Nil(t, sys.Stop())
 }
