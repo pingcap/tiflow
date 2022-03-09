@@ -30,6 +30,7 @@ import (
 // and writes to leveldb.
 type writer struct {
 	common
+	stopped bool
 
 	readerRouter  *actor.Router
 	readerActorID actor.ID
@@ -107,4 +108,13 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	// It's ok if send fails, as resolved ts events are received periodically.
 	_ = w.readerRouter.Send(w.readerActorID, msg)
 	return true
+}
+
+// Stop releases writer resource.
+func (w *writer) Close() {
+	if w.stopped {
+		return
+	}
+	w.stopped = true
+	w.common.closedWg.Done()
 }

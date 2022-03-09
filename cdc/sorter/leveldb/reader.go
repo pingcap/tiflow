@@ -32,6 +32,7 @@ import (
 // reader accepts out-of-order raw kv entries and output sorted entries
 type reader struct {
 	common
+	stopped bool
 
 	state pollState
 
@@ -402,6 +403,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		switch msgs[i].Tp {
 		case actormsg.TypeSorterTask:
 		case actormsg.TypeStop:
+			r.reportError("receive stop message", nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
@@ -489,4 +491,15 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		return false
 	}
 	return true
+}
+
+// Stop releases reader resource.
+func (r *reader) Close() {
+	if r.stopped {
+		return
+	}
+	r.stopped = true
+	// Must release iterator before stopping, otherwise it leaks iterator.
+	_ = r.state.tryReleaseIterator()
+	r.common.closedWg.Done()
 }

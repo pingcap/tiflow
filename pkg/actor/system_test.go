@@ -158,7 +158,7 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 	sys.Start(ctx)
 
 	id := 1
-	fa := &forwardActor{}
+	fa := &forwardActor{ch: make(chan<- message.Message, 1)}
 	mb := NewMailbox(ID(id), 1)
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
@@ -172,6 +172,7 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 type forwardActor struct {
 	contextAware bool
 
+	id ID
 	ch chan<- message.Message
 }
 
@@ -188,6 +189,8 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	}
 	return true
 }
+
+func (f *forwardActor) Close() {}
 
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
@@ -232,7 +235,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	sys, router := NewSystemBuilder("test").WorkerNumber(workerNum).Build()
 	sys.Start(ctx)
 
-	ch := make(chan message.Message, 1)
+	ch := make(chan message.Message, actorNum)
 
 	for id := 0; id < actorNum; id++ {
 		fa := &forwardActor{
@@ -243,7 +246,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	}
 
 	// Broadcase tick to actors.
-	router.Broadcast(message.TickMessage())
+	router.Broadcast(context.TODO(), message.TickMessage())
 	for i := 0; i < actorNum; i++ {
 		select {
 		case msg := <-ch:
@@ -282,6 +285,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 	id := ID(777)
 	ch := make(chan message.Message, 1)
 	fa := &forwardActor{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
@@ -292,6 +296,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 
 	id = ID(778)
 	fa = &forwardActor{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
@@ -389,6 +394,8 @@ func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
+func (f *flipflopActor) Close() {}
+
 // An actor can only be polled by one goroutine at the same time.
 func TestConcurrentPollSameActor(t *testing.T) {
 	t.Parallel()
@@ -439,6 +446,8 @@ func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	// closed
 	return false
 }
+
+func (c *closedActor) Close() {}
 
 func TestPollStoppedActor(t *testing.T) {
 	ctx := context.Background()
@@ -518,6 +527,8 @@ func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	// closed
 	return false
 }
+
+func (c *slowActor) Close() {}
 
 // Test router send during actor poll and before close.
 //
@@ -642,6 +653,59 @@ func TestSendAfterClose(t *testing.T) {
 	wait(t, func() {
 		err := sys.Stop()
 		require.Nil(t, err)
+	})
+}
+
+type stopActor struct {
+	wait *int64
+}
+
+func (s *stopActor) Poll(ctx context.Context, msgs []message.Message) bool {
+	return true
+}
+
+func (s *stopActor) Close() {
+	atomic.AddInt64(s.wait, 1)
+}
+
+func TestStopSystem(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sys, _ := makeTestSystem(t.Name(), t)
+	sys.Start(ctx)
+
+	w := new(int64)
+	for i := 0; i < 20_000; i++ {
+		mb := NewMailbox(ID(i), 1)
+		require.Nil(t, sys.Spawn(mb, &stopActor{w}))
+	}
+
+	wait(t, func() {
+		err := sys.Stop()
+		require.Nil(t, err)
+	})
+	require.EqualValues(t, 20_000, atomic.LoadInt64(w))
+}
+
+func TestSendAfterMailboxClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	router := NewRouter(t.Name())
+
+	id := ID(1)
+	mb := NewMailbox(id, 1)
+	router.InsertMailbox4Test(mb.ID(), mb)
+
+	val, _ := router.procs.Load(id)
+	proc := val.(*proc)
+	proc.onSystemStop()
+	msg := message.TickMessage()
+	require.EqualValues(t, errActorStopped, router.Send(id, msg))
+	require.EqualValues(t, errActorStopped, router.SendB(ctx, id, msg))
+	wait(t, func() {
+		router.Broadcast(ctx, msg)
 	})
 }
 
