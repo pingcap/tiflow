@@ -51,7 +51,6 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 }
 
 func TestSorterBasic(t *testing.T) {
-
 	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
@@ -79,7 +78,6 @@ func TestSorterBasic(t *testing.T) {
 }
 
 func TestSorterCancel(t *testing.T) {
-
 	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
@@ -126,9 +124,10 @@ func testSorter(ctx context.Context, t *testing.T, sorter sorter.EventSorter, co
 		log.Panic("Could not enable failpoint", zap.Error(err))
 	}
 
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied", ""))
+	p := "github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied"
+	require.Nil(t, failpoint.Enable(p, ""))
 	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/pkg/util/InjectCheckDataDirSatisfied"))
+		require.Nil(t, failpoint.Disable(p))
 	}()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -223,7 +222,6 @@ func testSorter(ctx context.Context, t *testing.T, sorter sorter.EventSorter, co
 }
 
 func TestSortDirConfigChangeFeed(t *testing.T) {
-
 	defer CleanUp()
 
 	poolMu.Lock()
@@ -249,7 +247,6 @@ func TestSortDirConfigChangeFeed(t *testing.T) {
 // TestSorterCancelRestart tests the situation where the Unified Sorter is repeatedly canceled and
 // restarted. There should not be any problem, especially file corruptions.
 func TestSorterCancelRestart(t *testing.T) {
-
 	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
@@ -293,7 +290,6 @@ func TestSorterCancelRestart(t *testing.T) {
 }
 
 func TestSorterIOError(t *testing.T) {
-
 	defer CleanUp()
 
 	conf := config.GetDefaultServerConfig()
@@ -367,7 +363,6 @@ func TestSorterIOError(t *testing.T) {
 }
 
 func TestSorterErrorReportCorrect(t *testing.T) {
-
 	defer CleanUp()
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -423,10 +418,9 @@ func TestSorterErrorReportCorrect(t *testing.T) {
 }
 
 func TestSortClosedAddEntry(t *testing.T) {
-
 	defer CleanUp()
 
-	sorter, err := NewUnifiedSorter(c.MkDir(), "test-cf", "test", 0)
+	sorter, err := NewUnifiedSorter(t.TempDir(), "test-cf", "test", 0)
 	require.Nil(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
@@ -449,7 +443,6 @@ func TestSortClosedAddEntry(t *testing.T) {
 }
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
-
 	defer CleanUp()
 
 	dir := t.TempDir()

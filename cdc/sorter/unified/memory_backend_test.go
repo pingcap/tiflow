@@ -24,7 +24,6 @@ import (
 )
 
 func TestNoLeaking(t *testing.T) {
-
 	bknd := newMemoryBackEnd()
 	wrtr, err := bknd.writer()
 	require.Nil(t, err)

@@ -92,7 +92,6 @@ func (b *mockFlushTaskBuilder) build() *flushTask {
 // TestMergerSingleHeap simulates a situation where there is only one data stream
 // It tests the most basic scenario.
 func TestMergerSingleHeap(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -163,7 +162,6 @@ func TestMergerSingleHeap(t *testing.T) {
 
 // TestMergerSingleHeapRetire simulates a situation where the resolved event is not the last event in a flushTask
 func TestMergerSingleHeapRetire(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -236,7 +234,6 @@ func TestMergerSingleHeapRetire(t *testing.T) {
 // TestMergerSortDelay simulates a situation where merging takes a long time.
 // Expects intermediate resolved events to be generated, so that the sink would not get stuck in a real life situation.
 func TestMergerSortDelay(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	require.Nil(t, err)
 
@@ -316,7 +313,6 @@ func TestMergerSortDelay(t *testing.T) {
 // TestMergerCancel simulates a situation where the merger is cancelled with pending data.
 // Expects proper clean-up of the data.
 func TestMergerCancel(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	require.Nil(t, err)
 
@@ -379,7 +375,6 @@ func TestMergerCancel(t *testing.T) {
 // TestMergerCancel simulates a situation where the merger is cancelled with pending data.
 // Expects proper clean-up of the data.
 func TestMergerCancelWithUnfinishedFlushTasks(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	require.Nil(t, err)
 
@@ -435,7 +430,6 @@ func TestMergerCancelWithUnfinishedFlushTasks(t *testing.T) {
 // TestMergerCancel simulates a situation where the input channel is abruptly closed.
 // There is expected to be NO fatal error.
 func TestMergerCloseChannel(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	require.Nil(t, err)
 
@@ -481,7 +475,6 @@ func TestMergerCloseChannel(t *testing.T) {
 // TestMergerOutputBlocked simulates a situation where the output channel is blocked for
 // a significant period of time.
 func TestMergerOutputBlocked(t *testing.T) {
-
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	require.Nil(t, err)
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug") //nolint:errcheck

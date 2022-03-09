@@ -30,7 +30,6 @@ import (
 )
 
 func TestBasicFunction(t *testing.T) {
-
 	dataDir := t.TempDir()
 	err := os.MkdirAll(dataDir, 0o755)
 	require.Nil(t, err)
@@ -105,7 +104,6 @@ func TestBasicFunction(t *testing.T) {
 // TestDirectoryBadPermission verifies that no permission to ls the directory does not prevent using it
 // as a temporary file directory.
 func TestDirectoryBadPermission(t *testing.T) {
-
 	dataDir := t.TempDir()
 	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
 	err := os.MkdirAll(sortDir, 0o755)
@@ -142,7 +140,6 @@ func TestDirectoryBadPermission(t *testing.T) {
 
 // TestCleanUpSelf verifies that the backendPool correctly cleans up files used by itself on exit.
 func TestCleanUpSelf(t *testing.T) {
-
 	dataDir := t.TempDir()
 	err := os.Chmod(dataDir, 0o755)
 	require.Nil(t, err)
@@ -263,7 +260,6 @@ func (p *mockOtherProcess) assertFilesNotExist(t *testing.T) {
 // TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
 // left by other CDC processes that have exited abnormally.
 func TestCleanUpStaleBasic(t *testing.T) {
-
 	dir := t.TempDir()
 	prefix := dir + "/sort-1-"
 
@@ -283,7 +279,6 @@ func TestCleanUpStaleBasic(t *testing.T) {
 // TestFileLockConflict tests that if two backEndPools were to use the same sort-dir,
 // and error would be returned by one of them.
 func TestFileLockConflict(t *testing.T) {
-
 	dir := t.TempDir()
 
 	backEndPool1, err := newBackEndPool(dir)
@@ -299,7 +294,6 @@ func TestFileLockConflict(t *testing.T) {
 // TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
 // left by other CDC processes that have exited abnormally.
 func TestCleanUpStaleLockNoPermission(t *testing.T) {
-
 	dir := t.TempDir()
 	prefix := dir + "/sort-1-"
 
@@ -319,7 +313,6 @@ func TestCleanUpStaleLockNoPermission(t *testing.T) {
 // getting the current system memory pressure. Such a failure is usually caused by a lack of file descriptor quota
 // set by the operating system.
 func TestGetMemoryPressureFailure(t *testing.T) {
-
 	origin := memory.MemTotal
 	defer func() {
 		memory.MemTotal = origin
@@ -347,14 +340,15 @@ func TestGetMemoryPressureFailure(t *testing.T) {
 }
 
 func TestCheckDataDirSatisfied(t *testing.T) {
-
 	dir := t.TempDir()
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dir
 	config.StoreGlobalServerConfig(conf)
 
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""))
+	p := "github.com/pingcap/tiflow/cdc/sorter/unified/" +
+		"InjectCheckDataDirSatisfied"
+	require.Nil(t, failpoint.Enable(p, ""))
 	err := checkDataDirSatisfied()
 	require.Nil(t, err)
-	require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied"))
+	require.Nil(t, failpoint.Disable(p))
 }

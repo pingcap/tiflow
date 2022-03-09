@@ -146,7 +146,6 @@ func newPullerForTest(
 }
 
 func TestPullerResolvedForward(t *testing.T) {
-
 	spans := []regionspan.Span{
 		{Start: []byte("t_a"), End: []byte("t_e")},
 	}
@@ -191,7 +190,6 @@ func TestPullerResolvedForward(t *testing.T) {
 }
 
 func TestPullerRawKV(t *testing.T) {
-
 	spans := []regionspan.Span{
 		{Start: []byte("c"), End: []byte("e")},
 	}
