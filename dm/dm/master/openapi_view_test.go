@@ -29,12 +29,11 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -57,22 +56,20 @@ type openAPISuite struct {
 
 	etcdTestCli     *clientv3.Client
 	testEtcdCluster *integration.ClusterV3
-	workerClients   map[string]workerrpc.Client
 }
 
 func (t *openAPISuite) SetUpSuite(c *check.C) {
 	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+	t.etcdTestCli = t.testEtcdCluster.RandClient()
 }
 
 func (t *openAPISuite) TearDownSuite(c *check.C) {
 	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	t.testEtcdCluster.Terminate(t.testT)
 }
 
 func (t *openAPISuite) SetUpTest(c *check.C) {
-	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
-	t.etcdTestCli = t.testEtcdCluster.RandClient()
-	t.workerClients = make(map[string]workerrpc.Client)
-
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
@@ -82,7 +79,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -104,7 +101,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 
 	// join to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -143,7 +140,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -627,7 +624,7 @@ func (t *openAPISuite) TestClusterAPI(c *check.C) {
 
 	// join a new master node to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -823,7 +820,7 @@ func setupTestServer(ctx context.Context, t *testing.T) *Server {
 	t.Helper()
 	// create a new cluster
 	cfg1 := NewConfig()
-	require.Nil(t, cfg1.Parse([]string{"-config=./dm-master.toml"}))
+	require.NoError(t, cfg1.FromContent(SampleConfig))
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = t.TempDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]

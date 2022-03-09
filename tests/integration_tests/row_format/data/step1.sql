@@ -27,6 +27,9 @@ CREATE TABLE multi_data_type
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
 
+-- make sure `nullable` can be handled by the mounter and mq encoding protocol
+INSERT INTO multi_data_type() VALUES ();
+
 INSERT INTO multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
                            , t_date, t_datetime, t_timestamp, t_time, t_year
                            , t_char, t_varchar, t_blob, t_text, t_enum
