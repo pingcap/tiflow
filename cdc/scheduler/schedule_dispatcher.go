@@ -61,7 +61,8 @@ type ScheduleDispatcherCommunicator interface {
 		changeFeedID model.ChangeFeedID,
 		tableID model.TableID,
 		captureID model.CaptureID,
-		isDelete bool, // True when we want to remove a table from the capture.
+		isDelete bool,
+		epoch model.ProcessorEpoch,
 	) (done bool, err error)
 
 	// Announce announces to the specified capture that the current node has become the Owner.
@@ -124,6 +125,10 @@ type captureStatus struct {
 	// We need to know this before we can make decision whether to
 	// dispatch a table.
 	SyncStatus captureSyncStatus
+
+	// Epoch is reset when the processor's internal states
+	// have been reset.
+	Epoch model.ProcessorEpoch
 
 	// Watermark fields
 	CheckpointTs model.Ts
@@ -396,7 +401,9 @@ func (s *BaseScheduleDispatcher) addTable(
 		}
 	}
 
-	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, target, false)
+	epoch := s.captureStatus[target].Epoch
+	ok, err = s.communicator.DispatchTable(
+		ctx, s.changeFeedID, tableID, target, false, epoch)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -428,7 +435,8 @@ func (s *BaseScheduleDispatcher) removeTable(
 	}
 	// need to delete table
 	captureID := record.CaptureID
-	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, captureID, true)
+	epoch := s.captureStatus[captureID].Epoch
+	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, captureID, true, epoch)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -496,8 +504,10 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 				zap.Any("tableRecord", record))
 		}
 
+		epoch := s.captureStatus[record.CaptureID].Epoch
 		// Removes the table from the current capture
-		ok, err := s.communicator.DispatchTable(ctx, s.changeFeedID, record.TableID, record.CaptureID, true)
+		ok, err := s.communicator.DispatchTable(
+			ctx, s.changeFeedID, record.TableID, record.CaptureID, true, epoch)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -513,17 +523,34 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
 // the processor.
-func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.CaptureID, tableID model.TableID) {
+func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
+	captureID model.CaptureID,
+	tableID model.TableID,
+	epoch model.ProcessorEpoch,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	logger := s.logger.With(
 		zap.String("captureID", captureID),
 		zap.Int64("tableID", tableID),
+		zap.String("epoch", epoch),
 	)
 
 	if _, ok := s.captures[captureID]; !ok {
 		logger.Warn("stale message from dead processor, ignore")
+		return
+	}
+
+	captureSt, ok := s.captureStatus[captureID]
+	if !ok {
+		logger.Warn("Message from an unknown processor, ignore")
+		return
+	}
+
+	if captureSt.Epoch != epoch {
+		logger.Warn("Processor epoch does not match",
+			zap.String("expected", captureSt.Epoch))
 		return
 	}
 
@@ -553,12 +580,18 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(captureID model.C
 }
 
 // OnAgentSyncTaskStatuses is called when the processor sends its complete current state.
-func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.CaptureID, running, adding, removing []model.TableID) {
+func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
+	captureID model.CaptureID,
+	epoch model.ProcessorEpoch,
+	running, adding, removing []model.TableID,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	logger := s.logger.With(zap.String("captureID", captureID))
-	logger.Info("scheduler received sync", zap.String("captureID", captureID))
+	logger.Info("scheduler received sync",
+		zap.String("captureID", captureID),
+		zap.String("epoch", epoch))
 
 	if ce := logger.Check(zap.DebugLevel, "OnAgentSyncTaskStatuses"); ce != nil {
 		// Print this information only in debug mode.
@@ -604,7 +637,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(captureID model.Capture
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RemovingTable})
 	}
 
-	s.captureStatus[captureID].SyncStatus = captureSyncFinished
+	status := s.captureStatus[captureID]
+	status.SyncStatus = captureSyncFinished
+	status.Epoch = epoch
 }
 
 // OnAgentCheckpoint is called when the processor sends a checkpoint.

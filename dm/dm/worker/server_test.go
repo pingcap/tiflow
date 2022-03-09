@@ -26,9 +26,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -45,9 +45,7 @@ import (
 
 // do not forget to update this path if the file removed/renamed.
 const (
-	sourceSampleFile  = "./source.yaml"
-	subtaskSampleFile = "./subtask.toml"
-	mydumperPath      = "../../bin/mydumper"
+	mydumperPath = "../../bin/mydumper"
 )
 
 var etcdErrCompacted = v3rpc.ErrCompacted
@@ -109,7 +107,6 @@ func (t *testServer) TestServer(c *C) {
 	etcdDir := c.MkDir()
 	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
 	c.Assert(err, IsNil)
-	defer ETCD.Close()
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
 	cfg.Join = masterAddr
@@ -166,7 +163,7 @@ func (t *testServer) TestServer(c *C) {
 
 	// start task
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
@@ -638,7 +635,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg

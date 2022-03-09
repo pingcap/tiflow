@@ -16,11 +16,14 @@ package leveldb
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,6 +63,28 @@ func TestAddEntry(t *testing.T) {
 		}, task.SorterTask)
 }
 
+func TestTryAddEntry(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, mb := newTestSorter(t.Name(), 1)
+
+	event := model.NewResolvedPolymorphicEvent(0, 1)
+	sent, err := s.TryAddEntry(ctx, event)
+	require.True(t, sent)
+	require.Nil(t, err)
+	task, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, event, task.SorterTask.InputEvent)
+
+	sent, err = s.TryAddEntry(ctx, event)
+	require.True(t, sent)
+	require.Nil(t, err)
+	sent, err = s.TryAddEntry(ctx, event)
+	require.False(t, sent)
+	require.Nil(t, err)
+}
+
 func TestOutput(t *testing.T) {
 	t.Parallel()
 
@@ -96,4 +121,30 @@ func TestCleanupFunc(t *testing.T) {
 				},
 			},
 		}, task.SorterTask)
+}
+
+func TestRunAndReportError(t *testing.T) {
+	t.Parallel()
+
+	s, mb := newTestSorter(t.Name(), 2)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		s.common.reportError(
+			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	}()
+	require.Error(t, s.Run(context.Background()))
+
+	// Stop writer and reader.
+	msg, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
+	msg, ok = mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
+
+	// Must be nonblock.
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 }

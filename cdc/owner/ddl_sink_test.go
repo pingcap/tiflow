@@ -37,7 +37,7 @@ type mockSink struct {
 	ddlError     error
 }
 
-func (m *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (m *mockSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.TableName) error {
 	atomic.StoreUint64(&m.checkpointTs, ts)
 	return nil
 }
@@ -92,9 +92,9 @@ func TestCheckpoint(t *testing.T) {
 			return nil
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
 	}
-	ddlSink.emitCheckpointTs(ctx, 1)
+	ddlSink.emitCheckpointTs(1, nil)
 	require.Nil(t, waitCheckpointGrowingUp(mSink, 1))
-	ddlSink.emitCheckpointTs(ctx, 10)
+	ddlSink.emitCheckpointTs(10, nil)
 	require.Nil(t, waitCheckpointGrowingUp(mSink, 10))
 }
 
