@@ -13,8 +13,10 @@
 
 package pulsar
 
-// TopicManager is the interface that wraps the basic Pulsar topic management operations.
-// Right now it doesn't have any implementation, Pulsar doesn't support multiple topics yet.
+// TopicManager is the interface
+// that wraps the basic Pulsar topic management operations.
+// Right now it doesn't have any implementation,
+// Pulsar doesn't support multiple topics yet.
 // So it now just returns a fixed number of partitions for a fixed topic.
 type TopicManager struct {
 	partitionNum int32

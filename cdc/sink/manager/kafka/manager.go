@@ -41,7 +41,11 @@ type TopicManager struct {
 }
 
 // NewTopicManager creates a new topic manager.
-func NewTopicManager(client kafka.Client, admin kafka.ClusterAdminClient, cfg *kafkaconfig.AutoCreateTopicConfig) *TopicManager {
+func NewTopicManager(
+	client kafka.Client,
+	admin kafka.ClusterAdminClient,
+	cfg *kafkaconfig.AutoCreateTopicConfig,
+) *TopicManager {
 	return &TopicManager{
 		client: client,
 		admin:  admin,
@@ -106,7 +110,8 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 
 	if !m.cfg.AutoCreate {
 		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			fmt.Sprintf("`auto-create-topic` is false, and %s not found", topicName))
+			fmt.Sprintf("`auto-create-topic` is false, "+
+				"and %s not found", topicName))
 	}
 
 	err = m.admin.CreateTopic(topicName, &sarama.TopicDetail{

@@ -35,12 +35,34 @@ func TestEventRouter(t *testing.T) {
 	d, err = NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "")
@@ -80,12 +102,34 @@ func TestGetActiveTopics(t *testing.T) {
 	d, err := NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "test")
@@ -108,12 +152,34 @@ func TestGetTopic(t *testing.T) {
 	d, err := NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "test")
@@ -147,12 +213,34 @@ func TestGetPartition(t *testing.T) {
 	d, err := NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "test")

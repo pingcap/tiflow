@@ -364,17 +364,39 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := kafkamanager.NewTopicManager(client, adminClient, baseConfig.DeriveTopicConfig())
+	topicManager := kafkamanager.NewTopicManager(
+		client,
+		adminClient,
+		baseConfig.DeriveTopicConfig(),
+	)
 	if err := topicManager.CreateTopic(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, baseConfig, saramaConfig, errCh)
+	sProducer, err := kafka.NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		topic,
+		baseConfig,
+		saramaConfig,
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := newMqSink(ctx, baseConfig.Credential, topicManager, sProducer, filter, topic, replicaConfig, encoderConfig, errCh)
+	sink, err := newMqSink(
+		ctx,
+		baseConfig.Credential,
+		topicManager,
+		sProducer,
+		filter,
+		topic,
+		replicaConfig,
+		encoderConfig,
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -414,8 +436,20 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	fakeTopicManager := pulsarmanager.NewTopicManager(producer.GetPartitionNum())
-	sink, err := newMqSink(ctx, credential, fakeTopicManager, producer, filter, "", replicaConfig, encoderConfig, errCh)
+	fakeTopicManager := pulsarmanager.NewTopicManager(
+		producer.GetPartitionNum(),
+	)
+	sink, err := newMqSink(
+		ctx,
+		credential,
+		fakeTopicManager,
+		producer,
+		filter,
+		"",
+		replicaConfig,
+		encoderConfig,
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

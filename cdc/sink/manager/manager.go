@@ -14,7 +14,8 @@
 package manager
 
 // TopicManager is the interface of topic manager.
-// It will be responsible for creating and updating the information of the topic.
+// It will be responsible for creating and
+// updating the information of the topic.
 type TopicManager interface {
 	// Partitions returns the partitions of the topic.
 	Partitions(topic string) (int32, error)

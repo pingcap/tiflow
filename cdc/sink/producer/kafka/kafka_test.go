@@ -104,7 +104,19 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	saramaConfig, err := NewSaramaConfig(ctx, config)
 	c.Assert(err, check.IsNil)
 	saramaConfig.Producer.Flush.MaxMessages = 1
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		topic,
+		config,
+		saramaConfig,
+		errCh,
+	)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
 
@@ -369,7 +381,19 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	saramaConfig.Producer.Retry.Max = 2
 	saramaConfig.Producer.MaxMessageBytes = 8
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		topic,
+		config,
+		saramaConfig,
+		errCh,
+	)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -439,7 +463,19 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(context.Background(), config)
 	c.Assert(err, check.IsNil)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		topic,
+		config,
+		saramaConfig,
+		errCh,
+	)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

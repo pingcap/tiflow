@@ -51,7 +51,8 @@ type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock    sync.RWMutex
+	clientLock sync.RWMutex
+	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
@@ -317,22 +318,19 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, saramaConfig *sarama.Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(
+	ctx context.Context,
+	client sarama.Client,
+	admin kafka.ClusterAdminClient,
+	topic string,
+	config *Config,
+	saramaConfig *sarama.Config,
+	errCh chan error,
+) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.Any("role", role))
-
-	// this admin mainly used by `metricsMonitor` to fetch broker info.
-	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {

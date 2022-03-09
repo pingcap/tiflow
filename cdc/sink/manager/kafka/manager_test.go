@@ -104,5 +104,9 @@ func TestCreateTopic(t *testing.T) {
 	cfg.AutoCreate = false
 	manager = NewTopicManager(client, adminClient, cfg)
 	err = manager.CreateTopic("new-topic2")
-	require.Regexp(t, "`auto-create-topic` is false, and new-topic2 not found", err)
+	require.Regexp(
+		t,
+		"`auto-create-topic` is false, and new-topic2 not found",
+		err,
+	)
 }

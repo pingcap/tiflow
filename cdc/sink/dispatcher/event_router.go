@@ -114,9 +114,14 @@ func (s *EventRouter) GetTopic(row *model.RowChangedEvent) string {
 }
 
 // GetPartition returns the target partition.
-func (s *EventRouter) GetPartition(row *model.RowChangedEvent, partitionNum int32) int32 {
-	_, partitionDispatcher := s.matchDispatcher(row.Table.Schema, row.Table.Table)
-	partition := partitionDispatcher.DispatchRowChangedEvent(row, partitionNum)
+func (s *EventRouter) GetPartition(
+	row *model.RowChangedEvent,
+	partitionNum int32,
+) int32 {
+	_, partitionDispatcher := s.matchDispatcher(row.Table.Schema,
+		row.Table.Table)
+	partition := partitionDispatcher.DispatchRowChangedEvent(row,
+		partitionNum)
 
 	return partition
 }
