@@ -36,6 +36,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		router:    tableActorRouter,
 		cancel:    func() {},
 		reportErr: func(err error) {},
+		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
 	}
 	require.True(t, tbl.AsyncStop(1))
 
@@ -44,5 +45,5 @@ func TestAsyncStopFailed(t *testing.T) {
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
 	require.Nil(t, tableActorSystem.Stop())
-	require.False(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop(1))
 }

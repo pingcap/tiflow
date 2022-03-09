@@ -87,6 +87,7 @@ func TestCompactorPoll(t *testing.T) {
 	// Close leveldb.
 	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	compactor.Close()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -107,6 +108,7 @@ func TestComactorContextCancel(t *testing.T) {
 	closed := !ldb.Poll(
 		ctx, []actormsg.Message{actormsg.SorterMessage(message.Task{})})
 	require.True(t, closed)
+	ldb.Close()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }

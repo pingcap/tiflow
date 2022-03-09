@@ -76,7 +76,11 @@ type Mailbox interface {
 }
 
 // NewMailbox creates a fixed capacity mailbox.
+// The minimum capacity is 1.
 func NewMailbox(id ID, cap int) Mailbox {
+	if cap <= 0 {
+		cap = 1
+	}
 	return &mailbox{
 		id:      id,
 		msgCh:   make(chan message.Message, cap),
