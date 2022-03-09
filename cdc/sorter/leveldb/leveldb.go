@@ -255,7 +255,7 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	return true
 }
 
-// Stop releases DBActor resource.
+// Close releases DBActor resource.
 func (ldb *DBActor) Close() {
 	if ldb.stopped {
 		return

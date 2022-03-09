@@ -47,9 +47,9 @@ var (
 
 // procState is the state of a proc.
 //
-//   ┌--------┐  Actor.Close()
-//   | Runing |------------------┐
-//   └--+-----┘                  v
+//   ┌---------┐  Actor.Close()
+//   | Running |-----------------┐
+//   └--+------┘                 v
 //      |                    ┌--------┐
 //      | System.Close()     | Closed |
 //      v                    └--------┘

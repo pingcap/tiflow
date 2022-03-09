@@ -137,7 +137,7 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	return true
 }
 
-// Stop releases CompactActor resource.
+// Close releases CompactActor resource.
 func (c *CompactActor) Close() {
 	log.Info("compactor actor quit", zap.Uint64("ID", uint64(c.id)))
 	c.closedWg.Done()
