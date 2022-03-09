@@ -166,19 +166,21 @@ func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
 		Table:  "TestAvroNull",
 	}
 
-	location, err := time.LoadLocation("UTC")
-	c.Check(err, check.IsNil)
-
 	cols := []*model.Column{
 		{Name: "id", Value: int64(1), Flag: model.HandleKeyFlag, Type: mysql.TypeLong},
 		{Name: "colNullable", Value: nil, Flag: model.NullableFlag, Type: mysql.TypeLong},
 		{Name: "colNotnull", Value: int64(0), Type: mysql.TypeLong},
+		{Name: "colNullable1", Value: int64(0), Flag: model.NullableFlag, Type: mysql.TypeLong},
 	}
 
 	colInfos := []rowcodec.ColInfo{
 		{ID: 1, IsPKHandle: true, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
 		{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
-		{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: setFlag(types.NewFieldType(mysql.TypeLong), uint(model.NullableFlag))},
+		{
+			ID: 3, IsPKHandle: false, VirtualGenCol: false,
+			Ft: setFlag(types.NewFieldType(mysql.TypeLong), uint(model.NullableFlag)),
+		},
+		{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
 	}
 
 	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
@@ -195,7 +197,7 @@ func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
 		}
 	}
 
-	native, err := rowToAvroNativeData(cols, colInfos, location)
+	native, err := rowToAvroNativeData(cols, colInfos, time.Local)
 	c.Assert(err, check.IsNil)
 	for k, v := range native.(map[string]interface{}) {
 		if k == "colNullable" {
@@ -203,6 +205,29 @@ func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
 		}
 		if k == "colNotnull" {
 			c.Assert(v, check.Equals, int64(0))
+		}
+		if k == "colNullable1" {
+			c.Assert(v, check.DeepEquals, map[string]interface{}{"int": int64(0)})
+		}
+	}
+
+	avroCodec, err := goavro.NewCodec(schema)
+	c.Assert(err, check.IsNil)
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, time.Local)
+	c.Assert(err, check.IsNil)
+
+	native, _, err = avroCodec.NativeFromBinary(r.data)
+	c.Check(err, check.IsNil)
+	c.Check(native, check.NotNil)
+	for k, v := range native.(map[string]interface{}) {
+		if k == "colNullable" {
+			c.Check(v, check.IsNil)
+		}
+		if k == "colNotnull" {
+			c.Assert(v.(int32), check.Equals, int32(0))
+		}
+		if k == "colNullable1" {
+			c.Assert(v, check.DeepEquals, map[string]interface{}{"int": int32(0)})
 		}
 	}
 }
@@ -248,7 +273,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	res, _, err := avroCodec.NativeFromBinary(r.data)
 	c.Check(err, check.IsNil)
 	c.Check(res, check.NotNil)
-	actual := (res.(map[string]interface{}))["ts"].(map[string]interface{})["long.timestamp-millis"].(time.Time)
+	actual := (res.(map[string]interface{}))["ts"].(time.Time)
 	c.Check(actual.Local().Sub(timestamp), check.LessEqual, time.Millisecond)
 }
 
