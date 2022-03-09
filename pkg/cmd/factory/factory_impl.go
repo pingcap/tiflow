@@ -20,17 +20,18 @@ import (
 
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
+	pd "github.com/tikv/pd/client"
+	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+
 	"github.com/pingcap/tiflow/cdc/kv"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3"
-	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 type factoryImpl struct {

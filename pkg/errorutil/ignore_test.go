@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/stretchr/testify/require"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
 func newMysqlErr(number uint16, message string) *mysql.MySQLError {

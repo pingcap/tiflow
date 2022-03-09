@@ -103,7 +103,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
-	err = sink.EmitCheckpointTs(ctx, uint64(120))
+	// TODO(hi-rustin): fix it after topic manager is ready.
+	err = sink.EmitCheckpointTs(ctx, uint64(120), nil)
 	c.Assert(err, check.IsNil)
 
 	// mock kafka broker processes 1 ddl event
@@ -129,7 +130,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
-	err = sink.EmitCheckpointTs(ctx, uint64(140))
+	err = sink.EmitCheckpointTs(ctx, uint64(140), nil)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}

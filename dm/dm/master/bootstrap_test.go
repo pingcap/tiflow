@@ -33,11 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-const (
-	// do not forget to update this path if the file removed/renamed.
-	subTaskSampleFile = "../worker/subtask.toml"
-)
-
 func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	s := testDefaultMasterServer(c)
 	defer s.Close()
@@ -67,7 +62,7 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
 	}
 	password := os.Getenv("MYSQL_PSWD")
 
-	cfg1, err := config.LoadFromFile("./source.yaml")
+	cfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	// fix empty map after marshal/unmarshal becomes nil
 	cfg1.From.Adjust()
@@ -124,7 +119,7 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 	s.cfg.V1SourcesPath = c.MkDir()
 	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)
 
-	cfg1, err := config.LoadFromFile("./source.yaml")
+	cfg1, err := config.ParseYaml(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	cfg2 := cfg1.Clone()
 	cfg2.SourceID = "mysql-replica-02"
@@ -179,7 +174,7 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 	)
 
 	cfg11 := config.NewSubTaskConfig()
-	c.Assert(cfg11.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(cfg11.Decode(config.SampleSubtaskConfig, true), IsNil)
 	cfg11.Dir = "./dump_data"
 	cfg11.ChunkFilesize = "64"
 	cfg11.Name = taskName1

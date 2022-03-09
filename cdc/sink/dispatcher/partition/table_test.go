@@ -77,8 +77,8 @@ func TestTableDispatcher(t *testing.T) {
 			CommitTs: 3,
 		}, expectPartition: 3},
 	}
-	p := NewTableDispatcher(16)
+	p := NewTableDispatcher()
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row))
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
 	}
 }
