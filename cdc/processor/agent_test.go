@@ -257,10 +257,6 @@ func TestAgentBasics(t *testing.T) {
 	err = agent.Tick(suite.cdcCtx)
 	require.NoError(t, err)
 
-	suite.tableExecutor.AssertExpectations(t)
-	suite.tableExecutor.ExpectedCalls = nil
-	suite.tableExecutor.Calls = nil
-
 	require.Eventually(t, func() bool {
 		select {
 		case <-suite.ctx.Done():
