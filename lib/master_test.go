@@ -187,9 +187,9 @@ func TestMasterCreateWorker(t *testing.T) {
 
 	err = master.messageHandlerManager.InvokeHandler(
 		t,
-		workerStatusUpdatedTopic(masterName, workerID1),
+		WorkerStatusUpdatedTopic(masterName),
 		masterName,
-		&workerStatusUpdatedMessage{Epoch: master.currentEpoch.Load()})
+		&WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: master.currentEpoch.Load()})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

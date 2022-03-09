@@ -139,7 +139,7 @@ func MockBaseMasterWorkerHeartbeat(
 ) {
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
-		HeartbeatPingTopic(masterID, workerID),
+		HeartbeatPingTopic(masterID),
 		executorID,
 		&HeartbeatPingMessage{
 			SendTime:     clock.MonoNow(),
@@ -165,8 +165,8 @@ func MockBaseMasterWorkerUpdateStatus(
 
 	err = master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
-		workerStatusUpdatedTopic(masterID, workerID),
+		WorkerStatusUpdatedTopic(masterID),
 		executorID,
-		&workerStatusUpdatedMessage{Epoch: master.currentEpoch.Load()})
+		&WorkerStatusUpdatedMessage{FromWorkerID: workerID, Epoch: master.currentEpoch.Load()})
 	require.NoError(t, err)
 }

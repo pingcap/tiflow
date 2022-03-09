@@ -23,7 +23,6 @@ type BaseJobMaster interface {
 
 	GetWorkers() map[WorkerID]WorkerHandle
 
-	RegisterWorker(ctx context.Context, workerID WorkerID) error
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 
 	Workload() model.RescUnit
@@ -167,10 +166,6 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 func (d *DefaultBaseJobMaster) OnError(err error) {
 	// TODO refine the OnError logic.
 	d.master.OnError(err)
-}
-
-func (d *DefaultBaseJobMaster) RegisterWorker(ctx context.Context, workerID WorkerID) error {
-	return d.master.RegisterWorker(ctx, workerID)
 }
 
 func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {

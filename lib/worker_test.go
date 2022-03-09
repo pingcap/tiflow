@@ -58,7 +58,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 
 	var hbMsg *HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
 		if ok {
 			hbMsg = rawMsg.(*HeartbeatPingMessage)
 		}
@@ -71,18 +71,19 @@ func TestWorkerInitAndClose(t *testing.T) {
 	err = worker.UpdateStatus(ctx, WorkerStatus{Code: WorkerStatusNormal})
 	require.NoError(t, err)
 
-	var statusMsg *workerStatusUpdatedMessage
+	var statusMsg *WorkerStatusUpdatedMessage
 	require.Eventually(t, func() bool {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
 		if ok {
-			statusMsg = rawMsg.(*workerStatusUpdatedMessage)
+			statusMsg = rawMsg.(*WorkerStatusUpdatedMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
-	require.Equal(t, &workerStatusUpdatedMessage{
-		Epoch: 1,
+	require.Equal(t, &WorkerStatusUpdatedMessage{
+		FromWorkerID: workerID1,
+		Epoch:        1,
 	}, statusMsg)
 
 	worker.On("CloseImpl").Return(nil)
@@ -129,7 +130,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 		var hbMsg *HeartbeatPingMessage
 		require.Eventually(t, func() bool {
-			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
+			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
 			if ok {
 				hbMsg = rawMsg.(*HeartbeatPingMessage)
 			}
@@ -137,7 +138,8 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		}, time.Second, time.Millisecond*10)
 
 		require.Conditionf(t, func() (success bool) {
-			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= defaultTimeoutConfig.workerHeartbeatInterval
+			return hbMsg.SendTime.Sub(lastHeartbeatSendTime) >= defaultTimeoutConfig.workerHeartbeatInterval &&
+				hbMsg.FromWorkerID == workerID1
 		}, "last-send-time %s, cur-send-time %s", lastHeartbeatSendTime, hbMsg.SendTime)
 		lastHeartbeatSendTime = hbMsg.SendTime
 
@@ -177,12 +179,13 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 	var hbMsg *HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName, workerID1))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
 		if ok {
 			hbMsg = rawMsg.(*HeartbeatPingMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
+	require.Equal(t, workerID1, hbMsg.FromWorkerID)
 
 	pongMsg := &HeartbeatPongMessage{
 		SendTime:   hbMsg.SendTime,
@@ -251,18 +254,19 @@ func TestWorkerStatus(t *testing.T) {
 		return false
 	}, 1*time.Second, 10*time.Millisecond)
 
-	var status *workerStatusUpdatedMessage
+	var status *WorkerStatusUpdatedMessage
 	require.Eventually(t, func() bool {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
-		rawStatus, ok := worker.messageSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		rawStatus, ok := worker.messageSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
 		if ok {
-			status = rawStatus.(*workerStatusUpdatedMessage)
+			status = rawStatus.(*WorkerStatusUpdatedMessage)
 		}
 		return ok
 	}, time.Second, 10*time.Millisecond)
-	require.Equal(t, &workerStatusUpdatedMessage{
-		Epoch: 1,
+	require.Equal(t, &WorkerStatusUpdatedMessage{
+		FromWorkerID: workerID1,
+		Epoch:        1,
 	}, status)
 
 	workerMetaClient := NewWorkerMetadataClient(masterName, worker.metaKVClient)

@@ -62,11 +62,11 @@ func TestStatusSender(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		msg, ok := msgSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		msg, ok := msgSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
 		if !ok {
 			return false
 		}
-		require.Equal(t, &workerStatusUpdatedMessage{Epoch: 1}, msg)
+		require.Equal(t, &WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: 1}, msg)
 		return true
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -107,11 +107,11 @@ func TestStatusSender(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		msg, ok := msgSender.TryPop(masterNodeName, workerStatusUpdatedTopic(masterName, workerID1))
+		msg, ok := msgSender.TryPop(masterNodeName, WorkerStatusUpdatedTopic(masterName))
 		if !ok {
 			return false
 		}
-		require.Equal(t, &workerStatusUpdatedMessage{Epoch: 1}, msg)
+		require.Equal(t, &WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: 1}, msg)
 		return true
 	}, 2*time.Second, 10*time.Millisecond)
 
@@ -168,12 +168,7 @@ func TestStatusReceiver(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = mockMsgHandlerManager.InvokeHandler(
-		t,
-		workerStatusUpdatedTopic(masterName, workerID1),
-		executorNodeID1,
-		&workerStatusUpdatedMessage{Epoch: 1})
-	require.NoError(t, err)
+	receiver.OnNotification(&WorkerStatusUpdatedMessage{FromWorkerID: workerID1, Epoch: 1})
 
 	err = receiver.Tick(ctx)
 	require.NoError(t, err)

@@ -172,10 +172,6 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 	err = jm.JobFsm.IterWaitAckJobs(
 		func(job *lib.MasterMetaKVData) (string, error) {
-			err := jm.BaseMaster.UnregisterWorker(ctx, job.ID)
-			if err != nil {
-				return job.ID, err
-			}
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -198,9 +194,6 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 			continue
 		}
 		jm.JobFsm.JobDispatched(job)
-		if err := jm.BaseMaster.RegisterWorker(ctx, job.ID); err != nil {
-			return err
-		}
 		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
 	}
 	return nil

@@ -58,7 +58,7 @@ func MockBaseWorkerWaitUpdateStatus(
 	t *testing.T,
 	worker *DefaultBaseWorker,
 ) {
-	topic := workerStatusUpdatedTopic(worker.masterClient.MasterID(), worker.masterClient.workerID)
+	topic := WorkerStatusUpdatedTopic(worker.masterClient.MasterID())
 	masterNode := worker.masterClient.MasterNode()
 	require.Eventually(t, func() bool {
 		_, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)

@@ -418,12 +418,10 @@ func TestUpdateStatus(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	err = suite.MessageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
-		t,
-		workerStatusUpdatedTopic(masterName, workerID1),
-		executorNodeID1,
-		&workerStatusUpdatedMessage{Epoch: 1})
-	require.NoError(t, err)
+	manager.OnWorkerStatusUpdated(&WorkerStatusUpdatedMessage{
+		FromWorkerID: workerID1,
+		Epoch:        1,
+	})
 
 	require.Eventually(t, func() bool {
 		err := manager.CheckStatusUpdate(ctx)
