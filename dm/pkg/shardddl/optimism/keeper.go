@@ -18,12 +18,12 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // DownstreamMeta used to fetch table info from downstream.
