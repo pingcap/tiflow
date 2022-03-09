@@ -689,7 +689,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+		p.changefeed.Info.Config.ForceReplicate, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
