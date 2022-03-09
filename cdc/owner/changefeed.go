@@ -59,6 +59,10 @@ type changefeed struct {
 	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
+	// currentTableNames is the table names that the changefeed is watching.
+	// And it contains only the tables of the ddl that have been processed.
+	// The ones that have not been executed yet do not have.
+	currentTableNames []model.TableName
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -189,7 +193,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.emitCheckpointTs(ctx, checkpointTs)
+	// This means that the cached DDL has been executed,
+	// and we need to use the latest table names.
+	if c.currentTableNames == nil {
+		c.currentTableNames = c.schema.AllTableNames()
+	}
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -209,18 +218,25 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
+	currentTs := oracle.GetPhysical(pdTime)
+
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
-		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
-		c.updateStatus(currentTs, newCheckpointTs, newResolvedTs)
+		c.updateStatus(newCheckpointTs, newResolvedTs)
+		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+	} else if c.state.Status != nil {
+		// We should keep the metrics updated even if the scheduler cannot
+		// advance the watermarks for now.
+		c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 	}
 	return nil
 }
@@ -515,6 +531,10 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
+		// We can't use the latest schema directly,
+		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
+		// So let's remember the name of the table before processing and cache the DDL.
+		c.currentTableNames = c.schema.AllTableNames()
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
@@ -542,11 +562,24 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	}
 	if done {
 		c.ddlEventCache = nil
+		// It has expired.
+		// We should use the latest table names now.
+		c.currentTableNames = nil
 	}
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
+
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+}
+
+func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
@@ -562,13 +595,6 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		return status, changed, nil
 	})
-	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
-
-	phyRTs := oracle.ExtractPhysical(resolvedTs)
-	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
-	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
@@ -582,6 +608,7 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	changefeedCloseDuration.Observe(costTime.Seconds())
 }
 
+// GetInfoProvider returns an InfoProvider if one is available.
 func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
 	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
 		return provider

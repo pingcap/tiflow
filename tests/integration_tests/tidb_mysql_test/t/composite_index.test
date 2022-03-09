@@ -1,0 +1,31 @@
+DROP TABLE IF EXISTS t;
+
+# create table
+CREATE TABLE t (c1 int, c2 integer, c3 int, c4 int, primary key(c1));
+
+# insert data
+INSERT INTO t (c1, c2, c3) VALUES(11, 22, 33);
+--error Condition not match
+INSERT INTO t (c1, c2, c3) VALUES(11, 22, 33);
+
+#composite primary key
+#DROP TABLE IF EXISTS t;
+
+# create table
+CREATE TABLE t1 (c1 int, c2 int, c3 int, c4 int, primary key(c1, c2));
+
+# insert data
+INSERT INTO t1 (c1, c2, c3) VALUES(11, 22, 33);
+INSERT INTO t1 (c1, c2, c3) VALUES(11, 21, 33);
+--error Condition not match
+INSERT INTO t1 (c1, c2, c3) VALUES(11, 22, 44);
+
+#composite unique key
+#DROP TABLE IF EXISTS t;
+# create table
+CREATE TABLE t2 (c1 int, c2 int, c3 int, UNIQUE c1_c2 (c1, c2));
+# insert data
+INSERT INTO t2 (c1, c2, c3) VALUES(11, 22, 33);
+INSERT INTO t2 (c1, c2, c3) VALUES(11, 21, 33);
+--error Condition not match
+INSERT INTO t2 (c1, c2, c3) VALUES(11, 22, 44);

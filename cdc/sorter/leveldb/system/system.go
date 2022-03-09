@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/memory"
 	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -47,13 +48,16 @@ const (
 type System struct {
 	dbs           []db.DB
 	dbSystem      *actor.System
-	dbRouter      *actor.Router
-	cleanSystem   *actor.System
-	cleanRouter   *actor.Router
+	DBRouter      *actor.Router
+	WriterSystem  *actor.System
+	WriterRouter  *actor.Router
+	ReaderSystem  *actor.System
+	ReaderRouter  *actor.Router
 	compactSystem *actor.System
 	compactRouter *actor.Router
 	compactSched  *lsorter.CompactScheduler
 	dir           string
+	memPercentage float64
 	cfg           *config.DBConfig
 	closedCh      chan struct{}
 	closedWg      *sync.WaitGroup
@@ -63,23 +67,32 @@ type System struct {
 }
 
 // NewSystem returns a system.
-func NewSystem(dir string, cfg *config.DBConfig) *System {
-	dbSystem, dbRouter := actor.NewSystemBuilder("sorter").
+func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
+	// A system polles actors that read and write leveldb.
+	dbSystem, dbRouter := actor.NewSystemBuilder("sorter-db").
 		WorkerNumber(cfg.Count).Build()
-	cleanSystem, cleanRouter := actor.NewSystemBuilder("cleaner").
+	// A system polles actors that compact leveldb, garbage collection.
+	compactSystem, compactRouter := actor.NewSystemBuilder("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
-	compactSystem, compactRouter := actor.NewSystemBuilder("compactor").
-		WorkerNumber(cfg.Count).Build()
-	compactSched := lsorter.NewCompactScheduler(compactRouter, cfg)
+	// A system polles actors that receive events from Puller and batch send
+	// writes to leveldb.
+	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
+	readerSystem, readerRouter := actor.NewSystemBuilder("sorter-reader").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
+	compactSched := lsorter.NewCompactScheduler(compactRouter)
 	return &System{
 		dbSystem:      dbSystem,
-		dbRouter:      dbRouter,
-		cleanSystem:   cleanSystem,
-		cleanRouter:   cleanRouter,
+		DBRouter:      dbRouter,
+		WriterSystem:  writerSystem,
+		WriterRouter:  writerRouter,
+		ReaderSystem:  readerSystem,
+		ReaderRouter:  readerRouter,
 		compactSystem: compactSystem,
 		compactRouter: compactRouter,
 		compactSched:  compactSched,
 		dir:           dir,
+		memPercentage: memPercentage,
 		cfg:           cfg,
 		closedCh:      make(chan struct{}),
 		closedWg:      new(sync.WaitGroup),
@@ -88,23 +101,13 @@ func NewSystem(dir string, cfg *config.DBConfig) *System {
 	}
 }
 
-// ActorID returns an ActorID correspond with tableID.
-func (s *System) ActorID(tableID uint64) actor.ID {
+// DBActorID returns an DBActorID correspond with tableID.
+func (s *System) DBActorID(tableID uint64) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], tableID)
 	h.Write(b[:])
 	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
-}
-
-// Router returns db actors router.
-func (s *System) Router() *actor.Router {
-	return s.dbRouter
-}
-
-// CleanerRouter returns cleaner actors router.
-func (s *System) CleanerRouter() *actor.Router {
-	return s.cleanRouter
 }
 
 // CompactScheduler returns compaction scheduler.
@@ -139,19 +142,23 @@ func (s *System) Start(ctx context.Context) error {
 
 	s.compactSystem.Start(ctx)
 	s.dbSystem.Start(ctx)
-	s.cleanSystem.Start(ctx)
-	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
-	dbCount := s.cfg.Count
-	for id := 0; id < dbCount; id++ {
+	s.WriterSystem.Start(ctx)
+	s.ReaderSystem.Start(ctx)
+	totalMemory, err := memory.MemTotal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	memInBytePerDB := float64(totalMemory) * s.memPercentage / float64(s.cfg.Count)
+	for id := 0; id < s.cfg.Count; id++ {
 		// Open db.
-		db, err := db.OpenPebble(ctx, id, s.dir, s.cfg)
+		db, err := db.OpenPebble(ctx, id, s.dir, int(memInBytePerDB), s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
 		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.closedWg, captureAddr)
+			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -161,21 +168,11 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		// Create and spawn db actor.
 		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg, captureAddr)
+			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		err = s.dbSystem.Spawn(dbmb, dbac)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		// Create and spawn cleaner actor.
-		clac, clmb, err := lsorter.NewCleanerActor(
-			id, db, s.cleanRouter, s.compactSched, s.cfg, s.closedWg)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = s.cleanSystem.Spawn(clmb, clac)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -192,7 +189,7 @@ func (s *System) Start(ctx context.Context) error {
 			case <-s.closedCh:
 				return
 			case <-metricsTimer.C:
-				collectMetrics(s.dbs, captureAddr)
+				collectMetrics(s.dbs)
 				metricsTimer.Reset(defaultMetricInterval)
 			}
 		}
@@ -219,8 +216,9 @@ func (s *System) Stop() error {
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 	// Close actors
-	s.broadcast(ctx, s.dbRouter, message.StopMessage())
-	s.broadcast(ctx, s.cleanRouter, message.StopMessage())
+	s.broadcast(ctx, s.DBRouter, message.StopMessage())
+	s.broadcast(ctx, s.WriterRouter, message.StopMessage())
+	s.broadcast(ctx, s.ReaderRouter, message.StopMessage())
 	s.broadcast(ctx, s.compactRouter, message.StopMessage())
 	// Close metrics goroutine.
 	close(s.closedCh)
@@ -232,7 +230,11 @@ func (s *System) Stop() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = s.cleanSystem.Stop()
+	err = s.WriterSystem.Stop()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.ReaderSystem.Stop()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -251,9 +253,9 @@ func (s *System) Stop() error {
 	return nil
 }
 
-func collectMetrics(dbs []db.DB, captureAddr string) {
+func collectMetrics(dbs []db.DB) {
 	for i := range dbs {
 		db := dbs[i]
-		db.CollectMetrics(captureAddr, i)
+		db.CollectMetrics(i)
 	}
 }

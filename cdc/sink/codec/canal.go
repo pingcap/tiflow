@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -163,6 +162,9 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType, err 
 	// for **unsigned** integral types, type would be `uint64` or `string`. see reference:
 	// https://github.com/pingcap/tiflow/blob/1e3dd155049417e3fd7bf9b0a0c7b08723b33791/cdc/entry/mounter.go#L501
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
+	if c.Value == nil {
+		return javaType, nil
+	}
 	var number uint64
 	switch v := c.Value.(type) {
 	case uint64:
@@ -496,12 +498,6 @@ func (d *CanalEventBatchEncoder) Size() int {
 	return proto.Size(d.packet)
 }
 
-// SetParams is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
-	// no op
-	return nil
-}
-
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)
@@ -537,20 +533,13 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 	return encoder
 }
 
-type canalEventBatchEncoderBuilder struct {
-	opts map[string]string
-}
+type canalEventBatchEncoderBuilder struct{}
 
 // Build a `CanalEventBatchEncoder`
-func (b *canalEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
-	encoder := NewCanalEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
+func (b *canalEventBatchEncoderBuilder) Build() EventBatchEncoder {
+	return NewCanalEventBatchEncoder()
 }
 
-func newCanalEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &canalEventBatchEncoderBuilder{opts: opts}
+func newCanalEventBatchEncoderBuilder() EncoderBuilder {
+	return &canalEventBatchEncoderBuilder{}
 }

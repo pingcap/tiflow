@@ -47,7 +47,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -65,7 +65,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 
 	// join to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]

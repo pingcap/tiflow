@@ -170,12 +170,12 @@ func newMySQLSink(
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
+	metricConflictDetectDurationHis :=
+		conflictDetectDurationHis.WithLabelValues(params.changefeedID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
+		metricBucketSizeCounters[i] =
+			bucketSizeCounter.WithLabelValues(params.changefeedID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -281,7 +281,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 	}
 }
 
-func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (s *mysqlSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// do nothing
 	return nil
 }
