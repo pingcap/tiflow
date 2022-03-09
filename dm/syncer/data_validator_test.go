@@ -423,6 +423,7 @@ func TestValidatorDoValidate(t *testing.T) {
 		streamer:         mockStreamer,
 		closed:           false,
 	}
+	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	require.Equal(t, int64(1), validator.changeEventCount[rowInsert].Load())
 	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
