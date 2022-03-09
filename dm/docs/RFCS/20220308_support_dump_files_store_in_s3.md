@@ -18,9 +18,9 @@ loaders:
 ### Implementation
 
 * Dumpling and Lightning already support S3 and they both import [br storage](https://github.com/pingcap/tidb/tree/master/br/pkg/storage), so DM can can use it and wrap DM's interface in [dm storage](https://github.com/pingcap/tiflow/tree/master/dm/pkg/storage).
-* [subtask config](https://github.com/pingcap/tiflow/blob/master/dm/dm/config/subtask.go) needs adjust S3 path and add `taskName.sourceID` suffix to meet the needs of parallel operations for mulit `subtask`.
-* [subtask config](https://github.com/pingcap/tiflow/blob/master/dm/dm/config/subtask.go) needs check configuration about loader's `dir` and `import-mode` to make sure to use Lightning.
-* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs support read or delete files in S3 to use dumped data's metadata.
-* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs config Lightning's checkpoint in S3.
-* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs change Lightning's TLS config to a local path and does not use S3 Path.
-* [syncer](https://github.com/pingcap/tiflow/blob/master/dm/syncer/syncer.go) needs support read or delete files in S3 to use dumped data's metadata.
+* [subtask config](https://github.com/pingcap/tiflow/blob/master/dm/dm/config/subtask.go) needs to adjust S3 path and add `taskName.sourceID` suffix to meet the needs of parallel operations for multiple `subtask`.
+* [subtask config](https://github.com/pingcap/tiflow/blob/master/dm/dm/config/subtask.go) needs to check configuration about loader's `dir` and `import-mode` to make sure to use Lightning.
+* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs to support read or delete files in S3 to use dumped data's metadata.
+* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs to configurate Lightning's checkpoint in S3.
+* [lightning loader](https://github.com/pingcap/tiflow/blob/master/dm/loader/lightning.go) needs to download Lightning's TLS config to a local path and does not use S3 Path.
+* [syncer](https://github.com/pingcap/tiflow/blob/master/dm/syncer/syncer.go) needs to support read or delete files in S3 to use dumped data's metadata.
