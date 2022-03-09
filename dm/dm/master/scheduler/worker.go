@@ -60,17 +60,13 @@ const (
 	WorkerOffline WorkerStage = "offline" // the worker is not online yet.
 	WorkerFree    WorkerStage = "free"    // the worker is online, but no upstream source assigned to it yet.
 	WorkerBound   WorkerStage = "bound"   // the worker is online, and one upstream source already assigned to it.
-	WorkerRelay   WorkerStage = "relay"   // the worker is online, pulling relay log but not responsible for migrating.
 )
 
 var (
-	nullBound ha.SourceBound
-
 	workerStage2Num = map[WorkerStage]float64{
 		WorkerOffline: 0.0,
 		WorkerFree:    1.0,
 		WorkerBound:   2.0,
-		WorkerRelay:   1.5,
 	}
 	unrecognizedState = -1.0
 )
@@ -145,7 +141,14 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 
 	w.reportMetrics()
 	w.bounds[bound.Source] = bound
+	w.stage = WorkerBound
 	return nil
+}
+
+func (w *Worker) checkFree() {
+	if w.stage == WorkerBound && len(w.bounds) == 0 && len(w.relaySources) == 0 {
+		w.stage = WorkerFree
+	}
 }
 
 // Unbound changes worker's stage from Bound to Free or Relay.
@@ -158,6 +161,7 @@ func (w *Worker) Unbound(source string) error {
 	}
 
 	delete(w.bounds, source)
+	w.checkFree()
 	w.reportMetrics()
 	return nil
 }
@@ -171,6 +175,7 @@ func (w *Worker) StartRelay(sources ...string) error {
 		w.relaySources[sourceID] = struct{}{}
 	}
 
+	w.stage = WorkerBound
 	return nil
 }
 
@@ -184,6 +189,8 @@ func (w *Worker) StopRelay(source string) {
 			zap.String("worker name", w.baseInfo.Name))
 	}
 	delete(w.relaySources, source)
+
+	w.checkFree()
 	w.reportMetrics()
 }
 

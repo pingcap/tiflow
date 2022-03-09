@@ -27,10 +27,12 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-func exactlyOneBound(t *testing.T, bounds map[string]ha.SourceBound, bound ha.SourceBound) {
+func checkBounds(t *testing.T, workerBounds map[string]ha.SourceBound, bounds ...ha.SourceBound) {
 	t.Helper()
-	require.Len(t, bounds, 1)
-	require.Equal(t, bound, bounds[bound.Source])
+	require.Len(t, workerBounds, len(bounds))
+	for _, b := range bounds {
+		require.Equal(t, workerBounds[b.Source], b)
+	}
 }
 
 func TestWorker(t *testing.T) {
@@ -59,8 +61,8 @@ func TestWorker(t *testing.T) {
 
 	// Free to Bound.
 	require.NoError(t, w.ToBound(bound))
-	require.Equal(t, WorkerFree, w.Stage())
-	exactlyOneBound(t, w.Bounds(), bound)
+	require.Equal(t, WorkerBound, w.Stage())
+	checkBounds(t, w.Bounds(), bound)
 
 	// Bound to Free.
 	w.ToFree()
@@ -81,7 +83,7 @@ func TestWorker(t *testing.T) {
 	w.ToFree()
 	require.NoError(t, w.ToBound(bound))
 	require.Equal(t, WorkerBound, w.Stage())
-	exactlyOneBound(t, w.Bounds(), bound)
+	checkBounds(t, w.Bounds(), bound)
 
 	// Bound to Offline.
 	w.ToOffline()
@@ -91,7 +93,7 @@ func TestWorker(t *testing.T) {
 	// Offline to Free to Relay
 	w.ToFree()
 	require.NoError(t, w.StartRelay(source1))
-	require.Equal(t, WorkerRelay, w.Stage())
+	require.Equal(t, WorkerBound, w.Stage())
 	checkRelaySource(t, w.RelaySources(), source1)
 
 	// Relay to Free
@@ -103,7 +105,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, w.StartRelay(source1))
 	require.NoError(t, w.ToBound(bound))
 	require.Equal(t, WorkerBound, w.Stage())
-	exactlyOneBound(t, w.Bounds(), bound)
+	checkBounds(t, w.Bounds(), bound)
 	checkRelaySource(t, w.RelaySources(), source1)
 
 	// Bound turn off relay
@@ -111,25 +113,31 @@ func TestWorker(t *testing.T) {
 	require.Equal(t, WorkerBound, w.Stage())
 	require.Len(t, w.RelaySources(), 0)
 
-	// Bound try to turn on relay, but with wrong source ID
+	// Bound try to turn on relay, but with different source ID
+	// Should start relay successfully
 	err = w.StartRelay(source2)
-	require.True(t, terror.ErrSchedulerRelayWorkersWrongBound.Equal(err))
-	require.Len(t, w.RelaySources(), 0)
+	require.NoError(t, err)
+	checkRelaySource(t, w.RelaySources(), source2)
 
-	// Bound turn on relay
+	// Bound turn on relay for another source
 	require.NoError(t, w.StartRelay(source1))
 	require.Equal(t, WorkerBound, w.Stage())
-	checkRelaySource(t, w.RelaySources(), source1)
+	checkRelaySource(t, w.RelaySources(), source1, source2)
 
 	// Bound to Relay
 	require.NoError(t, w.Unbound(source1))
-	require.Equal(t, WorkerRelay, w.Stage())
+	require.Equal(t, WorkerBound, w.Stage())
 	require.Len(t, w.Bounds(), 0)
-	checkRelaySource(t, w.RelaySources(), source1)
+	checkRelaySource(t, w.RelaySources(), source1, source2)
 
 	// Relay to Offline
 	w.ToOffline()
 	require.Equal(t, WorkerOffline, w.Stage())
+	checkRelaySource(t, w.RelaySources(), source1, source2)
+
+	// Offline turn off relay (when DM worker is offline, stop-relay)
+	w.StopRelay(source2)
+	require.Equal(t, WorkerOffline, w.stage)
 	checkRelaySource(t, w.RelaySources(), source1)
 
 	// Offline turn off relay (when DM worker is offline, stop-relay)

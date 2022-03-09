@@ -2217,19 +2217,21 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	boundSourcesNum = sourceNum
 	if worker == nil {
 		for _, bound := range s.lastBound {
-			w, ok := s.workers[bound.Worker]
-			if !ok {
-				// a not found worker, should not happen
-				s.logger.DPanic("worker instance not found for history worker", zap.String("worker", bound.Worker))
-				return false, nil
-			}
+			if bound.Source == source {
+				w, ok := s.workers[bound.Worker]
+				if !ok {
+					// a not found worker, should not happen
+					s.logger.DPanic("worker instance not found for history worker", zap.String("worker", bound.Worker))
+					return false, nil
+				}
 
-			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
-				worker = w
-				boundSourcesNum = len(w.Bounds())
-				s.logger.Info("found history worker when source bound",
-					zap.String("worker", workerName),
-					zap.String("source", source))
+				if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
+					worker = w
+					boundSourcesNum = len(w.Bounds())
+					s.logger.Info("found history worker when source bound",
+						zap.String("worker", workerName),
+						zap.String("source", source))
+				}
 			}
 		}
 	}

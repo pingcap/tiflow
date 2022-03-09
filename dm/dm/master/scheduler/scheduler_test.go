@@ -80,10 +80,12 @@ func (t *testSchedulerSuite) TearDownTest() {
 
 var stageEmpty ha.Stage
 
-func checkRelaySource(t *testing.T, relaySources map[string]struct{}, source string) {
+func checkRelaySource(t *testing.T, relaySources map[string]struct{}, sources ...string) {
 	t.Helper()
-	require.Len(t, relaySources, 1)
-	require.Equal(t, source, relaySources[source])
+	require.Len(t, relaySources, len(sources))
+	for _, s := range sources {
+		require.Contains(t, relaySources, s)
+	}
 }
 
 func (t *testSchedulerSuite) TestScheduler() {
@@ -1454,12 +1456,12 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 	require.Equal(t.T(), workerName2, s.bounds[sourceID2].baseInfo.Name)
 
 	s.updateStatusToUnbound(sourceID2)
-	require.Equal(t.T(), WorkerRelay, worker2.Stage())
+	require.Equal(t.T(), WorkerBound, worker2.Stage())
 	require.NoError(t.T(), s.StopRelay(sourceID2, []string{workerName2}))
 	require.Equal(t.T(), WorkerFree, worker2.Stage())
 
 	require.NoError(t.T(), s.StartRelay(sourceID1, []string{workerName2}))
-	require.Equal(t.T(), WorkerRelay, worker2.Stage())
+	require.Equal(t.T(), WorkerBound, worker2.Stage())
 	checkRelaySource(t.T(), worker2.RelaySources(), sourceID1)
 
 	worker3.ToOffline()
@@ -1510,11 +1512,11 @@ func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
 	require.NoError(t.T(), s.StartRelay(sourceID1, []string{workerName1, workerName2}))
 	require.False(t.T(), s.sourceCfgs[sourceID1].EnableRelay)
 	require.Equal(t.T(), WorkerBound, worker1.Stage())
-	require.Equal(t.T(), WorkerRelay, worker2.Stage())
+	require.Equal(t.T(), WorkerBound, worker2.Stage())
 
 	require.NoError(t.T(), s.StopRelay(sourceID1, []string{workerName1}))
 	require.Equal(t.T(), WorkerBound, worker1.Stage())
-	require.Equal(t.T(), WorkerRelay, worker2.Stage())
+	require.Equal(t.T(), WorkerBound, worker2.Stage())
 
 	require.NoError(t.T(), s.StopRelay(sourceID1, []string{workerName2}))
 	require.Equal(t.T(), WorkerBound, worker1.Stage())
@@ -1898,7 +1900,7 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 	_, ok := s.relayWorkers[sourceID2][workerName1]
 	require.True(t.T(), ok)
 	worker := s.workers[workerName1]
-	require.Equal(t.T(), WorkerRelay, worker.Stage())
+	require.Equal(t.T(), WorkerBound, worker.Stage())
 	checkRelaySource(t.T(), worker.RelaySources(), sourceID2)
 	_, ok = s.bounds[sourceID1]
 	require.False(t.T(), ok)
