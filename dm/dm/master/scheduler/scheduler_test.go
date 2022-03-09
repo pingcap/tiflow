@@ -2038,7 +2038,7 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 }
 
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
-	t.clearTestInfoOperation()
+	defer t.clearTestInfoOperation()
 
 	var (
 		logger       = log.L()
@@ -2081,19 +2081,19 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	t.True(terror.ErrSchedulerTaskNotExist.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
 
 	// start worker,add source and subtask
-	t.Nil(s.AddSourceCfg(sourceCfg1))
+	t.NoError(s.AddSourceCfg(sourceCfg1))
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
-	t.Nil(s.AddWorker(workerName1, workerAddr1))
+	t.NoError(s.AddWorker(workerName1, workerAddr1))
 	go func() {
-		t.Nil(ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
+		t.NoError(ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
 	t.True(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
 	}))
-	t.Nil(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1))
+	t.NoError(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1))
 
 	// can't update subtask not in scheduler
 	subtaskCfg2.Name = subtaskCfg1.Name

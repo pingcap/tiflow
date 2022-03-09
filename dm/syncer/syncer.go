@@ -3574,7 +3574,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
-// 2. only balist, route/filter rules and syncerConfig can be update at this monent.
+// 2. only balist, route/filter rules and syncerConfig can be update at this moment.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
@@ -3606,6 +3606,8 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+	s.Lock()
+	defer s.Unlock()
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
