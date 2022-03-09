@@ -1048,19 +1048,19 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 		return terror.ErrSchedulerMultiTask.Generate(strMapToSlice(taskNamesM))
 	}
 	// check whether exists.
+	cfg := cfgs[0]
+	v, ok := s.subTaskCfgs.Load(cfg.Name)
+	if !ok {
+		return terror.ErrSchedulerTaskNotExist.Generate(cfg.Name)
+	}
+	cfgM := v.(map[string]config.SubTaskConfig)
 	for _, cfg := range cfgs {
-		v, ok := s.subTaskCfgs.Load(cfg.Name)
-		if !ok {
-			return terror.ErrSchedulerTaskNotExist.Generate(cfg.Name)
-		}
-		cfgM := v.(map[string]config.SubTaskConfig)
 		_, ok = cfgM[cfg.SourceID]
 		if !ok {
 			return terror.ErrSchedulerSubTaskNotExist.Generate(cfg.Name, cfg.SourceID)
 		}
 	}
 	// check whether in running stage
-	cfg := cfgs[0]
 	stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
 	if stage.Expect == pb.Stage_Running {
 		return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)

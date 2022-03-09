@@ -2089,10 +2089,10 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 		t.NoError(ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
-	t.True(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	t.Eventually(func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 100*30*time.Millisecond, 30*time.Millisecond)
 	t.NoError(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1))
 
 	// can't update subtask not in scheduler
@@ -2113,12 +2113,12 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	t.True(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)))
 	t.NoError(s.StopRelay(sourceID1, []string{workerName1}))
 
-	// cant't updated when worker rpc error
+	// can't updated when worker rpc error
 	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("error")`))
-	// c.Assert(s.UpdateSubTasks(ctx, subtaskCfg1), ErrorMatches, "query error")
+	t.Regexp("query error", s.UpdateSubTasks(ctx, subtaskCfg1))
 	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 
-	// cant't updated when worker rpc check not pass
+	// can't updated when worker rpc check not pass
 	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("failed")`))
 	t.True(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
 	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
@@ -2126,7 +2126,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	// update success
 	subtaskCfg1.Batch = 1000
 	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
-	t.NoError((s.UpdateSubTasks(ctx, subtaskCfg1)))
+	t.NoError(s.UpdateSubTasks(ctx, subtaskCfg1))
 	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 	t.Equal(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, subtaskCfg1.Batch)
 
