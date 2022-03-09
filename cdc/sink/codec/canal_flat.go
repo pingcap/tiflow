@@ -482,21 +482,24 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 
 	var err error
 	if flatMessage.eventType() == canal.EventType_DELETE {
-		// for `DELETE` event, `data` contain the old data, set it as the `PreColumn`
+		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
 		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
 			mysqlType, javaSQLType)
+		// canal-json encoder does not encode `Flag` information into the result,
+		// we have to set the `Flag` to make it can be handled by MySQL Sink.
+		// see https://github.com/pingcap/tiflow/blob/7bfce98/cdc/sink/mysql.go#L869-L888
 		result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
 		return result, err
 	}
 
-	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Column`
+	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
 	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
 		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
 	}
 
-	// for `UPDATE`, `old` contain old data, set it as the `PreColumn`
+	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if flatMessage.eventType() == canal.EventType_UPDATE {
 		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(),
 			mysqlType, javaSQLType)
@@ -551,15 +554,13 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 	result.Query = flatDDL.getQuery()
 
 	// hack the DDL Type to be compatible with MySQL sink's logic
-	// see https://github.com/pingcap/tiflow/blob/0578db337d783643cfab9f25ccb28a5dd0de5806
-	// /cdc/sink/mysql.go#L362-L370
+	// see https://github.com/pingcap/tiflow/blob/0578db337d/cdc/sink/mysql.go#L362-L370
 	result.Type = getDDLActionType(strings.ToLower(result.Query))
 	return result
 }
 
 // return DDL ActionType by the prefix, query should be in lower case.
-// see https://github.com/pingcap/tidb/blob/6dbf2de2f05bbdeff6bde45d8cbad740a361dd6c/
-// parser/model/ddl.go#L101-L102
+// see https://github.com/pingcap/tidb/blob/6dbf2de2f/parser/model/ddl.go#L101-L102
 func getDDLActionType(query string) timodel.ActionType {
 	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
 		return timodel.ActionCreateSchema
