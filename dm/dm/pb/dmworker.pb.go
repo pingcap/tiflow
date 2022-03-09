@@ -81,15 +81,12 @@ func (TaskOp) EnumDescriptor() ([]byte, []int) {
 //          is transferred from Paused when resuming is requested
 //          transfers to Paused when error occurred or requested from external
 //          transfers to Stopped when requested from external
-//          transfers to Finished when sub task processing completed (no Syncer
-//          used)
-// Paused: indicates the processing is paused, and can be resume from external
-// request
-//         is transferred from Running when error occurred or requested from
-//         external transfers to Running when resuming is requested from
-//         external transfers to Stopped when requested from external
-// Stopped: indicates the processing is stopped, and can not be resume (or
-// re-run) again
+//          transfers to Finished when sub task processing completed (no Syncer used)
+// Paused: indicates the processing is paused, and can be resume from external request
+//         is transferred from Running when error occurred or requested from external
+//         transfers to Running when resuming is requested from external
+//         transfers to Stopped when requested from external
+// Stopped: indicates the processing is stopped, and can not be resume (or re-run) again
 //          is transferred from Running / Paused when requested from external
 //          can not transfer to any stages
 // Finished: indicates the processing is finished, and no need to re-run
@@ -764,10 +761,12 @@ func (m *LoadStatus) GetMetaBinlogGTID() string {
 	return ""
 }
 
-// ShardingGroup represents a DDL sharding group, this is used by SyncStatus,
-// and is differ from ShardingGroup in syncer pkg target: target table name DDL:
-// in syncing DDL firstPos: first DDL binlog pos for this group synced: synced
-// source tables unsynced: unsynced source tables
+// ShardingGroup represents a DDL sharding group, this is used by SyncStatus, and is differ from ShardingGroup in syncer pkg
+// target: target table name
+// DDL: in syncing DDL
+// firstPos: first DDL binlog pos for this group
+// synced: synced source tables
+// unsynced: unsynced source tables
 type ShardingGroup struct {
 	Target        string   `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
 	DDLs          []string `protobuf:"bytes,2,rep,name=DDLs,proto3" json:"DDLs,omitempty"`
@@ -1924,8 +1923,7 @@ func (m *SubTaskErrorList) GetError() []*SubTaskError {
 
 // ProcessResult represents results produced by a dm unit
 // isCanceled: indicates whether the process is canceled from external
-//             when Stop or Pause is requested from external, isCanceled will be
-//             true
+//             when Stop or Pause is requested from external, isCanceled will be true
 // errors: includes all (potential) errors occured when processing
 type ProcessResult struct {
 	IsCanceled bool            `protobuf:"varint,1,opt,name=isCanceled,proto3" json:"isCanceled,omitempty"`
@@ -1988,9 +1986,8 @@ func (m *ProcessResult) GetDetail() []byte {
 }
 
 // ProcessError is same as terror used in dm
-// NOTE: currently stack trace is not supported, `Message` is the
-// `terror.Error.getMsg` result and `RawCause` is the `Error` result of error
-// from `terror.Error.Cause()`.
+// NOTE: currently stack trace is not supported, `Message` is the `terror.Error.getMsg` result
+// and `RawCause` is the `Error` result of error from `terror.Error.Cause()`.
 type ProcessError struct {
 	ErrCode    int32  `protobuf:"varint,1,opt,name=ErrCode,proto3" json:"ErrCode,omitempty"`
 	ErrClass   string `protobuf:"bytes,2,opt,name=ErrClass,proto3" json:"ErrClass,omitempty"`
@@ -2083,11 +2080,11 @@ func (m *ProcessError) GetWorkaround() string {
 	return ""
 }
 
-// PurgeRelayRequest represents a request to purge relay log files for this
-// dm-worker inactive: whether purge inactive relay log files time: whether
-// purge relay log files before this time, the number of seconds elapsed since
-// January 1, 1970 UTC filename: whether purge relay log files before this
-// filename subDir: specify relay sub directory for @filename
+// PurgeRelayRequest represents a request to purge relay log files for this dm-worker
+// inactive: whether purge inactive relay log files
+// time: whether purge relay log files before this time, the number of seconds elapsed since January 1, 1970 UTC
+// filename: whether purge relay log files before this filename
+// subDir: specify relay sub directory for @filename
 type PurgeRelayRequest struct {
 	Inactive bool   `protobuf:"varint,1,opt,name=inactive,proto3" json:"inactive,omitempty"`
 	Time     int64  `protobuf:"varint,2,opt,name=time,proto3" json:"time,omitempty"`
@@ -2896,15 +2893,13 @@ type WorkerClient interface {
 	// PurgeRelay purges relay log files for this dm-worker
 	PurgeRelay(ctx context.Context, in *PurgeRelayRequest, opts ...grpc.CallOption) (*CommonWorkerResponse, error)
 	// Operate (get/set/remove) schema for a specified table in tracker.
-	// a `set`/`remove` operation should be an one-time operation (only take
-	// effect once), so we use a gRPC method rather than a etcd operation now (no
-	// persistent operation state).
+	// a `set`/`remove` operation should be an one-time operation (only take effect once),
+	// so we use a gRPC method rather than a etcd operation now (no persistent operation state).
 	OperateSchema(ctx context.Context, in *OperateWorkerSchemaRequest, opts ...grpc.CallOption) (*CommonWorkerResponse, error)
 	OperateV1Meta(ctx context.Context, in *OperateV1MetaRequest, opts ...grpc.CallOption) (*OperateV1MetaResponse, error)
 	HandleError(ctx context.Context, in *HandleWorkerErrorRequest, opts ...grpc.CallOption) (*CommonWorkerResponse, error)
 	GetWorkerCfg(ctx context.Context, in *GetWorkerCfgRequest, opts ...grpc.CallOption) (*GetWorkerCfgResponse, error)
-	// only some fields of the configuration of the subtask in the sync phase can
-	// be updated
+	// only some fields of the configuration of the subtask in the sync phase can be updated
 	CheckSubtasksCanUpdate(ctx context.Context, in *CheckSubtasksCanUpdateRequest, opts ...grpc.CallOption) (*CheckSubtasksCanUpdateResponse, error)
 }
 
@@ -2985,15 +2980,13 @@ type WorkerServer interface {
 	// PurgeRelay purges relay log files for this dm-worker
 	PurgeRelay(context.Context, *PurgeRelayRequest) (*CommonWorkerResponse, error)
 	// Operate (get/set/remove) schema for a specified table in tracker.
-	// a `set`/`remove` operation should be an one-time operation (only take
-	// effect once), so we use a gRPC method rather than a etcd operation now (no
-	// persistent operation state).
+	// a `set`/`remove` operation should be an one-time operation (only take effect once),
+	// so we use a gRPC method rather than a etcd operation now (no persistent operation state).
 	OperateSchema(context.Context, *OperateWorkerSchemaRequest) (*CommonWorkerResponse, error)
 	OperateV1Meta(context.Context, *OperateV1MetaRequest) (*OperateV1MetaResponse, error)
 	HandleError(context.Context, *HandleWorkerErrorRequest) (*CommonWorkerResponse, error)
 	GetWorkerCfg(context.Context, *GetWorkerCfgRequest) (*GetWorkerCfgResponse, error)
-	// only some fields of the configuration of the subtask in the sync phase can
-	// be updated
+	// only some fields of the configuration of the subtask in the sync phase can be updated
 	CheckSubtasksCanUpdate(context.Context, *CheckSubtasksCanUpdateRequest) (*CheckSubtasksCanUpdateResponse, error)
 }
 

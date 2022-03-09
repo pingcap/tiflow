@@ -146,7 +146,6 @@ type Scheduler struct {
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
-	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
 	// - bound the source to a worker (at first time).
@@ -412,16 +411,12 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID, &runningStage); len(tasks) > 0 {
 		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
-	// 3. check if there is relay workers for this source
-	relayWorkers, err := s.getRelayWorkers(cfg.SourceID)
-	if err != nil {
-		return err
-	}
-	if len(relayWorkers) > 0 {
+	// 3. check if this source is enable relay
+	if _, ok := s.expectRelayStages[cfg.SourceID]; ok {
 		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
 	// 4. put the config into etcd.
-	_, err = ha.PutSourceCfg(s.etcdCli, cfg)
+	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
 	if err != nil {
 		return err
 	}
@@ -1048,10 +1043,9 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 	for _, cfg := range cfgs {
 		taskNamesM[cfg.Name] = struct{}{}
 	}
-	taskNames := strMapToSlice(taskNamesM)
-	if len(taskNames) > 1 {
+	if len(taskNamesM) > 1 {
 		// only subtasks from one task supported now.
-		return terror.ErrSchedulerMultiTask.Generate(taskNames)
+		return terror.ErrSchedulerMultiTask.Generate(strMapToSlice(taskNamesM))
 	}
 	// check whether exists.
 	for _, cfg := range cfgs {
@@ -1066,18 +1060,17 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 		}
 	}
 	// check whether in running stage
-	for _, cfg := range cfgs {
-		stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
-		if stage.Expect == pb.Stage_Running {
-			return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
-		}
+	cfg := cfgs[0]
+	stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
+	if stage.Expect == pb.Stage_Running {
+		return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
 	}
 
 	// check by workers todo batch
 	for _, cfg := range cfgs {
 		worker := s.bounds[cfg.SourceID]
 		if worker == nil {
-			return terror.ErrWorkerNoStart
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("this source: %s have not bound to worker", cfg.SourceID)
 		}
 		resp, err := worker.checkSubtasksCanUpdate(ctx, &cfg)
 		if err != nil {
@@ -1741,7 +1734,6 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, taskName string,
 
 // GetExpectSubTaskStage returns the current expect subtask stage.
 // If the stage not exists, an invalid stage is returned.
-// This func is used for testing.
 func (s *Scheduler) GetExpectSubTaskStage(task, source string) ha.Stage {
 	invalidStage := ha.NewSubTaskStage(pb.Stage_InvalidStage, source, task)
 

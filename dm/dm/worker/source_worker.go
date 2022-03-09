@@ -620,17 +620,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	}
 
 	w.l.Info("OperateSubTask start", zap.Stringer("op", op), zap.String("task", name))
-	failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
-		failpoint.Goto("bypassRefresh")
-	})
 
-	if op == pb.TaskOp_Resume {
-		if refreshErr := w.tryRefreshSubTaskConfig(st); refreshErr != nil {
-			// NOTE: for current unit is not syncer unit or syncer is in shardding merge.
-			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
-		}
-	}
-	failpoint.Label("bypassRefresh")
 	var err error
 	switch op {
 	case pb.TaskOp_Delete:
@@ -641,6 +631,14 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		w.l.Info("pause subtask", zap.String("task", name))
 		err = st.Pause()
 	case pb.TaskOp_Resume:
+		failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
+			failpoint.Goto("bypassRefresh")
+		})
+		if refreshErr := w.tryRefreshSubTaskConfig(st); refreshErr != nil {
+			// NOTE: for current unit is not syncer unit or is in shard merge.
+			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
+		}
+		failpoint.Label("bypassRefresh")
 		w.l.Info("resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
