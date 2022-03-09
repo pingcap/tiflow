@@ -21,12 +21,12 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbterror"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -41,7 +41,7 @@ func ignoreTrackerDDLError(err error) bool {
 	switch {
 	case infoschema.ErrDatabaseExists.Equal(err), infoschema.ErrDatabaseDropExists.Equal(err),
 		infoschema.ErrTableDropExists.Equal(err),
-		tddl.ErrCantDropFieldOrKey.Equal(err):
+		dbterror.ErrCantDropFieldOrKey.Equal(err):
 		return true
 	default:
 		return false
