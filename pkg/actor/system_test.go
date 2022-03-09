@@ -693,13 +693,17 @@ func TestSendAfterMailboxClosed(t *testing.T) {
 	router := NewRouter(t.Name())
 
 	id := ID(1)
-	mb := NewMailbox(id, 1)
+	cap := 1
+	mb := NewMailbox(id, cap)
 	router.InsertMailbox4Test(mb.ID(), mb)
 
 	val, _ := router.procs.Load(id)
 	proc := val.(*proc)
-	proc.onSystemStop()
 	msg := message.TickMessage()
+	// To avoid racing between send and close, fill mailbox first,
+	// so later Send and SendB always return actor stop.
+	require.Nil(t, router.Send(id, msg))
+	proc.onSystemStop()
 	require.EqualValues(t, errActorStopped, router.Send(id, msg))
 	require.EqualValues(t, errActorStopped, router.SendB(ctx, id, msg))
 	wait(t, func() {
