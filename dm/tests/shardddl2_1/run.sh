@@ -111,7 +111,7 @@ function DM_049_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	else
-	  # TODO: fix this after DM worker supports redirect
+		# TODO: fix this after DM worker supports redirect
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"because schema conflict detected" 2

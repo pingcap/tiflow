@@ -269,7 +269,7 @@ function DM_107_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column col1 int not null"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values (2,2);"
 	# TODO: check the handle-error message in the future
-  # TODO: fix this after DM worker supports redirect
+	# TODO: fix this after DM worker supports redirect
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"because schema conflict detected" 1
