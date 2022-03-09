@@ -28,6 +28,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -569,7 +570,6 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	if err := s.FillSchemaName(job); err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
@@ -829,8 +829,13 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = newEmptySchemaSnapshot(s.forceReplicate)
 	}
 	if err := snap.handleDDL(job); err != nil {
+		log.Error("handle DDL failed",
+			zap.String("DDL", job.Query), zap.Stringer("job", job),
+			zap.Error(err), zap.Any("role", util.RoleProcessor))
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("DDL", job.Query),
+		zap.Stringer("job", job), zap.Any("role", util.RoleProcessor))
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
