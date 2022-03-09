@@ -412,7 +412,7 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 		}
 	}
 	if err := json.Unmarshal(b.data, msg); err != nil {
-		log.Info("canal-json decoder unmarshal data failed",
+		log.Error("canal-json decoder unmarshal data failed",
 			zap.Error(err), zap.ByteString("data", b.data))
 		return model.MqMessageTypeUnknown, false, err
 	}
