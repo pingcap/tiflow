@@ -7,7 +7,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/hanfei1991/microcosm/lib"
 )

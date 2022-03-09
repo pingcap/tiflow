@@ -11,8 +11,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 func allocTempURL(t *testing.T) string {

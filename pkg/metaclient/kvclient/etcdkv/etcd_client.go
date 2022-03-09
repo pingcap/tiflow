@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metaclient"

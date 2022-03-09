@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 var _ MetaKV = &MetaEtcd{}

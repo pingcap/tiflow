@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/atomic"
 )
 

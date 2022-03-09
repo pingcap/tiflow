@@ -14,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 func allocTempURL(t *testing.T) string {
@@ -150,7 +150,7 @@ func TestPrepareJoinEtcd(t *testing.T) {
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
 	err = PrepareJoinEtcd(cfgAfter2, after2MasterAddr)
 	require.NotNil(t, err)
-	require.Regexp(t, ".*failed to join embed etcd: there is a member that has not joined successfully, continue the join or remove it.*", err)
+	require.Regexp(t, ".*context deadline exceeded.*", err)
 
 	// start the joining etcd
 	cfgAfterEtcd := GenEmbedEtcdConfigWithLogger("info")

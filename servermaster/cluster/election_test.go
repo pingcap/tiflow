@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 )
 

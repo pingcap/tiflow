@@ -7,7 +7,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 // SetupEmbedEtcd starts an embed etcd server

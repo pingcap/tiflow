@@ -14,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 )
 
 type SuiteTestEtcd struct {

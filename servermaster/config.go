@@ -27,7 +27,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
 

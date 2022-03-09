@@ -26,7 +26,7 @@ func makeListenerForServerTests(t *testing.T) (l net.Listener, addr string) {
 
 // read only
 var clientConfigForUnitTesting = &p2pImpl.MessageClientConfig{
-	SendChannelSize:         0, // unbuffered channel to make tests more reliable
+	SendChannelSize:         1,
 	BatchSendInterval:       time.Second,
 	MaxBatchBytes:           math.MaxInt64,
 	MaxBatchCount:           math.MaxInt64,

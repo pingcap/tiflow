@@ -6,7 +6,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // resetExecutor loads existing executor information from meta storage

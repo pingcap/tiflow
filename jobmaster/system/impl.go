@@ -15,7 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )

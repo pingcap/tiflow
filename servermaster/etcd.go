@@ -20,7 +20,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	perrors "github.com/pingcap/errors"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 )
 

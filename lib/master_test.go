@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"

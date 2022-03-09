@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 // DiscoveryRunner defines an interface to run Discovery service

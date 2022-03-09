@@ -8,9 +8,9 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
