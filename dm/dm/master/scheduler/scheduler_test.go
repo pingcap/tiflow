@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -44,7 +43,6 @@ const (
 )
 
 var (
-	etcdTestCli      *clientv3.Client
 	etcdErrCompacted = v3rpc.ErrCompacted
 	testRelayDir     = "./test_relay_dir"
 )
@@ -54,8 +52,8 @@ func TestSchedulerSuite(t *testing.T) {
 }
 
 // clear keys in etcd test cluster.
-func clearTestInfoOperation(t *testing.T) {
-	require.NoError(t, ha.ClearTestInfoOperation(etcdTestCli))
+func (t *testSchedulerSuite) clearTestInfoOperation() {
+	require.NoError(t.T(), ha.ClearTestInfoOperation(t.etcdTestCli))
 }
 
 type testSchedulerSuite struct {
@@ -77,7 +75,7 @@ func (t *testSchedulerSuite) TearDownSuite() {
 }
 
 func (t *testSchedulerSuite) TearDownTest() {
-	clearTestInfoOperation(t.T())
+	t.clearTestInfoOperation()
 }
 
 var stageEmpty ha.Stage
@@ -89,7 +87,7 @@ func (t *testSchedulerSuite) TestScheduler() {
 }
 
 func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
-	defer clearTestInfoOperation(t.T())
+	defer t.clearTestInfoOperation()
 
 	var (
 		logger       = log.L()
@@ -111,11 +109,11 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 			switch restart {
 			case restartOnly:
 				s.Close()
-				require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			case restartNewInstance:
 				s.Close()
 				s = NewScheduler(&logger, config.Security{})
-				require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			}
 		}
 	)
@@ -154,13 +152,13 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	defer cancel()
 
 	// CASE 1: start without any previous info.
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
-	require.True(t.T(), terror.ErrSchedulerStarted.Equal(s.Start(ctx, etcdTestCli))) // start multiple times.
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
+	require.True(t.T(), terror.ErrSchedulerStarted.Equal(s.Start(ctx, t.etcdTestCli))) // start multiple times.
 	s.Close()
 	s.Close() // close multiple times.
 
 	// CASE 2: start again without any previous info.
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 
 	// CASE 2.1: add the first source config.
 	// no source config exist before added.
@@ -214,7 +212,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx1, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -340,7 +338,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx1, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -385,7 +383,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx2, etcdTestCli, workerName2, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName2, keepAliveTTL))
 	}()
 	// wait for worker2 become Free.
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -423,7 +421,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName2, sourceID1, pb.Stage_InvalidStage)
 	t.subTaskStageMatch(s, taskName2, sourceID2, pb.Stage_InvalidStage)
 	// start task2.
-	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22), IsNil)
+	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22))
 	// config added, stage become Running.
 	t.subTaskCfgExist(s, subtaskCfg21)
 	t.subTaskCfgExist(s, subtaskCfg22)
@@ -533,7 +531,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		w := s.GetWorkerByName(workerName1)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerOffline
-	}), IsTrue)
+	}))
 	t.workerOffline(s, workerName1)
 	// source1 should bound to worker2.
 	t.sourceBounds(s, []string{sourceID1}, []string{})
@@ -556,7 +554,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerBound
-	}), IsTrue)
+	}))
 	require.NoError(t.T(), s.RemoveSubTasks(taskName1, sourceID1))
 	t.subTaskCfgNotExist(s, taskName1, sourceID1)
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_InvalidStage)
@@ -568,8 +566,8 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerBound
-	}), IsTrue)
-	require.True(t.T(), terror.ErrSchedulerWorkerOnline.Equal(s.RemoveWorker(workerName2)), IsTrue)
+	}))
+	require.True(t.T(), terror.ErrSchedulerWorkerOnline.Equal(s.RemoveWorker(workerName2)))
 	t.sourceBounds(s, []string{sourceID1}, []string{})
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName2))
 	t.relayStageMatch(s, sourceID1, pb.Stage_Running)
@@ -583,7 +581,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerOffline
-	}), IsTrue)
+	}))
 	t.workerOffline(s, workerName2)
 	// source1 should unbound
 	t.sourceBounds(s, []string{}, []string{sourceID1})
@@ -608,7 +606,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 func (t *testSchedulerSuite) sourceCfgNotExist(s *Scheduler, source string) {
 	require.Nil(t.T(), s.GetSourceCfgByID(source))
-	scm, _, err := ha.GetSourceCfg(etcdTestCli, source, 0)
+	scm, _, err := ha.GetSourceCfg(t.etcdTestCli, source, 0)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), scm, 0)
 }
@@ -616,7 +614,7 @@ func (t *testSchedulerSuite) sourceCfgNotExist(s *Scheduler, source string) {
 func (t *testSchedulerSuite) sourceCfgExist(s *Scheduler, expectCfg *config.SourceConfig) {
 	cfgP := s.GetSourceCfgByID(expectCfg.SourceID)
 	require.Equal(t.T(), expectCfg, cfgP)
-	scm, _, err := ha.GetSourceCfg(etcdTestCli, expectCfg.SourceID, 0)
+	scm, _, err := ha.GetSourceCfg(t.etcdTestCli, expectCfg.SourceID, 0)
 	require.NoError(t.T(), err)
 	cfgV := scm[expectCfg.SourceID]
 	require.Equal(t.T(), expectCfg, cfgV)
@@ -624,7 +622,7 @@ func (t *testSchedulerSuite) sourceCfgExist(s *Scheduler, expectCfg *config.Sour
 
 func (t *testSchedulerSuite) subTaskCfgNotExist(s *Scheduler, task, source string) {
 	require.Nil(t.T(), s.getSubTaskCfgByTaskSource(task, source))
-	cfgM, _, err := ha.GetSubTaskCfg(etcdTestCli, source, task, 0)
+	cfgM, _, err := ha.GetSubTaskCfg(t.etcdTestCli, source, task, 0)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), cfgM, 0)
 }
@@ -632,7 +630,7 @@ func (t *testSchedulerSuite) subTaskCfgNotExist(s *Scheduler, task, source strin
 func (t *testSchedulerSuite) subTaskCfgExist(s *Scheduler, expectCfg config.SubTaskConfig) {
 	cfgP := s.getSubTaskCfgByTaskSource(expectCfg.Name, expectCfg.SourceID)
 	require.Equal(t.T(), expectCfg, *cfgP)
-	cfgM, _, err := ha.GetSubTaskCfg(etcdTestCli, expectCfg.SourceID, expectCfg.Name, 0)
+	cfgM, _, err := ha.GetSubTaskCfg(t.etcdTestCli, expectCfg.SourceID, expectCfg.Name, 0)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), cfgM, 1)
 	require.Equal(t.T(), expectCfg, cfgM[expectCfg.Name])
@@ -653,7 +651,7 @@ func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expe
 
 func (t *testSchedulerSuite) workerNotExist(s *Scheduler, worker string) {
 	require.Nil(t.T(), s.GetWorkerByName(worker))
-	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
+	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	_, ok := wm[worker]
 	require.False(t.T(), ok)
@@ -662,7 +660,7 @@ func (t *testSchedulerSuite) workerNotExist(s *Scheduler, worker string) {
 func (t *testSchedulerSuite) workerExist(s *Scheduler, info ha.WorkerInfo) {
 	require.NotNil(t.T(), s.GetWorkerByName(info.Name))
 	require.Equal(t.T(), info, s.GetWorkerByName(info.Name).BaseInfo())
-	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
+	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), info, wm[info.Name])
 }
@@ -672,11 +670,11 @@ func (t *testSchedulerSuite) workerOffline(s *Scheduler, worker string) {
 	require.NotNil(t.T(), w)
 	require.Equal(t.T(), nullBound, w.Bound())
 	require.Equal(t.T(), WorkerOffline, w.Stage())
-	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
+	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	_, ok := wm[worker]
 	require.True(t.T(), ok)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker)
+	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, worker)
 	require.NoError(t.T(), err)
 	_, ok = sbm[worker]
 	require.False(t.T(), ok)
@@ -687,11 +685,11 @@ func (t *testSchedulerSuite) workerFree(s *Scheduler, worker string) {
 	require.NotNil(t.T(), w)
 	require.Equal(t.T(), nullBound, w.Bound())
 	require.Equal(t.T(), WorkerFree, w.Stage())
-	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
+	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	_, ok := wm[worker]
 	require.True(t.T(), ok)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, worker)
+	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, worker)
 	require.NoError(t.T(), err)
 	_, ok = sbm[worker]
 	require.False(t.T(), ok)
@@ -702,11 +700,11 @@ func (t *testSchedulerSuite) workerBound(s *Scheduler, bound ha.SourceBound) {
 	require.NotNil(t.T(), w)
 	boundDeepEqualExcludeRev(t.T(), w.Bound(), bound)
 	require.Equal(t.T(), WorkerBound, w.Stage())
-	wm, _, err := ha.GetAllWorkerInfo(etcdTestCli)
+	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	_, ok := wm[bound.Worker]
 	require.True(t.T(), ok)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, bound.Worker)
+	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, bound.Worker)
 	require.NoError(t.T(), err)
 	boundDeepEqualExcludeRev(t.T(), sbm[bound.Worker], bound)
 }
@@ -715,7 +713,7 @@ func (t *testSchedulerSuite) sourceBounds(s *Scheduler, expectBounds, expectUnbo
 	require.Equal(t.T(), expectBounds, s.BoundSources())
 	require.Equal(t.T(), expectUnbounds, s.UnboundSources())
 
-	wToB, _, err := ha.GetSourceBound(etcdTestCli, "")
+	wToB, _, err := ha.GetSourceBound(t.etcdTestCli, "")
 	require.NoError(t.T(), err)
 	require.Len(t.T(), wToB, len(expectBounds))
 
@@ -749,7 +747,7 @@ func (t *testSchedulerSuite) relayStageMatch(s *Scheduler, source string, expect
 	stage := ha.NewRelayStage(expectStage, source)
 	stageDeepEqualExcludeRev(t.T(), s.GetExpectRelayStage(source), stage)
 
-	eStage, _, err := ha.GetRelayStage(etcdTestCli, source)
+	eStage, _, err := ha.GetRelayStage(t.etcdTestCli, source)
 	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Paused:
@@ -763,7 +761,7 @@ func (t *testSchedulerSuite) subTaskStageMatch(s *Scheduler, task, source string
 	stage := ha.NewSubTaskStage(expectStage, source, task)
 	stageDeepEqualExcludeRev(t.T(), s.GetExpectSubTaskStage(task, source), stage)
 
-	eStageM, _, err := ha.GetSubTaskStage(etcdTestCli, source, task)
+	eStageM, _, err := ha.GetSubTaskStage(t.etcdTestCli, source, task)
 	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Paused:
@@ -786,7 +784,7 @@ func (t *testSchedulerSuite) validatorStageMatch(s *Scheduler, task, source stri
 	} else {
 		stageDeepEqualExcludeRev(t.T(), m[source], stage)
 	}
-	stageM, _, err := ha.GetValidatorStage(etcdTestCli, source, task, 0)
+	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, task, 0)
 	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Stopped:
@@ -822,7 +820,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// step 1: start scheduler
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	// step 1.1: add sourceCfg and worker
 	require.NoError(t.T(), s.AddSourceCfg(sourceCfg1))
 	t.sourceCfgExist(s, sourceCfg1)
@@ -830,20 +828,20 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	t.workerExist(s, workerInfo1)
 	// step 2: start a worker
 	// step 2.1: worker start watching source bound
-	bsm, revBound, err := ha.GetSourceBound(etcdTestCli, workerName1)
+	bsm, revBound, err := ha.GetSourceBound(t.etcdTestCli, workerName1)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), bsm, 0)
 	sourceBoundCh := make(chan ha.SourceBound, 10)
 	sourceBoundErrCh := make(chan error, 10)
 	go func() {
-		ha.WatchSourceBound(ctx, etcdTestCli, workerName1, revBound+1, sourceBoundCh, sourceBoundErrCh)
+		ha.WatchSourceBound(ctx, t.etcdTestCli, workerName1, revBound+1, sourceBoundCh, sourceBoundErrCh)
 	}()
 	// step 2.2: worker start keepAlive
 	ctx1, cancel1 := context.WithCancel(ctx)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx1, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// step 2.3: scheduler should bound source to worker
 	// wait for source1 bound to worker1.
@@ -870,7 +868,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	// to trigger it to restart the source again
 	s.Close()
 	require.Len(t.T(), sourceBoundCh, 0)
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	// worker should receive the trigger event again
 	checkSourceBoundCh()
 	// case 2: worker is restarted, and worker keepalive broke but scheduler didn't catch the delete event
@@ -882,7 +880,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx2, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	checkSourceBoundCh()
 	// case 3: scheduler is restarted, but worker also broke after scheduler is down
@@ -895,12 +893,12 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	// check whether keepalive lease is out of date
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, _, err := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return err == nil && len(kam) == 0
 	}))
 	require.Len(t.T(), sourceBoundCh, 0)
 	require.Len(t.T(), sourceBoundCh, 0)
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli)) // restart scheduler
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 0)
 	unbounds := s.UnboundSources()
 	require.Len(t.T(), unbounds, 1)
@@ -918,7 +916,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx4, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx4, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	sourceBound1.Source = sourceID1
 	sourceBound1.IsDeleted = false
@@ -936,7 +934,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 
 	// step 2.2: worker start keepAlive
 	go func() {
-		require.NoError(t.T(), ha.KeepAlive(ctx, etcdTestCli, workerName2, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx, t.etcdTestCli, workerName2, keepAliveTTL))
 	}()
 
 	s.Close() // stop scheduler
@@ -945,11 +943,11 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	// check whether keepalive lease is out of date
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, _, err := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return err == nil && len(kam) == 1
 	}))
 	require.Len(t.T(), sourceBoundCh, 0)
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli)) // restart scheduler
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 1)
 	w := s.workers[workerName2]
 	require.Equal(t.T(), WorkerBound, w.stage)
@@ -985,7 +983,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	// step 1: start an empty scheduler without listening the worker event
 	s.started.Store(true)
 	s.cancel = cancel
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 
 	// step 2: add two sources and register four workers
 	require.NoError(t.T(), s.AddSourceCfg(sourceCfg1))
@@ -1010,15 +1008,15 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx1, etcdTestCli, workerName1, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx1, etcdTestCli, workerName2, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName2, keepAliveTTL))
 	}()
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, _, e := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, _, e := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return e == nil && len(kam) == 2
 	}))
 	cancel1()
@@ -1027,18 +1025,18 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
 	var rev int64
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, rev1, e := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, rev1, e := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		rev = rev1
 		return e == nil && len(kam) == 0
 	}))
 
 	// step 4: trigger etcd compaction and check whether we can receive it through watcher
 	var startRev int64 = 1
-	_, err = etcdTestCli.Compact(ctx, rev)
+	_, err = t.etcdTestCli.Compact(ctx, rev)
 	require.NoError(t.T(), err)
 	workerEvCh := make(chan ha.WorkerEvent, 10)
 	workerErrCh := make(chan error, 10)
-	ha.WatchWorkerEvent(ctx, etcdTestCli, startRev, workerEvCh, workerErrCh)
+	ha.WatchWorkerEvent(ctx, t.etcdTestCli, startRev, workerEvCh, workerErrCh)
 	select {
 	case err := <-workerErrCh:
 		require.Equal(t.T(), etcdErrCompacted, err)
@@ -1052,10 +1050,10 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx2, etcdTestCli, workerName3, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName3, keepAliveTTL))
 	}()
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, _, err := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		if err == nil {
 			if _, ok := kam[workerName3]; ok {
 				return len(kam) == 1
@@ -1074,7 +1072,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), ha.KeepAlive(ctx2, etcdTestCli, workerName4, keepAliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName4, keepAliveTTL))
 	}()
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		unbounds := s.UnboundSources()
@@ -1124,7 +1122,7 @@ func (t *testSchedulerSuite) TestLastBound() {
 
 	// step 1: start an empty scheduler without listening the worker event
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
 	s.workers[workerName3] = worker3
@@ -1192,7 +1190,7 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 
 	// step 1: start an empty scheduler without listening the worker event
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	// sourceID2 doesn't have a source config and not in unbound
 	s.sourceCfgs[sourceID1] = sourceCfg1
@@ -1227,7 +1225,7 @@ func (t *testSchedulerSuite) TestTransferSource() {
 
 	// step 1: start an empty scheduler
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
 	s.workers[workerName3] = worker3
@@ -1349,7 +1347,7 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 
 	// step 1: start an empty scheduler
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
 	s.workers[workerName3] = worker3
@@ -1469,7 +1467,7 @@ func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
 
 	// step 1: start an empty scheduler
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
@@ -1551,19 +1549,19 @@ func (t *testSchedulerSuite) TestCloseAllWorkers() {
 
 	for i, name := range names {
 		info := ha.NewWorkerInfo(name, fmt.Sprintf("127.0.0.1:%d", 50801+i))
-		_, err := ha.PutWorkerInfo(etcdTestCli, info)
+		_, err := ha.PutWorkerInfo(t.etcdTestCli, info)
 		require.NoError(t.T(), err)
 	}
 
 	require.NoError(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToRecoverWorkersBounds", "return"))
 	// Test closed when fail to start
-	require.Errorf(t.T(), s.Start(ctx, etcdTestCli), "failToRecoverWorkersBounds")
+	require.Errorf(t.T(), s.Start(ctx, t.etcdTestCli), "failToRecoverWorkersBounds")
 	require.Len(t.T(), s.workers, 3)
 	checkAllWorkersClosed(t.T(), s, true)
 	require.NoError(t.T(), failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/failToRecoverWorkersBounds"))
 
 	s.workers = map[string]*Worker{}
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	checkAllWorkersClosed(t.T(), s, false)
 	s.Close()
 	require.Len(t.T(), s.workers, 3)
@@ -1588,7 +1586,7 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 	defer cancel()
 
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	// found source configs before bound
 	s.sourceCfgs[sourceID1] = &config.SourceConfig{}
 	s.sourceCfgs[sourceID2] = &config.SourceConfig{}
@@ -1599,11 +1597,11 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 
 	wg.Add(2)
 	go func() {
-		require.NoError(t.T(), ha.KeepAlive(ctx, etcdTestCli, workerName1, keepaliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx, t.etcdTestCli, workerName1, keepaliveTTL))
 		wg.Done()
 	}()
 	go func() {
-		require.NoError(t.T(), ha.KeepAlive(ctx, etcdTestCli, workerName2, keepaliveTTL))
+		require.NoError(t.T(), ha.KeepAlive(ctx, t.etcdTestCli, workerName2, keepaliveTTL))
 		wg.Done()
 	}()
 
@@ -1617,20 +1615,20 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 	require.True(t.T(), bounded)
 
 	s.started.Store(false)
-	sbm, _, err := ha.GetSourceBound(etcdTestCli, "")
+	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, "")
 	require.NoError(t.T(), err)
 	require.Len(t.T(), sbm, 2)
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		kam, _, err2 := ha.GetKeepAliveWorkers(etcdTestCli)
+		kam, _, err2 := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		if err2 != nil {
 			return false
 		}
 		return len(kam) == 2
 	}))
 	// there isn't any source config in etcd
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	require.Len(t.T(), s.bounds, 0)
-	sbm, _, err = ha.GetSourceBound(etcdTestCli, "")
+	sbm, _, err = ha.GetSourceBound(t.etcdTestCli, "")
 	require.NoError(t.T(), err)
 	require.Len(t.T(), sbm, 0)
 	cancel()
@@ -1658,7 +1656,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 
 	// step 1: start an empty scheduler
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	s.workers[workerName1] = worker1
 	s.workers[workerName2] = worker2
 	s.workers[workerName3] = worker3
@@ -1735,7 +1733,7 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 
 	// step 1: start an empty scheduler
 	s.started.Store(true)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 
 	worker1 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName1}}
 	worker2 := &Worker{baseInfo: ha.WorkerInfo{Name: workerName2}}
@@ -1766,17 +1764,17 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	worker4.ToOffline()
 
 	// put task1, source1, worker3
-	_, err := ha.PutLoadTask(etcdTestCli, task1, sourceID1, workerName3)
+	_, err := ha.PutLoadTask(t.etcdTestCli, task1, sourceID1, workerName3)
 	require.NoError(t.T(), err)
 	// put task2, source2, worker4
-	_, err = ha.PutLoadTask(etcdTestCli, task2, sourceID2, workerName4)
+	_, err = ha.PutLoadTask(t.etcdTestCli, task2, sourceID2, workerName4)
 	require.NoError(t.T(), err)
 
 	// get all load tasks
 	var wg sync.WaitGroup
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel1()
-	loadTasks, startRev, err := ha.GetAllLoadTask(etcdTestCli)
+	loadTasks, startRev, err := ha.GetAllLoadTask(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	s.loadTasks = loadTasks
 
@@ -1791,7 +1789,7 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	}()
 
 	// put task2, source1, worker1
-	_, err = ha.PutLoadTask(etcdTestCli, task2, sourceID1, workerName1)
+	_, err = ha.PutLoadTask(t.etcdTestCli, task2, sourceID1, workerName1)
 	require.NoError(t.T(), err)
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		s.mu.Lock()
@@ -1800,7 +1798,7 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	}))
 
 	// del task2, source1, worker1
-	_, _, err = ha.DelLoadTask(etcdTestCli, task2, sourceID1)
+	_, _, err = ha.DelLoadTask(t.etcdTestCli, task2, sourceID1)
 	require.NoError(t.T(), err)
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		s.mu.Lock()
@@ -1857,23 +1855,23 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
 	// prepare etcd data
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	sourceCfg.SourceID = sourceID1
-	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	_, err = ha.PutSourceCfg(t.etcdTestCli, sourceCfg)
 	require.NoError(t.T(), err)
 	sourceCfg.SourceID = sourceID2
-	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	_, err = ha.PutSourceCfg(t.etcdTestCli, sourceCfg)
 	require.NoError(t.T(), err)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID2, workerName1)
+	_, err = ha.PutRelayConfig(t.etcdTestCli, sourceID2, workerName1)
 	require.NoError(t.T(), err)
-	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo)
+	_, err = ha.PutWorkerInfo(t.etcdTestCli, workerInfo)
 	require.NoError(t.T(), err)
-	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	_, err = ha.PutSourceBound(t.etcdTestCli, bound)
 	require.NoError(t.T(), err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	//nolint:errcheck
-	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	go ha.KeepAlive(ctx, t.etcdTestCli, workerName1, keepAlive)
 
 	// bootstrap
 	require.NoError(t.T(), s.recoverSources())
@@ -1914,27 +1912,27 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 	sourceCfg.Checker.BackoffMax = config.Duration{Duration: 5 * time.Second}
 
 	// prepare etcd data
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	sourceCfg.EnableRelay = true
 	sourceCfg.SourceID = sourceID1
-	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	_, err = ha.PutSourceCfg(t.etcdTestCli, sourceCfg)
 	require.NoError(t.T(), err)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName1)
+	_, err = ha.PutRelayConfig(t.etcdTestCli, sourceID1, workerName1)
 	require.NoError(t.T(), err)
-	_, err = ha.PutRelayConfig(etcdTestCli, sourceID1, workerName2)
+	_, err = ha.PutRelayConfig(t.etcdTestCli, sourceID1, workerName2)
 	require.NoError(t.T(), err)
-	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	_, err = ha.PutWorkerInfo(t.etcdTestCli, workerInfo1)
 	require.NoError(t.T(), err)
-	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo2)
+	_, err = ha.PutWorkerInfo(t.etcdTestCli, workerInfo2)
 	require.NoError(t.T(), err)
-	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	_, err = ha.PutSourceBound(t.etcdTestCli, bound)
 	require.NoError(t.T(), err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	//nolint:errcheck
-	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	go ha.KeepAlive(ctx, t.etcdTestCli, workerName1, keepAlive)
 	//nolint:errcheck
-	go ha.KeepAlive(ctx, etcdTestCli, workerName2, keepAlive)
+	go ha.KeepAlive(ctx, t.etcdTestCli, workerName2, keepAlive)
 
 	// bootstrap
 	require.NoError(t.T(), s.recoverSources())
@@ -1944,7 +1942,7 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 
 	// check when the relay config is conflicting with source config, relay config should be deleted
 	require.Len(t.T(), s.relayWorkers[sourceID1], 0)
-	result, _, err := ha.GetAllRelayConfig(etcdTestCli)
+	result, _, err := ha.GetAllRelayConfig(t.etcdTestCli)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), result, 0)
 
@@ -1977,22 +1975,22 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	}
 	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t.T(), err)
-	s.etcdCli = etcdTestCli
+	s.etcdCli = t.etcdTestCli
 	sourceCfg.SourceID = sourceID1
-	_, err = ha.PutSourceCfg(etcdTestCli, sourceCfg)
+	_, err = ha.PutSourceCfg(t.etcdTestCli, sourceCfg)
 	require.NoError(t.T(), err)
-	_, err = ha.PutWorkerInfo(etcdTestCli, workerInfo1)
+	_, err = ha.PutWorkerInfo(t.etcdTestCli, workerInfo1)
 	require.NoError(t.T(), err)
-	_, err = ha.PutSourceBound(etcdTestCli, bound)
+	_, err = ha.PutSourceBound(t.etcdTestCli, bound)
 	require.NoError(t.T(), err)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	//nolint:errcheck
-	go ha.KeepAlive(ctx, etcdTestCli, workerName1, keepAlive)
+	go ha.KeepAlive(ctx, t.etcdTestCli, workerName1, keepAlive)
 	require.NoError(t.T(), s.recoverSources())
 	_, err = s.recoverWorkersBounds()
 	require.NoError(t.T(), err)
-	require.NoError(t.T(), s.Start(ctx, etcdTestCli))
+	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	// CASE 1: start subtask without starting validation
 	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg)) // create new subtask without validation
 	t.subTaskCfgExist(s, subtaskCfg)
