@@ -79,7 +79,7 @@ type Sorter struct {
 	writerActorID actor.ID
 
 	readerRouter  *actor.Router
-	readerActorID actor.ID
+	ReaderActorID actor.ID
 
 	outputCh chan *model.PolymorphicEvent
 
@@ -174,7 +174,7 @@ func NewSorter(
 		writerRouter:  writerRouter,
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
-		readerActorID: actorID,
+		ReaderActorID: actorID,
 		outputCh:      outputCh,
 	}, nil
 }
@@ -187,14 +187,18 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		err = ctx.Err()
 	case err = <-ls.errCh:
 	}
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
 	atomic.StoreInt32(&ls.closed, 1)
+	// We should never lost message, make sure StopMessage is sent.
+	ctxTODO := context.TODO()
+	// As the context can't be cancelled. SendB can only return an error
+	// ActorStopped or ActorNotFound, and they mean actors have closed.
 	_ = ls.writerRouter.SendB(
-		ctx, ls.writerActorID, actormsg.StopMessage())
+		ctxTODO, ls.writerActorID, actormsg.StopMessage())
 	_ = ls.readerRouter.SendB(
-		ctx, ls.readerActorID, actormsg.StopMessage())
+		ctxTODO, ls.ReaderActorID, actormsg.StopMessage())
 	ls.closedWg.Wait()
+
+	_ = ls.cleanup(ctxTODO)
 	return errors.Trace(err)
 }
 
@@ -247,22 +251,20 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	//
 	// TODO: Consider if we are sending too many msgs here.
 	//       It may waste CPU and be a bottleneck.
-	_ = ls.readerRouter.Send(ls.readerActorID, msg)
+	_ = ls.readerRouter.Send(ls.ReaderActorID, msg)
 	return ls.outputCh
 }
 
-// CleanupFunc returns a function that cleans up sorter's data.
-func (ls *Sorter) CleanupFunc() func(context.Context) error {
-	return func(ctx context.Context) error {
-		task := message.Task{UID: ls.uid, TableID: ls.tableID}
-		task.DeleteReq = &message.DeleteRequest{
-			// We do not set task.Delete.Count, because we don't know
-			// how many key-value pairs in the range.
-			Range: [2][]byte{
-				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
-			},
-		}
-		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+// cleanup cleans up sorter's data.
+func (ls *Sorter) cleanup(ctx context.Context) error {
+	task := message.Task{UID: ls.uid, TableID: ls.tableID}
+	task.DeleteReq = &message.DeleteRequest{
+		// We do not set task.Delete.Count, because we don't know
+		// how many key-value pairs in the range.
+		Range: [2][]byte{
+			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+			encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+		},
 	}
+	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
 }

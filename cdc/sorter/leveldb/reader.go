@@ -405,6 +405,11 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		// Update the max commit ts and resolved ts of all received events.
 		ts := msgs[i].SorterTask.ReadTs
 		r.state.advanceMaxTs(ts.MaxCommitTs, ts.MaxResolvedTs)
+
+		// Test only message.
+		if msgs[i].SorterTask.Test != nil {
+			time.Sleep(msgs[i].SorterTask.Test.Sleep)
+		}
 	}
 
 	// Length of buffered resolved events.
