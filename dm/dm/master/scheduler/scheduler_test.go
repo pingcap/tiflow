@@ -53,6 +53,7 @@ func TestSchedulerSuite(t *testing.T) {
 
 // clear keys in etcd test cluster.
 func (t *testSchedulerSuite) clearTestInfoOperation() {
+	t.T().Helper()
 	require.NoError(t.T(), ha.ClearTestInfoOperation(t.etcdTestCli))
 }
 
@@ -605,6 +606,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 }
 
 func (t *testSchedulerSuite) sourceCfgNotExist(s *Scheduler, source string) {
+	t.T().Helper()
 	require.Nil(t.T(), s.GetSourceCfgByID(source))
 	scm, _, err := ha.GetSourceCfg(t.etcdTestCli, source, 0)
 	require.NoError(t.T(), err)
@@ -612,6 +614,7 @@ func (t *testSchedulerSuite) sourceCfgNotExist(s *Scheduler, source string) {
 }
 
 func (t *testSchedulerSuite) sourceCfgExist(s *Scheduler, expectCfg *config.SourceConfig) {
+	t.T().Helper()
 	cfgP := s.GetSourceCfgByID(expectCfg.SourceID)
 	require.Equal(t.T(), expectCfg, cfgP)
 	scm, _, err := ha.GetSourceCfg(t.etcdTestCli, expectCfg.SourceID, 0)
@@ -621,6 +624,7 @@ func (t *testSchedulerSuite) sourceCfgExist(s *Scheduler, expectCfg *config.Sour
 }
 
 func (t *testSchedulerSuite) subTaskCfgNotExist(s *Scheduler, task, source string) {
+	t.T().Helper()
 	require.Nil(t.T(), s.getSubTaskCfgByTaskSource(task, source))
 	cfgM, _, err := ha.GetSubTaskCfg(t.etcdTestCli, source, task, 0)
 	require.NoError(t.T(), err)
@@ -628,6 +632,7 @@ func (t *testSchedulerSuite) subTaskCfgNotExist(s *Scheduler, task, source strin
 }
 
 func (t *testSchedulerSuite) subTaskCfgExist(s *Scheduler, expectCfg config.SubTaskConfig) {
+	t.T().Helper()
 	cfgP := s.getSubTaskCfgByTaskSource(expectCfg.Name, expectCfg.SourceID)
 	require.Equal(t.T(), expectCfg, *cfgP)
 	cfgM, _, err := ha.GetSubTaskCfg(t.etcdTestCli, expectCfg.SourceID, expectCfg.Name, 0)
@@ -637,12 +642,14 @@ func (t *testSchedulerSuite) subTaskCfgExist(s *Scheduler, expectCfg config.SubT
 }
 
 func (t *testSchedulerSuite) downstreamMetaNotExist(s *Scheduler, task string) {
+	t.T().Helper()
 	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
 	require.Nil(t.T(), dbConfig)
 	require.Equal(t.T(), "", metaConfig)
 }
 
 func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+	t.T().Helper()
 	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
 	require.NotNil(t.T(), dbConfig)
 	require.Equal(t.T(), expectDBCfg, *dbConfig)
@@ -650,6 +657,7 @@ func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expe
 }
 
 func (t *testSchedulerSuite) workerNotExist(s *Scheduler, worker string) {
+	t.T().Helper()
 	require.Nil(t.T(), s.GetWorkerByName(worker))
 	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
 	require.NoError(t.T(), err)
@@ -658,6 +666,7 @@ func (t *testSchedulerSuite) workerNotExist(s *Scheduler, worker string) {
 }
 
 func (t *testSchedulerSuite) workerExist(s *Scheduler, info ha.WorkerInfo) {
+	t.T().Helper()
 	require.NotNil(t.T(), s.GetWorkerByName(info.Name))
 	require.Equal(t.T(), info, s.GetWorkerByName(info.Name).BaseInfo())
 	wm, _, err := ha.GetAllWorkerInfo(t.etcdTestCli)
@@ -666,6 +675,7 @@ func (t *testSchedulerSuite) workerExist(s *Scheduler, info ha.WorkerInfo) {
 }
 
 func (t *testSchedulerSuite) workerOffline(s *Scheduler, worker string) {
+	t.T().Helper()
 	w := s.GetWorkerByName(worker)
 	require.NotNil(t.T(), w)
 	require.Equal(t.T(), nullBound, w.Bound())
@@ -681,6 +691,7 @@ func (t *testSchedulerSuite) workerOffline(s *Scheduler, worker string) {
 }
 
 func (t *testSchedulerSuite) workerFree(s *Scheduler, worker string) {
+	t.T().Helper()
 	w := s.GetWorkerByName(worker)
 	require.NotNil(t.T(), w)
 	require.Equal(t.T(), nullBound, w.Bound())
@@ -696,6 +707,7 @@ func (t *testSchedulerSuite) workerFree(s *Scheduler, worker string) {
 }
 
 func (t *testSchedulerSuite) workerBound(s *Scheduler, bound ha.SourceBound) {
+	t.T().Helper()
 	w := s.GetWorkerByName(bound.Worker)
 	require.NotNil(t.T(), w)
 	boundDeepEqualExcludeRev(t.T(), w.Bound(), bound)
@@ -710,6 +722,7 @@ func (t *testSchedulerSuite) workerBound(s *Scheduler, bound ha.SourceBound) {
 }
 
 func (t *testSchedulerSuite) sourceBounds(s *Scheduler, expectBounds, expectUnbounds []string) {
+	t.T().Helper()
 	require.Equal(t.T(), expectBounds, s.BoundSources())
 	require.Equal(t.T(), expectUnbounds, s.UnboundSources())
 
@@ -734,16 +747,19 @@ func (t *testSchedulerSuite) sourceBounds(s *Scheduler, expectBounds, expectUnbo
 }
 
 func boundDeepEqualExcludeRev(t *testing.T, bound, expectBound ha.SourceBound) {
+	t.Helper()
 	expectBound.Revision = bound.Revision
 	require.Equal(t, expectBound, bound)
 }
 
 func stageDeepEqualExcludeRev(t *testing.T, stage, expectStage ha.Stage) {
+	t.Helper()
 	expectStage.Revision = stage.Revision
 	require.Equal(t, expectStage, stage)
 }
 
 func (t *testSchedulerSuite) relayStageMatch(s *Scheduler, source string, expectStage pb.Stage) {
+	t.T().Helper()
 	stage := ha.NewRelayStage(expectStage, source)
 	stageDeepEqualExcludeRev(t.T(), s.GetExpectRelayStage(source), stage)
 
@@ -758,6 +774,7 @@ func (t *testSchedulerSuite) relayStageMatch(s *Scheduler, source string, expect
 }
 
 func (t *testSchedulerSuite) subTaskStageMatch(s *Scheduler, task, source string, expectStage pb.Stage) {
+	t.T().Helper()
 	stage := ha.NewSubTaskStage(expectStage, source, task)
 	stageDeepEqualExcludeRev(t.T(), s.GetExpectSubTaskStage(task, source), stage)
 
@@ -773,6 +790,7 @@ func (t *testSchedulerSuite) subTaskStageMatch(s *Scheduler, task, source string
 }
 
 func (t *testSchedulerSuite) validatorStageMatch(s *Scheduler, task, source string, expectStage pb.Stage) {
+	t.T().Helper()
 	stage := ha.NewValidatorStage(expectStage, source, task)
 	var m map[string]ha.Stage
 	if v, ok := s.expectValidatorStages.Load(task); ok {
@@ -796,6 +814,7 @@ func (t *testSchedulerSuite) validatorStageMatch(s *Scheduler, task, source stri
 }
 
 func (t *testSchedulerSuite) validatorModeMatch(s *Scheduler, task, source string, expectMode string) {
+	t.T().Helper()
 	cfg := s.getSubTaskCfgByTaskSource(task, source)
 	require.NotNil(t.T(), cfg)
 	require.Equal(t.T(), expectMode, cfg.ValidatorCfg.Mode)
@@ -1528,6 +1547,7 @@ func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
 }
 
 func checkAllWorkersClosed(t *testing.T, s *Scheduler, closed bool) {
+	t.Helper()
 	for _, worker := range s.workers {
 		cli, ok := worker.cli.(*workerrpc.GRPCClient)
 		require.True(t, ok)
