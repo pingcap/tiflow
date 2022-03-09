@@ -252,6 +252,7 @@ func TestAgentBasics(t *testing.T) {
 	suite.tableExecutor.ExpectedCalls = nil
 	suite.tableExecutor.Calls = nil
 
+	suite.tableExecutor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
 	// Test Point 4: Accept an incoming DispatchTableMessage, and the AddTable method in TableExecutor can return true.
 	err = agent.Tick(suite.cdcCtx)
 	require.NoError(t, err)
