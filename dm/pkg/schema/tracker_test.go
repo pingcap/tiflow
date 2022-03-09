@@ -249,6 +249,10 @@ func (s *trackerSuite) TestDDL(c *C) {
 	cts, err = tracker.GetCreateTable(context.Background(), table)
 	c.Assert(err, IsNil)
 	c.Assert(cts, Equals, "CREATE TABLE `foo` ( `a` varchar(255) NOT NULL, `c` int(11) DEFAULT NULL, PRIMARY KEY (`a`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
+
+	// test expression index on tidb_shard.
+	err = tracker.Exec(ctx, "testdb", "CREATE TABLE bar (f_id INT PRIMARY KEY, UNIQUE KEY uniq_order_id ((tidb_shard(f_id)),f_id))")
+	c.Assert(err, IsNil)
 }
 
 func (s *trackerSuite) TestGetSingleColumnIndices(c *C) {
