@@ -163,6 +163,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					return
 				}
 			case ddl := <-s.ddlCh:
+				log.Info("emit ddl event", zap.Any("DDL", ddl))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
@@ -202,7 +203,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
-		log.Info("ddl is not finished yet", zap.Uint64("ddlSentTs", s.ddlSentTs))
+		log.Info("ddl is not finished yet", zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
