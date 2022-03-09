@@ -30,7 +30,7 @@ import (
 
 // TopicManager is a manager for kafka topics.
 type TopicManager struct {
-	client sarama.Client
+	client kafka.Client
 	admin  kafka.ClusterAdminClient
 
 	cfg *kafkaconfig.AutoCreateTopicConfig
@@ -41,7 +41,7 @@ type TopicManager struct {
 }
 
 // NewTopicManager creates a new topic manager.
-func NewTopicManager(client sarama.Client, admin kafka.ClusterAdminClient, cfg *kafkaconfig.AutoCreateTopicConfig) *TopicManager {
+func NewTopicManager(client kafka.Client, admin kafka.ClusterAdminClient, cfg *kafkaconfig.AutoCreateTopicConfig) *TopicManager {
 	return &TopicManager{
 		client: client,
 		admin:  admin,
@@ -77,7 +77,7 @@ func (m *TopicManager) tryRefreshMeta() error {
 			if err != nil {
 				return err
 			}
-			m.topics.Store(topic, len(partitions))
+			m.topics.Store(topic, int32(len(partitions)))
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}
