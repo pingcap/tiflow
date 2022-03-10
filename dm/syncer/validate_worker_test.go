@@ -36,6 +36,7 @@ import (
 // split into 3 cases, since it may be unstable when put together.
 func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	testFunc := func(t *testing.T, mode string) {
+		t.Helper()
 		tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 		tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
 		tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
