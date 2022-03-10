@@ -925,13 +925,11 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 		return err == nil && len(kam) == 0
 	}))
 	require.Len(t.T(), sourceBoundCh, 0)
-	require.Len(t.T(), sourceBoundCh, 0)
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 0)
 	unbounds := s.UnboundSources()
 	require.Len(t.T(), unbounds, 1)
 	require.Equal(t.T(), sourceID1, unbounds[0])
-	sourceBound1.Source = ""
 	sourceBound1.IsDeleted = true
 	checkSourceBoundCh()
 
@@ -978,7 +976,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 1)
 	w := s.workers[workerName2]
-	require.Equal(t.T(), WorkerFree, w.stage)
+	require.Equal(t.T(), WorkerBound, w.stage)
 	require.Contains(t.T(), w.Bounds(), sourceID1)
 	unbounds = s.UnboundSources()
 	require.Len(t.T(), unbounds, 0)
@@ -1014,13 +1012,14 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	s.etcdCli = t.etcdTestCli
 
 	// step 2: add two sources and register four workers
-	require.NoError(t.T(), s.AddSourceCfg(sourceCfg1))
-	require.NoError(t.T(), s.AddSourceCfg(&sourceCfg2))
-
 	require.NoError(t.T(), s.AddWorker(workerName1, workerAddr1))
 	require.NoError(t.T(), s.AddWorker(workerName2, workerAddr2))
 	require.NoError(t.T(), s.AddWorker(workerName3, workerAddr3))
 	require.NoError(t.T(), s.AddWorker(workerName4, workerAddr4))
+
+	require.NoError(t.T(), s.AddSourceCfg(sourceCfg1))
+	require.NoError(t.T(), s.AddSourceCfg(&sourceCfg2))
+
 	require.Len(t.T(), s.workers, 4)
 	require.Contains(t.T(), s.workers, workerName1)
 	require.Contains(t.T(), s.workers, workerName2)
@@ -1094,6 +1093,8 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	}()
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
 	time.Sleep(time.Second)
+	// unbound source2, to test whether we can observe a new worker and bound this source to it
+	s.updateStatusToUnbound(sourceID2)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -1164,7 +1165,13 @@ func (t *testSchedulerSuite) TestLastBound() {
 	require.NoError(t.T(), err)
 	require.True(t.T(), bounded)
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
+	// we only have one online worker, so first worker should bound both unbounded sources
+	require.Equal(t.T(), worker1, s.bounds[sourceID2])
+	require.Len(t.T(), worker1.Bounds(), 2)
 
+	// unbound sourceID2 for the later tests
+	s.updateStatusToUnbound(sourceID2)
+	s.lastBound[sourceID2] = ha.NewSourceBound(sourceID2, workerName1)
 	// worker3 has to bounded to source2
 	worker3.ToFree()
 	bounded, err = s.tryBoundForWorker(worker3)
@@ -1184,7 +1191,8 @@ func (t *testSchedulerSuite) TestLastBound() {
 	require.NoError(t.T(), err)
 	require.False(t.T(), bounded)
 
-	// after worker3 become offline, source2 should be bounded to worker2
+	// after worker3 become offline, source2 should be bounded to worker2 if it is its lastBound
+	s.lastBound[sourceID2] = ha.NewSourceBound(sourceID2, workerName2)
 	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	require.False(t.T(), ok)
@@ -1284,21 +1292,34 @@ func (t *testSchedulerSuite) TestTransferSource() {
 	require.NoError(t.T(), s.TransferSource(ctx, sourceID3, workerName3))
 	require.Equal(t.T(), worker3, s.bounds[sourceID3])
 
-	// test invalid transfer: source -> worker = bound -> bound
-	require.Error(t.T(), s.TransferSource(ctx, sourceID1, workerName3))
-	require.Equal(t.T(), worker4, s.bounds[sourceID1])
+	// test valid transfer: source -> worker = bound -> bound
+	require.NoError(t.T(), s.TransferSource(ctx, sourceID1, workerName3))
+	require.Equal(t.T(), worker3, s.bounds[sourceID1])
 	require.Equal(t.T(), worker3, s.bounds[sourceID3])
+	require.Equal(t.T(), WorkerFree, worker4.Stage())
+	require.Len(t.T(), worker4.Bounds(), 0)
+	require.Equal(t.T(), ha.NewSourceBound(sourceID1, workerName4), s.lastBound[sourceID1])
 
 	// test invalid transfer: source -> worker = bound -> offline
 	worker1.ToOffline()
 	require.Error(t.T(), s.TransferSource(ctx, sourceID1, workerName1))
-	require.Equal(t.T(), worker4, s.bounds[sourceID1])
+	require.Equal(t.T(), worker3, s.bounds[sourceID1])
 
-	// test invalid transfer: source -> worker = unbound -> bound
+	// test valid transfer: source -> worker = unbound -> bound
 	s.sourceCfgs[sourceID4] = &config.SourceConfig{}
-	require.Error(t.T(), s.TransferSource(ctx, sourceID4, workerName3))
-	require.Equal(t.T(), worker3, s.bounds[sourceID3])
+	require.NoError(t.T(), s.TransferSource(ctx, sourceID4, workerName3))
+	require.Equal(t.T(), worker3, s.bounds[sourceID4])
+	require.Equal(t.T(), ha.NewSourceBound("", ""), s.lastBound[sourceID4])
+	s.updateStatusToUnbound(sourceID4)
 	delete(s.sourceCfgs, sourceID4)
+
+	// test valid transfer: source -> worker = bound -> bound
+	require.NoError(t.T(), s.TransferSource(ctx, sourceID1, workerName4))
+	require.Equal(t.T(), worker4, s.bounds[sourceID1])
+	require.Equal(t.T(), worker3, s.bounds[sourceID3])
+	require.Equal(t.T(), WorkerBound, worker4.Stage())
+	require.Len(t.T(), worker4.Bounds(), 1)
+	require.Equal(t.T(), ha.NewSourceBound(sourceID1, workerName3), s.lastBound[sourceID1])
 
 	worker1.ToFree()
 	// now we have (worker1, nil) (worker2, source2) (worker3, source3) (worker4, source1)
@@ -1409,12 +1430,15 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), []*Worker{worker1, worker3}, workers)
 
-	// failed on bound-not-same-source worker and not exist worker
-	require.True(t.T(), terror.ErrSchedulerRelayWorkersWrongBound.Equal(s.StartRelay(sourceID1, []string{workerName2})))
+	// should success when on bound-not-same-source worker but fail on not exist worker
+	require.NoError(t.T(), s.StartRelay(sourceID1, []string{workerName2}))
+	require.NoError(t.T(), s.StopRelay(sourceID1, []string{workerName2}))
 	require.True(t.T(), terror.ErrSchedulerWorkerNotExist.Equal(s.StartRelay(sourceID1, []string{"not-exist"})))
 
-	// failed on one worker multiple relay source
-	require.True(t.T(), terror.ErrSchedulerRelayWorkersBusy.Equal(s.StartRelay(sourceID2, []string{workerName3})))
+	// should success on one worker multiple relay source
+	require.NoError(t.T(), s.StartRelay(sourceID2, []string{workerName3}))
+	checkRelaySource(t.T(), worker3.RelaySources(), sourceID1, sourceID2)
+	require.NoError(t.T(), s.StopRelay(sourceID2, []string{workerName3}))
 
 	// start another relay worker
 	require.NoError(t.T(), s.StartRelay(sourceID2, []string{workerName2}))
@@ -1469,7 +1493,9 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 
 	bound, err := s.tryBoundForSource(sourceID2)
 	require.NoError(t.T(), err)
-	require.False(t.T(), bound)
+	// should bound to worker1 since worker2 is has the least sources
+	require.True(t.T(), bound)
+	require.Equal(t.T(), workerName2, s.bounds[sourceID2].baseInfo.Name)
 }
 
 func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
@@ -1718,7 +1744,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	// sourceID1 bound to last bound worker
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 
-	require.Equal(t.T(), s.UnboundSources(), 0)
+	require.Len(t.T(), s.UnboundSources(), 0)
 
 	// test transfer two bounded sources
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName2, sourceID2))
@@ -1728,9 +1754,12 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	require.Equal(t.T(), worker4, s.bounds[sourceID3])
 	require.Equal(t.T(), worker3, s.bounds[sourceID4])
 
+	// although start relay on sourceID2, but we can still transfer two sources
 	require.NoError(t.T(), worker1.StartRelay(sourceID2))
 	err := s.transferWorkerAndSource(workerName1, sourceID2, workerName2, sourceID1)
-	require.True(t.T(), terror.ErrSchedulerBoundDiffWithStartedRelay.Equal(err))
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), worker1, s.bounds[sourceID1])
+	require.Equal(t.T(), worker2, s.bounds[sourceID2])
 }
 
 func (t *testSchedulerSuite) TestWatchLoadTask() {
@@ -1903,7 +1932,8 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 	require.Equal(t.T(), WorkerBound, worker.Stage())
 	checkRelaySource(t.T(), worker.RelaySources(), sourceID2)
 	_, ok = s.bounds[sourceID1]
-	require.False(t.T(), ok)
+	// we support bound source and start different relay now
+	require.True(t.T(), ok)
 }
 
 func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {

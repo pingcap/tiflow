@@ -559,6 +559,9 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		if inputWorkers[i] != "" {
 			bounds := workers[i].Bounds()
 			expect := inputSources[i]
+			if expect == "" && len(bounds) == 0 {
+				continue
+			}
 			if _, ok := bounds[expect]; !ok {
 				return terror.ErrSchedulerWrongWorkerInput.Generate(inputWorkers[i], expect, bounds)
 			}
@@ -660,7 +663,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 	s.mu.RUnlock()
 
-	// 2. check new worker is free and not started relay for another source
+	// 2. check new worker is not offline
 	if w.Stage() == WorkerOffline {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(worker, w.Stage(), WorkerBound)
 	}
@@ -731,6 +734,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
 		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
 	}
+	s.lastBound[source] = ha.NewSourceBound(source, oldWorker.BaseInfo().Name)
 	s.mu.Unlock()
 	return nil
 }
@@ -2448,6 +2452,12 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, string) {
 	// try to get a source for online worker.
 	if worker != "" {
+		// try to get a unbounded source
+		for _, sourceID := range s.UnboundSources() {
+			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) {
+				return "", sourceID
+			}
+		}
 		// try to get a bounded source
 		for sourceID, w := range s.bounds {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
@@ -2458,6 +2468,14 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 
 	// try to get a worker for a transferred source.
 	if source != "" {
+		// try to get a free worker
+		for _, w := range s.workers {
+			workerName := w.baseInfo.Name
+			if workerName != worker && w.Stage() == WorkerFree && s.hasLoadTaskByWorkerAndSource(workerName, source) {
+				return workerName, ""
+			}
+		}
+
 		// try to get a bounded worker
 		for sourceID, w := range s.bounds {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, source) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
