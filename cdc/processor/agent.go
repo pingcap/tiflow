@@ -166,7 +166,7 @@ func (a *agentImpl) FinishTableOperation(
 	tableID model.TableID,
 	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
-	topic := model.DispatchTableResponseTopic(a.changeFeed)
+	topic := model.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
 			log.L().Info("Delay sending FinishTableOperation due to pending sync",
