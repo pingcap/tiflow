@@ -215,7 +215,7 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err, IsNil)
 	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	subTask.setCurrUnit(subTask.units[2]) // set to syncer unit
-	c.Assert(s.worker.tryRefreshSubTaskConfig(subTask), IsNil)
+	c.Assert(s.worker.tryRefreshSubTaskAndSourceConfig(subTask), IsNil)
 	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
 

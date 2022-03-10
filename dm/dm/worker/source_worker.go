@@ -634,7 +634,7 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
 			failpoint.Goto("bypassRefresh")
 		})
-		if refreshErr := w.tryRefreshSubTaskConfig(st); refreshErr != nil {
+		if refreshErr := w.tryRefreshSubTaskAndSourceConfig(st); refreshErr != nil {
 			// NOTE: for current unit is not syncer unit or is in shard merge.
 			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
 		}
@@ -1284,7 +1284,7 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 
 func (w *SourceWorker) refreshSourceCfg() error {
 	oldCfg := w.cfg
-	sourceCfgM, _, err := ha.GetSourceCfg(w.etcdClient, oldCfg.SourceID, int64(-1))
+	sourceCfgM, _, err := ha.GetSourceCfg(w.etcdClient, oldCfg.SourceID, 0)
 	if err != nil {
 		return err
 	}
@@ -1292,10 +1292,14 @@ func (w *SourceWorker) refreshSourceCfg() error {
 	return nil
 }
 
-func (w *SourceWorker) tryRefreshSubTaskConfig(subTask *SubTask) error {
+func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error {
+	// try refresh source config first
+	if err := w.refreshSourceCfg(); err != nil {
+		return err
+	}
 	sourceName := subTask.cfg.SourceID
 	taskName := subTask.cfg.Name
-	tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, sourceName, taskName, int64(-1))
+	tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, sourceName, taskName, 0)
 	if err != nil {
 		return terror.Annotate(err, "fail to get subtask config from etcd")
 	}
