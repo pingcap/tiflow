@@ -60,8 +60,17 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	log.L().Info("Tick")
 	w.work.mu.Lock()
 	w.work.tickCount++
+	count := w.work.tickCount
 	w.work.mu.Unlock()
-	return nil
+	file, err := w.Resource().CreateFile(ctx, strconv.Itoa(count)+".txt")
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(ctx, []byte(strconv.Itoa(count)))
+	if err != nil {
+		return err
+	}
+	return file.Close(ctx)
 }
 
 func (w *exampleWorker) Status() lib.WorkerStatus {

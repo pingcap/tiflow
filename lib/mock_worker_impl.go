@@ -10,6 +10,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type mockWorkerImpl struct {
@@ -32,6 +33,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	MetaKVClient          metadata.MetaKV
+	ResourceProxy         resource.Proxy
 }
 
 //nolint:unparam

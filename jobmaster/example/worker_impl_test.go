@@ -2,6 +2,7 @@ package example
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -37,6 +38,13 @@ func TestExampleWorker(t *testing.T) {
 	require.NoError(t, err)
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
+
+	require.FileExists(t, "./unit_test_resources/worker/1.txt")
+	require.FileExists(t, "./unit_test_resources/worker/2.txt")
+	defer func() {
+		err = os.RemoveAll("./unit_test_resources/worker")
+		require.NoError(t, err)
+	}()
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {

@@ -15,6 +15,7 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
+	github.com/pingcap/tidb v1.1.0-beta.0.20220303050146-f5a52909b6af
 	github.com/pingcap/tidb-tools v5.4.1-0.20220302060346-b6d9cbe5dff1+incompatible
 	github.com/pingcap/tiflow v0.0.0-20220308162507-e342c02e789c
 	github.com/prometheus/client_golang v1.12.1

@@ -31,6 +31,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/resource"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
@@ -132,7 +133,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) buildDeps() (*deps.Deps, error) {
+func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
 		return s.msgServer.MakeHandlerManager()
@@ -169,6 +170,17 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
+	proxy, err := resource.DefaultBroker.NewProxyForWorker(context.TODO(), wid)
+	if err != nil {
+		return nil, err
+	}
+	err = deps.Provide(func() resource.Proxy {
+		return proxy
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return deps, nil
 }
 
@@ -185,7 +197,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ServerMasterClient:    s.cli,
 	}
 
-	dp, err := s.buildDeps()
+	dp, err := s.buildDeps(req.GetWorkerId())
 	if err != nil {
 		return nil, err
 	}
