@@ -200,6 +200,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 	t.testOptimist(c, t.etcdTestCli, restartOnly)
 	t.testOptimist(c, t.etcdTestCli, restartNewInstance)
 	t.testSortInfos(c, t.etcdTestCli)
+	t.testBuildLockJoinedAndTable(c, t.etcdTestCli)
 	t.testBuildLockWithInitSchema(c, t.etcdTestCli)
 }
 
@@ -1087,7 +1088,7 @@ func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 	c.Assert(infos[2], DeepEquals, i11)
 }
 
-func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
+func (t *testOptimist) testBuildLockJoinedAndTable(c *C, cli *clientv3.Client) {
 	defer t.clearOptimistTestSourceInfoOperation(c)
 
 	var (
@@ -1120,18 +1121,18 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
 
-	c.Assert(o.Start(ctx, t.etcdTestCli), IsNil)
-	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
+	c.Assert(o.Start(ctx, cli), IsNil)
+	_, err := optimism.PutSourceTables(cli, st1)
 	c.Assert(err, IsNil)
-	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
-	c.Assert(err, IsNil)
-
-	_, err = optimism.PutInfo(t.etcdTestCli, i21)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(t.etcdTestCli, i11)
+	_, err = optimism.PutSourceTables(cli, st2)
 	c.Assert(err, IsNil)
 
-	stm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
+	_, err = optimism.PutInfo(cli, i21)
+	c.Assert(err, IsNil)
+	_, err = optimism.PutInfo(cli, i11)
+	c.Assert(err, IsNil)
+
+	stm, _, err := optimism.GetAllSourceTables(cli)
 	c.Assert(err, IsNil)
 	o.tk.Init(stm)
 }
