@@ -83,9 +83,9 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		etcdClient:   etcdCli,
 		etcdKVClient: KVCli,
 
-		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 1),
-		syncCh:             make(chan *model.SyncMessage, 1),
-		checkpointCh:       make(chan *model.CheckpointMessage, 1),
+		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 2),
+		syncCh:             make(chan *model.SyncMessage, 2),
+		checkpointCh:       make(chan *model.CheckpointMessage, 2),
 
 		ownerMessageClient: ownerMessageClient,
 
@@ -107,6 +107,12 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	_, err = ownerMessageServer.SyncAddHandler(ctx, model.SyncTopic("cf-1"),
 		&model.SyncMessage{},
 		func(senderID string, msg interface{}) error {
+			ret.blockSyncMu.Lock()
+			for ret.blockSync {
+				ret.blockSyncCond.Wait()
+			}
+			ret.blockSyncMu.Unlock()
+
 			require.Equal(t, processorCaptureID, senderID)
 			require.IsType(t, &model.SyncMessage{}, msg)
 			ret.syncCh <- msg.(*model.SyncMessage)
@@ -118,12 +124,6 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	_, err = ownerMessageServer.SyncAddHandler(ctx, model.CheckpointTopic("cf-1"),
 		&model.CheckpointMessage{},
 		func(senderID string, msg interface{}) error {
-			ret.blockSyncMu.Lock()
-			for ret.blockSync {
-				ret.blockSyncCond.Wait()
-			}
-			ret.blockSyncMu.Unlock()
-
 			require.Equal(t, processorCaptureID, senderID)
 			require.IsType(t, &model.CheckpointMessage{}, msg)
 			ret.checkpointCh <- msg.(*model.CheckpointMessage)
@@ -206,15 +206,16 @@ func TestAgentBasics(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).Return(&clientv3.GetResponse{
-		Kvs: []*mvccpb.KeyValue{
-			{
-				Key:         []byte(etcd.CaptureOwnerKey),
-				Value:       []byte(ownerCaptureID),
-				ModRevision: 1,
+	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+		Return(&clientv3.GetResponse{
+			Kvs: []*mvccpb.KeyValue{
+				{
+					Key:         []byte(etcd.CaptureOwnerKey),
+					Value:       []byte(ownerCaptureID),
+					ModRevision: 1,
+				},
 			},
-		},
-	}, nil).Once()
+		}, nil).Once()
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -237,22 +238,26 @@ func TestAgentBasics(t *testing.T) {
 		}, syncMsg)
 	}
 
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"), &model.DispatchTableMessage{
-		OwnerRev: 1,
-		Epoch:    agent.CurrentEpoch(),
-		ID:       1,
-		IsDelete: false,
-	})
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+		&model.DispatchTableMessage{
+			OwnerRev: 1,
+			Epoch:    agent.CurrentEpoch(),
+			ID:       1,
+			IsDelete: false,
+		})
 	require.NoError(t, err)
 
 	// Test Point 3: Accept an incoming DispatchTableMessage, and the AddTable method in TableExecutor can return false.
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).Return(false, nil).Once()
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).Return(true, nil).Run(
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+		Return(false, nil).Once()
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+		Return(true, nil).Run(
 		func(_ mock.Arguments) {
 			delete(suite.tableExecutor.Adding, 1)
 			suite.tableExecutor.Running[1] = struct{}{}
 		}).Once()
-	suite.tableExecutor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
+	suite.tableExecutor.On("GetCheckpoint").
+		Return(model.Ts(1000), model.Ts(1000))
 
 	require.Eventually(t, func() bool {
 		err = agent.Tick(suite.cdcCtx)
@@ -371,15 +376,16 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).Return(&clientv3.GetResponse{
-		Kvs: []*mvccpb.KeyValue{
-			{
-				Key:         []byte(etcd.CaptureOwnerKey),
-				Value:       []byte(ownerCaptureID),
-				ModRevision: 1,
+	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+		Return(&clientv3.GetResponse{
+			Kvs: []*mvccpb.KeyValue{
+				{
+					Key:         []byte(etcd.CaptureOwnerKey),
+					Value:       []byte(ownerCaptureID),
+					ModRevision: 1,
+				},
 			},
-		},
-	}, nil).Once()
+		}, nil).Once()
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -414,37 +420,57 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).Return(&clientv3.GetResponse{
-		Kvs: []*mvccpb.KeyValue{
-			{
-				Key:         []byte(etcd.CaptureOwnerKey),
-				Value:       []byte(ownerCaptureID),
-				ModRevision: 1,
+	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+		Return(&clientv3.GetResponse{
+			Kvs: []*mvccpb.KeyValue{
+				{
+					Key:         []byte(etcd.CaptureOwnerKey),
+					Value:       []byte(ownerCaptureID),
+					ModRevision: 1,
+				},
 			},
-		},
-	}, nil).Once()
+		}, nil).Once()
 
 	agent, err := suite.CreateAgent(t)
 	require.NoError(t, err)
 
+	suite.BlockSync()
+
 	err = agent.Tick(suite.cdcCtx)
 	require.NoError(t, err)
 
-	suite.BlockSync()
-
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"), &model.DispatchTableMessage{
-		OwnerRev: 1,
-		Epoch:    agent.CurrentEpoch(),
-		ID:       1,
-		IsDelete: false,
-	})
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+		&model.DispatchTableMessage{
+			OwnerRev: 1,
+			Epoch:    agent.CurrentEpoch(),
+			ID:       1,
+			IsDelete: false,
+		})
 	require.NoError(t, err)
 
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).Return(true, nil).Run(
-		func(_ mock.Arguments) {
-			delete(suite.tableExecutor.Adding, 1)
-			suite.tableExecutor.Running[1] = struct{}{}
-		}).Once()
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+		&model.DispatchTableMessage{
+			OwnerRev: 1,
+			Epoch:    agent.CurrentEpoch(),
+			ID:       2,
+			IsDelete: false,
+		})
+	require.NoError(t, err)
+
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+		Return(true, nil).
+		Run(
+			func(_ mock.Arguments) {
+				delete(suite.tableExecutor.Adding, 1)
+				suite.tableExecutor.Running[1] = struct{}{}
+			}).Once()
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(2)).
+		Return(true, nil).
+		Run(
+			func(_ mock.Arguments) {
+				delete(suite.tableExecutor.Adding, 2)
+				suite.tableExecutor.Running[2] = struct{}{}
+			}).Once()
 	suite.tableExecutor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
 
 	require.Never(t, func() bool {
@@ -484,17 +510,27 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		err = agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 		return false
-	}, 100*time.Second, 10*time.Second)
+	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		select {
 		case <-suite.ctx.Done():
 			return false
-		case msg := <-suite.dispatchResponseCh:
-			require.Equal(t, &model.DispatchTableResponseMessage{
-				ID:    1,
-				Epoch: agent.CurrentEpoch(),
-			}, msg)
+		case <-suite.dispatchResponseCh:
+			return true
+		default:
+		}
+
+		err = agent.Tick(suite.cdcCtx)
+		require.NoError(t, err)
+		return false
+	}, time.Second*3, time.Millisecond*10)
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-suite.ctx.Done():
+			return false
+		case <-suite.dispatchResponseCh:
 			return true
 		default:
 		}

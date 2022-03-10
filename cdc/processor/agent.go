@@ -169,7 +169,8 @@ func (a *agentImpl) FinishTableOperation(
 	topic := model.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
-			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+			log.L().Info("Delay sending FinishTableOperation "+
+				"due to pending sync",
 				zap.String("changefeedID", a.changeFeed),
 				zap.String("ownerID", a.ownerCaptureID),
 				zap.Int64("tableID", tableID),
@@ -335,6 +336,9 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 }
 
 func (a *agentImpl) OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID) {
+	if a.ownerCaptureID == newOwnerCaptureID {
+		return
+	}
 	a.ownerCaptureID = newOwnerCaptureID
 	// Note that we clear the pending barriers.
 	a.barrierSeqs = map[p2p.Topic]p2p.Seq{}
