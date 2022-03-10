@@ -52,12 +52,12 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
-	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00
+	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66
 	github.com/pingcap/kvproto v0.0.0-20220303025110-d5eb908517b2
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220303050146-f5a52909b6af
+	github.com/pingcap/tidb v1.1.0-beta.0.20220309003348-b9bd5a7d7e4d
 	github.com/pingcap/tidb-tools v5.4.1-0.20220302060346-b6d9cbe5dff1+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220303050146-f5a52909b6af
+	github.com/pingcap/tidb/parser v0.0.0-20220309003348-b9bd5a7d7e4d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -73,7 +73,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20220217140116-589cf79b2ab5
+	github.com/tikv/client-go/v2 v2.0.1-0.20220302130440-46d649305eee
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20220216080339-1b8f82378ee7
 	github.com/tinylib/msgp v1.1.0

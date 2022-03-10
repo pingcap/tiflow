@@ -64,7 +64,7 @@ mysql-instances:
   syncer: null
   syncer-thread: 0
   continuous-validator-config-name: validator-01
-online-ddl: false
+online-ddl: true
 shadow-table-rules: []
 trash-table-rules: []
 online-ddl-scheme: ""
