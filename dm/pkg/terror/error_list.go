@@ -590,7 +590,7 @@ const (
 	codeWorkerWaitRelayCatchupGTID
 	codeWorkerRelayConfigChanging
 	codeWorkerRouteTableDupMatch
-	codeWorkerUpdate
+	codeWorkerUpdateSubTaskConfig
 )
 
 // DM-tracer error code.
