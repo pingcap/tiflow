@@ -13,8 +13,10 @@ import (
 func TestProxyConcurrent(t *testing.T) {
 	ctx := context.Background()
 	testID := "TestProxyConcurrent"
-	p, err := DefaultBroker.NewProxyForWorker(ctx, testID)
+	p, err := MockBroker.NewProxyForWorker(ctx, testID)
 	require.NoError(t, err)
+
+	require.Equal(t, MockBroker.AllocatedIDs(), []string{testID})
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -32,6 +34,6 @@ func TestProxyConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	err = os.RemoveAll("./resources/TestProxyConcurrent")
+	err = os.RemoveAll("./resources")
 	require.NoError(t, err)
 }

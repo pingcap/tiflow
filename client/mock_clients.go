@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/hanfei1991/microcosm/pb"
 )
 
 type MockExecutorClient struct {
@@ -143,4 +144,15 @@ func (c *MockServerMasterClient) ScheduleTask(
 
 	args := c.Called(ctx, req, timeout)
 	return args.Get(0).(*pb.TaskSchedulerResponse), args.Error(1)
+}
+
+func (c *MockServerMasterClient) PersistResource(
+	ctx context.Context,
+	in *pb.PersistResourceRequest,
+) (*pb.PersistResourceResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called()
+	return args.Get(0).(*pb.PersistResourceResponse), args.Error(1)
 }

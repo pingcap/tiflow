@@ -60,6 +60,7 @@ type Server struct {
 	metastore       metadata.MetaKV
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	resourceBroker  *resource.Broker
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -170,7 +171,7 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	proxy, err := resource.DefaultBroker.NewProxyForWorker(context.TODO(), wid)
+	proxy, err := s.resourceBroker.NewProxyForWorker(context.TODO(), wid)
 	if err != nil {
 		return nil, err
 	}
@@ -341,6 +342,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: make the prefix configurable later
+	s.resourceBroker = resource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
@@ -558,11 +562,14 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
+	resourceIDs := s.resourceBroker.AllocatedIDs()
+
 	rescs := s.sch.Resource()
 	req := &pb.ExecWorkloadRequest{
 		// TODO: use which field as ExecutorId is more accurate
 		ExecutorId: s.cfg.WorkerAddr,
 		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
+		ResourceId: resourceIDs,
 	}
 	for tp, resc := range rescs {
 		req.Workloads = append(req.Workloads, &pb.ExecWorkload{

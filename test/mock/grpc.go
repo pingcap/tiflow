@@ -5,10 +5,11 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.com/hanfei1991/microcosm/pb"
 )
 
 var container *grpcContainer
@@ -128,6 +129,16 @@ func (c *masterServerClient) QueryJob(
 		return nil, err
 	}
 	return resp.(*pb.QueryJobResponse), nil
+}
+
+func (c *masterServerClient) PersistResource(
+	ctx context.Context, req *pb.PersistResourceRequest, opts ...grpc.CallOption,
+) (*pb.PersistResourceResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*pb.PersistResourceResponse), nil
 }
 
 func (c *masterServerClient) ReportExecutorWorkload(

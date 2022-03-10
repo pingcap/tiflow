@@ -8,13 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 const dialTimeout = 5 * time.Second
@@ -45,6 +46,10 @@ type MasterClient interface {
 		req *pb.TaskSchedulerRequest,
 		timeout time.Duration,
 	) (resp *pb.TaskSchedulerResponse, err error)
+	PersistResource(
+		ctx context.Context,
+		request *pb.PersistResourceRequest,
+	) (*pb.PersistResourceResponse, error)
 	Close() (err error)
 	GetLeaderClient() pb.MasterClient
 }
@@ -231,6 +236,14 @@ func (c *MasterClientImpl) ReportExecutorWorkload(
 	ctx context.Context,
 	req *pb.ExecWorkloadRequest,
 ) (resp *pb.ExecWorkloadResponse, err error) {
+	err = c.rpcWrap(ctx, req, &resp)
+	return
+}
+
+func (c *MasterClientImpl) PersistResource(
+	ctx context.Context,
+	req *pb.PersistResourceRequest,
+) (resp *pb.PersistResourceResponse, err error) {
 	err = c.rpcWrap(ctx, req, &resp)
 	return
 }

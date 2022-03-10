@@ -50,6 +50,10 @@ service Master {
     // ReportExecutorWorkload is called from executor to server master to report
     // resource usage in executor.
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
+
+    // PersistResource is called from executor to indicate some workers on it wants
+    // to persist resource files.
+    rpc PersistResource(PersistResourceRequest) returns(PersistResourceResponse) {}
 }
 
 message HeartbeatRequest {
@@ -181,8 +185,18 @@ message ExecWorkload {
 message ExecWorkloadRequest {
     string executor_id = 1;
     repeated ExecWorkload workloads = 2;
+    repeated string resource_id = 3;
 }
 
 message ExecWorkloadResponse {
+    Error err = 1;
+}
+
+message PersistResourceRequest {
+    string executor_id = 1;
+    string resource_id = 2;
+}
+
+message PersistResourceResponse {
     Error err = 1;
 }

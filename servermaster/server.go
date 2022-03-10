@@ -12,22 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
-
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/serverutils"
-	"github.com/hanfei1991/microcosm/servermaster/cluster"
-	"github.com/hanfei1991/microcosm/test"
-	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
@@ -41,6 +25,22 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+
+	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/adapter"
+	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/serverutils"
+	"github.com/hanfei1991/microcosm/servermaster/cluster"
+	"github.com/hanfei1991/microcosm/test"
+	"github.com/hanfei1991/microcosm/test/mock"
 )
 
 // Server handles PRC requests for df master.
@@ -86,6 +86,11 @@ type Server struct {
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
+}
+
+func (s *Server) PersistResource(ctx context.Context, request *pb.PersistResourceRequest) (*pb.PersistResourceResponse, error) {
+	// TODO implement me
+	panic("implement me")
 }
 
 type serverMasterMetric struct {
@@ -351,7 +356,7 @@ func (s *Server) QueryMetaStore(
 func (s *Server) ReportExecutorWorkload(
 	ctx context.Context, req *pb.ExecWorkloadRequest,
 ) (*pb.ExecWorkloadResponse, error) {
-	// TODO: pass executor workload to resource manager
+	// TODO: pass executor workload to capacity manager
 	log.L().Debug("receive workload report", zap.String("executor", req.ExecutorId))
 	for _, res := range req.GetWorkloads() {
 		log.L().Debug("workload", zap.Int32("type", int32(res.GetTp())), zap.Int32("usage", res.GetUsage()))
