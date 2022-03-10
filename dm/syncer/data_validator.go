@@ -203,6 +203,8 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
 	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
 	if err != nil {
 		return err
@@ -323,7 +325,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 			if cmp <= 0 {
 				return nil
 			}
-			v.L.Info("wait syncer synced", zap.Reflect("loc", currLoc))
+			v.L.Debug("wait syncer synced", zap.Reflect("loc", currLoc))
 		}
 	}
 }

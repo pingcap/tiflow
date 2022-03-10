@@ -368,7 +368,7 @@ func (vw *validateWorker) compareData(sourceData, targetData []*sql.NullString, 
 }
 
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullString, error) {
-	tctx := tcontext.NewContext(vw.ctx, log.L())
+	tctx := tcontext.NewContext(vw.ctx, vw.L)
 	fullTableName := cond.Table.Target.String()
 	columnNames := make([]string, 0, cond.ColumnCnt)
 	for i := 0; i < cond.ColumnCnt; i++ {
