@@ -166,6 +166,18 @@ func (a *agentImpl) FinishTableOperation(
 	tableID model.TableID,
 	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
+	topic := model.DispatchTableResponseTopic(a.changeFeed)
+	if !a.Barrier(ctx) {
+		if _, exists := a.barrierSeqs[topic]; exists {
+			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+				zap.String("changefeedID", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID),
+				zap.Int64("tableID", tableID),
+				zap.String("epoch", epoch))
+			return false, nil
+		}
+	}
+
 	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
 	defer func() {
 		if err != nil {
