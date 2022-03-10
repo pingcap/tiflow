@@ -165,7 +165,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 		)`,
 	}
 	_, err := c.dbConn.ExecuteSQL(tctx, sqls)
-	tctx.L().Info("create checkpoint table", zap.Strings("statements", sqls))
+	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
 	return err
 }
 

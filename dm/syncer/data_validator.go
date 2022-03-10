@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
@@ -389,13 +390,49 @@ func (v *DataValidator) doValidate() {
 	}()
 
 	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
+	// when gtid is enabled:
+	// gtid of currLoc need to be updated when meet gtid event, so we can compare with syncer
+	// gtid of locationForFlush is updated when we meet xid event, if error happened, we start sync from this location
+	//
+	// some events maybe processed again, but it doesn't matter for validation
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
+	locationForFlush := currLoc.Clone()
 	lastFlushCheckpointTime := time.Now()
 	for {
 		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
-			v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
-			return
+			switch {
+			case err == context.Canceled:
+				return
+			case err == context.DeadlineExceeded:
+				v.L.Info("deadline exceeded when fetching binlog event")
+				continue
+			case isDuplicateServerIDError(err):
+				// if the server id is already used, need to use a new server id
+				v.L.Info("server id is already used by another slave, will change to a new server id and get event again")
+				err1 := v.streamerController.UpdateServerIDAndResetReplication(v.tctx, locationForFlush)
+				if err1 != nil {
+					v.errChan <- terror.Annotate(err1, "fail to update UpdateServerIDAndResetReplication")
+					return
+				}
+				continue
+			case err == relay.ErrorMaybeDuplicateEvent:
+				continue
+			case isConnectionRefusedError(err):
+				v.errChan <- terror.Annotate(err, "fail to get event")
+				return
+			default:
+				if v.streamerController.CanRetry(err) {
+					err = v.streamerController.ResetReplicationSyncer(v.tctx, locationForFlush)
+					if err != nil {
+						v.errChan <- terror.Annotate(err, "fail to reset replication")
+						return
+					}
+					continue
+				}
+				v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
+				return
+			}
 		}
 
 		switch ev := e.Event.(type) {
@@ -427,15 +464,25 @@ func (v *DataValidator) doValidate() {
 				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
 			}
+			// update on success processed
+			locationForFlush.Position = currLoc.Position
 		case *replication.XIDEvent:
+			locationForFlush.Position = currLoc.Position
+			err = locationForFlush.SetGTID(ev.GSet)
+			if err != nil {
+				v.errChan <- terror.Annotate(err, "failed to set gtid")
+				return
+			}
 			if time.Since(lastFlushCheckpointTime) > metaFlushInterval {
 				lastFlushCheckpointTime = time.Now()
-				if err = v.flushCheckpointAndData(currLoc); err != nil {
+				if err = v.flushCheckpointAndData(locationForFlush); err != nil {
 					v.L.Warn("failed to flush checkpoint: ", zap.Reflect("error", err))
 					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
 					return
 				}
 			}
+		default:
+			locationForFlush.Position = currLoc.Position
 		}
 	}
 }
