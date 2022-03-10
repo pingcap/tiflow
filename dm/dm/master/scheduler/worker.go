@@ -60,17 +60,13 @@ const (
 	WorkerOffline WorkerStage = "offline" // the worker is not online yet.
 	WorkerFree    WorkerStage = "free"    // the worker is online, but no upstream source assigned to it yet.
 	WorkerBound   WorkerStage = "bound"   // the worker is online, and one upstream source already assigned to it.
-	WorkerRelay   WorkerStage = "relay"   // the worker is online, pulling relay log but not responsible for migrating.
 )
 
 var (
-	nullBound ha.SourceBound
-
 	workerStage2Num = map[WorkerStage]float64{
 		WorkerOffline: 0.0,
 		WorkerFree:    1.0,
 		WorkerBound:   2.0,
-		WorkerRelay:   1.5,
 	}
 	unrecognizedState = -1.0
 )
@@ -81,12 +77,12 @@ type Worker struct {
 
 	cli workerrpc.Client // the gRPC client proxy.
 
-	baseInfo ha.WorkerInfo  // the base information of the DM-worker instance.
-	bound    ha.SourceBound // the source bound relationship, null value if not bounded.
-	stage    WorkerStage    // the current stage.
+	baseInfo ha.WorkerInfo             // the base information of the DM-worker instance.
+	bounds   map[string]ha.SourceBound // the source bounds relationship, source-id -> bound.
+	stage    WorkerStage               // the current stage.
 
-	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
-	relaySource string
+	// the sources from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
+	relaySources map[string]struct{}
 }
 
 // NewWorker creates a new Worker instance with Offline stage.
@@ -100,6 +96,7 @@ func NewWorker(baseInfo ha.WorkerInfo, securityCfg config.Security) (*Worker, er
 		cli:      cli,
 		baseInfo: baseInfo,
 		stage:    WorkerOffline,
+		bounds:   make(map[string]ha.SourceBound),
 	}
 	w.reportMetrics()
 	return w, nil
@@ -119,7 +116,7 @@ func (w *Worker) ToOffline() {
 	defer w.mu.Unlock()
 	w.stage = WorkerOffline
 	w.reportMetrics()
-	w.bound = nullBound
+	w.bounds = make(map[string]ha.SourceBound)
 }
 
 // ToFree transforms to Free and clears the bound and relay information.
@@ -129,8 +126,8 @@ func (w *Worker) ToFree() {
 	defer w.mu.Unlock()
 	w.stage = WorkerFree
 	w.reportMetrics()
-	w.bound = nullBound
-	w.relaySource = ""
+	w.bounds = make(map[string]ha.SourceBound)
+	w.relaySources = make(map[string]struct{})
 }
 
 // ToBound transforms to Bound.
@@ -141,74 +138,60 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 	if w.stage == WorkerOffline {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(w.BaseInfo(), WorkerOffline, WorkerBound)
 	}
-	if w.stage == WorkerRelay {
-		if w.relaySource != bound.Source {
-			return terror.ErrSchedulerBoundDiffWithStartedRelay.Generate(w.BaseInfo().Name, bound.Source, w.relaySource)
-		}
-	}
 
-	w.stage = WorkerBound
 	w.reportMetrics()
-	w.bound = bound
+	w.bounds[bound.Source] = bound
+	w.stage = WorkerBound
 	return nil
 }
 
-// Unbound changes worker's stage from Bound to Free or Relay.
-func (w *Worker) Unbound() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.stage != WorkerBound {
-		// caller should not do this.
-		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a worker that is not in bound stage.")
-	}
-
-	w.bound = nullBound
-	if w.relaySource != "" {
-		w.stage = WorkerRelay
-	} else {
+func (w *Worker) checkFree() {
+	if w.stage == WorkerBound && len(w.bounds) == 0 && len(w.relaySources) == 0 {
 		w.stage = WorkerFree
 	}
+}
+
+// Unbound changes worker's stage from Bound to Free or Relay.
+func (w *Worker) Unbound(source string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.bounds[source]; !ok {
+		// caller should not do this.
+		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a source %s that is not bound with worker %s.", source, w.baseInfo.Name)
+	}
+
+	delete(w.bounds, source)
+	w.checkFree()
 	w.reportMetrics()
 	return nil
 }
 
 // StartRelay adds relay source information to a bound worker and calculates the stage.
-func (w *Worker) StartRelay(sourceID string) error {
+func (w *Worker) StartRelay(sources ...string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	switch w.stage {
-	case WorkerOffline, WorkerRelay:
-	case WorkerFree:
-		w.stage = WorkerRelay
-		w.reportMetrics()
-	case WorkerBound:
-		if w.bound.Source != sourceID {
-			return terror.ErrSchedulerRelayWorkersWrongBound.Generatef(
-				"can't turn on relay of source %s for worker %s, because the worker is bound to source %s",
-				sourceID, w.BaseInfo().Name, w.bound.Source)
-		}
+	for _, sourceID := range sources {
+		w.relaySources[sourceID] = struct{}{}
 	}
-	w.relaySource = sourceID
 
+	w.stage = WorkerBound
 	return nil
 }
 
 // StopRelay clears relay source information of a bound worker and calculates the stage.
-func (w *Worker) StopRelay() {
+func (w *Worker) StopRelay(source string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.relaySource = ""
-	switch w.stage {
-	case WorkerOffline, WorkerBound:
-	case WorkerFree:
+	if _, ok := w.relaySources[source]; !ok {
 		log.L().DPanic("StopRelay for a Free worker should not happen",
 			zap.String("worker name", w.baseInfo.Name))
-	case WorkerRelay:
-		w.stage = WorkerFree
-		w.reportMetrics()
 	}
+	delete(w.relaySources, source)
+
+	w.checkFree()
+	w.reportMetrics()
 }
 
 // BaseInfo returns the base info of the worker.
@@ -224,20 +207,19 @@ func (w *Worker) Stage() WorkerStage {
 	return w.stage
 }
 
-// Bound returns the current source ID bounded to,
-// returns null value if not bounded.
-func (w *Worker) Bound() ha.SourceBound {
+// Bounds returns the bounds info of the worker.
+func (w *Worker) Bounds() map[string]ha.SourceBound {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.bound
+	return w.bounds
 }
 
-// RelaySourceID returns the source ID from which this worker is pulling relay log,
+// RelaySources returns the sources from which this worker is pulling relay log,
 // returns empty string if not started relay.
-func (w *Worker) RelaySourceID() string {
+func (w *Worker) RelaySources() map[string]struct{} {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.relaySource
+	return w.relaySources
 }
 
 // SendRequest sends request to the DM-worker instance.

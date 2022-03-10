@@ -410,6 +410,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	checkLocks(t.T(), o, nil, "", nil)
 
 	// no shard DDL info or lock operation exists.
+	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+		ifm, _, err := optimism.GetAllInfo(cli)
+		return err == nil && len(ifm) == 0
+	}), IsTrue)
 	ifm, _, err := optimism.GetAllInfo(cli)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), ifm, 0)

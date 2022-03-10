@@ -377,7 +377,6 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
@@ -385,6 +384,13 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 			defer wg.Done()
 			c.Assert(ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL), check.IsNil)
 		}(ctx1, name)
+		// wait the mock worker has alive
+		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+			resp, err2 := t.etcdTestCli.Get(ctx, common2.WorkerKeepAliveKeyAdapter.Encode(name))
+			c.Assert(err2, check.IsNil)
+			return resp.Count == 1
+		}), check.IsTrue)
+		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		idx := i
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			w := scheduler2.GetWorkerBySource(sources[idx])
@@ -409,7 +415,6 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
@@ -424,6 +429,7 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 			c.Assert(err2, check.IsNil)
 			return resp.Count == 1
 		}), check.IsTrue)
+		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 
 		c.Assert(scheduler2.StartRelay(sources[i], []string{workers[i]}), check.IsNil)
 		idx := i
@@ -1851,10 +1857,26 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
 	}(ctx, workerName3)
+
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
 	}), check.IsTrue)
+	// Transfer source two make sources evenly started on three workers
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		w := s1.scheduler.GetWorkerByName(workerName2)
+		return w != nil && w.Stage() != scheduler.WorkerOffline
+	}), check.IsTrue)
+	c.Assert(s1.scheduler.TransferSource(ctx, sourceID2, workerName2), check.IsNil)
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		w := s1.scheduler.GetWorkerByName(workerName3)
+		return w != nil && w.Stage() != scheduler.WorkerOffline
+	}), check.IsTrue)
+	c.Assert(s1.scheduler.TransferSource(ctx, sourceID3, workerName3), check.IsNil)
+	for _, sourceID := range []string{sourceID, sourceID2, sourceID3} {
+		w := s1.scheduler.GetWorkerBySource(sourceID)
+		c.Assert(w, check.NotNil)
+	}
 
 	// 6. stop sources
 	req.Config = []string{task, task2, task3}

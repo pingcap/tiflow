@@ -361,7 +361,7 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 		return s.getSourceWorker(true) != nil
 	}), IsTrue)
 
-	_, err = ha.DeleteSourceBound(etcdCli, s.cfg.Name)
+	_, err = ha.DeleteSourceBoundByWorker(etcdCli, s.cfg.Name)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s.getSourceWorker(true) == nil
@@ -406,7 +406,7 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	sourceBound := ha.NewSourceBound(sourceCfg.SourceID, cfg.Name)
 	_, err = ha.PutSourceBound(etcdCli, sourceBound)
 	c.Assert(err, IsNil)
-	rev, err := ha.DeleteSourceBound(etcdCli, cfg.Name)
+	rev, err := ha.DeleteSourceBoundByWorker(etcdCli, cfg.Name)
 	c.Assert(err, IsNil)
 	// step 2: start source at this worker
 	w, err := s.getOrStartWorker(sourceCfg, true)
@@ -510,7 +510,7 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 		w := s.getSourceWorker(true)
 		c.Assert(w, NotNil)
 		c.Assert(w.closed.Load(), IsFalse)
-		_, err := ha.DeleteRelayConfig(s.etcdClient, w.name)
+		_, err := ha.DeleteRelayConfig(s.etcdClient, sourceCfg.SourceID, w.name)
 		c.Assert(err, IsNil)
 		_, err = ha.DeleteSourceCfgRelayStageSourceBound(s.etcdClient, sourceCfg.SourceID, s.cfg.Name)
 		c.Assert(err, IsNil)

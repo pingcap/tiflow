@@ -2054,11 +2054,17 @@ func (s *Server) listMemberWorker(names []string) *pb.Members_Worker {
 			continue
 		}
 
+		bounds := workerAgent.Bounds()
+		sources := make([]string, 0, len(bounds))
+		for _, bound := range bounds {
+			sources = append(sources, bound.Source)
+		}
+
 		workers = append(workers, &pb.WorkerInfo{
 			Name:   workerAgent.BaseInfo().Name,
 			Addr:   workerAgent.BaseInfo().Addr,
 			Stage:  string(workerAgent.Stage()),
-			Source: workerAgent.Bound().Source,
+			Source: strings.Join(sources, ","),
 		})
 	}
 
