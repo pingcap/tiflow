@@ -294,6 +294,7 @@ func TestGetCheckSum(t *testing.T) {
 			db: db,
 		}
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+		require.Nil(t, err)
 		ret, err := c.getCheckSum(context.Background(), "db", f)
 		require.Equal(t, tt.wantRet, ret, tt.name)
 		if tt.wantDBErr != nil {

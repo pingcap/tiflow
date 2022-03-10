@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"time"
 
@@ -30,7 +31,10 @@ import (
 )
 
 type Verifier interface {
-	Verify(ctx context.Context) (string, string, error)
+	// Verify run the e2e consistency check, return false and the (startTs, endTs] time range of broken data, if check fail
+	// return true means no need to run next step, endTs is returned for GC
+	Verify(ctx context.Context) (bool, string, string, error)
+	// Close stop the verify process
 	Close() error
 }
 
@@ -47,10 +51,11 @@ type Config struct {
 }
 
 type TiDBVerification struct {
-	config            *Config
-	upstreamChecker   *checker
-	downstreamChecker *checker
-	running           atomic.Bool
+	config             *Config
+	upstreamChecker    *checker
+	downstreamChecker  *checker
+	moduleVerification ModuleVerifier
+	running            atomic.Bool
 }
 
 const (
@@ -63,7 +68,12 @@ const (
 	checkFail
 )
 
+// NewVerification start the verification process if no error
 func NewVerification(ctx context.Context, config *Config) error {
+	if config == nil {
+		return cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("Config can not be nil"))
+	}
+
 	upstreamDB, err := openDB(ctx, config.UpstreamDSN)
 	if err != nil {
 		return err
@@ -76,10 +86,15 @@ func NewVerification(ctx context.Context, config *Config) error {
 	if config.CheckInterval == 0 {
 		config.CheckInterval = defaultCheckInterval
 	}
+	m, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangeFeedID: config.ChangefeedID})
+	if err != nil {
+		return err
+	}
 	v := &TiDBVerification{
-		config:            config,
-		upstreamChecker:   newChecker(upstreamDB),
-		downstreamChecker: newChecker(downstreamDB),
+		config:             config,
+		upstreamChecker:    newChecker(upstreamDB),
+		downstreamChecker:  newChecker(downstreamDB),
+		moduleVerification: m,
 	}
 	go v.runVerify(ctx)
 
@@ -87,7 +102,9 @@ func NewVerification(ctx context.Context, config *Config) error {
 }
 
 func (v *TiDBVerification) runVerify(ctx context.Context) {
-	ticker := time.NewTicker(v.config.CheckInterval)
+	// in case run verify at the same if have multiple changefeed created
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ticker := time.NewTicker(v.config.CheckInterval + time.Duration(r.Int63n(int64(v.config.CheckInterval/4))))
 	defer ticker.Stop()
 
 	for {
@@ -102,20 +119,46 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 		case <-ticker.C:
 			// TODO:
 			// resource limitation cancel https://www.percona.com/doc/percona-toolkit/LATEST/pt-table-checksum.html
-			startTs, endTs, err := v.Verify(ctx)
+			enoughCheck, startTs, endTs, err := v.Verify(ctx)
 			if err != nil {
-				log.Warn("runVerify fail", zap.Error(err))
+				log.Warn("run e2e verify error",
+					zap.String("changefeed", v.config.ChangefeedID),
+					zap.String("startTs", startTs),
+					zap.String("endTs", endTs),
+					zap.Error(err))
+				return
 			}
-			log.Info("runVerify ret", zap.String("startTs", startTs), zap.String("endTs", endTs))
+			log.Info("e2e verify ret",
+				zap.String("changefeed", v.config.ChangefeedID),
+				zap.String("startTs", startTs),
+				zap.String("endTs", endTs),
+				zap.Bool("enoughCheck", enoughCheck))
 
-			// TODO: module level check
+			if !enoughCheck {
+				err = v.moduleVerification.Verify(ctx, startTs, endTs)
+				if err != nil {
+					log.Error("module verify ret",
+						zap.String("changefeed", v.config.ChangefeedID),
+						zap.String("startTs", startTs),
+						zap.String("endTs", endTs),
+						zap.Error(err))
+				}
+			}
+			// just run module level gc, e2e gc is taking care of at syncPoint side
+			err = v.moduleVerification.GC(endTs)
+			if err != nil {
+				log.Warn("module level gc fail", zap.Error(err))
+			}
 		}
 	}
 }
 
-func (v *TiDBVerification) Verify(ctx context.Context) (string, string, error) {
+// Verify implement Verify api,
+// if no error, return false and (startTs, endTs] for next step,
+// return true means no need to run next step, endTs is returned for GC
+func (v *TiDBVerification) Verify(ctx context.Context) (bool, string, string, error) {
 	if v.running.Load() {
-		return "", "", nil
+		return true, "", "", nil
 	}
 
 	v.running.Store(true)
@@ -123,17 +166,18 @@ func (v *TiDBVerification) Verify(ctx context.Context) (string, string, error) {
 
 	ts, err := v.getTS(ctx)
 	if err != nil {
-		return "", "", err
+		return false, "", "", err
 	}
 	if ts.result != unchecked {
-		return "", "", nil
+		return true, "", "", nil
 	}
 
 	startTs, endTs := "", ""
+	result := false
 	for ts.result == unchecked {
 		ret, err := v.checkConsistency(ctx, ts)
 		if err != nil {
-			return "", "", err
+			return false, "", "", err
 		}
 
 		checkRet := checkPass
@@ -142,13 +186,17 @@ func (v *TiDBVerification) Verify(ctx context.Context) (string, string, error) {
 		}
 		err = v.updateCheckResult(ctx, ts, checkRet)
 		if err != nil {
-			return "", "", err
+			return false, "", "", err
 		}
 
-		// if pass no need to run module check, if run from previous set startTs
+		// if pass set result true, sent out endTs for GC
+		// if run from previous set startTs for next step
 		if checkRet == checkPass {
 			if endTs != "" {
 				startTs = ts.primaryTs
+			} else {
+				endTs = ts.primaryTs
+				result = true
 			}
 			break
 		}
@@ -159,26 +207,24 @@ func (v *TiDBVerification) Verify(ctx context.Context) (string, string, error) {
 				endTs = ts.primaryTs
 				break
 			}
-			return "", "", err
+			return false, "", "", err
 		}
 
 		// if previous check pass run module check.
-		// if fail means already run module check last time, skip by return empty startTs, endTs.
+		// if fail means already run module check last time, skip by return endTs for GC.
 		// if unchecked, run e2e check against previous.
 		if preTs.result == checkPass {
 			startTs = preTs.primaryTs
-			endTs = ts.primaryTs
 		}
 		if preTs.result == checkFail {
-			startTs, endTs = "", ""
+			startTs = ""
+			result = true
 		}
-		if preTs.result == unchecked {
-			endTs = ts.primaryTs
-		}
+		endTs = ts.primaryTs
 		ts = preTs
 	}
 
-	return startTs, endTs, nil
+	return result, startTs, endTs, nil
 }
 
 func (v *TiDBVerification) checkConsistency(ctx context.Context, t tsPair) (bool, error) {
@@ -286,5 +332,6 @@ func (v *TiDBVerification) getTS(ctx context.Context) (tsPair, error) {
 
 func (v *TiDBVerification) Close() error {
 	err := multierr.Append(v.upstreamChecker.db.Close(), v.downstreamChecker.db.Close())
-	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
+	err = multierr.Append(cerror.WrapError(cerror.ErrMySQLConnectionError, err), v.moduleVerification.Close())
+	return err
 }

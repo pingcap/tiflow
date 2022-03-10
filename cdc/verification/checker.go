@@ -93,7 +93,7 @@ func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
 }
 
 func (c *checker) getAllTables(ctx context.Context, db string, f *filter.Filter) ([]string, error) {
-	rows, err := c.db.QueryContext(ctx, fmt.Sprintf("SHOW TABLES"))
+	rows, err := c.db.QueryContext(ctx, "SHOW TABLES")
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}

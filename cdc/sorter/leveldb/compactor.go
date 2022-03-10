@@ -37,7 +37,7 @@ type deleteThrottle struct {
 	nextTime time.Time
 	rnd      *rand.Rand
 
-	// The number of delete keys that triggers delete.
+	// The number of delete keys that trigger delete.
 	countThreshold int
 	period         time.Duration
 }
@@ -66,7 +66,7 @@ func (d *deleteThrottle) trigger(count int, now time.Time) bool {
 }
 
 // CompactActor is an actor that compacts db.
-// It GCs delete kv entries and reclaim disk space.
+// Its GCs delete kv entries and reclaim disk space.
 type CompactActor struct {
 	id       actor.ID
 	db       db.DB
@@ -129,7 +129,7 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	}
 
 	// A range that is large enough to cover entire db effectively.
-	// See see sorter/encoding/key.go.
+	// See sorter/encoding/key.go.
 	start, end := []byte{0x0}, bytes.Repeat([]byte{0xff}, 128)
 	if err := c.db.Compact(start, end); err != nil {
 		log.Error("db compact error", zap.Error(err))
@@ -161,7 +161,7 @@ type CompactScheduler struct {
 func (s *CompactScheduler) tryScheduleCompact(id actor.ID, deleteCount int) bool {
 	task := message.Task{
 		DeleteReq: &message.DeleteRequest{
-			// Compactor only needs count. DeleteRange is wrote by db actor.
+			// Compactor only needs count. DeleteRange is written by db actor.
 			Count: deleteCount,
 		},
 	}

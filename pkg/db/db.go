@@ -13,16 +13,21 @@
 
 package db
 
+//go:generate mockery --name=DB --inpackage
 // DB is an interface of a leveldb-like database.
 type DB interface {
+	// Iterator iterates over a DB's key/value pairs in key order, in the range [lowerBound,upperBound)
 	Iterator(lowerBound, upperBound []byte) Iterator
+	// Batch returns a new empty batch, the cap param is not used in pebble
 	Batch(cap int) Batch
+	// DeleteRange deletes all the keys (and values) in the range [start,end)
 	DeleteRange(start, end []byte) error
 	Compact(start, end []byte) error
 	Close() error
 	CollectMetrics(id int)
 }
 
+//go:generate mockery --name=Batch --inpackage
 // A Batch is a sequence of Puts and Deletes that Commit to DB.
 type Batch interface {
 	Put(key, value []byte)

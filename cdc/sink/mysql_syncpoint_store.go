@@ -68,7 +68,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL, so
 		return nil, errors.Trace(err)
 	}
 
-	//TODO; support mysql later
+	// TODO; support mysql later
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme == "tidb" || scheme == "tidb+ssl" {
 		cfg := verification.Config{

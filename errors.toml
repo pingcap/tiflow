@@ -536,6 +536,11 @@ error = '''
 meta not exists in region
 '''
 
+["CDC:ErrModuleVerificationFail"]
+error = '''
+module level verification fail: module %s
+'''
+
 ["CDC:ErrMySQLConnectionError"]
 error = '''
 MySQL connection error
@@ -649,6 +654,11 @@ pd batch load regions failed
 ["CDC:ErrPDEtcdAPIError"]
 error = '''
 etcd api call error
+'''
+
+["CDC:ErrPebbleDBError"]
+error = '''
+pebbledb error
 '''
 
 ["CDC:ErrPeerMessageClientClosed"]
@@ -1054,6 +1064,11 @@ unmarshal failed
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed
+'''
+
+["CDC:ErrVerificationConfigInvalid"]
+error = '''
+verification config invalid
 '''
 
 ["CDC:ErrVersionIncompatible"]

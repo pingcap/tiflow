@@ -9,8 +9,10 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/goleak"
@@ -31,11 +33,14 @@ func TestNewVerification(t *testing.T) {
 		openDB = origin
 	}()
 
+	err := NewVerification(ctx, nil)
+	require.NotNil(t, err)
+
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
 		db, _, err := sqlmock.New()
 		return db, err
 	}
-	err := NewVerification(ctx, &Config{CheckInterval: time.Minute})
+	err = NewVerification(ctx, &Config{CheckInterval: time.Minute})
 	require.Nil(t, err)
 
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
@@ -47,13 +52,18 @@ func TestNewVerification(t *testing.T) {
 
 	db, _, err := sqlmock.New()
 	require.Nil(t, err)
+	mockModuleVerifier := &MockModuleVerifier{}
+	mockModuleVerifier.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockModuleVerifier.On("GC", mock.Anything).Return(errors.New("oh no"))
+	mockModuleVerifier.On("Close").Return(cerror.WrapError(cerror.ErrPebbleDBError, errors.New("who care")))
 	v := &TiDBVerification{
 		config: &Config{
 			CheckInterval: 10 * time.Millisecond,
 		},
-		running:           *atomic.NewBool(true),
-		upstreamChecker:   newChecker(db),
-		downstreamChecker: newChecker(db),
+		running:            *atomic.NewBool(true),
+		upstreamChecker:    newChecker(db),
+		downstreamChecker:  newChecker(db),
+		moduleVerification: mockModuleVerifier,
 	}
 	ctx, cancel = context.WithTimeout(ctx, time.Millisecond*30)
 	defer cancel()
@@ -287,6 +297,7 @@ func TestVerify(t *testing.T) {
 		wantGetPreErr error
 		wantSts       string
 		wantEts       string
+		wantStopNow   bool
 	}{
 		{
 			name: "happy already pass",
@@ -301,6 +312,7 @@ func TestVerify(t *testing.T) {
 				},
 				checkRet: []int{111},
 			},
+			wantStopNow: true,
 		},
 		{
 			name: "happy already fail",
@@ -315,12 +327,14 @@ func TestVerify(t *testing.T) {
 				},
 				checkRet: []int{111},
 			},
+			wantStopNow: true,
 		},
 		{
 			name: "happy first uncheck, then pass",
 			args: args{
 				ts: tsPair{
-					result: unchecked,
+					result:    unchecked,
+					primaryTs: "22",
 				},
 				pts: []tsPair{
 					{
@@ -329,6 +343,8 @@ func TestVerify(t *testing.T) {
 				},
 				checkRet: []int{checkPass},
 			},
+			wantEts:     "22",
+			wantStopNow: true,
 		},
 		{
 			name: "happy first uncheck, then fail, first pre pass",
@@ -363,6 +379,8 @@ func TestVerify(t *testing.T) {
 				},
 				checkRet: []int{checkFail},
 			},
+			wantEts:     "11",
+			wantStopNow: true,
 		},
 		{
 			name: "happy first uncheck, then fail, first pre uncheck, then pass",
@@ -434,7 +452,7 @@ func TestVerify(t *testing.T) {
 				ChangefeedID: tt.args.ts.cf,
 			},
 		}
-		sts, ets, err := v.Verify(context.Background())
+		stopNow, sts, ets, err := v.Verify(context.Background())
 		if tt.wantGetTsErr != nil {
 			require.True(t, errors.ErrorEqual(err, tt.wantGetTsErr), tt.name)
 		} else if tt.wantCheckErr != nil {
@@ -446,7 +464,7 @@ func TestVerify(t *testing.T) {
 		}
 		require.Equal(t, tt.wantSts, sts, tt.name)
 		require.Equal(t, tt.wantEts, ets, tt.name)
-
+		require.Equal(t, tt.wantStopNow, stopNow)
 		compareCheckSum = origin
 	}
 }
