@@ -119,8 +119,9 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig) (
 
 	wb := pebble.Batch(0)
 	m := &ModuleVerification{
-		db: pebble,
-		wb: wb,
+		cfg: cfg,
+		db:  pebble,
+		wb:  wb,
 	}
 	verifications[cfg.ChangeFeedID] = m
 

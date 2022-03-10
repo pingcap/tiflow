@@ -33,6 +33,8 @@ func TestNewModuleVerification(t *testing.T) {
 	m1, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "1"})
 	defer m1.Close()
 	require.Nil(t, err)
+	m1.SentTrackData(context.Background(), Puller, []TrackData{{[]byte("1"), 1}})
+
 	m2, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "1"})
 	require.Nil(t, err)
 	require.Equal(t, m1, m2)
