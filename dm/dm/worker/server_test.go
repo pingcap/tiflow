@@ -239,7 +239,6 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err.Error(), Matches, ".*bind: address already in use.*")
 
 	t.testStopWorkerWhenLostConnect(c, s, ETCD)
-	// close
 	s.Close()
 
 	c.Assert(utils.WaitSomething(30, 10*time.Millisecond, func() bool {

@@ -1314,13 +1314,18 @@ func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error 
 	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
 }
 
-func (w *SourceWorker) checkCfgCanUpdated(cfg *config.SubTaskConfig) error {
+// CheckCfgCanUpdated check if current subtask config can be updated.
+func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	w.RLock()
 	defer w.RUnlock()
 
 	st := w.subTaskHolder.findSubTask(cfg.Name)
 	if st == nil {
 		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
+	}
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		return err
 	}
 	return st.CheckUnitCfgCanUpdate(cfg)
 }
