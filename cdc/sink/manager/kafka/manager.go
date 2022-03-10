@@ -81,12 +81,35 @@ func (m *TopicManager) tryRefreshMeta() error {
 			if err != nil {
 				return err
 			}
-			m.topics.Store(topic, int32(len(partitions)))
+			m.tryUpdatePartitionsAndLogging(topic, int32(len(partitions)))
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}
 
 	return nil
+}
+
+// tryUpdatePartitionsAndLogging try to update the partitions of the topic.
+func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions int32) {
+	oldPartitions, ok := m.topics.Load(topic)
+	if ok {
+		if oldPartitions.(int32) != partitions {
+			m.topics.Store(topic, partitions)
+			log.Info(
+				"update topic partition number",
+				zap.String("topic", topic),
+				zap.Int32("oldPartitionNumber", oldPartitions.(int32)),
+				zap.Int32("newPartitionNumber", partitions),
+			)
+		}
+	} else {
+		m.topics.Store(topic, partitions)
+		log.Info(
+			"store topic partition number",
+			zap.String("topic", topic),
+			zap.Int32("partitionNumber", partitions),
+		)
+	}
 }
 
 // CreateTopic creates a topic with the given name.
@@ -99,7 +122,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
 	for topic, detail := range topics {
-		m.topics.Store(topic, detail.NumPartitions)
+		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 	}
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 
@@ -122,11 +145,10 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	if err != nil && errors.Cause(err) != sarama.ErrTopicAlreadyExists {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	m.topics.Store(topicName, m.cfg.PartitionNum)
-
 	log.Info("TiCDC create the topic",
 		zap.Int32("partition-num", m.cfg.PartitionNum),
 		zap.Int16("replication-factor", m.cfg.ReplicationFactor))
+	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 
 	return nil
 }
