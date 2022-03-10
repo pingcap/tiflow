@@ -111,22 +111,58 @@ func TestWriterPoll(t *testing.T) {
 			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(3, 1, 1)),
 		},
 		expectMaxCommitTs:   3,
-		expectMaxResolvedTs: 0,
+		expectMaxResolvedTs: 2,
 	}, {
 		// Mix rawkv events and resolved ts events.
 		inputEvents: []*model.PolymorphicEvent{
 			newTestEvent(4, 2, 0), // crts 4, startts 2
-			model.NewResolvedPolymorphicEvent(0, 4),
-			newTestEvent(5, 3, 0), // crts 5, startts 3
-			model.NewResolvedPolymorphicEvent(0, 6),
+			model.NewResolvedPolymorphicEvent(0, 3),
+			newTestEvent(6, 3, 0), // crts 6, startts 3
+			model.NewResolvedPolymorphicEvent(0, 3),
 		},
 
 		expectWrites: [][]byte{
 			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 2, 0)),
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(5, 3, 0)),
+			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(6, 3, 0)),
 		},
-		expectMaxCommitTs:   5,
-		expectMaxResolvedTs: 6,
+		expectMaxCommitTs:   6,
+		expectMaxResolvedTs: 3,
+	}, {
+		// Duplicate commit events.
+		inputEvents: []*model.PolymorphicEvent{
+			newTestEvent(6, 3, 0), // crts 6, startts 3
+			newTestEvent(6, 3, 0), // crts 6, startts 3
+		},
+
+		expectWrites: [][]byte{
+			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(6, 3, 0)),
+		},
+		expectMaxCommitTs:   6,
+		expectMaxResolvedTs: 3,
+	}, {
+		// Commit ts regress and bounce.
+		inputEvents: []*model.PolymorphicEvent{
+			newTestEvent(4, 3, 0), // crts 4, startts 3
+			newTestEvent(5, 3, 0), // crts 5, startts 3
+			newTestEvent(4, 2, 0), // crts 4, startts 3
+		},
+
+		expectWrites: [][]byte{
+			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 3, 0)),
+			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(5, 3, 0)),
+			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 2, 0)),
+		},
+		expectMaxCommitTs:   6,
+		expectMaxResolvedTs: 3,
+	}, {
+		// Resolved ts regress. It should not happen, but we test it anyway.
+		inputEvents: []*model.PolymorphicEvent{
+			model.NewResolvedPolymorphicEvent(0, 2),
+		},
+
+		expectWrites:        [][]byte{},
+		expectMaxCommitTs:   6,
+		expectMaxResolvedTs: 3,
 	}}
 
 	for i, cs := range cases {
