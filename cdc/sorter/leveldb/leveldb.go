@@ -97,7 +97,7 @@ var _ actor.Actor = (*DBActor)(nil)
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
-	wg *sync.WaitGroup, captureAddr string,
+	wg *sync.WaitGroup,
 ) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
@@ -128,8 +128,8 @@ func NewDBActor(
 
 		closedWg: wg,
 
-		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
-		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
+		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(idTag),
+		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(idTag),
 	}, mb, nil
 }
 
@@ -180,15 +180,13 @@ func (ldb *DBActor) acquireIterators() {
 			break
 		}
 
-		iterCh := req.IterCh
 		iterRange := req.Range
 		iter := ldb.db.Iterator(iterRange[0], iterRange[1])
-		iterCh <- &message.LimitedIterator{
+		req.IterCallback(&message.LimitedIterator{
 			Iterator:   iter,
 			Sema:       ldb.iterSem,
 			ResolvedTs: req.ResolvedTs,
-		}
-		close(iterCh)
+		})
 	}
 }
 

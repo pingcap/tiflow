@@ -155,7 +155,7 @@ func TestEtcdBank(t *testing.T) {
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)})
 				require.Nil(t, err)
-				err = worker.Run(ctx, nil, 100*time.Millisecond, "127.0.0.1", "")
+				err = worker.Run(ctx, nil, 100*time.Millisecond, "")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}

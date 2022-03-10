@@ -199,6 +199,16 @@ check-leaktest-added: tools/bin/gofumports
 	# TODO: enable leaktest for DM tests.
 	./scripts/add-leaktest.sh $(TEST_FILES_WITHOUT_DM)
 
+check-ticdc-dashboard:
+	@echo "check-ticdc-dashboard"
+	@./scripts/check-ticdc-dashboard.sh
+
+check-diff-line-width:
+ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
+	@echo "check-file-width"
+	@./scripts/check-diff-line-width.sh
+endif
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -212,7 +222,8 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"

@@ -24,7 +24,7 @@ var (
 			Subsystem: "mounter",
 			Name:      "input_chan_size",
 			Help:      "mounter input chan size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	mountDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -32,14 +32,14 @@ var (
 			Name:      "unmarshal_and_mount",
 			Help:      "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 	totalRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "mounter",
 			Name:      "total_rows_count",
 			Help:      "The total count of rows that are processed by mounter",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 )
 
 // InitMetrics registers all metrics in this file

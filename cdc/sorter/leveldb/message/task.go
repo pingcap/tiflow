@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/db"
 	"golang.org/x/sync/semaphore"
@@ -27,11 +28,21 @@ type Task struct {
 	UID     uint32
 	TableID uint64
 
+	// Input unsorted event for writers.
+	// Sorter.AddEntry -> writer.
+	InputEvent *model.PolymorphicEvent
+	// Latest resolved ts / commit ts for readers.
+	// An empty ReadTs works like a tick.
+	// writer -> reader
+	ReadTs ReadTs
 	// A batch of events (bytes encoded) need to be wrote.
+	// writer -> leveldb
 	WriteReq map[Key][]byte
 	// Requests an iterator when it is not nil.
+	// reader -> leveldb
 	IterReq *IterRequest
 	// Deletes all of the key-values in the range.
+	// reader -> leveldb and leveldb -> compactor
 	DeleteReq *DeleteRequest
 }
 
@@ -42,6 +53,12 @@ type DeleteRequest struct {
 	Count int
 }
 
+// ReadTs wraps the latest resolved ts and commit ts.
+type ReadTs struct {
+	MaxCommitTs   uint64
+	MaxResolvedTs uint64
+}
+
 // IterRequest contains parameters that necessary to build an iterator.
 type IterRequest struct {
 	UID uint32
@@ -50,8 +67,9 @@ type IterRequest struct {
 	ResolvedTs uint64
 	// Range of a requested iterator.
 	Range [2][]byte
-	// Must be buffered channel to avoid blocking.
-	IterCh chan *LimitedIterator `json:"-"` // Make Task JSON printable.
+	// IterCallback is callback to send iterator back.
+	// It must be buffered channel to avoid blocking.
+	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
 }
 
 // Key is the key that is written to db.

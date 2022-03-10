@@ -27,15 +27,16 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -265,7 +266,7 @@ func TestEtcdSum(t *testing.T) {
 				return errors.Trace(err)
 			}
 
-			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", ""))
+			return errors.Trace(etcdWorker.Run(ctx, nil, 10*time.Millisecond, ""))
 		})
 	}
 
@@ -348,7 +349,7 @@ func TestLinearizability(t *testing.T) {
 	require.Nil(t, err)
 	errg := &errgroup.Group{}
 	errg.Go(func() error {
-		return reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
+		return reactor.Run(ctx, nil, 10*time.Millisecond, "")
 	})
 
 	time.Sleep(500 * time.Millisecond)
@@ -431,7 +432,7 @@ func TestFinished(t *testing.T) {
 		state: make(map[string]string),
 	})
 	require.Nil(t, err)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "")
 	require.Nil(t, err)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	require.Nil(t, err)
@@ -498,7 +499,7 @@ func TestCover(t *testing.T) {
 		state: make(map[string]string),
 	})
 	require.Nil(t, err)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "")
 	require.Nil(t, err)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	require.Nil(t, err)
@@ -575,7 +576,7 @@ func TestEmptyTxn(t *testing.T) {
 		state: make(map[string]string),
 	})
 	require.Nil(t, err)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "")
 	require.Nil(t, err)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	require.Nil(t, err)
@@ -640,7 +641,7 @@ func TestEmptyOrNil(t *testing.T) {
 		state: make(map[string]string),
 	})
 	require.Nil(t, err)
-	err = reactor.Run(ctx, nil, 10*time.Millisecond, "127.0.0.1", "")
+	err = reactor.Run(ctx, nil, 10*time.Millisecond, "")
 	require.Nil(t, err)
 	resp, err := cli.Get(ctx, prefix+"/key1")
 	require.Nil(t, err)
@@ -719,7 +720,7 @@ func TestModifyAfterDelete(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := worker1.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
+		err := worker1.Run(ctx, nil, time.Millisecond*100, "")
 		require.Nil(t, err)
 	}()
 
@@ -734,7 +735,7 @@ func TestModifyAfterDelete(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	err = worker2.Run(ctx, nil, time.Millisecond*100, "127.0.0.1", "")
+	err = worker2.Run(ctx, nil, time.Millisecond*100, "")
 	require.Nil(t, err)
 
 	modifyReactor.waitOnCh <- struct{}{}

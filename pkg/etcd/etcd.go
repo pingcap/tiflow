@@ -19,21 +19,20 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"github.com/tikv/pd/pkg/tempurl"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/errors"
-	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/embed"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -88,14 +87,13 @@ type CDCEtcdClient struct {
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	metrics := map[string]prometheus.Counter{
-		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut, captureAddr),
-		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet, captureAddr),
-		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel, captureAddr),
-		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn, captureAddr),
-		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant, captureAddr),
-		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke, captureAddr),
+		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
+		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
+		EtcdDel:    etcdRequestCounter.WithLabelValues(EtcdDel),
+		EtcdTxn:    etcdRequestCounter.WithLabelValues(EtcdTxn),
+		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
+		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
 	return CDCEtcdClient{Client: Wrap(cli, metrics)}
 }
