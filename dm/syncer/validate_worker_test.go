@@ -99,6 +99,7 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 			require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].tp)
 			require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["2"].failedCnt)
 		} else {
+			// fast mode
 			require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
 			require.Equal(t, int64(1), worker.pendingRowCount.Load())
 		}
@@ -203,10 +204,21 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["3"].failedCnt)
 
-		if mode == config.ValidationFast {
-			mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
-				sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b").AddRow(3, "3dd"))
-			require.NoError(t, worker.validateTableChange())
+		// sync row 3 but got wrong result
+		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
+			sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b").AddRow(3, "3dd"))
+		require.NoError(t, worker.validateTableChange())
+		if mode == config.ValidationFull {
+			// remain error
+			require.Equal(t, int64(1), worker.pendingRowCount.Load())
+			require.Len(t, worker.pendingChangesMap, 1)
+			require.Contains(t, worker.pendingChangesMap, tbl1.String())
+			require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
+			require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "3")
+			require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].tp)
+			require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["3"].failedCnt) // fail again
+		} else {
+			// correct and clear all errors
 			require.Equal(t, int64(0), worker.pendingRowCount.Load())
 			require.Len(t, worker.pendingChangesMap, 0)
 		}
