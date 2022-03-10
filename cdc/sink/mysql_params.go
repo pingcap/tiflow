@@ -88,6 +88,7 @@ type sinkParams struct {
 	safeMode            bool
 	timezone            string
 	tls                 string
+	tidbPlacementMode   string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -266,6 +267,7 @@ func generateDSNByParams(
 	if params.timezone != "" {
 		dsnCfg.Params["time_zone"] = params.timezone
 	}
+	dsnCfg.Params["tidb_placement_mode"] = "ignore"
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 	dsnCfg.Params["timeout"] = params.dialTimeout
