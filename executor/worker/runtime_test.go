@@ -7,10 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
-
-	"github.com/hanfei1991/microcosm/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,48 +71,6 @@ func TestWorkerFinished(t *testing.T) {
 		return rt.taskNum.Load() == int64(workerNum)
 	}, 1*time.Second, 100*time.Millisecond)
 
-	for _, worker := range workers {
-		worker.SetFinished()
-	}
-
-	require.Eventually(t, func() bool {
-		t.Logf("taskNum %d", rt.taskNum.Load())
-		return rt.taskNum.Load() == 0
-	}, 10*time.Second, 100*time.Millisecond)
-
 	cancel()
 	wg.Wait()
-}
-
-type dummyWorker struct {
-	id RunnableID
-
-	needQuit atomic.Bool
-}
-
-func (d *dummyWorker) Init(ctx context.Context) error {
-	return nil
-}
-
-func (d *dummyWorker) Poll(ctx context.Context) error {
-	if d.needQuit.Load() {
-		return errors.New("worker is finished")
-	}
-	return nil
-}
-
-func (d *dummyWorker) ID() RunnableID {
-	return d.id
-}
-
-func (d *dummyWorker) Workload() model.RescUnit {
-	return model.RescUnit(1)
-}
-
-func (d *dummyWorker) Close(ctx context.Context) error {
-	return nil
-}
-
-func (d *dummyWorker) SetFinished() {
-	d.needQuit.Store(true)
 }

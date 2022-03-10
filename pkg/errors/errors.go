@@ -84,6 +84,10 @@ var (
 	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))
 	ErrExecutorSessionDone        = errors.Normalize("executor %s session done", errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"))
 	ErrRuntimeReachedCapacity     = errors.Normalize("runtime has reached its capacity %d", errors.RFCCodeText("DFLOW:ErrRuntimeReachedCapacity"))
+	ErrRuntimeIsClosed            = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeIsClosed"))
+	ErrRuntimeInitQueuingTimeOut  = errors.Normalize("a task has waited too long to be initialized", errors.RFCCodeText("DFLOW:ErrRuntimeInitQueuingTimeOut"))
+	ErrRuntimeDuplicateTaskID     = errors.Normalize("trying to add a task with the same ID as an existing one", errors.RFCCodeText("DFLOW:ErrRuntimeDuplicateTaskID %s"))
+	ErrRuntimeClosed              = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeClosed"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
