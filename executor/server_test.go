@@ -93,7 +93,7 @@ func TestCollectMetric(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg.WorkerAddr = addr
 	s := NewServer(cfg, nil)
-	s.workerRtm = worker.NewRuntime(ctx, defaultRuntimeCapacity)
+	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	s.grpcSrv = grpc.NewServer()
 	registerMetrics()

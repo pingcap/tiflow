@@ -83,6 +83,7 @@ var (
 	ErrTaskNotFound               = errors.Normalize("task %d is not found", errors.RFCCodeText("DFLOW:ErrTaskNotFound"))
 	ErrExecutorUnknownOperator    = errors.Normalize("operator type %d is unknown", errors.RFCCodeText("DFLOW:ErrOperatorUnknown"))
 	ErrExecutorSessionDone        = errors.Normalize("executor %s session done", errors.RFCCodeText("DFLOW:ErrExecutorSessionDone"))
+	ErrRuntimeIncomingQueueFull   = errors.Normalize("runtime has too many pending CreateWorker requests", errors.RFCCodeText("DFLOW:ErrRuntimeIncomingQueueFull"))
 	ErrRuntimeReachedCapacity     = errors.Normalize("runtime has reached its capacity %d", errors.RFCCodeText("DFLOW:ErrRuntimeReachedCapacity"))
 	ErrRuntimeIsClosed            = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeIsClosed"))
 	ErrRuntimeInitQueuingTimeOut  = errors.Normalize("a task has waited too long to be initialized", errors.RFCCodeText("DFLOW:ErrRuntimeInitQueuingTimeOut"))

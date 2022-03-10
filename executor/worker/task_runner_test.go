@@ -83,7 +83,7 @@ func TestTaskRunnerInitBlocked(t *testing.T) {
 	worker := newDummyWorker("my-worker")
 	err := tr.AddTask(worker)
 	require.Error(t, err)
-	require.Regexp(t, ".*ResourceExhausted.*", err.Error())
+	require.Regexp(t, ".*ErrRuntimeIncomingQueueFull.*", err.Error())
 
 	for _, worker := range workers {
 		worker.UnblockInit()

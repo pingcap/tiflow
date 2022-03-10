@@ -5,17 +5,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/executor/worker/internal"
+	"github.com/hanfei1991/microcosm/model"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+)
 
-	"github.com/hanfei1991/microcosm/executor/worker/internal"
-	"github.com/hanfei1991/microcosm/model"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
+// Re-export types for public use
+type (
+	Runnable   = internal.Runnable
+	RunnableID = internal.RunnableID
+	Workloader = internal.Workloader
+	Closer     = internal.Closer
 )
 
 type TaskRunner struct {
@@ -71,7 +76,7 @@ func (r *TaskRunner) AddTask(task Runnable) error {
 	default:
 	}
 
-	return status.Error(codes.ResourceExhausted, "task runner in-queue is full")
+	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 func (r *TaskRunner) Run(ctx context.Context) error {
@@ -216,4 +221,8 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 	}()
 
 	return nil
+}
+
+func (r *TaskRunner) TaskCount() int64 {
+	return r.taskCount.Load()
 }
