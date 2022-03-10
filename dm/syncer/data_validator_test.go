@@ -88,7 +88,6 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 	return cfg
 }
 
-//nolint
 func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBConn {
 	t.Helper()
 	baseDB := conn.NewBaseDB(db, func() {})
@@ -424,6 +423,7 @@ func TestValidatorDoValidate(t *testing.T) {
 		streamer:         mockStreamer,
 		closed:           false,
 	}
+	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	require.Equal(t, int64(1), validator.changeEventCount[rowInsert].Load())
 	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
@@ -448,13 +448,13 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 
 func TestValidatorGenColData(t *testing.T) {
 	res := genColData(1)
-	require.Equal(t, "1", string(res))
+	require.Equal(t, "1", res)
 	res = genColData(1.2)
-	require.Equal(t, "1.2", string(res))
+	require.Equal(t, "1.2", res)
 	res = genColData("abc")
-	require.Equal(t, "abc", string(res))
+	require.Equal(t, "abc", res)
 	res = genColData([]byte{'\x01', '\x02', '\x03'})
-	require.Equal(t, "\x01\x02\x03", string(res))
+	require.Equal(t, "\x01\x02\x03", res)
 	res = genColData(decimal.NewFromInt(222123123))
-	require.Equal(t, "222123123", string(res))
+	require.Equal(t, "222123123", res)
 }
