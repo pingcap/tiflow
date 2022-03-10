@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -253,7 +254,8 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table *TableName `json:"table" msg:"table"`
+	Table    *TableName         `json:"table" msg:"table"`
+	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 
 	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
@@ -326,6 +328,22 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	}
 
 	return pkeyCols
+}
+
+// WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
+func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
+	for _, col := range r.Columns {
+		if _, ok := colNames[col.Name]; ok {
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
+		}
+	}
+	for _, col := range r.PreColumns {
+		if _, ok := colNames[col.Name]; ok {
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
+		}
+	}
 }
 
 // ApproximateBytes returns approximate bytes in memory consumed by the event.

@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/errors"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/soheilhy/cmux"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

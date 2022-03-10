@@ -21,23 +21,21 @@ import (
 // TableDispatcher is a partition dispatcher which dispatches events
 // based on the schema and table name.
 type TableDispatcher struct {
-	partitionNum int32
-	hasher       *hash.PositionInertia
+	hasher *hash.PositionInertia
 }
 
 // NewTableDispatcher creates a TableDispatcher.
-func NewTableDispatcher(partitionNum int32) *TableDispatcher {
+func NewTableDispatcher() *TableDispatcher {
 	return &TableDispatcher{
-		partitionNum: partitionNum,
-		hasher:       hash.NewPositionInertia(),
+		hasher: hash.NewPositionInertia(),
 	}
 }
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) int32 {
+func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
 	t.hasher.Reset()
 	// distribute partition by table
 	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	return int32(t.hasher.Sum32() % uint32(t.partitionNum))
+	return int32(t.hasher.Sum32() % uint32(partitionNum))
 }
