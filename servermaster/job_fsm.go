@@ -73,29 +73,52 @@ func NewJobFsm() *JobFsm {
 }
 
 func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
-	fsm.jobsMu.Lock()
-	defer fsm.jobsMu.Unlock()
-	resp := &pb.QueryJobResponse{}
-	meta, ok := fsm.pendingJobs[jobID]
-	if ok {
-		resp.Tp = int64(meta.Tp)
-		resp.Config = meta.Config
-		resp.Status = pb.QueryJobResponse_pending
+	checkPendingJob := func() *pb.QueryJobResponse {
+		fsm.jobsMu.Lock()
+		defer fsm.jobsMu.Unlock()
+
+		meta, ok := fsm.pendingJobs[jobID]
+		if !ok {
+			return nil
+		}
+		resp := &pb.QueryJobResponse{
+			Tp:     int64(meta.Tp),
+			Config: meta.Config,
+			Status: pb.QueryJobResponse_pending,
+		}
 		return resp
 	}
-	job, ok := fsm.waitAckJobs[jobID]
-	if ok {
-		meta = job.MasterMetaKVData
-		resp.Tp = int64(meta.Tp)
-		resp.Config = meta.Config
-		resp.Status = pb.QueryJobResponse_dispatched
+
+	checkWaitAckJob := func() *pb.QueryJobResponse {
+		fsm.jobsMu.Lock()
+		defer fsm.jobsMu.Unlock()
+
+		job, ok := fsm.waitAckJobs[jobID]
+		if !ok {
+			return nil
+		}
+		meta := job.MasterMetaKVData
+		resp := &pb.QueryJobResponse{
+			Tp:     int64(meta.Tp),
+			Config: meta.Config,
+			Status: pb.QueryJobResponse_dispatched,
+		}
 		return resp
 	}
-	job, ok = fsm.onlineJobs[jobID]
-	resp.Status = pb.QueryJobResponse_online
-	if ok {
-		resp.Tp = int64(job.Tp)
-		resp.Config = job.Config
+
+	checkOnlineJob := func() *pb.QueryJobResponse {
+		fsm.jobsMu.Lock()
+		defer fsm.jobsMu.Unlock()
+
+		job, ok := fsm.onlineJobs[jobID]
+		if !ok {
+			return nil
+		}
+		resp := &pb.QueryJobResponse{
+			Tp:     int64(job.Tp),
+			Config: job.Config,
+			Status: pb.QueryJobResponse_online,
+		}
 		jobInfo, err := job.ToPB()
 		// TODO (zixiong) ToPB should handle the tombstone situation gracefully.
 		if err != nil {
@@ -123,12 +146,16 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 			// TODO think about
 			log.L().Panic("Unexpected Job Info")
 		}
-	} else {
-		resp.Err = &pb.Error{
-			Code: pb.ErrorCode_UnKnownJob,
-		}
+		return nil
 	}
-	return resp
+
+	if resp := checkPendingJob(); resp != nil {
+		return resp
+	}
+	if resp := checkWaitAckJob(); resp != nil {
+		return resp
+	}
+	return checkOnlineJob()
 }
 
 func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData) {

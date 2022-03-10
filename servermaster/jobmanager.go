@@ -53,7 +53,28 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 }
 
 func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
-	return jm.JobFsm.QueryJob(req.JobId)
+	resp := jm.JobFsm.QueryJob(req.JobId)
+	if resp != nil {
+		return resp
+	}
+	mcli := lib.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
+	if masterMeta, err := mcli.Load(ctx); err != nil {
+		log.L().Warn("failed to load master kv meta from meta store", zap.Error(err))
+	} else {
+		if masterMeta != nil && masterMeta.StatusCode == lib.MasterStatusFinished {
+			resp := &pb.QueryJobResponse{
+				Tp:     int64(masterMeta.Tp),
+				Config: masterMeta.Config,
+				Status: pb.QueryJobResponse_finished,
+			}
+			return resp
+		}
+	}
+	return &pb.QueryJobResponse{
+		Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		},
+	}
 }
 
 // SubmitJob processes "SubmitJobRequest".

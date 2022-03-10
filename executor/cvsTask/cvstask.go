@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -42,12 +44,20 @@ type cvsTask struct {
 	srcDir   string
 	dstHost  string
 	dstDir   string
-	counter  int64
+	counter  *atomic.Int64
 	index    int64
-	status   lib.WorkerStatusCode
 	cancelFn func()
 	buffer   chan strPair
 	isEOF    bool
+
+	statusCode struct {
+		sync.RWMutex
+		code lib.WorkerStatusCode
+	}
+	runError struct {
+		sync.RWMutex
+		err error
+	}
 
 	statusRateLimiter *rate.Limiter
 }
@@ -70,26 +80,29 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 		index:             cfg.StartLoc,
 		buffer:            make(chan strPair, BUFFERSIZE),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
+		counter:           atomic.NewInt64(0),
 	}
 	return task
 }
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
-	task.status = lib.WorkerStatusNormal
+	task.setStatusCode(lib.WorkerStatusNormal)
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
 			log.L().Error("error happened when reading data from the upstream ", zap.Any("message", err.Error()))
-			task.status = lib.WorkerStatusError
+			task.setStatusCode(lib.WorkerStatusError)
+			task.setRunError(err)
 		}
 	}()
 	go func() {
 		err := task.Send(ctx)
 		if err != nil {
 			log.L().Error("error happened when writing data to the downstream ", zap.Any("message", err.Error()))
-			task.status = lib.WorkerStatusError
+			task.setStatusCode(lib.WorkerStatusError)
+			task.setRunError(err)
 		}
 	}()
 
@@ -107,14 +120,19 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		}
 		return err
 	}
+	switch task.getStatusCode() {
+	case lib.WorkerStatusFinished, lib.WorkerStatusError:
+		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
+	default:
+	}
 	return nil
 }
 
 // Status returns a short worker status to be periodically sent to the master.
 func (task *cvsTask) Status() lib.WorkerStatus {
 	return lib.WorkerStatus{
-		Code: task.status, ErrorMessage: "",
-		ExtBytes: []byte(fmt.Sprintf("%d", task.counter)),
+		Code: task.getStatusCode(), ErrorMessage: "",
+		ExtBytes: []byte(fmt.Sprintf("%d", task.counter.Load())),
 	}
 }
 
@@ -186,7 +204,6 @@ func (task *cvsTask) Send(ctx context.Context) error {
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
 		log.L().Error("call write data rpc failed", zap.Error(err))
-		task.status = lib.WorkerStatusError
 		task.cancelFn()
 		return err
 	}
@@ -195,22 +212,43 @@ func (task *cvsTask) Send(ctx context.Context) error {
 		case kv, more := <-task.buffer:
 			if !more {
 				log.L().Info("Reach the end of the file ")
-				task.status = lib.WorkerStatusFinished
+				task.setStatusCode(lib.WorkerStatusFinished)
 				_, err = writer.CloseAndRecv()
 				return err
 			}
 			err := writer.Send(&pb.WriteLinesRequest{FileName: task.dstDir, Key: kv.firstStr, Value: kv.secondStr})
-			task.counter++
+			task.counter.Add(1)
 			if err != nil {
 				log.L().Error("call write data rpc failed ", zap.Error(err))
-				task.status = lib.WorkerStatusError
 				task.cancelFn()
 				return err
 			}
 		case <-ctx.Done():
-			task.status = lib.WorkerStatusError
-			return nil
-
+			return ctx.Err()
 		}
 	}
+}
+
+func (task *cvsTask) getStatusCode() lib.WorkerStatusCode {
+	task.statusCode.RLock()
+	defer task.statusCode.RUnlock()
+	return task.statusCode.code
+}
+
+func (task *cvsTask) setStatusCode(status lib.WorkerStatusCode) {
+	task.statusCode.Lock()
+	defer task.statusCode.Unlock()
+	task.statusCode.code = status
+}
+
+func (task *cvsTask) getRunError() error {
+	task.runError.RLock()
+	defer task.runError.RUnlock()
+	return task.runError.err
+}
+
+func (task *cvsTask) setRunError(err error) {
+	task.runError.Lock()
+	defer task.runError.Unlock()
+	task.runError.err = err
 }

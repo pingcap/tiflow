@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
@@ -16,7 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/errors"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -43,12 +45,13 @@ func (e *errorInfo) Error() string {
 
 type JobMaster struct {
 	lib.BaseJobMaster
-	syncInfo      *Config
-	syncFilesInfo map[lib.WorkerID]*workerInfo
-	counter       int64
-	workerID      lib.WorkerID
-	status        lib.WorkerStatusCode
-	filesNum      int
+	syncInfo          *Config
+	syncFilesInfo     map[lib.WorkerID]*workerInfo
+	counter           int64
+	workerID          lib.WorkerID
+	status            lib.WorkerStatusCode
+	filesNum          int
+	statusRateLimiter *rate.Limiter
 }
 
 func RegisterWorker() {
@@ -64,6 +67,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	jm.workerID = workerID
 	jm.syncInfo = conf.(*Config)
 	jm.syncFilesInfo = make(map[lib.WorkerID]*workerInfo)
+	jm.statusRateLimiter = rate.NewLimiter(rate.Every(time.Second*2), 1)
 	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
@@ -125,14 +129,12 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			log.L().Info("worker status abnormal", zap.Any("status", status))
 		}
 	}
-	log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.status))
-	if filesNum == jm.filesNum && jm.status != lib.WorkerStatusFinished {
-		jm.status = lib.WorkerStatusFinished
-		err := jm.BaseJobMaster.UpdateJobStatus(ctx, jm.Status())
-		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			log.L().Warn("update status try again later", zap.String("error", err.Error()))
-			return nil
-		}
+	if jm.statusRateLimiter.Allow() {
+		log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.status))
+	}
+	if filesNum == jm.filesNum {
+		log.L().Info("cvs job master finished")
+		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
 	return nil
 }
@@ -161,7 +163,14 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
 	log.L().Info("on worker offline ", zap.Any(" worker :", worker.ID()))
 	if !exist {
-		log.L().Info("bad worker found", zap.Any("message", worker.ID()))
+		log.L().Panic("bad worker found", zap.Any("message", worker.ID()))
+	}
+	// Force to set worker handle, in case of worker finishes before OnWorkerOnline
+	// is fired and worker handle is missing
+	syncInfo.handle = worker
+	if derrors.ErrWorkerFinish.Equal(reason) {
+		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()))
+		return nil
 	}
 	var err error
 	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
