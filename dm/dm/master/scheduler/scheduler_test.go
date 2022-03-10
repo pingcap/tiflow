@@ -1180,7 +1180,8 @@ func (t *testSchedulerSuite) TestLastBound() {
 	require.NoError(t.T(), err)
 	require.False(t.T(), bounded)
 
-	// after worker3 become offline, source2 should be bounded to worker2
+	// after worker3 become offline, source2 should be bounded to worker2 if it is its lastBound
+	s.lastBound[sourceID2] = ha.NewSourceBound(sourceID2, workerName2)
 	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	require.False(t.T(), ok)
