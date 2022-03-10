@@ -1121,11 +1121,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "avg(ticdc_processor_min_resolved_table_id{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
-=======
-              "expr": "ticdc_processor_min_resolved_table_id{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\", changefeed=~\"$changefeed\"}",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(ticdc_processor_min_resolved_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -1224,11 +1220,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "avg(ticdc_processor_min_checkpoint_table_id{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
-=======
-              "expr": "ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\", changefeed=~\"$changefeed\"}",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -4971,16 +4963,6 @@
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
               "refId": "A"
-<<<<<<< HEAD
-=======
-            },
-            {
-              "expr": "sum(ticdc_db_block_cache_access_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\", type=\"hit\"}) by (capture) / sum(ticdc_db_block_cache_access_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "cache-hit-{{capture}}",
-              "refId": "B"
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
             }
           ],
           "thresholds": [],
@@ -5374,18 +5356,14 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=~\"sorter|cleaner|compactor\"}[1m])) by (name, instance)",
-=======
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=~\"sorter.*\"}[1m])) by (name, instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=~\"sorter|cleaner|compactor\"}[1m])) by (name, instance)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{name}}",
               "refId": "A"
             },
             {
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=\"sorter\"}[1m])) by (name, id, instance)",
+              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$capture\", name=\"sorter\"}[1m])) by (name, id, instance)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{name}}-{{id}}",
@@ -9644,11 +9622,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc_.*|cdc\"}[1m])) by (instance)",
-=======
-              "expr": "sum(delta(ticdc_tikvclient_lock_resolver_actions_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (type)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc_.*|cdc\"}[1m])) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-endpoint",
@@ -9656,7 +9630,7 @@
               "step": 4
             },
             {
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdcwkr.*\"}[1m])) by (instance)",
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdcwkr.*\"}[1m])) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}-workers",
@@ -9664,7 +9638,7 @@
               "step": 4
             },
             {
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"tso\"}[1m])) by (instance)",
+              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"tso\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -9774,11 +9748,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_cdc_grpc_message_sent_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[30s])) by (instance, type)",
-=======
-              "expr": "sum(rate(ticdc_tikvclient_region_cache_operations_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (type)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(rate(tikv_cdc_grpc_message_sent_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[30s])) by (instance, type)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -9875,11 +9845,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_grpc_msg_duration_seconds_count{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type!=\"kv_gc\"}[1m])) by (type)",
-=======
-              "expr": "histogram_quantile(0.99999, sum(rate(ticdc_tikvclient_backoff_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[1m])) by (le, type))",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(rate(tikv_grpc_msg_duration_seconds_count{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type!=\"kv_gc\"}[1m])) by (type)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{type}}",
@@ -9988,11 +9954,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
-=======
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdc_.*|cdc\"}[1m])) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -10001,11 +9963,7 @@
               "step": 10
             },
             {
-<<<<<<< HEAD
-              "expr": "avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
-=======
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"cdcwkr.*\"}[1m])) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -10014,11 +9972,7 @@
               "step": 10
             },
             {
-<<<<<<< HEAD
-              "expr": "(avg(process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
-=======
-              "expr": "sum(rate(tikv_thread_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", name=~\"tso\"}[1m])) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "(avg(process_resident_memory_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10027,7 +9981,7 @@
               "step": 10
             },
             {
-              "expr": "sum(tikv_cdc_sink_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_sink_memory_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10036,7 +9990,7 @@
               "step": 10
             },
             {
-              "expr": "sum(tikv_cdc_old_value_cache_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_old_value_cache_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10045,7 +9999,7 @@
               "step": 10
             },
             {
-              "expr": "sum(tikv_cdc_sink_memory_capacity{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_sink_memory_capacity{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -10054,7 +10008,7 @@
               "step": 10
             },
             {
-              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 2,
@@ -10166,11 +10120,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "scalar(max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
-=======
-              "expr": "sum(rate(tikv_cdc_grpc_message_sent_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[30s])) by (instance, type)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "scalar(max(pd_cluster_tso{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
               "format": "time_series",
               "hide": false,
               "instant": false,
@@ -10180,7 +10130,7 @@
               "step": 10
             },
             {
-              "expr": "max(pd_cluster_tso{tidb_cluster=\"$tidb_cluster\"})",
+              "expr": "max(pd_cluster_tso{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10189,7 +10139,7 @@
               "step": 10
             },
             {
-              "expr": "avg(tikv_cdc_min_resolved_ts{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10288,11 +10238,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "avg(tikv_cdc_min_resolved_ts_region{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-=======
-              "expr": "sum(rate(tikv_grpc_msg_duration_seconds_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type!=\"kv_gc\"}[1m])) by (type)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(tikv_cdc_min_resolved_ts_region{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10390,65 +10336,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
-=======
-              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "A",
-              "step": 10
-            },
-            {
-              "expr": "avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"cdc.*\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "cdc-{{instance}}",
-              "refId": "B",
-              "step": 10
-            },
-            {
-              "expr": "(avg(process_resident_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=~\"tikv.*\"}) by (instance)) - (avg(tikv_engine_block_cache_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", db=\"kv\"}) by(instance))",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "tikv-{{instance}}",
-              "refId": "C",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_sink_memory_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "sink-{{instance}}",
-              "refId": "D",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_old_value_cache_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "old-value-{{instance}}",
-              "refId": "E",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_sink_memory_capacity{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 2,
-              "legendFormat": "sink-cap-{{instance}}",
-              "refId": "F",
-              "step": 10
-            },
-            {
-              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p9999",
@@ -10542,7 +10430,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -10622,30 +10510,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
-=======
-              "expr": "scalar(max(pd_cluster_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}))/1000 - avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}/1000) by (instance) > 0",
-              "format": "time_series",
-              "hide": false,
-              "instant": false,
-              "intervalFactor": 2,
-              "legendFormat": "{{instance}}-min-resolved-lag",
-              "refId": "A",
-              "step": 10
-            },
-            {
-              "expr": "max(pd_cluster_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"})",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "current-ts",
-              "refId": "B",
-              "step": 10
-            },
-            {
-              "expr": "avg(tikv_cdc_min_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-p9999",
@@ -10745,11 +10610,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(tikv_cdc_scan_tasks{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"ongoing\"}) by (type, instance)",
-=======
-              "expr": "avg(tikv_cdc_min_resolved_ts_region{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"ongoing\"}) by (type, instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -10757,7 +10618,7 @@
               "refId": "A"
             },
             {
-              "expr": "sum(tikv_cdc_scan_tasks{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"total\"}) by (instance) - sum(tikv_cdc_scan_tasks{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=~\"abort|finish\"}) by (instance)",
+              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"total\"}) by (instance) - sum(tikv_cdc_scan_tasks{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=~\"abort|finish\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -10854,11 +10715,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "avg(tikv_cdc_captured_region_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-=======
-              "expr": "histogram_quantile(0.99999, sum(rate(tikv_cdc_resolved_ts_gap_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "avg(tikv_cdc_captured_region_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10867,7 +10724,7 @@
               "step": 10
             },
             {
-              "expr": "sum(tikv_cdc_region_resolve_status{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
+              "expr": "sum(tikv_cdc_region_resolve_status{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -10968,15 +10825,9 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
+              "expr": "sum(rate(tikv_cdc_scan_bytes_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
               "format": "time_series",
               "hide": false,
-=======
-              "expr": "sum(rate(tikv_cdc_scan_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
               "intervalFactor": 2,
               "legendFormat": "tikv-{{instance}}",
               "refId": "A",
@@ -11075,11 +10926,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(tikv_cdc_scan_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
-=======
-              "expr": "histogram_quantile(0.9999, sum(rate(tikv_cdc_scan_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance))",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(tikv_cdc_scan_bytes_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -11184,11 +11031,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "(sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance) - sum(rate(tikv_cdc_old_value_cache_miss{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)) / sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-=======
-              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"ongoing\"}) by (type, instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "(sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance) - sum(rate(tikv_cdc_old_value_cache_miss{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)) / sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11196,11 +11039,7 @@
               "refId": "A"
             },
             {
-<<<<<<< HEAD
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_access{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-=======
-              "expr": "sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=\"total\"}) by (instance) - sum(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", type=~\"abort|finish\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": true,
               "intervalFactor": 1,
@@ -11208,7 +11047,7 @@
               "refId": "B"
             },
             {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11216,7 +11055,7 @@
               "refId": "C"
             },
             {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss_none{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
+              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss_none{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11317,11 +11156,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(tikv_cdc_old_value_cache_length{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-=======
-              "expr": "avg(tikv_cdc_captured_region_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(tikv_cdc_old_value_cache_length{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11329,11 +11164,7 @@
               "refId": "A"
             },
             {
-<<<<<<< HEAD
-              "expr": "sum(tikv_cdc_old_value_cache_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance) / sum(tikv_cdc_old_value_cache_length{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-=======
-              "expr": "sum(tikv_cdc_region_resolve_status{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance, status)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(tikv_cdc_old_value_cache_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance) / sum(tikv_cdc_old_value_cache_length{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11341,7 +11172,7 @@
               "refId": "B"
             },
             {
-              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
+              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -11441,11 +11272,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "sum(rate(tikv_cdc_old_value_scan_details{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance, cf, tag)",
-=======
-              "expr": "sum(rate(tikv_cdc_scan_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}[30s])) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "sum(rate(tikv_cdc_old_value_scan_details{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance, cf, tag)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -11541,7 +11368,7 @@
           "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(rate(tikv_cdc_old_value_duration_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "expr": "sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
               "format": "heatmap",
               "instant": false,
               "intervalFactor": 2,
@@ -11621,25 +11448,21 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "histogram_quantile(0.99, sum(rate(tikv_cdc_old_value_duration_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
-=======
-              "expr": "sum(tikv_cdc_scan_bytes_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", job=\"tikv\"}) by (instance)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "histogram_quantile(0.99, sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-99%-{{tag}}",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(tikv_cdc_old_value_duration_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
+              "expr": "histogram_quantile(0.95, sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-95%-{{tag}}",
               "refId": "B"
             },
             {
-              "expr": "sum(rate(tikv_cdc_old_value_duration_sum{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag) / sum(rate(tikv_cdc_old_value_duration_count{tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag)",
+              "expr": "sum(rate(tikv_cdc_old_value_duration_sum{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag) / sum(rate(tikv_cdc_old_value_duration_count{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-avg-{{tag}}",
@@ -11747,45 +11570,12 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
               "exemplar": true,
               "expr": "sum without (from) (rate(ticdc_message_server_message_count{instance=~\"$capture\"}[30s]))",
               "interval": "",
               "legendFormat": "{{instance}}",
               "queryType": "randomWalk",
               "refId": "A"
-=======
-              "expr": "(sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance) - sum(rate(tikv_cdc_old_value_cache_miss{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)) / sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "hit-rate-{{instance}}",
-              "refId": "A"
-            },
-            {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_access{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": true,
-              "intervalFactor": 1,
-              "legendFormat": "access-{{instance}}",
-              "refId": "B"
-            },
-            {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "miss-{{instance}}",
-              "refId": "C"
-            },
-            {
-              "expr": "-sum(rate(tikv_cdc_old_value_cache_miss_none{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "miss-none-{{instance}}",
-              "refId": "D"
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
             }
           ],
           "thresholds": [],
@@ -11875,37 +11665,12 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
               "exemplar": true,
               "expr": "sum without (to) (rate(ticdc_message_client_message_count{instance=~\"$capture\"}[30s]))",
               "interval": "",
               "legendFormat": "{{instance}}",
               "queryType": "randomWalk",
               "refId": "A"
-=======
-              "expr": "sum(tikv_cdc_old_value_cache_length{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-len",
-              "refId": "A"
-            },
-            {
-              "expr": "sum(tikv_cdc_old_value_cache_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance) / sum(tikv_cdc_old_value_cache_length{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-avg entry bytes",
-              "refId": "B"
-            },
-            {
-              "expr": "sum(tikv_cdc_old_value_cache_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}) by (instance)",
-              "format": "time_series",
-              "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-quota",
-              "refId": "C"
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
             }
           ],
           "thresholds": [],
@@ -11997,7 +11762,6 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
               "exemplar": true,
               "expr": "histogram_quantile(0.5, sum(rate(ticdc_message_server_message_batch_size_bucket[30s])) by (le))",
               "interval": "",
@@ -12008,10 +11772,6 @@
             {
               "exemplar": true,
               "expr": "histogram_quantile(0.95, sum(rate(ticdc_message_server_message_batch_size_bucket[30s])) by (le))",
-=======
-              "expr": "sum(rate(tikv_cdc_old_value_scan_details{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (instance, cf, tag)",
-              "format": "time_series",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
               "hide": false,
               "interval": "",
               "legendFormat": "p90",
@@ -12116,7 +11876,6 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
               "exemplar": true,
               "expr": "histogram_quantile(0.5, sum(rate(ticdc_message_server_message_batch_bytes_bucket [30s])) by (le))",
               "hide": false,
@@ -12130,13 +11889,6 @@
               "interval": "",
               "legendFormat": "p95",
               "queryType": "randomWalk",
-=======
-              "expr": "sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-              "intervalFactor": 2,
-              "legendFormat": "{{le}}",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
               "refId": "A"
             },
             {
@@ -12164,115 +11916,6 @@
             "mode": "time",
             "name": null,
             "show": true,
-<<<<<<< HEAD
-=======
-            "showHistogram": true
-          },
-          "tooltipDecimals": 1,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "xBucketNumber": null,
-          "xBucketSize": null,
-          "yAxis": {
-            "decimals": 1,
-            "format": "s",
-            "logBase": 1,
-            "max": null,
-            "min": null,
-            "show": true,
-            "splitFactor": null
-          },
-          "yBucketBound": "upper",
-          "yBucketNumber": null,
-          "yBucketSize": null
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "decimals": 1,
-          "description": "",
-          "fill": 1,
-          "gridPos": {
-            "h": 7,
-            "w": 6,
-            "x": 18,
-            "y": 49
-          },
-          "id": 142,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "hideEmpty": false,
-            "hideZero": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-99%-{{tag}}",
-              "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(tikv_cdc_old_value_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-95%-{{tag}}",
-              "refId": "B"
-            },
-            {
-              "expr": "sum(rate(tikv_cdc_old_value_duration_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag) / sum(rate(tikv_cdc_old_value_duration_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (le, instance, tag)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-avg-{{tag}}",
-              "refId": "C"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Old value seek duration",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
             "values": []
           },
           "yaxes": [
@@ -12533,8 +12176,6 @@
                   "instance": "dest\\src"
                 }
               }
-<<<<<<< HEAD
-=======
             }
           ],
           "type": "table"
@@ -12594,455 +12235,11 @@
             },
             {
               "exemplar": true,
-              "expr": "2 * count(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}) - 1",
+              "expr": "2 * count(process_start_time_seconds{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}) - 1",
               "hide": false,
               "interval": "",
               "legendFormat": "expected",
               "refId": "B"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Total Stream Count",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        }
-      ],
-      "title": "Peer Messages",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 10
-      },
-      "id": 403,
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "CPU usage of TiCDC actors",
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 10
-          },
-          "hiddenSeries": false,
-          "id": 418,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "hideEmpty": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "dataLinks": []
-          },
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "repeat": null,
-          "repeatDirection": "h",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
-            }
-          },
-          "seriesOverrides": [
-            {
-              "alias": "alloc-from-os",
-              "fill": 3,
-              "lines": true,
-              "stack": false
-            },
-            {
-              "alias": "gc-threshold",
-              "bars": false,
-              "color": "#C4162A",
-              "lines": true,
-              "linewidth": 2,
-              "stack": false
-            },
-            {
-              "alias": "gc",
-              "bars": false,
-              "color": "#C4162A",
-              "hideTooltip": true,
-              "legend": false,
-              "pointradius": 3,
-              "points": true,
-              "stack": false
-            }
-          ],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(ticdc_actor_worker_cpu_seconds_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}[1m])) by (instance, name)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{name}}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "CPU usage",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "percentunit",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of workers for actor systems",
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 10
-          },
-          "hiddenSeries": false,
-          "id": 421,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "hideEmpty": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "dataLinks": []
-          },
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "repeat": null,
-          "repeatDirection": "h",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
-            }
-          },
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{name}}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Worker count",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": "0",
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "cards": {
-            "cardPadding": 0,
-            "cardRound": 0
-          },
-          "color": {
-            "cardColor": "#FF9830",
-            "colorScale": "linear",
-            "colorScheme": "interpolateSpectral",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The time of slow polling actors (> 100 ms)",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 17
-          },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 414,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": true,
-            "show": true,
-            "sort": "current",
-            "sortDesc": true,
-            "total": false,
-            "values": true
-          },
-          "links": [],
-          "maxPerRow": 3,
-          "repeatDirection": "h",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_actor_slow_poll_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}[1m])) by (le)",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "intervalFactor": 2,
-              "legendFormat": "{{le}}",
-              "refId": "A"
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 8,
-            "w": 4,
-            "x": 20,
-            "y": 15
-          },
-          "hiddenSeries": false,
-          "id": 358,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.7",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-<<<<<<< HEAD
-              "exemplar": true,
-              "expr": "sum(ticdc_message_server_cur_stream_count)",
-              "interval": "",
-              "legendFormat": "actual",
-              "queryType": "randomWalk",
-              "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "2 * count(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}) - 1",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "expected",
-              "refId": "B"
-=======
-              "expr": "histogram_quantile(0.80, sum(rate(ticdc_actor_slow_poll_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}[1m])) by (le,name)) < 5",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{name}}-p80",
-              "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_actor_slow_poll_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}[1m])) by (le,name)) < 5",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{name}}-p99",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(ticdc_actor_slow_poll_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\"}[1m])) by (le,name)) >= 5",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "slow-{{name}}-p99",
-              "refId": "C"
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
             }
           ],
           "thresholds": [],
@@ -13188,11 +12385,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "process_resident_memory_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
-=======
-              "expr": "sum(ticdc_actor_batch_size_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=\"msg\"}) by (name) / sum(ticdc_actor_poll_loop_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=~\"actor\"}) by (name)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "process_resident_memory_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13200,7 +12393,7 @@
               "refId": "A"
             },
             {
-              "expr": "go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
+              "expr": "go_memstats_next_gc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13208,7 +12401,7 @@
               "refId": "H"
             },
             {
-              "expr": "go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
+              "expr": "go_memstats_heap_alloc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_next_gc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / (1 + ticdc_server_go_gc{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} / 100)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13216,7 +12409,7 @@
               "refId": "C"
             },
             {
-              "expr": "go_memstats_heap_idle_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_released_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_heap_inuse_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "expr": "go_memstats_heap_idle_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_released_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_heap_inuse_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13224,7 +12417,7 @@
               "refId": "B"
             },
             {
-              "expr": "go_memstats_stack_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mspan_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mcache_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_buck_hash_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_gc_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_other_sys_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "expr": "go_memstats_stack_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mspan_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_mcache_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_buck_hash_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_gc_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} + go_memstats_other_sys_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13232,7 +12425,7 @@
               "refId": "D"
             },
             {
-              "expr": "go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
+              "expr": "go_memstats_next_gc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13240,7 +12433,7 @@
               "refId": "E"
             },
             {
-              "expr": "(clamp_max(idelta(go_memstats_last_gc_time_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[1m]), 1) * go_memstats_next_gc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}) > 0",
+              "expr": "(clamp_max(idelta(go_memstats_last_gc_time_seconds{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[1m]), 1) * go_memstats_next_gc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}) > 0",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13353,11 +12546,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "go_memstats_heap_objects{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
-=======
-              "expr": "sum(ticdc_actor_batch_size_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=\"proc\"}) by (name) / sum(ticdc_actor_poll_loop_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=\"system\"}) by (name)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "go_memstats_heap_objects{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
@@ -13466,11 +12655,7 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"0\"}",
-=======
-              "expr": "sum(rate(ticdc_actor_poll_loop_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=\"actor\"}[1m])) by (name)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "go_gc_duration_seconds{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"0\"}",
               "format": "time_series",
               "hide": false,
               "instant": false,
@@ -13480,7 +12665,7 @@
               "step": 40
             },
             {
-              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile!~\"0|1\"}",
+              "expr": "go_gc_duration_seconds{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile!~\"0|1\"}",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 1,
@@ -13488,7 +12673,7 @@
               "refId": "B"
             },
             {
-              "expr": "go_gc_duration_seconds{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"1\"}",
+              "expr": "go_gc_duration_seconds{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\", quantile=\"1\"}",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 1,
@@ -13604,32 +12789,28 @@
           "steppedLine": false,
           "targets": [
             {
-<<<<<<< HEAD
-              "expr": "irate(go_memstats_alloc_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
-=======
-              "expr": "sum(rate(ticdc_actor_poll_loop_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", name=~\"$actor_name\", type=\"system\"}[1m])) by (name)",
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
+              "expr": "irate(go_memstats_alloc_bytes_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "alloc",
               "refId": "A"
             },
             {
-              "expr": "irate((go_memstats_alloc_bytes_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"})[30s:])",
+              "expr": "irate((go_memstats_alloc_bytes_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"} - go_memstats_heap_alloc_bytes{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"})[30s:])",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "sweep",
               "refId": "B"
             },
             {
-              "expr": "irate(go_memstats_mallocs_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
+              "expr": "irate(go_memstats_mallocs_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "alloc-ops",
               "refId": "C"
             },
             {
-              "expr": "irate(go_memstats_frees_total{tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
+              "expr": "irate(go_memstats_frees_total{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$runtime_instance\"}[30s])",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "swepp-ops",
@@ -16015,31 +15196,6 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
-<<<<<<< HEAD
-=======
-      },
-      {
-        "allValue": null,
-        "current": {},
-        "datasource": "${DS_TEST-CLUSTER}",
-        "definition": "label_values(ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, name)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Actor",
-        "multi": true,
-        "name": "actor_name",
-        "options": [],
-        "query": "label_values(ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, name)",
-        "refresh": 2,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
->>>>>>> d073614ab (metrics: support multi-k8s in grafana dashboards (#4658))
       }
     ]
   },
