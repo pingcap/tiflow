@@ -31,7 +31,7 @@ A simple solution is to simply check whether the DDLs are the same, just as what
 
 ### Comparison based on the schema before and after DDL execution
 
-Instead of considering specific DDLs, this approach determines whether all the sharding tables have been reconciled based on the comparison of the schema before and after the DDL execution.
+Instead of considering specific DDLs, this approach determines whether all the sharding tables have been optimistic compatible based on the comparison of the schema before and after the DDL execution.
 
 #### Consistency condition for sharding tables
 
