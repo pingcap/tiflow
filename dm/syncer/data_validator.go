@@ -228,6 +228,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 
+	v.L.Info("starting")
 	if v.stage == pb.Stage_Running {
 		v.L.Info("already started")
 		return
@@ -252,6 +253,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	go v.errorProcessRoutine()
 
 	v.stage = pb.Stage_Running
+	v.L.Info("started")
 }
 
 func (v *DataValidator) printStatusRoutine() {
@@ -334,12 +336,14 @@ func (v *DataValidator) waitSyncerRunning() error {
 	if v.syncer.IsRunning() {
 		return nil
 	}
+	v.L.Info("wait until syncer running")
 	for {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
 			if v.syncer.IsRunning() {
+				v.L.Info("syncer is running, wait finished")
 				return nil
 			}
 		}
@@ -377,7 +381,6 @@ func (v *DataValidator) doValidate() {
 		}
 	}
 
-	v.L.Info("start continuous validation")
 	v.startValidateWorkers()
 	defer func() {
 		for _, worker := range v.workers {
@@ -445,6 +448,7 @@ func (v *DataValidator) Stop() {
 func (v *DataValidator) stopInner() {
 	v.Lock()
 	defer v.Unlock()
+	v.L.Info("stopping")
 	if v.stage != pb.Stage_Running {
 		v.L.Warn("not started")
 		return
@@ -460,6 +464,7 @@ func (v *DataValidator) stopInner() {
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
 
 	v.stage = pb.Stage_Stopped
+	v.L.Info("stopped")
 }
 
 func (v *DataValidator) Started() bool {

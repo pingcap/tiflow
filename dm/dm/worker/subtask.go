@@ -556,6 +556,10 @@ func (st *SubTask) Close() {
 	}
 	st.closeUnits() // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	// we can start/stop validator independent of task, so we don't set st.validator = nil inside
+	st.StopValidator()
+	st.validator = nil
 }
 
 // Kill kill running unit and stop the sub task.
@@ -572,6 +576,7 @@ func (st *SubTask) Kill() {
 	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
 
 	st.StopValidator()
+	st.validator = nil
 }
 
 // Pause pauses a running sub task or a sub task paused by error.
