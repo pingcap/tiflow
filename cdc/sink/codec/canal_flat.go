@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -77,6 +78,9 @@ type canalFlatMessageInterface interface {
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
+	mqMessageType() model.MqMessageType
+	eventType() canal.EventType
+	pkNameSet() map[string]struct{}
 }
 
 // adapted from https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java#L1
@@ -146,6 +150,30 @@ func (c *canalFlatMessage) getMySQLType() map[string]string {
 
 func (c *canalFlatMessage) getJavaSQLType() map[string]int32 {
 	return c.SQLType
+}
+
+func (c *canalFlatMessage) mqMessageType() model.MqMessageType {
+	if c.IsDDL {
+		return model.MqMessageTypeDDL
+	}
+
+	if c.EventType == tidbWaterMarkType {
+		return model.MqMessageTypeResolved
+	}
+
+	return model.MqMessageTypeRow
+}
+
+func (c *canalFlatMessage) eventType() canal.EventType {
+	return canal.EventType(canal.EventType_value[c.EventType])
+}
+
+func (c *canalFlatMessage) pkNameSet() map[string]struct{} {
+	result := make(map[string]struct{}, len(c.PKNames))
+	for _, item := range c.PKNames {
+		result[item] = struct{}{}
+	}
+	return result
 }
 
 type tidbExtension struct {
@@ -358,11 +386,12 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 // CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
 	data                []byte
-	msg                 *MQMessage
+	msg                 canalFlatMessageInterface
 	enableTiDBExtension bool
 }
 
-func newCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
+// NewCanalFlatEventBatchDecoder return a decoder for canal-json
+func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventBatchDecoder {
 	return &CanalFlatEventBatchDecoder{
 		data:                data,
 		msg:                 nil,
@@ -375,71 +404,69 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	if len(b.data) == 0 {
 		return model.MqMessageTypeUnknown, false, nil
 	}
-	msg := &MQMessage{}
+	var msg canalFlatMessageInterface = &canalFlatMessage{}
+	if b.enableTiDBExtension {
+		msg = &canalFlatMessageWithTiDBExtension{
+			canalFlatMessage: &canalFlatMessage{},
+			Extensions:       &tidbExtension{},
+		}
+	}
 	if err := json.Unmarshal(b.data, msg); err != nil {
+		log.Error("canal-json decoder unmarshal data failed",
+			zap.Error(err), zap.ByteString("data", b.data))
 		return model.MqMessageTypeUnknown, false, err
 	}
 	b.msg = msg
 	b.data = nil
-	if b.msg.Type == model.MqMessageTypeUnknown {
-		return model.MqMessageTypeUnknown, false, nil
-	}
-	return b.msg.Type, true, nil
+
+	return b.msg.mqMessageType(), true, nil
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.msg == nil || b.msg.Type != model.MqMessageTypeRow {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found row changed event message")
+	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeRow {
+		return nil, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("not found row changed event message")
 	}
-
-	var data canalFlatMessageInterface = &canalFlatMessage{}
-	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
-	}
-
-	if err := json.Unmarshal(b.msg.Value, data); err != nil {
-		return nil, errors.Trace(err)
+	result, err := canalFlatMessage2RowChangedEvent(b.msg)
+	if err != nil {
+		return nil, err
 	}
 	b.msg = nil
-	return canalFlatMessage2RowChangedEvent(data)
+	return result, nil
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.msg == nil || b.msg.Type != model.MqMessageTypeDDL {
-		return nil, cerrors.ErrCanalDecodeFailed.GenWithStack("not found ddl event message")
+	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeDDL {
+		return nil, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("not found ddl event message")
 	}
 
-	var data canalFlatMessageInterface = &canalFlatMessage{}
-	if b.enableTiDBExtension {
-		data = &canalFlatMessageWithTiDBExtension{canalFlatMessage: &canalFlatMessage{}, Extensions: &tidbExtension{}}
-	}
-
-	if err := json.Unmarshal(b.msg.Value, data); err != nil {
-		return nil, errors.Trace(err)
-	}
+	result := canalFlatMessage2DDLEvent(b.msg)
 	b.msg = nil
-	return canalFlatMessage2DDLEvent(data), nil
+	return result, nil
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
-	if b.msg == nil || b.msg.Type != model.MqMessageTypeResolved {
-		return 0, cerrors.ErrCanalDecodeFailed.GenWithStack("not found resolved event message")
+	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeResolved {
+		return 0, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("not found resolved event message")
 	}
 
-	message := &canalFlatMessageWithTiDBExtension{
-		canalFlatMessage: &canalFlatMessage{},
-	}
-	if err := json.Unmarshal(b.msg.Value, message); err != nil {
-		return 0, errors.Trace(err)
+	withExtensionEvent, ok := b.msg.(*canalFlatMessageWithTiDBExtension)
+	if !ok {
+		log.Error("canal-json resolved event message should have tidb extension, but not found",
+			zap.Any("msg", b.msg))
+		return 0, cerrors.ErrCanalDecodeFailed.
+			GenWithStack("MqMessageTypeResolved tidb extension not found")
 	}
 	b.msg = nil
-	return message.Extensions.WatermarkTs, nil
+	return withExtensionEvent.Extensions.WatermarkTs, nil
 }
 
 func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*model.RowChangedEvent, error) {
@@ -450,15 +477,37 @@ func canalFlatMessage2RowChangedEvent(flatMessage canalFlatMessageInterface) (*m
 		Table:  *flatMessage.getTable(),
 	}
 
+	mysqlType := flatMessage.getMySQLType()
+	javaSQLType := flatMessage.getJavaSQLType()
+
 	var err error
-	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
+	if flatMessage.eventType() == canal.EventType_DELETE {
+		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(
+			flatMessage.getData(), mysqlType, javaSQLType)
+		// canal-json encoder does not encode `Flag` information into the result,
+		// we have to set the `Flag` to make it can be handled by MySQL Sink.
+		// see https://github.com/pingcap/tiflow/blob/7bfce98/cdc/sink/mysql.go#L869-L888
+		result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
+		return result, err
+	}
+
+	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
+	result.Columns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getData(),
+		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
 	}
-	result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(), flatMessage.getMySQLType(), flatMessage.getJavaSQLType())
-	if err != nil {
-		return nil, err
+
+	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
+	if flatMessage.eventType() == canal.EventType_UPDATE {
+		result.PreColumns, err = canalFlatJSONColumnMap2SinkColumns(flatMessage.getOld(),
+			mysqlType, javaSQLType)
+		if err != nil {
+			return nil, err
+		}
 	}
+	result.WithHandlePrimaryFlag(flatMessage.pkNameSet())
 
 	return result, nil
 }
@@ -504,5 +553,22 @@ func canalFlatMessage2DDLEvent(flatDDL canalFlatMessageInterface) *model.DDLEven
 	// we lost DDL type from canal flat json format, only got the DDL SQL.
 	result.Query = flatDDL.getQuery()
 
+	// hack the DDL Type to be compatible with MySQL sink's logic
+	// see https://github.com/pingcap/tiflow/blob/0578db337d/cdc/sink/mysql.go#L362-L370
+	result.Type = getDDLActionType(result.Query)
 	return result
+}
+
+// return DDL ActionType by the prefix
+// see https://github.com/pingcap/tidb/blob/6dbf2de2f/parser/model/ddl.go#L101-L102
+func getDDLActionType(query string) timodel.ActionType {
+	query = strings.ToLower(query)
+	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
+		return timodel.ActionCreateSchema
+	}
+	if strings.HasPrefix(query, "drop schema") || strings.HasPrefix(query, "drop database") {
+		return timodel.ActionDropSchema
+	}
+
+	return timodel.ActionNone
 }
