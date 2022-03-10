@@ -150,7 +150,7 @@ func newSourceTableSchemaUpdateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("flush", true, "flush the table info and checkpoint immediately")
-	cmd.Flags().Bool("sync", false, "sync the table info to master to resolve shard ddl lock, only for optimistic mode now")
+	cmd.Flags().Bool("sync", true, "sync the table info to master to resolve shard ddl lock, only for optimistic mode now")
 	cmd.Flags().Bool("from-source", false, "use the schema from upstream database as the schema of the specified tables")
 	cmd.Flags().Bool("from-target", false, "use the schema from downstream database as the schema of the specified tables")
 	return cmd
