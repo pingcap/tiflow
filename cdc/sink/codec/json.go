@@ -102,6 +102,15 @@ func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model
 		log.Panic("canal-json encoded message should have type in `string`")
 	}
 
+	if javaType == JavaSQLTypeBIT {
+		val, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
+		}
+		col.Value = val
+		return col
+	}
+
 	if javaType != JavaSQLTypeBLOB {
 		col.Value = value
 		return col
