@@ -370,17 +370,17 @@ function DM_INJECT_DML_ERROR_CASE() {
 
 function DM_INJECT_ERROR() {
 	# inject at ddl
-	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
+	run_case INJECT_DDL_ERROR "single-source-no-sharding2" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
 		"clean_table" ""
 	# inject at dml
-	run_case INJECT_DML_ERROR "single-source-no-sharding" \
+	run_case INJECT_DML_ERROR "single-source-no-sharding2" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b varchar(10));\"" \
 		"clean_table" ""
 }
 
 function DM_LIST_ERROR_CASE() {
-	run_sql_source1 "insert into ${db}.${tb1} values(1，1);"
+	run_sql_source1 "insert into ${db}.${tb1} values(1, 1);"
 	run_sql_source1 "alter table ${db}.${tb1} add column c int default 100; alter table ${db}.${tb1} add primary key (c)"
 	run_sql_source1 "alter table ${db}.${tb1} modify c varchar(10);"
 	run_sql_source1 "alter table ${db}.${tb1} modify c varchar(20);"
@@ -391,7 +391,7 @@ function DM_LIST_ERROR_CASE() {
 		"Unsupported modify column: this column has primary key flag" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog test" \
+		"binlog list test" \
 		"\"msg\": \"\[\]\"" 1
 
 	first_pos1=$(get_start_pos 127.0.0.1:$MASTER_PORT $source1)
@@ -427,13 +427,13 @@ function DM_LIST_ERROR_CASE() {
 		"binlog skip test" \
 		"\"result\": true" 2
 
-	run_sql_source1 "insert into ${db}.${tb1} values(1,1,2.2);"
+	run_sql_source1 "insert into ${db}.${tb1} values(2,1,2.2);"
 
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb} where c = 2.2;" "count(1): 1"
 }
 
 function DM_LIST_ERROR() {
-	run_case INJECT_DDL_ERROR "single-source-no-sharding" \
+	run_case LIST_ERROR "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"" \
 		"clean_table" ""
 }
