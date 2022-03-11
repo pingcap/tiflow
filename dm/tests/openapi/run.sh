@@ -312,9 +312,6 @@ function test_complex_operations_of_source_and_task() {
 	openapi_source_check "create_source2_success"
 	openapi_source_check "list_source_success" 2
 
-	# test update source enable GTID
-	openapi_source_check "update_source1_success"
-
 	# create and check task
 	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -536,9 +533,6 @@ function run() {
 	# run dm-worker2
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	test_complex_operations_of_source_and_task
-	exit 1
 
 	test_relay
 	test_source

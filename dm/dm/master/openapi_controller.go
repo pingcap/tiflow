@@ -106,6 +106,17 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 	if err := s.scheduler.UpdateSourceCfg(newCfg); err != nil {
 		return nil, err
 	}
+	// when enable filed updated, we need operate task on this source
+	if worker := s.scheduler.GetWorkerBySource(sourceName); worker != nil && newCfg.Enable != oldCfg.Enable {
+		stage := pb.Stage_Running
+		taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName, nil)
+		if !newCfg.Enable {
+			stage = pb.Stage_Paused
+		}
+		if err := s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, stage, false); err != nil {
+			return nil, err
+		}
+	}
 	return &req.Source, nil
 }
 

@@ -1301,15 +1301,21 @@ func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error 
 	if err != nil {
 		return terror.Annotate(err, "fail to get subtask config from etcd")
 	}
-	var subTaskCfg config.SubTaskConfig
+
+	var cfg config.SubTaskConfig
 	var ok bool
-	if subTaskCfg, ok = tsm[taskName]; !ok {
+	if cfg, ok = tsm[taskName]; !ok {
 		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
 	}
-	if checkErr := subTask.CheckUnitCfgCanUpdate(&subTaskCfg); checkErr != nil {
+
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(&cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		return err
+	}
+	if checkErr := subTask.CheckUnitCfgCanUpdate(&cfg); checkErr != nil {
 		return checkErr
 	}
-	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
+	return w.UpdateSubTask(w.ctx, &cfg, false)
 }
 
 // CheckCfgCanUpdated check if current subtask config can be updated.
@@ -1317,13 +1323,13 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	w.RLock()
 	defer w.RUnlock()
 
-	st := w.subTaskHolder.findSubTask(cfg.Name)
-	if st == nil {
+	subTask := w.subTaskHolder.findSubTask(cfg.Name)
+	if subTask == nil {
 		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
 	}
 	// copy some config item from dm-worker's source config
 	if err := copyConfigFromSource(cfg, w.cfg, w.relayEnabled.Load()); err != nil {
 		return err
 	}
-	return st.CheckUnitCfgCanUpdate(cfg)
+	return subTask.CheckUnitCfgCanUpdate(cfg)
 }

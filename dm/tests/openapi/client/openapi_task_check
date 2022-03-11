@@ -514,7 +514,7 @@ def do_complex_operations(task_name):
     for s in status["data"]:
         assert s["stage"] == "Running"
 
-    # disable source1, task on source is paused
+    # disable source1, subtask on source is paused
     resp = requests.post(disable_source_url)
     if resp.status_code != 200:
         print("disable source failed", resp.json())
@@ -525,6 +525,14 @@ def do_complex_operations(task_name):
             assert s["stage"] == "Paused"
         else:
             assert s["stage"] == "Running"
+
+    # update source1 success
+    source["enable_gtid"] = True
+    source["password"] = "123456"
+    resp = requests.put(source1_url, json=update_source_req)
+    if resp.status_code != 200:
+        print("update source failed", resp.json())
+    assert resp.status_code == 200
 
     # enable source task will start again
     resp = requests.post(enable_source_url)
