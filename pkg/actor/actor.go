@@ -43,11 +43,12 @@ type Actor interface {
 	// memory allocation.
 	Poll(ctx context.Context, msgs []message.Message) (running bool)
 
-	// Close is called after Poll returns false,
+	// OnClose is called after Poll returns false,
 	// or actor system is stopping and all message has been received.
+	// An actor should release its resources during OnClose.
 	//
-	// Close must be idempotent and nonblocking.
-	Close()
+	// OnClose must be idempotent and nonblocking.
+	OnClose()
 }
 
 // Mailbox sends messages to an actor.

@@ -112,7 +112,7 @@ func (p *proc) onMailboxEmpty() {
 	// MailboxClosed -> Close
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateMailboxClosed), uint64(procStateClosed)) {
-		p.actor.Close()
+		p.actor.OnClose()
 	}
 }
 
@@ -122,12 +122,12 @@ func (p *proc) onActorClosed() {
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateRunning), uint64(procStateClosed)) {
 		p.mb.close()
-		p.actor.Close()
+		p.actor.OnClose()
 		return
 	}
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateMailboxClosed), uint64(procStateClosed)) {
-		p.actor.Close()
+		p.actor.OnClose()
 	}
 }
 
@@ -608,7 +608,7 @@ func (s *System) poll(ctx context.Context, id int) {
 
 				// Drop all remaining messages.
 				if remainMsgCount != 0 {
-					// TODO: we may need to releaes resources hold by messages.
+					// TODO: we may need to release resources hold by messages.
 					rd.metricDropMessage.Add(float64(remainMsgCount))
 				}
 			}

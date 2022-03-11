@@ -128,7 +128,7 @@ func (f *forwardActor) Poll(ctx sdtContext.Context, msgs []message.Message) bool
 	return true
 }
 
-func (f *forwardActor) Close() {}
+func (f *forwardActor) OnClose() {}
 
 func wait(t *testing.T, timeout time.Duration, f func()) {
 	wait := make(chan int)

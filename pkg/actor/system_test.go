@@ -188,7 +188,7 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
-func (f *forwardActor) Close() {}
+func (f *forwardActor) OnClose() {}
 
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
@@ -392,7 +392,7 @@ func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
-func (f *flipflopActor) Close() {}
+func (f *flipflopActor) OnClose() {}
 
 // An actor can only be polled by one goroutine at the same time.
 func TestConcurrentPollSameActor(t *testing.T) {
@@ -445,7 +445,7 @@ func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return false
 }
 
-func (c *closedActor) Close() {}
+func (c *closedActor) OnClose() {}
 
 func TestPollStoppedActor(t *testing.T) {
 	ctx := context.Background()
@@ -526,7 +526,7 @@ func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return false
 }
 
-func (c *slowActor) Close() {}
+func (c *slowActor) OnClose() {}
 
 // Test router send during actor poll and before close.
 //
@@ -662,7 +662,7 @@ func (s *stopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
-func (s *stopActor) Close() {
+func (s *stopActor) OnClose() {
 	atomic.AddInt64(s.wait, 1)
 }
 

@@ -161,7 +161,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 // Close implements Actor interface.
 // TODO: implements table actor stop here.
-func (t *tableActor) Close() {
+func (t *tableActor) OnClose() {
 }
 
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
