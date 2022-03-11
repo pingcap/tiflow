@@ -38,9 +38,6 @@ func (t *testConfigSuite) SetUpSuite(c *check.C) {
 	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
 }
 
-func (t *testConfigSuite) TearDownSuite(c *check.C) {
-}
-
 func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
 	// test print sample config
 	out := capturer.CaptureStdout(func() {

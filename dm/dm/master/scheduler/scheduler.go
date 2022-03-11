@@ -420,7 +420,7 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	if err != nil {
 		return err
 	}
-	// 4. record the config in the scheduler.
+	// 5. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	return nil
 }
