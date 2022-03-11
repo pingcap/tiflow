@@ -1111,7 +1111,7 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 	var (
 		logger           = log.L()
 		o                = NewOptimist(&logger, getDownstreamMeta)
-		task             = "task"
+		task             = "task-build-lock-joined-and-table"
 		source1          = "mysql-replica-1"
 		source2          = "mysql-replica-2"
 		downSchema       = "db"
@@ -1160,7 +1160,7 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 	var (
 		logger     = log.L()
 		o          = NewOptimist(&logger, getDownstreamMeta)
-		task       = "task"
+		task       = "task-lock-with-init-schema"
 		source1    = "mysql-replica-1"
 		source2    = "mysql-replica-2"
 		downSchema = "db"
