@@ -109,12 +109,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
-	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
+	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
+		util.ChangefeedIDFromCtx(ctx), util.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
+				lockResolver, p, eventCh)
 		})
 	}
 
@@ -178,16 +180,28 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			var e model.RegionFeedEvent
 			select {
-			case e = <-eventCh:
+<<<<<<< HEAD
+=======
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
+			case <-metricsTicker.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				continue
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+			case e = <-eventCh:
 			}
+
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
-			} else if e.Resolved != nil {
+				continue
+			}
+
+			if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
