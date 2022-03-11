@@ -118,7 +118,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockResolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
+				lockResolver, p, eventCh)
 		})
 	}
 

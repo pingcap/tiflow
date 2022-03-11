@@ -187,7 +187,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}
 	}
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -197,7 +197,9 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
@@ -277,7 +279,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
 	}
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -287,7 +289,9 @@ func prepareBench(b *testing.B, regionNum int) (
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			100, false, lockResolver, isPullInit, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
