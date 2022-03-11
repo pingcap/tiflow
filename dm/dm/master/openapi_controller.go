@@ -68,7 +68,7 @@ func (s *Server) updateSource(ctx context.Context, cfg *config.SourceConfig) err
 // nolint:unparam
 func (s *Server) deleteSource(ctx context.Context, sourceName string, force bool) error {
 	if force {
-		for _, taskName := range s.scheduler.GetTaskNameListBySourceName(sourceName) {
+		for _, taskName := range s.scheduler.GetTaskNameListBySourceName(sourceName, nil) {
 			if err := s.scheduler.RemoveSubTasks(taskName, sourceName); err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func (s *Server) enableSource(ctx context.Context, sourceName, workerName string
 	if worker == nil {
 		return terror.ErrWorkerNoStart
 	}
-	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName)
+	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName, nil)
 	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Running, true)
 }
 
@@ -119,7 +119,7 @@ func (s *Server) disableSource(ctx context.Context, sourceName string) error {
 		// no need to stop task if the source is not running
 		return nil
 	}
-	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName)
+	taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName, nil)
 	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Stopped, true)
 }
 
