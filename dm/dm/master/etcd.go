@@ -22,7 +22,7 @@ import (
 	"time"
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 

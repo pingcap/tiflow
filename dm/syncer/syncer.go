@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -39,12 +38,11 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	common2 "github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -60,6 +58,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -90,7 +89,7 @@ var (
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
 	maxDMLExecutionDuration     = 30 * time.Second
 
-	maxPauseOrStopWaitTime = 10 * time.Second
+	defaultMaxPauseOrStopWaitTime = 10 * time.Second
 
 	adminQueueName     = "admin queue"
 	defaultBucketCount = 8
@@ -176,7 +175,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed atomic.Bool
+	closed  atomic.Bool
+	running atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -239,6 +239,9 @@ type Syncer struct {
 	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
 	lastCheckpointFlushedTime time.Time
 
+	firstMeetBinlogTS *int64
+	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
+
 	locations *locationRecorder
 
 	relay                      relay.Process
@@ -259,6 +262,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
+	syncer.running.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -287,6 +291,20 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
 	return syncer
+}
+
+func (s *Syncer) refreshCliArgs() {
+	if s.cli == nil {
+		// for dummy syncer in ut
+		return
+	}
+	cliArgs, err := ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
+	if err != nil {
+		s.tctx.L().Error("failed to get task cli args", zap.Error(err))
+	}
+	s.Lock()
+	s.cliArgs = cliArgs
+	s.Unlock()
 }
 
 func (s *Syncer) newJobChans() {
@@ -422,6 +440,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-checkpoint", Fn: s.checkpoint.Close})
 
 	err = s.checkpoint.Load(tctx)
@@ -579,6 +598,8 @@ func (s *Syncer) reset() {
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
+	s.firstMeetBinlogTS = nil
+	s.exitSafeModeTS = nil
 	switch s.cfg.ShardMode {
 	case config.ShardPessimistic:
 		// every time start to re-sync from resume, we reset status to make it like a fresh syncing
@@ -676,6 +697,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		defer wg.Done()
 		<-newCtx.Done() // ctx or newCtx
 	}()
+
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	err := s.Run(newCtx)
 	if err != nil {
@@ -863,6 +887,7 @@ func (s *Syncer) updateReplicationLagMetric() {
 	if minTS != int64(0) {
 		lag = s.calcReplicationLag(minTS)
 	}
+
 	metrics.ReplicationLagHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Observe(float64(lag))
 	metrics.ReplicationLagGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(lag))
 	s.secondsBehindMaster.Store(lag)
@@ -877,11 +902,6 @@ func (s *Syncer) updateReplicationLagMetric() {
 	// reset skip job TS in case of skip job TS is never updated
 	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
 		s.workerJobTSArray[skipJobIdx].Store(0)
-	}
-
-	// reset ddl job TS in case of ddl job TS is never updated
-	if minTS == s.workerJobTSArray[ddlJobIdx].Load() {
-		s.workerJobTSArray[ddlJobIdx].Store(0)
 	}
 }
 
@@ -900,11 +920,12 @@ func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 
 // only used in tests.
 var (
-	lastLocation    binlog.Location
-	lastLocationNum int
-	waitJobsDone    bool
-	failExecuteSQL  bool
-	failOnce        atomic.Bool
+	lastLocationForTest              binlog.Location
+	lastLocationNumForTest           int
+	waitJobsDoneForTest              bool
+	failExecuteSQLForTest            bool
+	failOnceForTest                  atomic.Bool
+	waitBeforeRunExitDurationForTest time.Duration
 )
 
 // TODO: move to syncer/job.go
@@ -914,41 +935,41 @@ var (
 func (s *Syncer) addJob(job *job) {
 	failpoint.Inject("countJobFromOneEvent", func() {
 		if job.tp == dml {
-			if job.currentLocation.Position.Compare(lastLocation.Position) == 0 {
-				lastLocationNum++
+			if job.currentLocation.Position.Compare(lastLocationForTest.Position) == 0 {
+				lastLocationNumForTest++
 			} else {
-				lastLocation = job.currentLocation
-				lastLocationNum = 1
+				lastLocationForTest = job.currentLocation
+				lastLocationNumForTest = 1
 			}
 			// trigger a flush after see one job
-			if lastLocationNum == 1 {
-				waitJobsDone = true
-				s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 1 {
+				waitJobsDoneForTest = true
+				s.tctx.L().Info("meet the first job of an event", zap.Any("binlog position", lastLocationForTest))
 			}
 			// mock a execution error after see two jobs.
-			if lastLocationNum == 2 {
-				failExecuteSQL = true
-				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 2 {
+				failExecuteSQLForTest = true
+				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
 	})
 	failpoint.Inject("countJobFromOneGTID", func() {
 		if job.tp == dml {
-			if binlog.CompareLocation(job.currentLocation, lastLocation, true) == 0 {
-				lastLocationNum++
+			if binlog.CompareLocation(job.currentLocation, lastLocationForTest, true) == 0 {
+				lastLocationNumForTest++
 			} else {
-				lastLocation = job.currentLocation
-				lastLocationNum = 1
+				lastLocationForTest = job.currentLocation
+				lastLocationNumForTest = 1
 			}
 			// trigger a flush after see one job
-			if lastLocationNum == 1 {
-				waitJobsDone = true
-				s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 1 {
+				waitJobsDoneForTest = true
+				s.tctx.L().Info("meet the first job of a GTID", zap.Any("binlog position", lastLocationForTest))
 			}
 			// mock a execution error after see two jobs.
-			if lastLocationNum == 2 {
-				failExecuteSQL = true
-				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocation))
+			if lastLocationNumForTest == 2 {
+				failExecuteSQLForTest = true
+				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
 	})
@@ -1059,9 +1080,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 			// nolint:nilerr
 			return
 		}
-
-		s.updateReplicationJobTS(job, ddlJobIdx)
-
+		s.updateReplicationJobTS(nil, ddlJobIdx) // clear ddl job ts because this ddl is already done.
 		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
 			utils.OsExit(1)
@@ -1154,7 +1173,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Debug("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1190,7 +1209,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Debug("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -1256,14 +1275,16 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 
 	s.logAndClearFilteredStatistics()
 
-	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" && s.cli != nil {
 		clone := *s.cliArgs
 		clone.StartTime = ""
 		err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone)
 		if err2 != nil {
 			s.tctx.L().Error("failed to clean start-time in task cli args", zap.Error(err2))
 		} else {
+			s.Lock()
 			s.cliArgs.StartTime = ""
+			s.Unlock()
 		}
 	}
 	return nil
@@ -1291,6 +1312,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		if !ok {
 			return
 		}
+		// add this ddl ts beacause we start to exec this ddl.
+		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
 		failpoint.Inject("BlockDDLJob", func(v failpoint.Value) {
 			t := v.(int) // sleep time
@@ -1450,12 +1473,12 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 	defer s.runWg.Done()
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
-		maxPauseOrStopWaitTime = time.Minute * 10
+		defaultMaxPauseOrStopWaitTime = time.Minute * 10
 	})
-
 	select {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")
+		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
@@ -1466,11 +1489,30 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		}
 		s.waitXIDJob.Store(int64(waiting))
 		s.waitTransactionLock.Unlock()
+		s.refreshCliArgs()
+
+		waitDuration := defaultMaxPauseOrStopWaitTime
+		if s.cliArgs != nil && s.cliArgs.WaitTimeOnStop != "" {
+			waitDuration, _ = time.ParseDuration(s.cliArgs.WaitTimeOnStop)
+		}
+		prepareForWaitTime := time.Since(needToExitTime)
+		failpoint.Inject("recordAndIgnorePrepareTime", func() {
+			prepareForWaitTime = time.Duration(0)
+		})
+		waitDuration -= prepareForWaitTime
+		failpoint.Inject("recordAndIgnorePrepareTime", func() {
+			waitBeforeRunExitDurationForTest = waitDuration
+		})
+		if waitDuration.Seconds() <= 0 {
+			s.tctx.L().Info("wait transaction end timeout, exit now")
+			s.runCancel()
+			return
+		}
+
 		select {
 		case <-s.runCtx.Ctx.Done():
 			s.tctx.L().Info("syncer run exit so runCtx done")
-		case <-time.After(maxPauseOrStopWaitTime):
-			// TODO: maxPauseOrStopWaitTime should also count the time of waiting waitTransactionLock
+		case <-time.After(waitDuration):
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
 		}
@@ -1554,26 +1596,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	// task command line arguments have the highest priority
-	// dm-syncer and other usage may not have a etcdCli, so we check it first
 	skipLoadMeta := false
-	if s.cli != nil {
-		s.cliArgs, err = ha.GetTaskCliArgs(s.cli, s.cfg.Name, s.cfg.SourceID)
-		if err != nil {
-			s.tctx.L().Error("failed to get task cli args", zap.Error(err))
+	s.refreshCliArgs()
+	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
+		err = s.setGlobalPointByTime(s.runCtx, s.cliArgs.StartTime)
+		if terror.ErrConfigStartTimeTooLate.Equal(err) {
+			return err
 		}
-		if s.cliArgs != nil && s.cliArgs.StartTime != "" {
-			err = s.setGlobalPointByTime(s.runCtx, s.cliArgs.StartTime)
-			if terror.ErrConfigStartTimeTooLate.Equal(err) {
-				return err
-			}
-			skipLoadMeta = err == nil
-		}
+		skipLoadMeta = err == nil
 	}
 
 	// some initialization that can't be put in Syncer.Init
 	if fresh && !skipLoadMeta {
 		// for fresh task, we try to load checkpoints from meta (file or config item)
-		err = s.checkpoint.LoadMeta()
+		err = s.checkpoint.LoadMeta(runCtx)
 		if err != nil {
 			return err
 		}
@@ -1630,9 +1666,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
+
+	failpoint.Inject("S3GetDumpFilesCheck", func() {
+		cleanDumpFile = false
+	})
+
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = os.RemoveAll(s.cfg.Dir); err != nil {
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
 			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
@@ -1919,7 +1960,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		})
 		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
-			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnce.CAS(false, true) {
+			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnceForTest.CAS(false, true) {
 				err = errors.New("failpoint triggered")
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
@@ -2123,6 +2164,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 
+		// set exitSafeModeTS when meet first binlog
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
+				return checkErr
+			}
+		}
+		// check if need to exit safe mode by binlog header TS
+		if s.exitSafeModeTS != nil && !s.isReplacingOrInjectingErr && shardingReSync == nil {
+			if checkErr := s.checkAndExitSafeModeByBinlogTS(s.runCtx, int64(e.Header.Timestamp)); checkErr != nil {
+				return checkErr
+			}
+		}
 		ec := eventContext{
 			tctx:                s.runCtx,
 			header:              e.Header,
@@ -2225,6 +2278,42 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return nil
 		}
 	}
+}
+
+func (s *Syncer) initSafeModeExitTS(firstBinlogTS int64) error {
+	// see more in https://github.com/pingcap/tiflow/pull/4601#discussion_r814446628
+	duration, err := time.ParseDuration(s.cliArgs.SafeModeDuration)
+	if err != nil {
+		return err
+	}
+	s.firstMeetBinlogTS = &firstBinlogTS
+	exitTS := firstBinlogTS + int64(duration.Seconds())
+	s.exitSafeModeTS = &exitTS
+	s.tctx.L().Info("safe-mode will disable by task cli args", zap.Int64("ts", exitTS))
+	return nil
+}
+
+func (s *Syncer) checkAndExitSafeModeByBinlogTS(ctx *tcontext.Context, ts int64) error {
+	if s.exitSafeModeTS != nil && ts > *s.exitSafeModeTS {
+		if err := s.safeMode.Add(ctx, -1); err != nil {
+			return err
+		}
+		s.exitSafeModeTS = nil
+		if !s.safeMode.Enable() {
+			s.tctx.L().Info("safe-mode disable by task cli args", zap.Int64("ts in binlog", ts))
+		}
+		// delete cliArgs in etcd
+		clone := *s.cliArgs
+		clone.SafeModeDuration = ""
+		if err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone); err2 != nil {
+			s.tctx.L().Error("failed to clean safe-mode-duration in task cli args", zap.Error(err2))
+		} else {
+			s.Lock()
+			s.cliArgs.SafeModeDuration = ""
+			s.Unlock()
+		}
+	}
+	return nil
 }
 
 type eventContext struct {
@@ -2486,9 +2575,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 	}
 
 	failpoint.Inject("flushFirstJob", func() {
-		if waitJobsDone {
+		if waitJobsDoneForTest {
 			s.tctx.L().Info("trigger flushFirstJob")
-			waitJobsDone = false
+			waitJobsDoneForTest = false
 
 			err2 := s.flushJobs()
 			if err2 != nil {
@@ -3305,10 +3394,12 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-
-	files, err := utils.CollectDirFiles(s.cfg.Dir)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
+		failpoint.Inject("S3GetDumpFilesCheck", func() {
+			panic(errors.Annotate(err, "fail to get dump files"))
+		})
 		return err
 	}
 	var dbs, tables []string
@@ -3346,12 +3437,12 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		filepath := path.Join(s.cfg.Dir, file)
-		content, err2 := common2.GetFileContent(filepath)
+		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("file", filepath),
+				zap.String("path", s.cfg.LoaderConfig.Dir),
+				zap.String("file", file),
 				zap.Error(err))
 			setFirstErr(err2)
 			continue
@@ -3365,7 +3456,8 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			err = s.schemaTracker.Exec(ctx, db, string(stmt))
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
-					zap.Any("file", filepath),
+					zap.Any("path", s.cfg.LoaderConfig.Dir),
+					zap.Any("file", file),
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)
@@ -3499,6 +3591,10 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
+func (s *Syncer) IsRunning() bool {
+	return s.running.Load()
+}
+
 func (s *Syncer) isClosed() bool {
 	return s.closed.Load()
 }
@@ -3524,6 +3620,7 @@ func (s *Syncer) Close() {
 	// when closing syncer by `stop-task`, remove active relay log from hub
 	s.removeActiveRelayLog()
 	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
+
 	s.runWg.Wait()
 	s.closed.Store(true)
 }
@@ -3593,10 +3690,42 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+// CheckCanUpdateCfg check if task config can be updated.
+// 1. task must not in a pessimistic ddl state.
+// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
+	s.RLock()
+	defer s.RUnlock()
+	// can't update when in sharding merge
+	if s.cfg.ShardMode == config.ShardPessimistic {
+		_, tables := s.sgk.UnresolvedTables()
+		if len(tables) > 0 {
+			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
+		}
+	}
+
+	oldCfg, err := s.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	oldCfg.BAList = newCfg.BAList
+	oldCfg.BWList = newCfg.BWList
+	oldCfg.RouteRules = newCfg.RouteRules
+	oldCfg.FilterRules = newCfg.FilterRules
+	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+	if oldCfg.String() != newCfg.String() {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+	}
+	return nil
+}
+
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+	s.Lock()
+	defer s.Unlock()
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3688,6 +3817,8 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		s.timezone, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
 		return err
 	}
+	// update syncer config
+	s.cfg.SyncerConfig = cfg.SyncerConfig
 	return nil
 }
 
@@ -3851,6 +3982,9 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 
 // delLoadTask is called when finish restoring data, to delete load worker in etcd.
 func (s *Syncer) delLoadTask() error {
+	if s.cli == nil {
+		return nil
+	}
 	_, _, err := ha.DelLoadTask(s.cli, s.cfg.Name, s.cfg.SourceID)
 	if err != nil {
 		return err

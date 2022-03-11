@@ -27,7 +27,7 @@ func TestSystemStartStop(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	sys := NewSystem(t.TempDir(), cfg)
+	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
 	require.Nil(t, sys.Stop())
 
@@ -42,7 +42,7 @@ func TestSystemStopUnstarted(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	sys := NewSystem(t.TempDir(), cfg)
+	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Stop())
 }
 
@@ -52,22 +52,22 @@ func TestCollectMetrics(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 2
 
-	sys := NewSystem(t.TempDir(), cfg)
+	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	collectMetrics(sys.dbs, "")
+	collectMetrics(sys.dbs)
 	require.Nil(t, sys.Stop())
 }
 
-func TestActorID(t *testing.T) {
+func TestDBActorID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 2
 
-	sys := NewSystem(t.TempDir(), cfg)
+	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	id1 := sys.ActorID(1)
-	id2 := sys.ActorID(1)
+	id1 := sys.DBActorID(1)
+	id2 := sys.DBActorID(1)
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
 	require.Nil(t, sys.Stop())

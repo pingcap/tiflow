@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -146,7 +146,6 @@ type Scheduler struct {
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
 	lastBound map[string]ha.SourceBound
 
-	// TODO: seems this memory status is useless.
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
 	// - bound the source to a worker (at first time).
@@ -394,7 +393,6 @@ func (s *Scheduler) addSource(cfg *config.SourceConfig) error {
 }
 
 // UpdateSourceCfg update the upstream source config to the cluster.
-// please verify the config before call this.
 func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -409,12 +407,13 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(cfg.SourceID)
 	}
 	// 2. check if tasks using this configuration are running
-	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID); len(tasks) > 0 {
-		return terror.ErrSchedulerSourceOpTaskExist.Generate(cfg.SourceID, tasks)
+	runningStage := pb.Stage_Running
+	if tasks := s.GetTaskNameListBySourceName(cfg.SourceID, &runningStage); len(tasks) > 0 {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
-	// 3. check this cfg is ok to update.
-	if !checkSourceCfgCanUpdated(s.sourceCfgs[cfg.SourceID], cfg) {
-		return terror.ErrSchedulerSourceCfgUpdate.Generate()
+	// 3. check if this source is enable relay
+	if _, ok := s.expectRelayStages[cfg.SourceID]; ok {
+		return terror.ErrSchedulerSourceCfgUpdate.Generate(cfg.SourceID)
 	}
 	// 4. put the config into etcd.
 	_, err := ha.PutSourceCfg(s.etcdCli, cfg)
@@ -424,15 +423,6 @@ func (s *Scheduler) UpdateSourceCfg(cfg *config.SourceConfig) error {
 	// 5. record the config in the scheduler.
 	s.sourceCfgs[cfg.SourceID] = cfg
 	return nil
-}
-
-// currently the source cfg can only update relay-log related parts.
-func checkSourceCfgCanUpdated(oldCfg, newCfg *config.SourceConfig) bool {
-	newCfgClone := newCfg.Clone()
-	newCfgClone.RelayBinLogName = oldCfg.RelayBinLogName
-	newCfgClone.RelayBinlogGTID = oldCfg.RelayBinlogGTID
-	newCfgClone.RelayDir = oldCfg.RelayDir
-	return newCfgClone.String() == oldCfg.String()
 }
 
 // RemoveSourceCfg removes the upstream source config in the cluster.
@@ -738,14 +728,14 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 			}
 		}
 		// pause running tasks
-		if batchPauseErr := s.batchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
+		if batchPauseErr := s.BatchOperateTaskOnWorker(ctx, oldWorker, runningTasks, source, pb.Stage_Paused, true); batchPauseErr != nil {
 			return batchPauseErr
 		}
 		// we need resume tasks that we just paused, we use another goroutine to do this because if error happens
 		// just logging this message and let user handle it manually
 		defer func() {
 			go func() {
-				if err := s.batchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
+				if err := s.BatchOperateTaskOnWorker(context.Background(), w, runningTasks, source, pb.Stage_Running, false); err != nil {
 					s.logger.Warn(
 						"auto resume task failed", zap.Any("tasks", runningTasks),
 						zap.String("source", source), zap.String("worker", worker), zap.Error(err))
@@ -779,8 +769,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	return nil
 }
 
-// batchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
-func (s *Scheduler) batchOperateTaskOnWorker(
+// BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
+func (s *Scheduler) BatchOperateTaskOnWorker(
 	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
@@ -847,7 +837,7 @@ func (s *Scheduler) AcquireSubtaskLatch(name string) (ReleaseFunc, error) {
 // AddSubTasks adds the information of one or more subtasks for one task.
 // use s.mu.RLock() to protect s.bound, and s.subtaskLatch to protect subtask related members.
 // setting `latched` to true means caller has acquired latch.
-func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) error {
+func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...config.SubTaskConfig) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -915,7 +905,7 @@ func (s *Scheduler) AddSubTasks(latched bool, cfgs ...config.SubTaskConfig) erro
 			continue
 		}
 		newCfgs = append(newCfgs, cfg)
-		newStages = append(newStages, ha.NewSubTaskStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
+		newStages = append(newStages, ha.NewSubTaskStage(expectStage, cfg.SourceID, cfg.Name))
 		if cfg.ValidatorCfg.Mode != config.ValidationNone {
 			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
 		}
@@ -1039,6 +1029,71 @@ func (s *Scheduler) RemoveSubTasks(task string, sources ...string) error {
 	return nil
 }
 
+// UpdateSubTasks update the information of one or more subtasks for one task.
+func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+	if len(cfgs) == 0 {
+		return nil // no subtasks need to add, this should not happen.
+	}
+	taskNamesM := make(map[string]struct{}, 1)
+	for _, cfg := range cfgs {
+		taskNamesM[cfg.Name] = struct{}{}
+	}
+	if len(taskNamesM) > 1 {
+		// only subtasks from one task supported now.
+		return terror.ErrSchedulerMultiTask.Generate(strMapToSlice(taskNamesM))
+	}
+	// check whether exists.
+	cfg := cfgs[0]
+	v, ok := s.subTaskCfgs.Load(cfg.Name)
+	if !ok {
+		return terror.ErrSchedulerTaskNotExist.Generate(cfg.Name)
+	}
+	cfgM := v.(map[string]config.SubTaskConfig)
+	for _, cfg := range cfgs {
+		_, ok = cfgM[cfg.SourceID]
+		if !ok {
+			return terror.ErrSchedulerSubTaskNotExist.Generate(cfg.Name, cfg.SourceID)
+		}
+	}
+	// check whether in running stage
+	stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
+	if stage.Expect == pb.Stage_Running {
+		return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
+	}
+
+	// check by workers todo batch
+	for _, cfg := range cfgs {
+		worker := s.bounds[cfg.SourceID]
+		if worker == nil {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("this source: %s have not bound to worker", cfg.SourceID)
+		}
+		resp, err := worker.checkSubtasksCanUpdate(ctx, &cfg)
+		if err != nil {
+			return err
+		}
+		if !resp.CheckSubtasksCanUpdate.Success {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generatef("can not update because %s", resp.CheckSubtasksCanUpdate.Msg)
+		}
+	}
+	// put the configs and stages into etcd.
+	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
+	if err != nil {
+		return err
+	}
+	// record the config
+	for _, cfg := range cfgs {
+		v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+		m := v.(map[string]config.SubTaskConfig)
+		m[cfg.SourceID] = cfg
+	}
+	return nil
+}
+
 // getSubTaskCfgByTaskSource gets subtask config by task name and source ID. Only used in tests.
 func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTaskConfig {
 	v, ok := s.subTaskCfgs.Load(task)
@@ -1144,12 +1199,18 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 }
 
 // GetTaskNameListBySourceName gets task name list by source name.
-func (s *Scheduler) GetTaskNameListBySourceName(sourceName string) []string {
+func (s *Scheduler) GetTaskNameListBySourceName(sourceName string, expectStage *pb.Stage) []string {
 	var taskNameList []string
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
+		subtaskM := v.(map[string]ha.Stage)
+		subtaskStage, ok2 := subtaskM[sourceName]
+		if !ok2 {
+			return true
+		}
 		task := k.(string)
-		subtaskCfgMap := v.(map[string]config.SubTaskConfig)
-		if _, ok := subtaskCfgMap[sourceName]; ok {
+		if expectStage == nil {
+			taskNameList = append(taskNameList, task)
+		} else if subtaskStage.Expect == *expectStage {
 			taskNameList = append(taskNameList, task)
 		}
 		return true
@@ -1490,11 +1551,9 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 func (s *Scheduler) GetRelayWorkers(source string) ([]*Worker, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	if !s.started.Load() {
 		return nil, terror.ErrSchedulerNotStarted.Generate()
 	}
-
 	workers := s.relayWorkers[source]
 	ret := make([]*Worker, 0, len(workers))
 	for w := range workers {
@@ -1596,37 +1655,37 @@ func (s *Scheduler) GetExpectRelayStage(source string) ha.Stage {
 
 // UpdateExpectSubTaskStage updates the current expect subtask stage.
 // now, only support updates:
-// - from `Running` to `Paused`.
-// - from `Paused` to `Running`.
+// - from `Running` to `Paused/Stopped`.
+// - from `Paused/Stopped` to `Running`.
 // NOTE: from `Running` to `Running` and `Paused` to `Paused` still update the data in etcd,
 // because some user may want to update `{Running, Paused, ...}` to `{Running, Running, ...}`.
 // so, this should be also supported in DM-worker.
-func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sources ...string) error {
+func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, taskName string, sources ...string) error {
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
 
-	if task == "" || len(sources) == 0 {
+	if taskName == "" || len(sources) == 0 {
 		return nil // no subtask need to update, this should not happen.
 	}
 
 	// 1. check the new expectant stage.
 	switch newStage {
-	case pb.Stage_Running, pb.Stage_Paused:
+	case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
 	default:
 		return terror.ErrSchedulerSubTaskStageInvalidUpdate.Generate(newStage)
 	}
 
-	release, err := s.subtaskLatch.tryAcquire(task)
+	release, err := s.subtaskLatch.tryAcquire(taskName)
 	if err != nil {
-		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", task)
+		return terror.ErrSchedulerLatchInUse.Generate("UpdateExpectSubTaskStage", taskName)
 	}
 	defer release()
 
 	// 2. check the task exists.
-	v, ok := s.expectSubTaskStages.Load(task)
+	v, ok := s.expectSubTaskStages.Load(taskName)
 	if !ok {
-		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(task)
+		return terror.ErrSchedulerSubTaskOpTaskNotExist.Generate(taskName)
 	}
 
 	var (
@@ -1641,7 +1700,7 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sou
 		} else {
 			currStagesM[currStage.Expect.String()] = struct{}{}
 		}
-		stages = append(stages, ha.NewSubTaskStage(newStage, source, task))
+		stages = append(stages, ha.NewSubTaskStage(newStage, source, taskName))
 	}
 	notExistSources := strMapToSlice(notExistSourcesM)
 	currStages := strMapToSlice(currStagesM)
@@ -1670,7 +1729,6 @@ func (s *Scheduler) UpdateExpectSubTaskStage(newStage pb.Stage, task string, sou
 
 // GetExpectSubTaskStage returns the current expect subtask stage.
 // If the stage not exists, an invalid stage is returned.
-// This func is used for testing.
 func (s *Scheduler) GetExpectSubTaskStage(task, source string) ha.Stage {
 	invalidStage := ha.NewSubTaskStage(pb.Stage_InvalidStage, source, task)
 
@@ -2661,4 +2719,66 @@ func (s *Scheduler) handleLoadTask(ctx context.Context, loadTaskCh <-chan ha.Loa
 			}
 		}
 	}
+}
+
+func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[string]map[string]config.SubTaskConfig) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.started.Load() {
+		return terror.ErrSchedulerNotStarted.Generate()
+	}
+	for taskName := range stCfgs {
+		release, err := s.subtaskLatch.tryAcquire(taskName)
+		if err != nil {
+			return terror.Annotatef(err, "fail to require lock for validation task")
+		}
+		defer release()
+	}
+
+	// 1. get stages of subtask's validator and update stage
+	newCfgs := make([]config.SubTaskConfig, 0)
+	validatorStages := make([]ha.Stage, 0)
+	for taskName := range stCfgs {
+		for _, cfg := range stCfgs[taskName] {
+			stageM, _, err := ha.GetValidatorStage(s.etcdCli, cfg.SourceID, cfg.Name, 0)
+			if err != nil {
+				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
+			}
+			if v, ok := stageM[cfg.Name]; ok && v.Expect == expectStage {
+				s.logger.Info(
+					"validator stage is already in expected stage",
+					zap.String("expectStage", expectStage.String()),
+					zap.String("taskName", cfg.Name),
+					zap.String("source", cfg.SourceID),
+				)
+			} else {
+				if expectStage == pb.Stage_Running {
+					// don't need to update config if stopping the validator task
+					newCfgs = append(newCfgs, cfg)
+				}
+				validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
+			}
+		}
+	}
+	// 2. setting subtask stage in etcd
+	if len(newCfgs) > 0 || len(validatorStages) > 0 {
+		_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
+		if err != nil {
+			return terror.Annotate(err, "fail to set new validator stage")
+		}
+	}
+	// 3. cache validator stage
+	for _, stage := range validatorStages {
+		v, _ := s.expectValidatorStages.LoadOrStore(stage.Task, map[string]ha.Stage{})
+		m := v.(map[string]ha.Stage)
+		m[stage.Source] = stage
+	}
+	if expectStage == pb.Stage_Running {
+		for _, cfg := range newCfgs {
+			v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+			m := v.(map[string]config.SubTaskConfig)
+			m[cfg.SourceID] = cfg
+		}
+	}
+	return nil
 }

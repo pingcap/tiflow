@@ -17,26 +17,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	txnCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "txn_count",
-			Help:      "txn count received/executed by this processor",
-		}, []string{"type", "changefeed", "capture"})
-	tableMemoryHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "table_memory_consumption",
-			Help:      "estimated memory consumption for a table after the sorter",
-			Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
-		}, []string{"changefeed", "capture"})
-)
+var tableMemoryHistogram = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "processor",
+		Name:      "table_memory_consumption",
+		Help:      "estimated memory consumption for a table after the sorter",
+		Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
+	}, []string{"changefeed"})
 
 // InitMetrics registers all metrics used in processor
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(txnCounter)
 	registry.MustRegister(tableMemoryHistogram)
 }

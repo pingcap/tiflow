@@ -67,7 +67,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -76,7 +76,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -95,7 +95,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -104,7 +104,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -243,10 +243,7 @@ func (s *sorterSuite) TestSortDirConfigChangeFeed(c *check.C) {
 	config.GetGlobalServerConfig().Sorter.SortDir = ""
 
 	_, err := NewUnifiedSorter(dir, /* the changefeed setting */
-		"test-cf",
-		"test",
-		0,
-		"0.0.0.0:0")
+		"test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	poolMu.Lock()
@@ -268,7 +265,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      0, // disable memory sort
+		MaxMemoryPercentage:    0, // disable memory sort
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -293,7 +290,7 @@ func (s *sorterSuite) TestSorterCancelRestart(c *check.C) {
 	}()
 
 	for i := 0; i < 5; i++ {
-		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 		c.Assert(err, check.IsNil)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err = testSorter(ctx, c, sorter, 100000000)
@@ -312,7 +309,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -321,7 +318,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -358,7 +355,7 @@ func (s *sorterSuite) TestSorterIOError(c *check.C) {
 	}()
 
 	// recreate the sorter
-	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	finishedCh = make(chan struct{})
@@ -389,7 +386,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   0,
 		NumWorkerPoolGoroutine: 4,
 		SortDir:                sortDir,
@@ -398,7 +395,7 @@ func (s *sorterSuite) TestSorterErrorReportCorrect(c *check.C) {
 
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	c.Assert(err, check.IsNil)
-	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0, "0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir, "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -436,11 +433,7 @@ func (s *sorterSuite) TestSortClosedAddEntry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer CleanUp()
 
-	sorter, err := NewUnifiedSorter(c.MkDir(),
-		"test-cf",
-		"test",
-		0,
-		"0.0.0.0:0")
+	sorter, err := NewUnifiedSorter(c.MkDir(), "test-cf", "test", 0)
 	c.Assert(err, check.IsNil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
@@ -467,12 +460,11 @@ func (s *sorterSuite) TestUnifiedSorterFileLockConflict(c *check.C) {
 	defer CleanUp()
 
 	dir := c.MkDir()
-	captureAddr := "0.0.0.0:0"
-	_, err := newBackEndPool(dir, captureAddr)
+	_, err := newBackEndPool(dir)
 	c.Assert(err, check.IsNil)
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
-	_, err = NewUnifiedSorter(dir, "test-cf", "test", 0, captureAddr)
+	_, err = NewUnifiedSorter(dir, "test-cf", "test", 0)
 	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
 }

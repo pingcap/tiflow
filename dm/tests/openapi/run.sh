@@ -424,7 +424,6 @@ function test_noshard_task_dump_status() {
 	check_port_offline $WORKER2_PORT 20
 
 	openapi_task_check "get_task_status_success_but_worker_meet_error" "$task_name" 2
-	clean_cluster_sources_and_tasks
 
 	export GO_FAILPOINTS=""
 	kill_dm_worker
@@ -437,6 +436,8 @@ function test_noshard_task_dump_status() {
 	# run dm-worker2
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	openapi_source_check "list_source_success" 2
+	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
 }
 
