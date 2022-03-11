@@ -156,6 +156,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	if err != nil && errors.Cause(err) != sarama.ErrTopicAlreadyExists {
 		log.Error(
 			"Kafka admin client create the topic failed",
+			zap.String("topic", topicName),
 			zap.Int32("partitionNumber", m.cfg.PartitionNum),
 			zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
 			zap.Error(err),
@@ -165,6 +166,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	}
 	log.Info(
 		"Kafka admin client create the topic success",
+		zap.String("topic", topicName),
 		zap.Int32("partitionNumber", m.cfg.PartitionNum),
 		zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
 		zap.Duration("cost", time.Since(start)),
