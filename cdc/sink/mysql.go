@@ -600,6 +600,8 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
+// convert2RowChange is a helper function that convert the row change representation
+// of CDC into a general one. In future we may directly let CDC use general representation.
 func convert2RowChange(row *model.RowChangedEvent) *sqlmodel.RowChange {
 	preValues := make([]interface{}, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
