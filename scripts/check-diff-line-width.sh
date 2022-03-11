@@ -22,18 +22,18 @@ BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 
 fail=0
 for filename in $(git diff --name-only); do
-  # only check files under cdc and pkg folder
-  if [[ $filename != cdc* ]] && [[ $filename != pkg* ]]; then
-    continue
-  fi
-  # only check go source files
-  if [[ $filename != *.go ]] || [[ $filename == _test.go ]]; then
-    continue
-  fi
-  git --no-pager diff $BASE_HASH -U0 -- $filename |
-  	grep -E '^\+' | grep -vE '^\+\+\+' |
-  	sed 's/\t/    /g' |
-  	awk '
+	# only check files under cdc and pkg folder
+	if [[ $filename != cdc* ]] && [[ $filename != pkg* ]]; then
+		continue
+	fi
+	# only check go source files
+	if [[ $filename != *.go ]] || [[ $filename == _test.go ]]; then
+		continue
+	fi
+	git --no-pager diff $BASE_HASH -U0 -- $filename |
+		grep -E '^\+' | grep -vE '^\+\+\+' |
+		sed 's/\t/    /g' |
+		awk '
   {
       # Minus 1 for +
       width = length($0) - 1;
