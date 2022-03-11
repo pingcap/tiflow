@@ -19,35 +19,87 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
+	"github.com/pingcap/tiflow/cdc/verification"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
-// SyncpointTableName is the name of table where all syncpoint maps sit
-const syncpointTableName string = "syncpoint_v1"
+// syncpointTableName is the name of table where all syncpoint maps sit
+const (
+	syncpointDatabaseName string = "tidb_cdc"
+	syncpointTableName    string = "syncpoint_v1"
+)
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
 }
 
 // newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
+func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL, sourceURI *url.URL, interval time.Duration, filter *filter.Filter) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
 	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
-		return nil, errors.New("can create mysql sink with unsupported scheme")
+	sinkDSNStr, err := generateDSNStr(ctx, id, sinkURI, "sink")
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+	syncDB, err = sql.Open("mysql", sinkDSNStr)
+	if err != nil {
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+	}
+	err = syncDB.PingContext(ctx)
+	if err != nil {
+		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+	}
+
+	syncpointStore := &mysqlSyncpointStore{
+		db: syncDB,
+	}
+	sourceDSNStr, err := generateDSNStr(ctx, id, sourceURI, "source")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// TODO; support mysql later
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme == "tidb" || scheme == "tidb+ssl" {
+		cfg := verification.Config{
+			// delay the verification in case syncpoint not started immediately
+			CheckInterval: interval + time.Second,
+			UpstreamDSN:   sourceDSNStr,
+			DownStreamDSN: sinkDSNStr,
+			Filter:        filter,
+			DataBaseName:  syncpointDatabaseName,
+			TableName:     syncpointTableName,
+			ChangefeedID:  id,
+		}
+		err = verification.NewVerification(ctx, &cfg)
+		if err != nil {
+			log.Warn("Start verification fail", zap.Error(err))
+			return nil, err
+		}
+	}
+	log.Info("Start mysql syncpoint sink")
+
+	return syncpointStore, nil
+}
+
+func generateDSNStr(ctx context.Context, id string, uri *url.URL, dsnType string) (string, error) {
+	scheme := strings.ToLower(uri.Scheme)
+	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
+		return "", errors.New("can create mysql sink with unsupported scheme")
+	}
+
 	params := defaultParams.Clone()
-	s := sinkURI.Query().Get("tidb-txn-mode")
+	s := uri.Query().Get("tidb-txn-mode")
 	if s != "" {
 		if s == "pessimistic" || s == "optimistic" {
 			params.tidbTxnMode = s
@@ -56,25 +108,25 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		}
 	}
 	var tlsParam string
-	if sinkURI.Query().Get("ssl-ca") != "" {
+	if uri.Query().Get("ssl-ca") != "" {
 		credential := security.Credential{
-			CAPath:   sinkURI.Query().Get("ssl-ca"),
-			CertPath: sinkURI.Query().Get("ssl-cert"),
-			KeyPath:  sinkURI.Query().Get("ssl-key"),
+			CAPath:   uri.Query().Get("ssl-ca"),
+			CertPath: uri.Query().Get("ssl-cert"),
+			KeyPath:  uri.Query().Get("ssl-key"),
 		}
 		tlsCfg, err := credential.ToTLSConfig()
 		if err != nil {
-			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+			return "", cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
-		name := "cdc_mysql_tls" + "syncpoint" + id
+		name := fmt.Sprintf("cdc_mysql_tls_syncpoint_%s_%s", id, dsnType)
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
-			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+			return "", cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
 		tlsParam = "?tls=" + name
 	}
-	if _, ok := sinkURI.Query()["time-zone"]; ok {
-		s = sinkURI.Query().Get("time-zone")
+	if _, ok := uri.Query()["time-zone"]; ok {
+		s = uri.Query().Get("time-zone")
 		if s == "" {
 			params.timezone = ""
 		} else {
@@ -87,9 +139,9 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
+	username := uri.User.Username()
+	password, _ := uri.User.Password()
+	port := uri.Port()
 	if username == "" {
 		username = "root"
 	}
@@ -97,10 +149,10 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, uri.Hostname(), port, tlsParam)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 
 	// create test db used for parameter detection
@@ -109,32 +161,19 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection when configuring sink")
+		return "", cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack(fmt.Sprintf("fail to open MySQL connection when configuring %s", dsnType))
 	}
 	defer testDB.Close()
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	syncDB, err = sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-	err = syncDB.PingContext(ctx)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+		return "", errors.Trace(err)
 	}
 
-	log.Info("Start mysql syncpoint sink")
-	syncpointStore := &mysqlSyncpointStore{
-		db: syncDB,
-	}
-
-	return syncpointStore, nil
+	return dsnStr, nil
 }
 
 func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
-	database := mark.SchemaName
+	database := syncpointDatabaseName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -156,7 +195,8 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
+	// TODO: gc, ttl for tidb, partition table for mysql
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18), result int, PRIMARY KEY ( `cf`, `primary_ts` ) )")
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -185,7 +225,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("insert ignore into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	_, err = tx.Exec("insert ignore into "+syncpointDatabaseName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts, result) VALUES (?,?,?,?)", id, checkpointTs, secondaryTs, 0)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {

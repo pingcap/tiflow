@@ -157,9 +157,8 @@ function run() {
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sync-point --sync-interval=10s
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sync-point --sync-interval=10s --sync-point-upstream-dsn="tidb://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/"
 
 	goSql
 
