@@ -3572,10 +3572,42 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+// CheckCanUpdateCfg check if task config can be updated.
+// 1. task must not in a pessimistic ddl state.
+// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
+	s.RLock()
+	defer s.RUnlock()
+	// can't update when in sharding merge
+	if s.cfg.ShardMode == config.ShardPessimistic {
+		_, tables := s.sgk.UnresolvedTables()
+		if len(tables) > 0 {
+			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
+		}
+	}
+
+	oldCfg, err := s.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	oldCfg.BAList = newCfg.BAList
+	oldCfg.BWList = newCfg.BWList
+	oldCfg.RouteRules = newCfg.RouteRules
+	oldCfg.FilterRules = newCfg.FilterRules
+	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+	if oldCfg.String() != newCfg.String() {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+	}
+	return nil
+}
+
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+	s.Lock()
+	defer s.Unlock()
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3667,6 +3699,8 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		s.timezone, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
 		return err
 	}
+	// update syncer config
+	s.cfg.SyncerConfig = cfg.SyncerConfig
 	return nil
 }
 
