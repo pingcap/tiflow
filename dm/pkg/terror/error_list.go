@@ -590,6 +590,7 @@ const (
 	codeWorkerWaitRelayCatchupGTID
 	codeWorkerRelayConfigChanging
 	codeWorkerRouteTableDupMatch
+	codeWorkerUpdateSubTaskConfig
 )
 
 // DM-tracer error code.
@@ -664,6 +665,8 @@ const (
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
 	codeSchedulerWorkerNotFree
+	codeSchedulerSubTaskNotExist
+	codeSchedulerSubTaskCfgUpdate
 )
 
 // dmctl error code.
@@ -1239,6 +1242,7 @@ var (
 	ErrWorkerAlreadyStart            = New(codeWorkerAlreadyStarted, ClassDMWorker, ScopeInternal, LevelHigh, "mysql source worker %s has already started with source %s, but get a request with source %s", "Please try restart this DM-worker")
 	ErrWorkerSourceNotMatch          = New(codeWorkerSourceNotMatch, ClassDMWorker, ScopeInternal, LevelHigh, "source of request does not match with source in worker", "")
 	ErrWorkerWaitRelayCatchupGTID    = New(codeWorkerWaitRelayCatchupGTID, ClassDMWorker, ScopeInternal, LevelHigh, "cannot compare gtid between loader and relay, loader gtid: %s, relay gtid: %s", "")
+	ErrWorkerUpdateSubTaskConfig     = New(codeWorkerUpdateSubTaskConfig, ClassDMWorker, ScopeInternal, LevelHigh, "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s", "")
 
 	ErrWorkerFailToGetSubtaskConfigFromEtcd = New(codeWorkerFailToGetSubtaskConfigFromEtcd, ClassDMWorker, ScopeInternal, LevelMedium, "there is no relative subtask config for task %s in etcd", "")
 	ErrWorkerFailToGetSourceConfigFromEtcd  = New(codeWorkerFailToGetSourceConfigFromEtcd, ClassDMWorker, ScopeInternal, LevelMedium, "there is no relative source config for source %s in etcd", "")
@@ -1307,17 +1311,19 @@ var (
 	ErrSchedulerRelayStageSourceNotExist     = New(codeSchedulerRelayStageSourceNotExist, ClassScheduler, ScopeInternal, LevelMedium, "sources %v need to update expectant relay stage not exist", "")
 	ErrSchedulerMultiTask                    = New(codeSchedulerMultiTask, ClassScheduler, ScopeInternal, LevelMedium, "the scheduler cannot perform multiple different tasks %v in one operation", "")
 	ErrSchedulerSubTaskExist                 = New(codeSchedulerSubTaskExist, ClassScheduler, ScopeInternal, LevelMedium, "subtasks with name %s for sources %v already exist", "Please use `query-status` command to see tasks.")
+	ErrSchedulerSubTaskNotExist              = New(codeSchedulerSubTaskNotExist, ClassScheduler, ScopeInternal, LevelMedium, "subtasks with name %s for sources %v not exist", "Please create this subtask first.")
 	ErrSchedulerSubTaskStageInvalidUpdate    = New(codeSchedulerSubTaskStageInvalidUpdate, ClassDMMaster, ScopeInternal, LevelMedium, "invalid new expectant subtask stage %s", "")
 	ErrSchedulerSubTaskOpTaskNotExist        = New(codeSchedulerSubTaskOpTaskNotExist, ClassDMMaster, ScopeInternal, LevelMedium, "subtasks with name %s need to be operate not exist", "Please use `query-status` command to see tasks.")
 	ErrSchedulerSubTaskOpSourceNotExist      = New(codeSchedulerSubTaskOpSourceNotExist, ClassDMMaster, ScopeInternal, LevelMedium, "sources %v need to be operate not exist", "")
 	ErrSchedulerTaskNotExist                 = New(codeSchedulerTaskNotExist, ClassScheduler, ScopeInternal, LevelMedium, "task with name %s not exist", "Please use `query-status` command to see tasks.")
+	ErrSchedulerSubTaskCfgUpdate             = New(codeSchedulerSubTaskCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "subtask with name %s source name %s can only update when no running tasks for now", "")
 	ErrSchedulerRequireRunningTaskInSyncUnit = New(codeSchedulerRequireRunningTaskInSyncUnit, ClassScheduler, ScopeInternal, LevelHigh, "running tasks %v to be transferred on source %s should in sync unit", "Please use `pause-task [-s source ...] task` to pause them first.")
 	ErrSchedulerRelayWorkersBusy             = New(codeSchedulerRelayWorkersBusy, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have started relay for sources %s respectively", "Please use `stop-relay` to stop them, or change your topology.")
 	ErrSchedulerRelayWorkersWrongBound       = New(codeSchedulerRelayWorkersBound, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have bound for another sources %s respectively", "Please `start-relay` on free or same source workers.")
 	ErrSchedulerRelayWorkersWrongRelay       = New(codeSchedulerRelayWorkersWrongRelay, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have started relay for another sources %s respectively", "Please correct sources in `stop-relay`.")
 	ErrSchedulerSourceOpRelayExist           = New(codeSchedulerSourceOpRelayExist, ClassScheduler, ScopeInternal, LevelHigh, "source with name %s need to operate has existing relay workers %s", "Please `stop-relay` first.")
 	ErrSchedulerLatchInUse                   = New(codeSchedulerLatchInUse, ClassScheduler, ScopeInternal, LevelLow, "when %s, resource %s is in use by other client", "Please try again later")
-	ErrSchedulerSourceCfgUpdate              = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update relay-log related parts for now", "")
+	ErrSchedulerSourceCfgUpdate              = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update when not enable relay and no running tasks for now", "")
 	ErrSchedulerWrongWorkerInput             = New(codeSchedulerWrongWorkerInput, ClassScheduler, ScopeInternal, LevelMedium, "require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]", "")
 	ErrSchedulerBoundDiffWithStartedRelay    = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]", "If you intend to bind the source with worker, you can stop-relay for current source.")
 	ErrSchedulerStartRelayOnSpecified        = New(codeSchedulerStartRelayOnSpecified, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now", "Please stop all relay workers first, or specify worker name for `start-relay`.")
@@ -1326,6 +1332,7 @@ var (
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
 	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
+
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
 	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
