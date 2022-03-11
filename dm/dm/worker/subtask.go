@@ -639,14 +639,13 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 		return terror.ErrWorkerUpdateTaskStage.Generate(st.Stage().String())
 	}
 
-	// update all units' configuration, if SubTask itself has configuration need to update, do it later
 	for _, u := range st.units {
 		err := u.Update(ctx, cfg)
 		if err != nil {
 			return err
 		}
 	}
-
+	st.SetCfg(*cfg)
 	return nil
 }
 
@@ -683,16 +682,34 @@ func (st *SubTask) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 // CheckUnit checks whether current unit is sync unit.
 func (st *SubTask) CheckUnit() bool {
-	st.Lock()
-	defer st.Unlock()
-
+	st.RLock()
+	defer st.RUnlock()
 	flag := true
-
 	if _, ok := st.currUnit.(*syncer.Syncer); !ok {
 		flag = false
 	}
-
 	return flag
+}
+
+// CheckUnitCfgCanUpdate checks this unit cfg can update.
+func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
+	st.RLock()
+	defer st.RUnlock()
+
+	if st.currUnit == nil {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, pb.UnitType_InvalidUnit)
+	}
+
+	switch st.currUnit.Type() {
+	case pb.UnitType_Sync:
+		if s, ok := st.currUnit.(*syncer.Syncer); ok {
+			return s.CheckCanUpdateCfg(cfg)
+		}
+		// skip check for mock sync unit
+	default:
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, st.currUnit.Type())
+	}
+	return nil
 }
 
 // ShardDDLOperation returns the current shard DDL lock operation.
