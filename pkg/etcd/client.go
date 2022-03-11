@@ -20,14 +20,15 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 )
 
 // etcd operation names
@@ -100,11 +101,15 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 			metric.Inc()
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 // Put delegates request to clientv3.KV.Put
-func (c *Client) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
+func (c *Client) Put(ctx context.Context, key, val string,
+	opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
 		resp, inErr = c.cli.Put(ctx, key, val, opts...)
@@ -114,7 +119,8 @@ func (c *Client) Put(ctx context.Context, key, val string, opts ...clientv3.OpOp
 }
 
 // Get delegates request to clientv3.KV.Get
-func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.GetResponse, err error) {
+func (c *Client) Get(ctx context.Context, key string,
+	opts ...clientv3.OpOption) (resp *clientv3.GetResponse, err error) {
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
 		resp, inErr = c.cli.Get(ctx, key, opts...)
@@ -124,7 +130,8 @@ func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption)
 }
 
 // Delete delegates request to clientv3.KV.Delete
-func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
+func (c *Client) Delete(ctx context.Context, key string,
+	opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
 	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
@@ -134,7 +141,8 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOpti
 
 // Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
 // such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
-func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+func (c *Client) Txn(ctx context.Context,
+	cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
 	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
@@ -146,7 +154,8 @@ func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse 
 }
 
 // Grant delegates request to clientv3.Lease.Grant
-func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGrantResponse, err error) {
+func (c *Client) Grant(ctx context.Context,
+	ttl int64) (resp *clientv3.LeaseGrantResponse, err error) {
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
 		resp, inErr = c.cli.Grant(ctx, ttl)
@@ -178,7 +187,8 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 }
 
 // Revoke delegates request to clientv3.Lease.Revoke
-func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
+func (c *Client) Revoke(ctx context.Context,
+	id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
@@ -188,7 +198,8 @@ func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv
 }
 
 // TimeToLive delegates request to clientv3.Lease.TimeToLive
-func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID,
+	opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
@@ -198,14 +209,17 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (c *Client) Watch(
+	ctx context.Context, key string, role string, opts ...clientv3.OpOption,
+) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse,
+	key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
@@ -268,7 +282,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 				watchCtx, cancel = context.WithCancel(ctx)
 				// to avoid possible context leak warning from govet
 				_ = cancel
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
+				watchCh = c.cli.Watch(watchCtx, key,
+					clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}

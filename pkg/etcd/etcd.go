@@ -491,7 +491,7 @@ func (c CDCEtcdClient) GetTaskPosition(
 }
 
 // PutTaskPositionOnChange puts task position information into etcd if the
-// task position value changes or the presvious value does not exist in etcd.
+// task position value changes or the previous value does not exist in etcd.
 // returns true if task position is written to etcd.
 func (c CDCEtcdClient) PutTaskPositionOnChange(
 	ctx context.Context,
@@ -534,7 +534,8 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
-// PutCaptureInfo put capture info into etcd.
+// PutCaptureInfo put capture info into etcd,
+// this happens when the capture starts.
 func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, leaseID clientv3.LeaseID) error {
 	data, err := info.Marshal()
 	if err != nil {
