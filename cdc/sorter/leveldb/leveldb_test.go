@@ -78,7 +78,7 @@ func TestMaybeWrite(t *testing.T) {
 	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
-	ldb.Close()
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -126,7 +126,7 @@ func TestCompact(t *testing.T) {
 	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
-	ldb.Close()
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -224,7 +224,7 @@ func TestPutReadDelete(t *testing.T) {
 	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
-	ldb.Close()
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -276,7 +276,7 @@ func TestAcquireIterators(t *testing.T) {
 	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
-	ldb.Close()
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -422,7 +422,7 @@ func TestContextCancel(t *testing.T) {
 	tasks, _ := makeTask(map[message.Key][]byte{"key": {}}, [][]byte{{0x00}, {0xff}})
 	closed := !ldb.Poll(ctx, tasks)
 	require.True(t, closed)
-	ldb.Close()
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }

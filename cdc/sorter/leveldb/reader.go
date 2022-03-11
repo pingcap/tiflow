@@ -493,8 +493,8 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	return true
 }
 
-// Stop releases reader resource.
-func (r *reader) Close() {
+// OnClose releases reader resource.
+func (r *reader) OnClose() {
 	if r.stopped {
 		return
 	}

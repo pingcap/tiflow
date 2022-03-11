@@ -110,8 +110,8 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	return true
 }
 
-// Stop releases writer resource.
-func (w *writer) Close() {
+// OnClose releases writer resource.
+func (w *writer) OnClose() {
 	if w.stopped {
 		return
 	}
