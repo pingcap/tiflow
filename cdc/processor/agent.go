@@ -67,6 +67,7 @@ type agentImpl struct {
 
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
+	ownerRevision  int64
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -121,7 +122,8 @@ func newAgent(
 	}
 
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
-	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
+		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	cancel()
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
@@ -133,12 +135,28 @@ func newAgent(
 		log.Info("no owner found. We will wait for an owner to contact us.",
 			zap.String("changefeed", changeFeedID),
 			zap.Error(err))
-	} else {
-		ret.ownerCaptureID = ownerCaptureID
-		log.Debug("found owner",
-			zap.String("changefeed", changeFeedID),
-			zap.String("ownerID", ownerCaptureID))
+		return ret, nil
 	}
+
+	ret.ownerCaptureID = ownerCaptureID
+	log.Debug("found owner",
+		zap.String("changefeed", changeFeedID),
+		zap.String("ownerID", ownerCaptureID))
+
+	ret.ownerRevision, err = ctx.GlobalVars().EtcdClient.
+		GetOwnerRevision(etcdCliCtx, ownerCaptureID)
+	if err != nil {
+		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
+			// These are expected errors when no owner has been elected
+			log.Info("no owner found when querying for the owner revision",
+				zap.String("changefeed", changeFeedID),
+				zap.Error(err))
+			ret.ownerCaptureID = ""
+			return ret, nil
+		}
+		return nil, errors.Trace(err)
+	}
+
 	return ret, nil
 }
 
@@ -335,11 +353,16 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 	return true
 }
 
-func (a *agentImpl) OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID) {
-	if a.ownerCaptureID == newOwnerCaptureID {
+func (a *agentImpl) OnOwnerChanged(
+	ctx context.Context,
+	newOwnerCaptureID model.CaptureID,
+	newOwnerRev int64,
+) {
+	if a.ownerCaptureID == newOwnerCaptureID && a.ownerRevision == newOwnerRev {
 		return
 	}
 	a.ownerCaptureID = newOwnerCaptureID
+	a.ownerRevision = newOwnerRev
 	// Note that we clear the pending barriers.
 	a.barrierSeqs = map[p2p.Topic]p2p.Seq{}
 }
