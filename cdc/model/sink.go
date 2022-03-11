@@ -330,6 +330,22 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
+// WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
+func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
+	for _, col := range r.Columns {
+		if _, ok := colNames[col.Name]; ok {
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
+		}
+	}
+	for _, col := range r.PreColumns {
+		if _, ok := colNames[col.Name]; ok {
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
+		}
+	}
+}
+
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
 func (r *RowChangedEvent) ApproximateBytes() int {
 	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
