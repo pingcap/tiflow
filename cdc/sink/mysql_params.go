@@ -88,7 +88,6 @@ type sinkParams struct {
 	safeMode            bool
 	timezone            string
 	tls                 string
-	tidbPlacementMode   string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -267,7 +266,6 @@ func generateDSNByParams(
 	if params.timezone != "" {
 		dsnCfg.Params["time_zone"] = params.timezone
 	}
-	dsnCfg.Params["tidb_placement_mode"] = "ignore"
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 	dsnCfg.Params["timeout"] = params.dialTimeout
@@ -300,6 +298,15 @@ func generateDSNByParams(
 		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 	}
 
+	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB,
+		"tidb_placement_mode", "ignore")
+	if err != nil {
+		return "", err
+	}
+	if tidbPlacementMode != "" {
+		dsnCfg.Params["tidb_placement_mode"] =
+			fmt.Sprintf(`"%s"`, tidbPlacementMode)
+	}
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))

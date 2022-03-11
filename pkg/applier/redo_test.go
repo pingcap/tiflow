@@ -140,6 +140,10 @@ func TestApplyDMLs(t *testing.T) {
 			mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
 				sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
 			)
+			mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+				WillReturnRows(
+					sqlmock.NewRows(columns).AddRow("tidb_placement_mode", "IGNORE"),
+				)
 			mock.ExpectClose()
 			return db, nil
 		}
@@ -224,7 +228,7 @@ func TestApplyDMLs(t *testing.T) {
 	close(redoLogCh)
 	close(ddlEventCh)
 
-	cfg := &RedoApplierConfig{SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1"}
+	cfg := &RedoApplierConfig{SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1&tidb_placement_mode=ignore"}
 	ap := NewRedoApplier(cfg)
 	err := ap.Apply(ctx)
 	require.Nil(t, err)
