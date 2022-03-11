@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,9 @@ type cdcMonitReactor struct {
 
 func (r *cdcMonitReactor) Tick(_ context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
 	r.state = state.(*cdcReactorState)
+	if config.GetGlobalServerConfig().Debug.EnableNewScheduler {
+		return r.state, nil
+	}
 
 	err := r.verifyTs()
 	if err != nil {
