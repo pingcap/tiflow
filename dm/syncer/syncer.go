@@ -172,8 +172,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed  atomic.Bool
-	running atomic.Bool
+	closed       atomic.Bool
+	schemaLoaded atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -259,7 +259,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
-	syncer.running.Store(false)
+	syncer.schemaLoaded.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -693,9 +693,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		<-newCtx.Done() // ctx or newCtx
 	}()
 
-	s.running.Store(true)
-	defer s.running.Store(false)
-
 	err := s.Run(newCtx)
 	if err != nil {
 		// returned error rather than sent to runFatalChan
@@ -742,21 +739,10 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return nil, terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, sourceTable.Schema)
 	}
 
-	// if table already exists in checkpoint, create it in schema tracker
-	if ti = s.checkpoint.GetFlushedTableInfo(sourceTable); ti != nil {
-		if err = s.schemaTracker.CreateTableIfNotExists(sourceTable, ti); err != nil {
-			return nil, terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
-		tctx.L().Debug("lazy init table info in schema tracker", zap.Stringer("table", sourceTable))
-		return ti, nil
-	}
-
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
-	if ti == nil {
-		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
-		if err != nil {
-			return nil, err
-		}
+	err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
+	if err != nil {
+		return nil, err
 	}
 
 	ti, err = s.schemaTracker.GetTableInfo(sourceTable)
@@ -1560,6 +1546,14 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
+	if !s.schemaLoaded.Load() {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
+		}
+		s.schemaLoaded.Store(true)
+	}
+
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
@@ -3473,8 +3467,8 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
-func (s *Syncer) IsRunning() bool {
-	return s.running.Load()
+func (s *Syncer) IsSchemaLoaded() bool {
+	return s.schemaLoaded.Load()
 }
 
 func (s *Syncer) isClosed() bool {

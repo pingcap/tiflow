@@ -297,6 +297,9 @@ type CheckPoint interface {
 	// String return text of global position
 	String() string
 
+	// LoadIntoSchemaTracker loads table infos of all points into schema tracker
+	LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error
+
 	// CheckAndUpdate check the checkpoint data consistency and try to fix them if possible
 	CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error
 }
@@ -1098,6 +1101,29 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	}
 
 	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+}
+
+// LoadIntoSchemaTracker loads table infos of all points into schema tracker
+func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	for cpSchema, mSchema := range cp.points {
+		for cpTable, point := range mSchema {
+			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
+			if point.flushedPoint.ti == nil {
+				continue
+			}
+			if err := schemaTracker.CreateSchemaIfNotExists(cpSchema); err != nil {
+				return terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, cpSchema)
+			}
+			tbl := filter.Table{Schema: cpSchema, Name: cpTable}
+			if err := schemaTracker.CreateTableIfNotExists(&tbl, point.flushedPoint.ti); err != nil {
+				return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, cpSchema, cpTable)
+			}
+		}
+	}
+	return nil
 }
 
 // CheckAndUpdate check the checkpoint data consistency and try to fix them if possible.

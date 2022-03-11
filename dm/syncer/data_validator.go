@@ -334,7 +334,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 }
 
 func (v *DataValidator) waitSyncerRunning() error {
-	if v.syncer.IsRunning() {
+	if v.syncer.IsSchemaLoaded() {
 		return nil
 	}
 	v.L.Info("wait until syncer running")
@@ -343,7 +343,7 @@ func (v *DataValidator) waitSyncerRunning() error {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
-			if v.syncer.IsRunning() {
+			if v.syncer.IsSchemaLoaded() {
 				v.L.Info("syncer is running, wait finished")
 				return nil
 			}
