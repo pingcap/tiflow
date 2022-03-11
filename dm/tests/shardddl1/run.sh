@@ -309,11 +309,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 
 	restart_master
@@ -329,11 +331,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 }
 
@@ -381,6 +385,7 @@ function DM_UpdateBARule_CASE() {
 
 	# source2 db2.tb1 do a unsupported DDL
 	run_sql_source2 "alter table ${shardddl2}.${tb1} rename column id to new_id;"
+	# TODO: fix this after DM worker supports redirect
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"because schema conflict detected" 1

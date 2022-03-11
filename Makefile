@@ -6,7 +6,7 @@
 PROJECT=tiflow
 P=3
 
-FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
+FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -32,7 +32,7 @@ LINUX := "Linux"
 MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock'
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
 PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
