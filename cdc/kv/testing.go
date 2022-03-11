@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -155,10 +156,16 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 	startTS := mustGetTimestamp(t, storage)
 
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+=======
+	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
+		err := cli.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: nil, End: nil},
+			startTS, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -244,10 +251,16 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+=======
+	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
+		err := cli.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: nil, End: nil},
+			startTS, false, lockResolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -269,7 +282,9 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
+				err := cli.EventFeed(ctx,
+					regionspan.ComparableSpan{Start: nil, End: nil},
+					startTS, false, lockResolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

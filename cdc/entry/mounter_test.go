@@ -30,12 +30,20 @@ import (
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
+<<<<<<< HEAD
 type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
 func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+const (
+	dummyChangeFeedID = "dummy_changefeed"
+)
+
+func TestMounterDisableOldValue(t *testing.T) {
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
@@ -232,9 +240,15 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	tk.MustExec(tc.createTableDDL)
 
 	jobs, err := getAllHistoryDDLJob(store)
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
 	c.Assert(err, check.IsNil)
+=======
+	require.Nil(t, err)
+	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+	require.Nil(t, err)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
 		c.Assert(err, check.IsNil)
