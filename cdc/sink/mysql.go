@@ -907,7 +907,11 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]int) *timodel.TableInfo {
+func recoverTableInfo(
+	preCols,
+	postCols []*model.Column,
+	indexOffsetMatrix [][]int,
+) *timodel.TableInfo {
 	nonEmptyColumns := preCols
 	if len(nonEmptyColumns) == 0 {
 		nonEmptyColumns = postCols
@@ -922,6 +926,7 @@ func recoverTableInfo(preCols, postCols []*model.Column, indexOffsetMatrix [][]i
 		if column == nil {
 			// will not use this column, just add a dummy columnInfo
 			columnInfo.Name = timodel.NewCIStr("omitted column")
+			columnInfo.GeneratedExprString = "generated_by_recoverTableInfo"
 			tableInfo.Columns = append(tableInfo.Columns, columnInfo)
 			continue
 		}

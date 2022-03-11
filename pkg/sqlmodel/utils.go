@@ -14,7 +14,6 @@
 package sqlmodel
 
 import (
-	"fmt"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -29,7 +28,6 @@ func getColsAndValuesOfIdx(
 	values := make([]interface{}, 0, len(indexColumns.Columns))
 	for _, col := range indexColumns.Columns {
 		cols = append(cols, columns[col.Offset])
-		fmt.Printf("lance test data %v, col.Offset %v", data, col.Offset)
 		values = append(values, data[col.Offset])
 	}
 
