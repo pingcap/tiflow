@@ -676,6 +676,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
 		ctx.GlobalVars().PDClient,

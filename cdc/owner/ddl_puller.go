@@ -101,6 +101,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	log.Debug("DDL puller started", zap.String("changefeed", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	lastResolvedTsAdvancedTime := h.clock.Now()
 
