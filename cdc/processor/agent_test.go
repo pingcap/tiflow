@@ -206,7 +206,8 @@ func TestAgentBasics(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+	suite.etcdKVClient.On("Get", mock.Anything,
+		etcd.CaptureOwnerKey, mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
@@ -215,7 +216,7 @@ func TestAgentBasics(t *testing.T) {
 					ModRevision: 1,
 				},
 			},
-		}, nil).Once()
+		}, nil)
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -238,7 +239,8 @@ func TestAgentBasics(t *testing.T) {
 		}, syncMsg)
 	}
 
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
+		model.DispatchTableTopic("cf-1"),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
@@ -320,8 +322,9 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 	defer suite.Close()
 
 	// Empty response implies no owner.
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
-		Return(&clientv3.GetResponse{}, nil).Once()
+	suite.etcdKVClient.On("Get", mock.Anything,
+		etcd.CaptureOwnerKey, mock.Anything).
+		Return(&clientv3.GetResponse{}, nil)
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -334,10 +337,12 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 	}
 
 	// Test Point 3: Agent should process the Announce message.
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.AnnounceTopic("cf-1"), &model.AnnounceMessage{
-		OwnerRev:     1,
-		OwnerVersion: version.ReleaseSemver(),
-	})
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
+		model.AnnounceTopic("cf-1"),
+		&model.AnnounceMessage{
+			OwnerRev:     1,
+			OwnerVersion: version.ReleaseSemver(),
+		})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -373,7 +378,8 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+	suite.etcdKVClient.On("Get", mock.Anything,
+		etcd.CaptureOwnerKey, mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
@@ -382,7 +388,7 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 					ModRevision: 1,
 				},
 			},
-		}, nil).Once()
+		}, nil)
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -417,7 +423,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	suite := newAgentTestSuite(t)
 	defer suite.Close()
 
-	suite.etcdKVClient.On("Get", mock.Anything, etcd.CaptureOwnerKey, mock.Anything).
+	suite.etcdKVClient.On("Get", mock.Anything,
+		etcd.CaptureOwnerKey, mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
@@ -426,7 +433,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 					ModRevision: 1,
 				},
 			},
-		}, nil).Once()
+		}, nil)
 
 	agent, err := suite.CreateAgent(t)
 	require.NoError(t, err)
@@ -436,7 +443,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	err = agent.Tick(suite.cdcCtx)
 	require.NoError(t, err)
 
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
+		model.DispatchTableTopic("cf-1"),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
@@ -445,7 +453,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	_, err = suite.ownerMessageClient.SendMessage(suite.ctx, model.DispatchTableTopic("cf-1"),
+	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
+		model.DispatchTableTopic("cf-1"),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
@@ -468,7 +477,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 				delete(suite.tableExecutor.Adding, 2)
 				suite.tableExecutor.Running[2] = struct{}{}
 			}).Once()
-	suite.tableExecutor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
+	suite.tableExecutor.On("GetCheckpoint").
+		Return(model.Ts(1000), model.Ts(1000))
 
 	require.Never(t, func() bool {
 		err = agent.Tick(suite.cdcCtx)
