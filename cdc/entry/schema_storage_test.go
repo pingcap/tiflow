@@ -953,8 +953,7 @@ func TestSchemaStorage(t *testing.T) {
 
 		jobs, err := getAllHistoryDDLJob(store)
 		require.Nil(t, err)
-		schemaStorage, err := NewSchemaStorage(nil, 0, nil,
-			false, dummyChangeFeedID)
+		schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 		require.Nil(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
