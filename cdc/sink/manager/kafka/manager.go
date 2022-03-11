@@ -114,10 +114,20 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 
 // CreateTopic creates a topic with the given name.
 func (m *TopicManager) CreateTopic(topicName string) error {
+	start := time.Now()
 	topics, err := m.admin.ListTopics()
 	if err != nil {
+		log.Error(
+			"Kafka admin client list topics failed",
+			zap.Error(err),
+			zap.Duration("cost", time.Since(start)),
+		)
 		return errors.Trace(err)
 	}
+	log.Info(
+		"Kafka admin client list topics success",
+		zap.Duration("cost", time.Since(start)),
+	)
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
@@ -137,17 +147,28 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 				"and %s not found", topicName))
 	}
 
+	start = time.Now()
 	err = m.admin.CreateTopic(topicName, &sarama.TopicDetail{
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
 	// Ignore topic already exists error.
 	if err != nil && errors.Cause(err) != sarama.ErrTopicAlreadyExists {
+		log.Error(
+			"Kafka admin client create the topic failed",
+			zap.Int32("partitionNumber", m.cfg.PartitionNum),
+			zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
+			zap.Error(err),
+			zap.Duration("cost", time.Since(start)),
+		)
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	log.Info("TiCDC create the topic",
-		zap.Int32("partition-num", m.cfg.PartitionNum),
-		zap.Int16("replication-factor", m.cfg.ReplicationFactor))
+	log.Info(
+		"Kafka admin client create the topic success",
+		zap.Int32("partitionNumber", m.cfg.PartitionNum),
+		zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
+		zap.Duration("cost", time.Since(start)),
+	)
 	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 
 	return nil
