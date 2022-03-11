@@ -344,7 +344,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -354,8 +354,15 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// new session, request to store 1, request to store 2
@@ -443,7 +450,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -452,9 +459,16 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// new session, new request
@@ -541,7 +555,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -550,9 +564,16 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -698,7 +719,11 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
+=======
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -708,9 +733,16 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -733,8 +765,82 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cancel()
 }
 
+<<<<<<< HEAD
 func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	defer s.TearDownTest(c)
+=======
+// TestClusterIDMismatch tests kv client returns an error when TiKV returns
+// the cluster ID mismatch error.
+func TestClusterIDMismatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	changeDataCh := make(chan *cdcpb.ChangeDataEvent, 10)
+	changeDataService := newMockChangeDataService(t, changeDataCh)
+	mockService, addr := newMockService(ctx, t, changeDataService, wg)
+	defer func() {
+		close(changeDataCh)
+		mockService.Stop()
+		wg.Wait()
+	}()
+
+	rpcClient, cluster, pdClient, err := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+	require.Nil(t, err)
+
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	require.Nil(t, err)
+	defer kvStorage.Close() //nolint:errcheck
+
+	cluster.AddStore(1, addr)
+	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
+
+	baseAllocatedID := currentRequestID()
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	isPullInit := &mockPullerInit{}
+
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	eventCh := make(chan model.RegionFeedEvent, 50)
+
+	var wg2 sync.WaitGroup
+	wg2.Add(1)
+	go func() {
+		defer wg2.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
+	}()
+
+	// wait request id allocated with: new session, new request
+	waitRequestID(t, baseAllocatedID+1)
+	clusterIDMismatchEvent := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId:  3,
+			RequestId: currentRequestID(),
+			Event: &cdcpb.Event_Error{
+				Error: &cdcpb.Error{
+					ClusterIdMismatch: &cdcpb.ClusterIDMismatch{
+						Current: 0,
+						Request: 1,
+					},
+				},
+			},
+		},
+	}}
+
+	changeDataCh <- clusterIDMismatchEvent
+
+	wg2.Wait()
+	cancel()
+}
+
+func testHandleFeedEvent(t *testing.T) {
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -760,7 +866,7 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -769,9 +875,16 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1209,7 +1322,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	lockerResolver := txnutil.NewLockerResolver(kvStorage)
+	lockerResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1218,9 +1331,16 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockerResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockerResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	var requestIds sync.Map
@@ -1319,7 +1439,7 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1328,9 +1448,16 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1448,7 +1575,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1458,9 +1585,16 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	go func() {
 		defer wg.Done()
 		defer close(eventCh)
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1657,7 +1791,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1667,9 +1801,16 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	err = retry.Do(context.Background(), func() error {
@@ -1733,7 +1874,7 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1743,9 +1884,16 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1810,7 +1958,7 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1819,9 +1967,16 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1919,7 +2074,7 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1928,9 +2083,16 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2018,7 +2180,7 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientErrUnreachable")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2028,9 +2190,16 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 	clientWg.Add(1)
 	go func() {
 		defer clientWg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(err, check.Equals, errUnreachable)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, errUnreachable, err)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2165,7 +2334,7 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientSingleFeedProcessDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2174,9 +2343,16 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2343,7 +2519,7 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2352,9 +2528,16 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2557,7 +2740,7 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2566,9 +2749,16 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2651,7 +2841,11 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
+<<<<<<< HEAD
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+=======
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2660,9 +2854,16 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2732,7 +2933,7 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2741,9 +2942,16 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait the second region is scheduled
@@ -2798,7 +3006,7 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamCloseDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2807,9 +3015,16 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -2866,6 +3081,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
+<<<<<<< HEAD
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval", "return(1)")
 	c.Assert(err, check.IsNil)
 	originalReconnectInterval := reconnectInterval
@@ -2876,6 +3092,9 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	}()
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage)
+=======
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2884,9 +3103,16 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -3025,7 +3251,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientMockRangeLock")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3034,9 +3260,16 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// the kv client is blocked by failpoint injection, and after region has split
@@ -3141,7 +3374,7 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	}()
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3150,9 +3383,16 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3260,7 +3500,7 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3269,9 +3509,16 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3352,7 +3599,7 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
 	isPullInit := &mockPullerInit{}
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
@@ -3362,9 +3609,16 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
+=======
+		err = cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}()
 
 	// The expected request ids are agnostic because the kv client could retry
