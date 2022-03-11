@@ -209,8 +209,9 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientV3.LeaseID,
 }
 
 // Watch delegates request to clientV3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string,
-	role string, opts ...clientV3.OpOption) clientV3.WatchChan {
+func (c *Client) Watch(
+	ctx context.Context, key string, role string, opts ...clientV3.OpOption,
+) clientV3.WatchChan {
 	watchCh := make(chan clientV3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
