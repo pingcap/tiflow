@@ -92,7 +92,6 @@ func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceReque
 	return &req.Source, nil
 }
 
-// nolint:unparam,unused
 func (s *Server) updateSource(ctx context.Context, sourceName string, req openapi.UpdateSourceRequest) (*openapi.Source, error) {
 	// TODO: support dynamic updates
 	oldCfg := s.scheduler.GetSourceCfgByID(sourceName)
@@ -111,7 +110,7 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		stage := pb.Stage_Running
 		taskNameList := s.scheduler.GetTaskNameListBySourceName(sourceName, nil)
 		if !newCfg.Enable {
-			stage = pb.Stage_Paused
+			stage = pb.Stage_Stopped
 		}
 		if err := s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, stage, false); err != nil {
 			return nil, err
@@ -132,7 +131,6 @@ func (s *Server) deleteSource(ctx context.Context, sourceName string, force bool
 	return s.scheduler.RemoveSourceCfg(sourceName)
 }
 
-// nolint:unparam,unused
 func (s *Server) getSource(ctx context.Context, sourceName string, req openapi.DMAPIGetSourceParams) (*openapi.Source, error) {
 	sourceCfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if sourceCfg == nil {
@@ -158,7 +156,6 @@ func (s *Server) getSourceStatus(ctx context.Context, sourceName string) ([]open
 	return s.getSourceStatusListFromWorker(ctx, sourceName, true)
 }
 
-// nolint:unparam
 func (s *Server) listSource(ctx context.Context, req openapi.DMAPIGetSourceListParams) ([]openapi.Source, error) {
 	sourceCfgM := s.scheduler.GetSourceCfgs()
 	openapiSourceList := make([]openapi.Source, 0, len(sourceCfgM))
@@ -271,7 +268,6 @@ func (s *Server) purgeRelay(ctx context.Context, sourceName string, req openapi.
 	return nil
 }
 
-// nolint:unparam,unused
 func (s *Server) enableSource(ctx context.Context, sourceName string) error {
 	cfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if cfg == nil {
@@ -292,7 +288,6 @@ func (s *Server) enableSource(ctx context.Context, sourceName string) error {
 	return s.scheduler.BatchOperateTaskOnWorker(ctx, worker, taskNameList, sourceName, pb.Stage_Running, false)
 }
 
-// nolint:unused
 func (s *Server) disableSource(ctx context.Context, sourceName string) error {
 	cfg := s.scheduler.GetSourceCfgByID(sourceName)
 	if cfg == nil {
@@ -356,7 +351,6 @@ func (s *Server) checkOpenAPITaskbeforeOperate(ctx context.Context, task *openap
 	return subTaskConfigList, nil
 }
 
-// nolint:unparam,unused
 func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) (*openapi.Task, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
@@ -369,7 +363,6 @@ func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) 
 	return task, s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-// nolint:unused
 func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) (*openapi.Task, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
@@ -382,12 +375,13 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	return task, s.scheduler.UpdateSubTasks(ctx, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-// nolint:unparam,unused
 func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) error {
 	// check if there is running task
+	var task *openapi.Task
+	var err error
 	if !force {
 		withStatus := true
-		task, err := s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{WithStatus: &withStatus})
+		task, err = s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{WithStatus: &withStatus})
 		if err != nil {
 			return err
 		}
@@ -406,10 +400,6 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	}
 	defer release()
 
-	task, err := s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{})
-	if err != nil {
-		return err
-	}
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustErr := adjustTargetDB(ctx, toDBCfg); adjustErr != nil {
 		return adjustErr
@@ -420,12 +410,11 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 		return terror.Annotate(err, "while removing metadata")
 	}
 	release()
-	// delete task
 	sourceNameList := s.getTaskSourceNameList(taskName)
+	// delete subtask on worker
 	return s.scheduler.RemoveSubTasks(taskName, sourceNameList...)
 }
 
-// nolint:unused
 func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPIGetTaskParams) (*openapi.Task, error) {
 	subTaskConfigM := s.scheduler.GetSubTaskCfgsByTask(taskName)
 	if subTaskConfigM == nil {
@@ -543,7 +532,6 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, req openapi
 	return subTaskStatusList, nil
 }
 
-// nolint:unparam,unused
 func (s *Server) listTask(ctx context.Context, req openapi.DMAPIGetTaskListParams) ([]openapi.Task, error) {
 	subTaskConfigMap := s.scheduler.GetALlSubTaskCfgs()
 	taskList := config.SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
@@ -597,7 +585,6 @@ func (s *Server) listTask(ctx context.Context, req openapi.DMAPIGetTaskListParam
 	return taskArray, nil
 }
 
-// nolint:unparam,unused
 func (s *Server) startTask(ctx context.Context, taskName string, req openapi.StartTaskRequest) error {
 	// start all subtasks for this task
 	if req.SourceNameList == nil || len(*req.SourceNameList) == 0 {
@@ -643,7 +630,7 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, *req.SourceNameList...)
 }
 
-// nolint:unparam,unused
+// nolint:unparam
 func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.StopTaskRequest) error {
 	// all subtasks for this task
 	if req.SourceNameList == nil || len(*req.SourceNameList) == 0 {
@@ -654,7 +641,7 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, *req.SourceNameList...)
 }
 
-// nolint:unparam,unused
+// nolint:unparam
 func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTaskRequest) (*openapi.Task, *config.TaskConfig, error) {
 	if req.TaskConfigFile != nil {
 		taskCfg := config.NewTaskConfig()
