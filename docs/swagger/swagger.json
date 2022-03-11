@@ -711,6 +711,9 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "topic": {
+                    "type": "string"
                 }
             }
         },

@@ -1168,7 +1168,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Debug("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1204,7 +1204,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Debug("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -3572,6 +3572,9 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+// CheckCanUpdateCfg check if task config can be updated.
+// 1. task must not in a pessimistic ddl state.
+// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
@@ -3592,14 +3595,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
-	newCfg.To.Session = oldCfg.To.Session // session is adjused in `createDBs`
-	println("---------old------------")
-	println(oldCfg.String())
-	println("---------old------------")
-
-	println("---------new------------")
-	println(newCfg.String())
-	println("---------new------------")
+	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
 	if oldCfg.String() != newCfg.String() {
 		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
 	}
@@ -3610,6 +3606,8 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+	s.Lock()
+	defer s.Unlock()
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {

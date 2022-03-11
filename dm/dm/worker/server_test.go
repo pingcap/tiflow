@@ -215,7 +215,7 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err, IsNil)
 	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	subTask.setCurrUnit(subTask.units[2]) // set to syncer unit
-	c.Assert(s.worker.tryRefreshSubTaskConfig(subTask), IsNil)
+	c.Assert(s.worker.tryRefreshSubTaskAndSourceConfig(subTask), IsNil)
 	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
 	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
 
@@ -239,7 +239,6 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err.Error(), Matches, ".*bind: address already in use.*")
 
 	t.testStopWorkerWhenLostConnect(c, s, ETCD)
-	// close
 	s.Close()
 
 	c.Assert(utils.WaitSomething(30, 10*time.Millisecond, func() bool {
@@ -664,81 +663,4 @@ func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg
-}
-
-func (t *testServer) testSourceWorker(c *C) {
-	cfg := loadSourceConfigWithoutPassword(c)
-
-	dir := c.MkDir()
-	cfg.EnableRelay = true
-	cfg.RelayDir = dir
-	cfg.MetaDir = dir
-
-	var (
-		masterAddr   = tempurl.Alloc()[len("http://"):]
-		keepAliveTTL = int64(1)
-	)
-	etcdDir := c.MkDir()
-	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
-	c.Assert(err, IsNil)
-	defer ETCD.Close()
-	workerCfg := NewConfig()
-	c.Assert(workerCfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
-	workerCfg.Join = masterAddr
-	workerCfg.KeepAliveTTL = keepAliveTTL
-	workerCfg.RelayKeepAliveTTL = keepAliveTTL
-
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:            GetJoinURLs(workerCfg.Join),
-		DialTimeout:          dialTimeout,
-		DialKeepAliveTime:    keepaliveTime,
-		DialKeepAliveTimeout: keepaliveTimeout,
-	})
-	c.Assert(err, IsNil)
-
-	NewRelayHolder = NewDummyRelayHolderWithInitError
-	defer func() {
-		NewRelayHolder = NewRealRelayHolder
-	}()
-	w, err := NewSourceWorker(cfg, etcdCli, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
-	c.Assert(w.EnableRelay(false), ErrorMatches, "init error")
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
-
-	NewRelayHolder = NewDummyRelayHolder
-	w, err = NewSourceWorker(cfg, etcdCli, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
-
-	// stop twice
-	w.Stop(true)
-	c.Assert(w.closed.Load(), IsTrue)
-	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	w.Stop(true)
-	c.Assert(w.closed.Load(), IsTrue)
-	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	c.Assert(w.closed.Load(), IsTrue)
-
-	c.Assert(w.StartSubTask(&config.SubTaskConfig{
-		Name: "testStartTask",
-	}, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
-	task := w.subTaskHolder.findSubTask("testStartTask")
-	c.Assert(task, NotNil)
-	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
-
-	c.Assert(w.StartSubTask(&config.SubTaskConfig{
-		Name: "testStartTask-in-stopped",
-	}, pb.Stage_Stopped, pb.Stage_Stopped, true), IsNil)
-	task = w.subTaskHolder.findSubTask("testStartTask-in-stopped")
-	c.Assert(task, NotNil)
-	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
-
-	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
-		Name: "testStartTask",
-	}, true)
-	c.Assert(err, ErrorMatches, ".*worker already closed.*")
-
-	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
-	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 }

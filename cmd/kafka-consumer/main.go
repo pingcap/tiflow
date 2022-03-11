@@ -56,6 +56,9 @@ var (
 
 	downstreamURIStr string
 
+	protocol            config.Protocol
+	enableTiDBExtension bool
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -105,14 +108,14 @@ func init() {
 	})
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
 
-	config, err := newSaramaConfig()
+	saramaConfig, err := newSaramaConfig()
 	if err != nil {
-		log.Panic("Error creating sarama config", zap.Error(err))
+		log.Panic("Error creating sarama saramaConfig", zap.Error(err))
 	}
 
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
+		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, saramaConfig)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
 		}
@@ -124,6 +127,7 @@ func init() {
 		}
 		kafkaPartitionNum = int32(c)
 	}
+	log.Info("Setting partitionNum", zap.Int32("partitionNum", kafkaPartitionNum))
 
 	s = upstreamURI.Query().Get("max-message-bytes")
 	if s != "" {
@@ -131,9 +135,9 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-message-bytes of upstream-uri")
 		}
-		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
 		kafkaMaxMessageBytes = c
 	}
+	log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", kafkaMaxMessageBytes))
 
 	s = upstreamURI.Query().Get("max-batch-size")
 	if s != "" {
@@ -141,8 +145,29 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-batch-size of upstream-uri")
 		}
-		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
+	}
+	log.Info("Setting max-batch-size", zap.Int("max-batch-size", kafkaMaxBatchSize))
+
+	s = upstreamURI.Query().Get("protocol")
+	if s != "" {
+		if err := protocol.FromString(s); err != nil {
+			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
+		}
+	}
+	log.Info("Setting protocol", zap.Any("protocol", protocol))
+
+	s = upstreamURI.Query().Get("enable-tidb-extension")
+	if s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Fatal("invalid enable-tidb-extension of upstream-uri")
+		}
+		if protocol != config.ProtocolCanalJSON && b {
+			log.Fatal("enable-tidb-extension only work with canal-json")
+		}
+
+		enableTiDBExtension = b
 	}
 }
 
@@ -220,8 +245,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer")
-
 	/**
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
@@ -237,6 +260,7 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
+	log.Info("Starting a new TiCDC consumer", zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
 	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
@@ -269,12 +293,12 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Panic("Error running consumer: %v", zap.Error(err))
+			log.Panic("Error running consumer", zap.Error(err))
 		}
 	}()
 
 	<-consumer.ready // Await till the consumer has been set up
-	log.Info("TiCDC open protocol consumer up and running!...")
+	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
@@ -313,6 +337,9 @@ type Consumer struct {
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	globalResolvedTs uint64
+
+	protocol            config.Protocol
+	enableTiDBExtension bool
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -327,10 +354,14 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	c := new(Consumer)
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
+	c.protocol = protocol
+	c.enableTiDBExtension = enableTiDBExtension
+
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = util.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
@@ -388,14 +419,25 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	for message := range claim.Messages() {
 		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		var (
+			decoder codec.EventBatchDecoder
+			err     error
+		)
+		switch c.protocol {
+		case config.ProtocolOpen, config.ProtocolDefault:
+			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		case config.ProtocolCanalJSON:
+			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
+		default:
+			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+		}
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		counter := 0
 		for {
-			tp, hasNext, err := batchDecoder.HasNext()
+			tp, hasNext, err := decoder.HasNext()
 			if err != nil {
 				log.Panic("decode message key failed", zap.Error(err))
 			}
@@ -407,29 +449,29 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
 				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
+					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
 			}
 
 			switch tp {
 			case model.MqMessageTypeDDL:
-				ddl, err := batchDecoder.NextDDLEvent()
+				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
-				row, err := batchDecoder.NextRowChangedEvent()
+				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Debug("RowChangedEvent fallback row, ignore it",
+					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition),
-						zap.ByteString("row", message.Key))
+						zap.Any("row", row))
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
@@ -449,12 +491,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
 				}
 			case model.MqMessageTypeResolved:
-				ts, err := batchDecoder.NextResolvedEvent()
+				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				// `resolvedTs` should be monotonically increasing, it's allowed to receive redandunt one.
+				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
@@ -485,17 +527,19 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	if ddl.CommitTs <= c.maxDDLReceivedTs {
+		log.Info("ignore ddl event", zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs), zap.Any("ddl", ddl))
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 	if ddl.CommitTs < globalResolvedTs {
-		log.Panic("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		log.Panic("unexpected ddl event, commitTs < globalResolvedTs", zap.Any("ddl", ddl))
 	}
 	if ddl.CommitTs == globalResolvedTs {
-		log.Warn("receive redundant ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
+		log.Warn("ignore redundant ddl event, commitTs == globalResolvedTs", zap.Any("ddl", ddl))
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
+	log.Info("ddl event received", zap.Any("ddl", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
@@ -577,7 +621,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback")
+			log.Panic("global ResolvedTs fallback",
+				zap.Any("lastGlobalResolvedTs", lastGlobalResolvedTs),
+				zap.Any("globalResolvedTs", globalResolvedTs))
 		}
 
 		if globalResolvedTs > lastGlobalResolvedTs {

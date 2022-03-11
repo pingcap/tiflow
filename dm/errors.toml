@@ -2915,7 +2915,7 @@ workaround = "please check the route rules in the task config"
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40081]
-message = "can only update task config for limited filed and this task must in sync unit, current task: %s current unit: %s"
+message = "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -3239,7 +3239,7 @@ workaround = "Please try again later"
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46025]
-message = "source with name %s can only update when no running tasks for now"
+message = "source can only update when not enable relay and no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]

@@ -150,7 +150,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 		if req.Sync {
 			if s.cfg.ShardMode != config.ShardOptimistic {
-				log.L().Warn("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
+				log.L().Info("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
 				break
 			}
 			targetTable := s.route(sourceTable)

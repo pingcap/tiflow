@@ -21,10 +21,9 @@ service Worker {
 
   rpc GetWorkerCfg(GetWorkerCfgRequest) returns (GetWorkerCfgResponse) {}
 
-  // only some fields of the configuration of the subtask in the sync phase can
-  // be updated
-  rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest)
-      returns (CheckSubtasksCanUpdateResponse) {}
+
+  // only some fields of the configuration of the subtask in the sync phase can be updated
+  rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
 }
 
 enum TaskOp {

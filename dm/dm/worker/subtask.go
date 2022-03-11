@@ -645,7 +645,7 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 			return err
 		}
 	}
-	st.cfg = cfg
+	st.SetCfg(*cfg)
 	return nil
 }
 

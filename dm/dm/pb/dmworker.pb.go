@@ -2907,8 +2907,7 @@ type WorkerClient interface {
 	OperateV1Meta(ctx context.Context, in *OperateV1MetaRequest, opts ...grpc.CallOption) (*OperateV1MetaResponse, error)
 	HandleError(ctx context.Context, in *HandleWorkerErrorRequest, opts ...grpc.CallOption) (*CommonWorkerResponse, error)
 	GetWorkerCfg(ctx context.Context, in *GetWorkerCfgRequest, opts ...grpc.CallOption) (*GetWorkerCfgResponse, error)
-	// only some fields of the configuration of the subtask in the sync phase can
-	// be updated
+	// only some fields of the configuration of the subtask in the sync phase can be updated
 	CheckSubtasksCanUpdate(ctx context.Context, in *CheckSubtasksCanUpdateRequest, opts ...grpc.CallOption) (*CheckSubtasksCanUpdateResponse, error)
 }
 
@@ -2996,8 +2995,7 @@ type WorkerServer interface {
 	OperateV1Meta(context.Context, *OperateV1MetaRequest) (*OperateV1MetaResponse, error)
 	HandleError(context.Context, *HandleWorkerErrorRequest) (*CommonWorkerResponse, error)
 	GetWorkerCfg(context.Context, *GetWorkerCfgRequest) (*GetWorkerCfgResponse, error)
-	// only some fields of the configuration of the subtask in the sync phase can
-	// be updated
+	// only some fields of the configuration of the subtask in the sync phase can be updated
 	CheckSubtasksCanUpdate(context.Context, *CheckSubtasksCanUpdateRequest) (*CheckSubtasksCanUpdateResponse, error)
 }
 
