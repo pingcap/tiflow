@@ -549,7 +549,6 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	if err := s.FillSchemaName(job); err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
@@ -673,11 +672,18 @@ type schemaStorageImpl struct {
 	resolvedTs uint64
 
 	filter         *filter.Filter
+<<<<<<< HEAD
 	explicitTables bool
+=======
+	forceReplicate bool
+
+	id model.ChangeFeedID
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (SchemaStorage, error) {
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
+	forceReplicate bool, id model.ChangeFeedID) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {
@@ -692,7 +698,12 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, 
 		snaps:          []*schemaSnapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
+<<<<<<< HEAD
 		explicitTables: forceReplicate,
+=======
+		forceReplicate: forceReplicate,
+		id:             id,
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}
 	return schema, nil
 }
@@ -731,11 +742,14 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 		now := time.Now()
 		if now.Sub(logTime) >= 30*time.Second && isRetryable(err) {
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?",
-				zap.Uint64("ts", ts), zap.Duration("duration", now.Sub(startTime)))
+				zap.Uint64("ts", ts),
+				zap.Duration("duration", now.Sub(startTime)),
+				zap.String("changefeed", s.id))
 			logTime = now
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
+	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(),
+		retry.WithIsRetryableErr(isRetryable))
 
 	return snap, err
 }
@@ -763,8 +777,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
-			log.Info("ignore foregone DDL",
-				zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
+			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
+				zap.String("DDL", job.Query), zap.String("changefeed", s.id))
 			return nil
 		}
 		snap = lastSnap.Clone()
@@ -772,8 +786,13 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = newEmptySchemaSnapshot(s.explicitTables)
 	}
 	if err := snap.handleDDL(job); err != nil {
+		log.Error("handle DDL failed", zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.String("changefeed", s.id))
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("DDL", job.Query),
+		zap.Stringer("job", job), zap.String("changefeed", s.id))
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
@@ -834,8 +853,16 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
+<<<<<<< HEAD
+=======
+	log.Debug("handle DDL new commit",
+		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.String("changefeed", s.id))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
-		log.Info("discard DDL", zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
+		log.Info("discard DDL",
+			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),
+			zap.String("changefeed", s.id))
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()

@@ -545,8 +545,13 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	}
 
 	jobs = append(jobs, job)
+<<<<<<< HEAD
 	storage, err := NewSchemaStorage(nil, 0, nil, false)
 	c.Assert(err, check.IsNil)
+=======
+	storage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+	require.Nil(t, err)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
 		c.Assert(err, check.IsNil)
@@ -905,12 +910,21 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 		}
 
 		jobs, err := getAllHistoryDDLJob(store)
+<<<<<<< HEAD
 		c.Assert(err, check.IsNil)
 		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
 		c.Assert(err, check.IsNil)
 		for _, job := range jobs {
 			err := scheamStorage.HandleDDLJob(job)
 			c.Assert(err, check.IsNil)
+=======
+		require.Nil(t, err)
+		schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+		require.Nil(t, err)
+		for _, job := range jobs {
+			err := schemaStorage.HandleDDLJob(job)
+			require.Nil(t, err)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 		}
 
 		for _, job := range jobs {
@@ -918,9 +932,15 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 			meta, err := kv.GetSnapshotMeta(store, ts)
 			c.Assert(err, check.IsNil)
 			snapFromMeta, err := newSchemaSnapshotFromMeta(meta, ts, false)
+<<<<<<< HEAD
 			c.Assert(err, check.IsNil)
 			snapFromSchemaStore, err := scheamStorage.GetSnapshot(ctx, ts)
 			c.Assert(err, check.IsNil)
+=======
+			require.Nil(t, err)
+			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
+			require.Nil(t, err)
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 
 			tidySchemaSnapshot(snapFromMeta)
 			tidySchemaSnapshot(snapFromSchemaStore)

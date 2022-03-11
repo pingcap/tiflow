@@ -20,8 +20,17 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+=======
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
+	tikverr "github.com/tikv/client-go/v2/error"
+	"github.com/tikv/client-go/v2/tikv"
+	"github.com/tikv/client-go/v2/tikvrpc"
+	"github.com/tikv/client-go/v2/txnkv"
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	"go.uber.org/zap"
 )
 
@@ -31,13 +40,18 @@ type LockResolver interface {
 }
 
 type resolver struct {
-	kvStorage tikv.Storage
+	kvStorage  tikv.Storage
+	changefeed model.ChangeFeedID
+	role       util.Role
 }
 
 // NewLockerResolver returns a LockResolver.
-func NewLockerResolver(kvStorage tikv.Storage) LockResolver {
+func NewLockerResolver(kvStorage tikv.Storage,
+	id model.ChangeFeedID, role util.Role) LockResolver {
 	return &resolver{
-		kvStorage: kvStorage,
+		kvStorage:  kvStorage,
+		changefeed: id,
+		role:       role,
 	}
 }
 
@@ -119,6 +133,15 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		bo = tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
 	}
+<<<<<<< HEAD
 	log.Info("resolve lock successfully", zap.Uint64("regionID", regionID), zap.Uint64("maxVersion", maxVersion))
+=======
+	log.Info("resolve lock successfully",
+		zap.Uint64("regionID", regionID),
+		zap.Int("lockCount", lockCount),
+		zap.Uint64("maxVersion", maxVersion),
+		zap.String("changefeed", r.changefeed),
+		zap.Any("role", r.role))
+>>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	return nil
 }
