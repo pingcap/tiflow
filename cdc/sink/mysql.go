@@ -214,7 +214,10 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -228,6 +231,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
+	log.Info("start exec DDL", zap.Any("DDL", ddl))
 	err := s.statistics.RecordDDLExecution(func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
