@@ -8,8 +8,8 @@ import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 import { supportedIgnorableEvents, TaskFormData } from '~/models/task'
 
 const itemLayout = {
-  labelCol: { span: 4 },
-  wrapperCol: { span: 20 },
+  labelCol: { span: 5 },
+  wrapperCol: { span: 19 },
 }
 
 const EventFilters: StepCompnent = ({ prev, initialValues }) => {
@@ -67,7 +67,6 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                     {...itemLayout}
                     label={t('event filter name')}
                     name={[field.name, 'name']}
-                    fieldKey={[field.fieldKey, 'name']}
                     tooltip={t('create task event filter name tooltip')}
                     rules={[
                       {
@@ -102,7 +101,6 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                     label={t('event filter ignore event')}
                     name={[field.name, 'ignore_event']}
                     tooltip={t('create task event filter ignore_event tooltip')}
-                    fieldKey={[field.fieldKey, 'ignore_event']}
                   >
                     <Select
                       mode="multiple"
@@ -122,7 +120,6 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                     label={t('event filter ignore sql')}
                     tooltip={t('create task event filter ignore_sql tooltip')}
                     name={[field.name, 'ignore_sql']}
-                    fieldKey={[field.fieldKey, 'ignore_sql']}
                   >
                     <Select mode="tags" />
                   </Form.Item>

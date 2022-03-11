@@ -13,7 +13,7 @@ import {
 import { FileAddOutlined, CloseOutlined, RetweetOutlined } from '~/uikit/icons'
 import { useDmapiGetSourceListQuery } from '~/models/source'
 import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
-import { TaskMode } from '~/models/task'
+import { TaskMigrateConsistencyLevel, TaskMode } from '~/models/task'
 
 const formLayout = {
   labelCol: { span: 6 },
@@ -66,18 +66,20 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
               >
                 <InputNumber className="!w-[100%]" placeholder="4" />
               </Form.Item>
-              <Form.Item
-                label={t('data dir')}
-                tooltip={t('create task data_dir tooltip')}
-                name={['source_config', 'full_migrate_conf', 'data_dir']}
-              >
-                <Input placeholder="/data" />
-              </Form.Item>
+
               <Form.Item
                 label={t('consistency requirement')}
                 name={['source_config', 'full_migrate_conf', 'consistency']}
               >
-                <Input />
+                <Select>
+                  {Object.values(TaskMigrateConsistencyLevel).map(
+                    consistency => (
+                      <Select.Option key={consistency} value={consistency}>
+                        {consistency}
+                      </Select.Option>
+                    )
+                  )}
+                </Select>
               </Form.Item>
             </div>
             <div className="flex-1">
@@ -124,7 +126,6 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                     rules={[
                       { required: true, message: t('source name is required') },
                     ]}
-                    fieldKey={[field.fieldKey, 'source_name']}
                   >
                     <Select placeholder="mysql-01" loading={isFetching}>
                       {data?.data.map(source => (
@@ -172,7 +173,6 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                       hidden={!gtidOrBinlogStatus.get(field.name)}
                       label={t('gtid')}
                       name={[field.name, 'binlog_gtid']}
-                      fieldKey={[field.fieldKey, 'binlog_gtid']}
                     >
                       <Input
                         className="max-w-[90%]"

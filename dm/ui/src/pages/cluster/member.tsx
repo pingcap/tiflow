@@ -35,13 +35,15 @@ const MasterTable: React.FC = () => {
     Modal.confirm({
       title: t('are you sure to offline this master'),
       icon: <ExclamationCircleOutlined />,
-      onOk() {
+      async onOk() {
         const key = 'offlineMasterNode-' + Date.now()
         message.loading({ content: t('requesting'), key })
-        offlineMasterNode(name)
-          .unwrap()
-          .then(() => message.success({ content: t('request success') }))
-          .catch(() => message.destroy(key))
+        try {
+          await offlineMasterNode(name).unwrap()
+          message.success({ content: t('request success') })
+        } catch (e) {
+          message.destroy(key)
+        }
       },
     })
   }
@@ -122,13 +124,15 @@ const WorkerTable: React.FC = () => {
     Modal.confirm({
       title: t('are you sure to offline this worker'),
       icon: <ExclamationCircleOutlined />,
-      onOk() {
+      async onOk() {
         const key = 'offlineWorkerNode-' + Date.now()
         message.loading({ content: t('requesting'), key })
-        offlineWorkerNode(name)
-          .unwrap()
-          .then(() => message.success({ content: t('request success') }))
-          .catch(() => message.destroy(key))
+        try {
+          await offlineWorkerNode(name).unwrap()
+          message.success({ content: t('request success') })
+        } catch (e) {
+          message.destroy(key)
+        }
       },
     })
   }

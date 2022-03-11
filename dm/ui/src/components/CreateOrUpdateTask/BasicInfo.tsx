@@ -77,6 +77,14 @@ const BasicInfo: StepCompnent = ({ initialValues, isEditing }) => {
         <Input placeholder="dm_meta" disabled={isEditing} />
       </Form.Item>
 
+      <Form.Item
+        label={t('data dir')}
+        tooltip={t('create task data_dir tooltip')}
+        name={['source_config', 'full_migrate_conf', 'data_dir']}
+      >
+        <Input placeholder="/data" />
+      </Form.Item>
+
       <Form.Item>
         <Button className="mr-4" onClick={() => navigate('/migration/task')}>
           {t('cancel')}

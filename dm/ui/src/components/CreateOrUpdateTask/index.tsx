@@ -10,6 +10,7 @@ import {
   TaskFormData,
   TaskMode,
   useDmapiCreateTaskMutation,
+  useDmapiStartTaskMutation,
   useDmapiUpdateTaskMutation,
 } from '~/models/task'
 import BasicInfo from '~/components/CreateOrUpdateTask/BasicInfo'
@@ -60,6 +61,7 @@ const CreateTaskConfig: React.FC<{
   const [taskData, setTaskData] = useState<TaskFormData>(defaultValue)
   const [createTask] = useDmapiCreateTaskMutation()
   const [updateTask] = useDmapiUpdateTaskMutation()
+  const [startTask] = useDmapiStartTaskMutation()
   const desciptions = [
     t('create task basic info desc'),
     t('create task source info desc'),
@@ -75,27 +77,32 @@ const CreateTaskConfig: React.FC<{
     setCurrentStep(c => c - 1)
   }, [])
 
-  const handleSubmit = (taskData: TaskFormData) => {
+  const handleSubmit = async (taskData: TaskFormData) => {
     const isEditing = Boolean(data)
     const key = 'createTask-' + Date.now()
     message.loading({ content: t('requesting'), key })
     const payload = { ...taskData }
+    const startAfterSaved = payload.start_after_saved
     if ('binlog_filter_rule_array' in payload) {
       delete payload.binlog_filter_rule_array
     }
     if (isEmptyObject(payload.target_config.security)) {
       delete payload.target_config.security
     }
+    if ('start_after_saved' in payload) {
+      delete payload.start_after_saved
+    }
     const handler = isEditing ? updateTask : createTask
-    handler({ task: payload as Task })
-      .unwrap()
-      .then(() => {
-        message.success({ content: t('request success'), key })
-        navigate('#')
-      })
-      .catch(() => {
-        message.destroy(key)
-      })
+    try {
+      await handler({ task: payload as Task }).unwrap()
+      message.success({ content: t('request success'), key })
+      if (startAfterSaved) {
+        await startTask({ taskName: payload.name }).unwrap()
+      }
+      navigate('/migration/task')
+    } catch (e) {
+      message.destroy(key)
+    }
   }
 
   const getStepComponent = () => {

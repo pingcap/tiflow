@@ -20,12 +20,11 @@ const CreateTaskEditorMode: React.FC<{
 
   const handleEditorChange = (v: string) => setVal(v)
   const handleCancel = () => navigate('/migration/task')
-  const handleSubmit = () => {
-    convertTaskDataToConfigFile({ task_config_file: val })
-      .unwrap()
-      .then(res => {
-        onSubmit(res.task)
-      })
+  const handleSubmit = async () => {
+    const res = await convertTaskDataToConfigFile({
+      task_config_file: val,
+    }).unwrap()
+    onSubmit(res.task)
   }
 
   useEffect(() => {

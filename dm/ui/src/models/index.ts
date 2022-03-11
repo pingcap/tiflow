@@ -18,6 +18,7 @@ const rtkQueryErrorLogger: Middleware = () => next => action => {
         action.payload?.data?.error_msg ??
         action.payload?.data?.error ??
         'Oops, somthing went wrong',
+      duration: 15,
     })
   }
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useLocalStorageState } from 'ahooks'
 import { useTranslation } from 'react-i18next'
+import clsx from 'clsx'
 
 import { ControlOutlined } from '~/uikit/icons'
 import {
@@ -33,6 +34,7 @@ const Dashboard = () => {
     },
   })
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [form] = Form.useForm()
   const { host, port, view } = config
 
@@ -53,7 +55,7 @@ const Dashboard = () => {
   }, [config])
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full relative">
       <Popover
         arrowPointAtCenter={false}
         placement="topRight"
@@ -94,6 +96,7 @@ const Dashboard = () => {
       >
         <div
           style={{
+            zIndex: 2,
             position: 'fixed',
             bottom: 100,
             right: 40,
@@ -136,12 +139,19 @@ const Dashboard = () => {
           </Form>
         </div>
       </Modal>
-      {(!host || !port) && <Skeleton active className="m-4" />}
+      {loading && (
+        <div className="m-4 absolute h-full w-full z-1">
+          {t('dashboard loading tip')}
+          <Skeleton active />
+          <Skeleton active />
+        </div>
+      )}
       {port && host && (
         <iframe
           key={view}
+          onLoad={() => setLoading(false)}
           src={`//${host}:${port}${view}`}
-          className="h-full w-full"
+          className={clsx('w-full h-full', loading && 'invisible')}
           frameBorder="0"
         />
       )}

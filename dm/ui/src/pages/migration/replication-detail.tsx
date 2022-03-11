@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useDebounce } from 'ahooks'
 
 import i18n from '~/i18n'
 import {
@@ -26,8 +27,11 @@ const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
   const [currentTask, setCurrentTask] = useState<Task>()
   const [currentSourceName, setCurrentSourceName] = useState<string>()
-  const [dbName, setDbName] = useState('')
-  const [tableName, setTableName] = useState('')
+  const [dbPattern, setDbPattern] = useState('')
+  const [tablePattern, setTablePattern] = useState('')
+  const debouncedDbPattern = useDebounce(dbPattern, { wait: 500 })
+  const debouncedTablePattern = useDebounce(tablePattern, { wait: 500 })
+
   const currentTaskName = currentTask?.name ?? ''
   const { data: taskList, isFetching: isFetchingTaskList } =
     useDmapiGetTaskListQuery({
@@ -41,6 +45,8 @@ const ReplicationDetail: React.FC = () => {
     {
       taskName: currentTaskName,
       sourceName: currentSourceName ?? '',
+      schemaPattern: debouncedDbPattern,
+      tablePattern: debouncedTablePattern,
     },
     { skip: !currentTask || !currentSourceName }
   )
@@ -107,10 +113,10 @@ const ReplicationDetail: React.FC = () => {
   ]
 
   useEffect(() => {
-    if (dbName || tableName) {
-      setKeyword(dbName + ' ' + tableName)
+    if (dbPattern || tablePattern) {
+      setKeyword(dbPattern + ' ' + tablePattern)
     }
-  }, [dbName, tableName])
+  }, [dbPattern, tablePattern])
 
   useEffect(() => {
     if (!currentTask && taskList && taskList.data[0]) {
@@ -157,15 +163,15 @@ const ReplicationDetail: React.FC = () => {
 
             <Input
               addonBefore="database"
-              value={dbName}
+              value={dbPattern}
               placeholder="source database"
-              onChange={e => setDbName(e.target.value)}
+              onChange={e => setDbPattern(e.target.value)}
             />
             <Input
               addonBefore="table"
-              value={tableName}
+              value={tablePattern}
               placeholder="source table"
-              onChange={e => setTableName(e.target.value)}
+              onChange={e => setTablePattern(e.target.value)}
             />
             <Button onClick={refetch}>{t('check')}</Button>
           </Space>

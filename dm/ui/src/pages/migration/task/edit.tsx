@@ -11,7 +11,7 @@ const EditTask: React.FC = () => {
   const data = useAppSelector(state => state.globals.preloadedTask)
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-y-auto">
       <div className="px-4 pt-4">
         <Breadcrumb>
           <Breadcrumb.Item>{t('migration')}</Breadcrumb.Item>

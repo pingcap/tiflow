@@ -94,7 +94,7 @@ const SourceList: React.FC = () => {
     if (isEditing) {
       payload.enable = currentSource!.enable
     } else {
-      payload.enable = false
+      payload.enable = true
     }
     const key = 'createSource-' + Date.now()
     const emptyKeys = Object.keys(payload).filter(key =>
@@ -105,17 +105,14 @@ const SourceList: React.FC = () => {
     })
     message.loading({ content: t('requesting'), key })
     const handler = isEditing ? updateSource : createSource
-    handler({
-      source: payload,
-    })
-      .unwrap()
-      .then(() => {
-        message.success({ content: t('request success'), key, duration: 6 })
-        setShowModal(false)
-      })
-      .catch(() => {
-        message.destroy(key)
-      })
+
+    try {
+      await handler({ source: payload }).unwrap()
+      message.success({ content: t('request success'), key, duration: 6 })
+      setShowModal(false)
+    } catch (e) {
+      message.destroy(key)
+    }
   }
   const handleBatchSelection = (handler: (name: string) => Promise<any>) => {
     if (selectedSources.length === 0) return

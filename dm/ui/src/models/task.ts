@@ -150,6 +150,7 @@ const injectedRtkApi = api.injectEndpoints({
           table_pattern: queryArg.tablePattern,
         },
       }),
+      keepUnusedDataFor: 1,
     }),
   }),
 })
@@ -163,7 +164,7 @@ export type TaskMigrateTarget = {
 
 export type DmapiStartTaskApiArg = {
   taskName: string
-  startTaskRequest: {
+  startTaskRequest?: {
     remove_meta?: boolean
     safe_mode_time_duration?: any
     source_name_list?: string[]
@@ -225,11 +226,19 @@ export type TaskTableMigrateRule = {
   binlog_filter_rule?: string[]
 }
 
+export enum TaskMigrateConsistencyLevel {
+  Flush = 'flush',
+  Snapshot = 'snapshot',
+  Lock = 'lock',
+  None = 'none',
+  Auto = 'auto',
+}
+
 export type TaskFullMigrateConf = {
   export_threads?: number
   import_threads?: number
   data_dir?: string
-  consistency?: string
+  consistency?: TaskMigrateConsistencyLevel
 }
 
 export type TaskIncrMigrateConf = {
@@ -285,6 +294,7 @@ export type Task = {
 
 export interface TaskFormData extends Task {
   binlog_filter_rule_array?: Array<TaskBinLogFilterRule & { name: string }>
+  start_after_saved?: boolean
 }
 
 export type LoadStatus = {

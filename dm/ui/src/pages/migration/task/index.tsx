@@ -100,8 +100,8 @@ const SourceTable: React.FC<{
 }
 
 const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
-  const [stage, setStage] = useState<TaskStage>()
-  const [unit, setUnit] = useState<TaskUnit>()
+  const [stage, setStage] = useState<TaskStage | ''>('')
+  const [unit, setUnit] = useState<TaskUnit | ''>('')
   const [page, setPage] = useState(1)
   const offset = useMemo(() => {
     return {
@@ -119,6 +119,7 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
     }
     return data
   }, [subs, stage, unit, offset])
+
   const handlePageChange = (page: number) => {
     setPage(page)
   }
@@ -144,6 +145,9 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
                 {stage}
               </Select.Option>
             ))}
+            <Select.Option key="all" value="">
+              All
+            </Select.Option>
           </Select>
           <Select
             className="min-w-100px"
@@ -157,6 +161,9 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
                 {i}
               </Select.Option>
             ))}
+            <Select.Option key="all" value="">
+              All
+            </Select.Option>
           </Select>
         </Space>
       </div>

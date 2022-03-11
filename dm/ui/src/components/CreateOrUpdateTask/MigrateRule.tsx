@@ -1,7 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Form, Button, Card, Select, Input, Cascader } from '~/uikit'
+import {
+  Form,
+  Button,
+  Card,
+  Select,
+  Input,
+  Cascader,
+  message,
+  Space,
+} from '~/uikit'
 import {
   FileAddOutlined,
   DoubleRightOutlined,
@@ -12,7 +21,6 @@ import {
 import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 import {
   useDmapiGetSourceSchemaListQuery,
-  useDmapiGetSourceListQuery,
   useDmapiGetSourceTableListMutation,
 } from '~/models/source'
 
@@ -29,12 +37,16 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
   const [currentSource, setCurrentSource] = useState('')
   const [cascaderValue, setCascaderValue] = useState<string[][]>([])
   const [form] = Form.useForm()
-  const { data } = useDmapiGetSourceListQuery({ with_status: false })
   const [getSourceTable] = useDmapiGetSourceTableListMutation()
   const { data: schemas, isFetching } = useDmapiGetSourceSchemaListQuery(
     { sourceName: currentSource },
     { skip: !currentSource }
   )
+  const selectedSource = useMemo(() => {
+    return (
+      initialValues?.source_config?.source_conf?.map(i => i.source_name) ?? []
+    )
+  }, [initialValues])
 
   const [cascaderOptions, setCascaderOptions] = useState(
     schemas?.map(item => ({
@@ -82,6 +94,23 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
     })
   }
 
+  const handleSubmit = (startAfterSaved: boolean) => {
+    const rules = form.getFieldValue('table_migrate_rule')
+    if (rules.length === 0) {
+      message.error({
+        content: t('migrate rules is required'),
+      })
+      return
+    }
+    if (startAfterSaved) {
+      form.setFieldsValue({
+        ...form.getFieldsValue(),
+        start_after_saved: true,
+      })
+    }
+    form.submit()
+  }
+
   useEffect(() => {
     if (schemas) {
       setCascaderOptions(
@@ -99,7 +128,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
   return (
     <Form initialValues={initialValues} name="migrateRule" form={form}>
       <div className="grid grid-cols-1 gap-4 auto-rows-fr my-4">
-        <Form.List name={['table_migrate_rule']}>
+        <Form.List name="table_migrate_rule">
           {(fields, { add, remove }) => (
             <>
               {fields.map(field => (
@@ -117,18 +146,15 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       <h1 className="font-bold">{t('source')}</h1>
                       <Form.Item
                         label={t('source')}
-                        name={[field.key, 'source', 'source_name']}
+                        name={[field.name, 'source', 'source_name']}
                         {...itemLayout}
                       >
                         <Select
                           onChange={val => setCurrentSource(val as string)}
                         >
-                          {data?.data.map(source => (
-                            <Select.Option
-                              key={source.source_name}
-                              value={source.source_name}
-                            >
-                              {source.source_name}
+                          {selectedSource.map(s => (
+                            <Select.Option key={s} value={s}>
+                              {s}
                             </Select.Option>
                           ))}
                         </Select>
@@ -138,7 +164,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                         tooltip={t(
                           'create task migrate rule source schema tooltip'
                         )}
-                        name={[field.key, 'source', 'schema']}
+                        name={[field.name, 'source', 'schema']}
                         {...itemLayout}
                       >
                         <Input
@@ -168,7 +194,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                         tooltip={t(
                           'create task migrate rule source table tooltip'
                         )}
-                        name={[field.key, 'source', 'table']}
+                        name={[field.name, 'source', 'table']}
                         {...itemLayout}
                       >
                         <Input placeholder="tbl_*" />
@@ -184,7 +210,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                       <Form.Item
                         label={t('event filter')}
                         {...itemLayout}
-                        name={[field.key, 'binlog_filter_rule']}
+                        name={[field.name, 'binlog_filter_rule']}
                         tooltip={t(
                           'create task migrate rule binlog_filter_rule tooltip'
                         )}
@@ -222,7 +248,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                         tooltip={t(
                           'create task migrate rule target schema tooltip'
                         )}
-                        name={[field.key, 'target', 'schema']}
+                        name={[field.name, 'target', 'schema']}
                         {...itemLayout}
                       >
                         <Input />
@@ -232,7 +258,7 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                         tooltip={t(
                           'create task migrate rule target table tooltip'
                         )}
-                        name={[field.key, 'target', 'table']}
+                        name={[field.name, 'target', 'table']}
                         {...itemLayout}
                       >
                         <Input />
@@ -246,7 +272,13 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                 className="!h-200px"
                 type="dashed"
                 icon={<FileAddOutlined />}
-                onClick={() => add()}
+                onClick={() =>
+                  add({
+                    source: { schema: '', table: '' },
+                    target: { schema: '', table: '' },
+                    binlog_filter_rule: [],
+                  })
+                }
               >
                 {t('add migrate rule')}
               </Button>
@@ -256,12 +288,15 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
       </div>
 
       <Form.Item>
-        <Button className="mr-4" onClick={prev}>
-          {t('previous')}
-        </Button>
-        <Button type="primary" htmlType="submit">
-          {t('save')}
-        </Button>
+        <Space>
+          <Button onClick={prev}>{t('previous')}</Button>
+          <Button type="primary" onClick={() => handleSubmit(false)}>
+            {t('save')}
+          </Button>
+          <Button type="primary" onClick={() => handleSubmit(true)}>
+            {t('save and run')}
+          </Button>
+        </Space>
       </Form.Item>
     </Form>
   )
