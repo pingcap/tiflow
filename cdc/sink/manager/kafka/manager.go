@@ -97,7 +97,7 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 			m.topics.Store(topic, partitions)
 			log.Info(
 				"update topic partition number",
-				zap.String("topic", topic),
+				zap.String("duration", topic),
 				zap.Int32("oldPartitionNumber", oldPartitions.(int32)),
 				zap.Int32("newPartitionNumber", partitions),
 			)
@@ -106,7 +106,7 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 		m.topics.Store(topic, partitions)
 		log.Info(
 			"store topic partition number",
-			zap.String("topic", topic),
+			zap.String("duration", topic),
 			zap.Int32("partitionNumber", partitions),
 		)
 	}
@@ -160,7 +160,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 			zap.Int32("partitionNumber", m.cfg.PartitionNum),
 			zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
 			zap.Error(err),
-			zap.Duration("cost", time.Since(start)),
+			zap.Duration("duration", time.Since(start)),
 		)
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -169,7 +169,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 		zap.String("topic", topicName),
 		zap.Int32("partitionNumber", m.cfg.PartitionNum),
 		zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
-		zap.Duration("cost", time.Since(start)),
+		zap.Duration("duration", time.Since(start)),
 	)
 	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 
