@@ -251,6 +251,7 @@ var (
 	ErrSortDirLockError                = errors.Normalize("error encountered when locking sort-dir", errors.RFCCodeText("ErrSortDirLockError"))
 	ErrLevelDBSorterError              = errors.Normalize("leveldb error: %s", errors.RFCCodeText("CDC:ErrLevelDBSorterError"))
 	ErrSorterClosed                    = errors.Normalize("sorter is closed", errors.RFCCodeText("CDC:ErrSorterClosed"))
+	ErrPebbleDBError                   = errors.Normalize("pebbledb error", errors.RFCCodeText("CDC:ErrPebbleDBError"))
 
 	// processor errors
 	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
@@ -294,4 +295,8 @@ var (
 	ErrRewindRequestBodyError = errors.Normalize("failed to seek to the beginning of request body", errors.RFCCodeText("CDC:ErrRewindRequestBodyError"))
 	ErrZeroLengthResponseBody = errors.Normalize("0-length response with status code: %d", errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"))
 	ErrInvalidHost            = errors.Normalize("host must be a URL or a host:port pair: %q", errors.RFCCodeText("CDC:ErrInvalidHost"))
+
+	// Verification error
+	ErrVerificationConfigInvalid = errors.Normalize("verification config invalid", errors.RFCCodeText("CDC:ErrVerificationConfigInvalid"))
+	ErrModuleVerificationFail    = errors.Normalize("module level verification fail: module %s", errors.RFCCodeText("CDC:ErrModuleVerificationFail"))
 )

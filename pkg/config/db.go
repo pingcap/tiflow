@@ -77,7 +77,7 @@ type DBConfig struct {
 	// CompactionDeletionThreshold defines the threshold of the number of deletion that
 	// trigger compaction.
 	//
-	// The default value is 30 minutes, 1800.
+	// The default value is 30 minutes, 1800s.
 	CompactionPeriod int `toml:"compaction-period" json:"compaction-period"`
 
 	// IteratorMaxAliveDuration the maximum iterator alive duration in ms.

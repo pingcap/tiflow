@@ -26,6 +26,7 @@ type PolymorphicEvent struct {
 	RawKV    *RawKVEntry
 	Row      *RowChangedEvent
 	finished chan struct{}
+	TrackID  []byte
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -38,6 +39,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		CRTs:     rawKV.CRTs,
 		RawKV:    rawKV,
 		finished: nil,
+		TrackID:  rawKV.Key,
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
@@ -81,6 +82,7 @@ type sinkNode struct {
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
+	verifier         verification.ModuleVerifier
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -105,6 +107,17 @@ func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
 	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
+	if ctx.ChangefeedVars().Info.SyncPointEnabled {
+		v, err := verification.NewModuleVerification(context.Background(),
+			&verification.ModuleVerificationConfig{
+				ChangeFeedID: ctx.ChangefeedVars().ID,
+				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
+			})
+		if err != nil {
+			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "sink"))
+		}
+		n.verifier = v
+	}
 	return nil
 }
 
@@ -210,7 +223,9 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 	} else {
 		n.rowBuffer = append(n.rowBuffer, event.Row)
 	}
-
+	if n.verifier != nil {
+		n.verifier.SentTrackData(ctx, verification.Sink, []verification.TrackData{{TrackID: event.TrackID, CommitTs: event.CRTs}})
+	}
 	if len(n.rowBuffer) >= defaultSyncResolvedBatch {
 		if err := n.emitRowToSink(ctx); err != nil {
 			return errors.Trace(err)
