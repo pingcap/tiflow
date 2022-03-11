@@ -44,11 +44,12 @@ func (t *testForEtcd) TestDeleteInfosOperationsSchema(c *C) {
 	c.Assert(ifm[task][source][upSchema][upTable], DeepEquals, infoWithVer)
 
 	// put operation.
-	_, _, err = PutOperation(etcdTestCli, false, op, 0)
+	rev, _, err = PutOperation(etcdTestCli, false, op, 0)
 	c.Assert(err, IsNil)
 	opm, _, err := GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 1)
+	op.Revision = rev
 	c.Assert(opm[task][source][upSchema][upTable], DeepEquals, op)
 
 	// DELETE info and operation with version 0
