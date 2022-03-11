@@ -480,7 +480,8 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	)
 	columns = []string{"Charset", "Description", "Default collation", "Maxlen"}
 	mock.ExpectQuery("show character set where charset = 'gbk';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese", "gbk_chinese_ci", 2),
+		sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese",
+			"gbk_chinese_ci", 2),
 	)
 	mock.ExpectClose()
 	return db, nil
@@ -1260,7 +1261,7 @@ func TestGBKSupported(t *testing.T) {
 	require.Nil(t, err)
 
 	// no warning log will be output because GBK charset is supported
-	require.Equal(t, logs.Len(), 0, logs.TakeAll())
+	require.Equal(t, logs.Len(), 0)
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)

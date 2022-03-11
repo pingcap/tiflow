@@ -168,7 +168,8 @@ func newMySQLSink(
 		return nil, errors.Trace(err)
 	}
 	if !gbkSupported {
-		log.Warn("gbk charset is not supported by downstream, some types of DDL may fail to be executed",
+		log.Warn("gbk charset is not supported by downstream, "+
+			"some types of DDL may fail to be executed",
 			zap.String("hostname", hostName), zap.String("port", port))
 	}
 	db, err := GetDBConnImpl(ctx, dsnStr)
@@ -390,15 +391,22 @@ func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
 }
 
 // check whether the target charset is supported
-func checkCharsetSupport(ctx context.Context, db *sql.DB, _ string) (bool, error) {
+func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (bool, error) {
 	var (
-		charset          string
+		charSet          string
 		description      string
 		defaultCollation string
 		maxLen           int
 	)
-	err := db.QueryRowContext(ctx, "show character set where charset = 'gbk';").
-		Scan(&charset, &description, &defaultCollation, &maxLen)
+
+	// validate charsetName
+	_, err := charset.GetCharsetInfo(charsetName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	err = db.QueryRowContext(ctx, "show character set where charset = '"+charsetName+"';").
+		Scan(&charSet, &description, &defaultCollation, &maxLen)
 	if err != nil && err != sql.ErrNoRows {
 		return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}

@@ -483,8 +483,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		v := datum.GetString()
-		const sizeOfV = unsafe.Sizeof(v)
-		return v, int(sizeOfV), "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		// TEXT and BLOB are differentiated by charset.
 		// If charset is binary, then the real type is BLOB, else the real type is TEXT.
@@ -496,8 +495,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 			return b, sizeOfBytes(b), "", nil
 		}
 		v := datum.GetString()
-		const sizeOfV = unsafe.Sizeof(v)
-		return v, int(sizeOfV), "", nil
+		return v, sizeOfString(v), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {

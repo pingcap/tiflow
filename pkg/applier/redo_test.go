@@ -142,7 +142,8 @@ func TestApplyDMLs(t *testing.T) {
 			)
 			columns = []string{"Charset", "Description", "Default collation", "Maxlen"}
 			mock.ExpectQuery("show character set where charset = 'gbk';").WillReturnRows(
-				sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese", "gbk_chinese_ci", 2),
+				sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese",
+					"gbk_chinese_ci", 2),
 			)
 			mock.ExpectClose()
 			return db, nil
