@@ -53,6 +53,7 @@ type openAPI struct {
 	testStatusProvider owner.StatusProvider
 }
 
+// NewOpenAPI creates a new openAPI.
 func NewOpenAPI(c *capture.Capture) openAPI {
 	return openAPI{capture: c}
 }

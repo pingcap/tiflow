@@ -19,6 +19,9 @@ service Worker {
     rpc HandleError(HandleWorkerErrorRequest) returns(CommonWorkerResponse) {}
 
     rpc GetWorkerCfg(GetWorkerCfgRequest) returns(GetWorkerCfgResponse) {}
+
+    // only some fields of the configuration of the subtask in the sync phase can be updated
+    rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
 }
 
 enum TaskOp {
@@ -29,6 +32,7 @@ enum TaskOp {
     Start = 4;
     Update = 5;
     AutoResume = 6;
+    Delete = 7;
 }
 
 message QueryStatusRequest {
@@ -389,4 +393,11 @@ enum ValidatorOp {
     InvalidValidatorOp = 0;
     StartValidator = 1;
     StopValidator = 2;
+}
+
+message CheckSubtasksCanUpdateRequest { string subtaskCfgTomlString = 1; }
+
+message CheckSubtasksCanUpdateResponse {
+  bool success = 1;
+  string msg = 2; // message when error occurred
 }

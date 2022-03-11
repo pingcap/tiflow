@@ -790,6 +790,12 @@ description = ""
 workaround = "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used."
 tags = ["upstream", "high"]
 
+[error.DM-functional-11127]
+message = "receive conflict DDL for the optimistic shard ddl lock %s: %s"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
 description = ""
@@ -1130,6 +1136,18 @@ tags = ["internal", "medium"]
 message = "start-time %s is too late, no binlog location matches it"
 description = ""
 workaround = "Please check the `--start-time` is expected or try again later."
+tags = ["internal", "high"]
+
+[error.DM-config-20058]
+message = "loader's dir %s is invalid"
+description = ""
+workaround = "Please check the `dir` config in task configuration file."
+tags = ["internal", "high"]
+
+[error.DM-config-20059]
+message = "loader's dir %s is s3 dir, but s3 is not supported"
+description = ""
+workaround = "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
 tags = ["internal", "high"]
 
 [error.DM-binlog-op-22001]
@@ -2890,6 +2908,12 @@ description = ""
 workaround = "please check the route rules in the task config"
 tags = ["internal", "high"]
 
+[error.DM-dm-worker-40081]
+message = "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
@@ -3209,7 +3233,7 @@ workaround = "Please try again later"
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46025]
-message = "source can only update relay-log related parts for now"
+message = "source can only update when not enable relay and no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]
@@ -3258,6 +3282,18 @@ tags = ["internal", "low"]
 
 [error.DM-scheduler-46033]
 message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46034]
+message = "subtasks with name %s for sources %v not exist"
+description = ""
+workaround = "Please create this subtask first."
+tags = ["internal", "medium"]
+
+[error.DM-scheduler-46035]
+message = "subtask with name %s source name %s can only update when no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]

@@ -36,16 +36,14 @@ import (
 
 // TODO refactor this into a struct Merger.
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
-		"capture":    captureAddr,
 		"changefeed": changefeedID,
 	})
-	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(captureAddr, changefeedID)
-	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID)
-	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(changefeedID)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(changefeedID)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(changefeedID)
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)

@@ -595,7 +595,7 @@ func (r *Relay) handleEvents(
 					r.logger.Error("the requested binlog files have purged in the master server or the master server have switched, currently DM do no support to handle this error",
 						zap.String("db host", cfg.Host), zap.Int("db port", cfg.Port), zap.Stringer("last pos", lastPos), log.ShortError(err))
 					// log the status for debug
-					pos, gs, err2 := utils.GetMasterStatus(ctx, r.db.DB, r.cfg.Flavor)
+					pos, gs, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
 					if err2 == nil {
 						r.logger.Info("current master status", zap.Stringer("position", pos), log.WrapStringerField("GTID sets", gs))
 					}
@@ -784,7 +784,7 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 
 	var latestPosName, latestGTIDStr string
 	if (r.cfg.EnableGTID && len(r.cfg.BinlogGTID) == 0) || (!r.cfg.EnableGTID && len(r.cfg.BinLogName) == 0) {
-		latestPos, latestGTID, err2 := utils.GetMasterStatus(ctx, r.db.DB, r.cfg.Flavor)
+		latestPos, latestGTID, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
 		if err2 != nil {
 			return err2
 		}
@@ -864,7 +864,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				return
 			}
 			ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-			pos, _, err := utils.GetMasterStatus(ctx2, r.db.DB, r.cfg.Flavor)
+			pos, _, err := utils.GetPosAndGs(ctx2, r.db.DB, r.cfg.Flavor)
 			cancel2()
 			if err != nil {
 				r.logger.Warn("get master status", zap.Error(err))

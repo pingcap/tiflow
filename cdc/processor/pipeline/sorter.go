@@ -56,9 +56,7 @@ type sorterNode struct {
 	eg     *errgroup.Group
 	cancel context.CancelFunc
 
-	cleanID     actor.ID
-	cleanTask   message.Message
-	cleanRouter *actor.Router
+	cleanup func(context.Context) error
 
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
@@ -90,10 +88,10 @@ func newSorterNode(
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.StartActorNode(ctx, false, &wg)
+	return n.start(ctx, false, &wg, 0, nil)
 }
 
-func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group) error {
+func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
@@ -111,22 +109,25 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			startTs := ctx.ChangefeedVars().Info.StartTs
-			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
-			router := ctx.GlobalVars().SorterSystem.Router()
+			ssystem := ctx.GlobalVars().SorterSystem
+			dbActorID := ssystem.DBActorID(uint64(n.tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter := leveldb.NewSorter(
-				ctx, n.tableID, startTs, router, actorID, compactScheduler,
-				config.GetGlobalServerConfig().Debug.DB)
-			n.cleanID = actorID
-			n.cleanTask = levelSorter.CleanupTask()
-			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
+			levelSorter, err := leveldb.NewSorter(
+				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
+				ssystem.WriterSystem, ssystem.WriterRouter,
+				ssystem.ReaderSystem, ssystem.ReaderRouter,
+				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			n.cleanup = levelSorter.CleanupFunc()
 			eventSorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
 			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 			var err error
-			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -146,17 +147,21 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
 		for {
+			// We must call `sorter.Output` before receiving resolved events.
+			// Skip calling `sorter.Output` and caching output channel may fail
+			// to receive any events.
+			output := eventSorter.Output()
 			select {
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
 				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
-			case msg, ok := <-eventSorter.Output():
+			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
 					return nil
@@ -228,6 +233,9 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 					if msg.CRTs < lastSentResolvedTs {
 						continue
 					}
+					if isTableActorMode {
+						_ = tableActorRouter.Send(tableActorID, message.TickMessage())
+					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
@@ -245,64 +253,63 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	return err
 }
 
+// handleRawEvent process the raw kv event,send it to sorter
+func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.PolymorphicEvent) {
+	rawKV := event.RawKV
+	if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
+		// Puller resolved ts should not fall back.
+		resolvedTs := rawKV.CRTs
+		oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
+		if oldResolvedTs > resolvedTs {
+			log.Panic("resolved ts regression",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("resolvedTs", resolvedTs),
+				zap.Uint64("oldResolvedTs", oldResolvedTs))
+		}
+		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
+
+		if resolvedTs > n.BarrierTs() &&
+			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
+			// Do not send resolved ts events that is larger than
+			// barrier ts.
+			// When DDL puller stall, resolved events that outputted by
+			// sorter may pile up in memory, as they have to wait DDL.
+			//
+			// Disabled if redolog is on, it requires sink reports
+			// resolved ts, conflicts to this change.
+			// TODO: Remove redolog check once redolog decouples for global
+			//       resolved ts.
+			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
+		}
+	}
+	n.sorter.AddEntry(ctx, event)
+}
+
 func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	switch msg.Tp {
 	case pipeline.MessageTypePolymorphicEvent:
-		rawKV := msg.PolymorphicEvent.RawKV
-		if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
-			// Puller resolved ts should not fall back.
-			resolvedTs := rawKV.CRTs
-			oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
-			if oldResolvedTs > resolvedTs {
-				log.Panic("resolved ts regression",
-					zap.Int64("tableID", n.tableID),
-					zap.Uint64("resolvedTs", resolvedTs),
-					zap.Uint64("oldResolvedTs", oldResolvedTs))
-			}
-			atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
-
-			if resolvedTs > n.barrierTs &&
-				!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
-				// Do not send resolved ts events that is larger than
-				// barrier ts.
-				// When DDL puller stall, resolved events that outputted by
-				// sorter may pile up in memory, as they have to wait DDL.
-				//
-				// Disabled if redolog is on, it requires sink reports
-				// resolved ts, conflicts to this change.
-				// TODO: Remove redolog check once redolog decouples for global
-				//       resolved ts.
-				msg = pipeline.PolymorphicEventMessage(
-					model.NewResolvedPolymorphicEvent(0, n.barrierTs))
-			}
-		}
-		// todo: remove feature switcher after GA
-		if n.isTableActorMode {
-			return n.sorter.TryAddEntry(ctx, msg.PolymorphicEvent)
-		}
-		n.sorter.AddEntry(ctx, msg.PolymorphicEvent)
+		n.handleRawEvent(ctx, msg.PolymorphicEvent)
 		return true, nil
 	case pipeline.MessageTypeBarrier:
-		if msg.BarrierTs > n.barrierTs {
-			n.barrierTs = msg.BarrierTs
-		}
+		n.updateBarrierTs(msg.BarrierTs)
 		fallthrough
 	default:
-		// todo: remove feature switcher after GA
-		if n.isTableActorMode {
-			return ctx.(*actorNodeContext).TrySendToNextNode(msg), nil
-		}
 		ctx.(pipeline.NodeContext).SendToNextNode(msg)
 		return true, nil
 	}
 }
 
-func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	n.cancel()
-	if n.cleanRouter != nil {
+func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
+	if barrierTs > n.BarrierTs() {
+		atomic.StoreUint64(&n.barrierTs, barrierTs)
+	}
+}
+
+func (n *sorterNode) releaseResource(ctx context.Context, changefeedID string) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+	if n.cleanup != nil {
 		// Clean up data when the table sorter is canceled.
-		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
+		err := n.cleanup(ctx)
 		if err != nil {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
@@ -311,9 +318,19 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
 	n.flowController.Abort()
+}
+
+func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
+	n.cancel()
+	n.releaseResource(ctx, ctx.ChangefeedVars().ID)
 	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {
 	return atomic.LoadUint64(&n.resolvedTs)
+}
+
+// BarrierTs returns the sorter barrierTs
+func (n *sorterNode) BarrierTs() model.Ts {
+	return atomic.LoadUint64(&n.barrierTs)
 }

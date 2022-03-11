@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/router"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -269,6 +271,10 @@ type SubTaskConfig struct {
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 }
 
+// SampleSubtaskConfig is the content of subtask.toml in current folder.
+//go:embed subtask.toml
+var SampleSubtaskConfig string
+
 // NewSubTaskConfig creates a new SubTaskConfig.
 func NewSubTaskConfig() *SubTaskConfig {
 	cfg := &SubTaskConfig{}
@@ -395,10 +401,25 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	dirSuffix := "." + c.Name
-	if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) { // check to support multiple times calling
-		// if not ends with the task name, we append the task name to the tail
-		c.LoaderConfig.Dir += dirSuffix
+	// adjust dir
+	if c.Mode == ModeAll || c.Mode == ModeFull {
+		// check
+		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
+		if isS3 && c.ImportMode == LoadModeLoader {
+			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
+		}
+		// add suffix
+		var dirSuffix string
+		if isS3 {
+			dirSuffix = c.Name + "." + c.SourceID
+		} else {
+			dirSuffix = c.Name
+		}
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		if err != nil {
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+		}
+		c.LoaderConfig.Dir = newDir
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {

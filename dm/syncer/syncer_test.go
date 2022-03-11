@@ -38,6 +38,7 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
@@ -1212,11 +1213,11 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *C) {
 	filename := filepath.Join(s.cfg.Dir, "metadata")
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: BAD METADATA"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), NotNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), NotNil)
 
 	err = os.WriteFile(filename, []byte("SHOW MASTER STATUS:\n\tLog: mysql-bin.000003\n\tPos: 1234\n\tGTID:\n\n"), 0o644)
 	c.Assert(err, IsNil)
-	c.Assert(syncer.checkpoint.LoadMeta(), IsNil)
+	c.Assert(syncer.checkpoint.LoadMeta(context.Background()), IsNil)
 
 	c.Assert(os.Remove(filename), IsNil)
 
@@ -1798,14 +1799,50 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NotNil(t, syncer.runCancel)
 
 	// test syncer wait time not more than maxPauseOrStopWaitTime
-	oldMaxPauseOrStopWaitTime := maxPauseOrStopWaitTime
-	maxPauseOrStopWaitTime = time.Second
+	oldMaxPauseOrStopWaitTime := defaultMaxPauseOrStopWaitTime
+	defaultMaxPauseOrStopWaitTime = time.Second
 	ctx2, cancel := context.WithCancel(context.Background())
 	cancel()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.isTransactionEnd = false
 	syncer.runWg.Add(1)
 	syncer.waitBeforeRunExit(ctx2)
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
-	maxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
+	defaultMaxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
+
+	// test use cliArgs
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime", "return()"))
+	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStop: "2s"}
+	ctx3, cancel := context.WithCancel(context.Background())
+	cancel()
+	runCtx, runCancel = context.WithCancel(context.Background())
+	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.runWg.Add(1)
+	syncer.waitBeforeRunExit(ctx3)
+	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
+	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
+	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
+}
+
+func TestCheckCanUpdateCfg(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+
+	// update to a not change cfg is ok
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+
+	cfg2 := genDefaultSubTaskConfig4Test()
+	cfg2.Name = "new name"
+	// updated to a not allowed field
+	require.True(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(syncer.CheckCanUpdateCfg(cfg2)))
+
+	// update ba list or route rules or filter rules is ok or syncerCfg
+	cfg2.Name = cfg.Name
+
+	cfg2.BAList = &filter.Rules{DoDBs: []string{"test"}}
+	cfg2.RouteRules = []*router.TableRule{{SchemaPattern: "test", TargetSchema: "test1"}}
+	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
+	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
 }

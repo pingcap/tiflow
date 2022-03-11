@@ -19,7 +19,8 @@ import "github.com/pingcap/errors"
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
 	// TODO: turn on after GA.
-	EnableTableActor bool `toml:"enable-table-actor" json:"enable-table-actor"`
+	EnableTableActor bool              `toml:"enable-table-actor" json:"enable-table-actor"`
+	TableActor       *TableActorConfig `toml:"table-actor" json:"table-actor"`
 
 	// EnableDBSorter enables db sorter.
 	//

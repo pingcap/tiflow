@@ -32,9 +32,10 @@ import (
 )
 
 const (
-	// expose these two variables for redo log applier
+	// DefaultWorkerCount is the default number of workers.
 	DefaultWorkerCount = 16
-	DefaultMaxTxnRow   = 256
+	// DefaultMaxTxnRow is the default max number of rows in a transaction.
+	DefaultMaxTxnRow = 256
 	// The upper limit of max worker counts.
 	maxWorkerCount = 1024
 	// The upper limit of max txn rows.

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -97,7 +97,7 @@ func prepareJoinEtcd(cfg *Config) error {
 	}
 
 	// try to join self, invalid
-	if cfg.Join == cfg.MasterAddr {
+	if cfg.Join == cfg.AdvertiseAddr {
 		return terror.ErrMasterJoinEmbedEtcdFail.Generate(fmt.Sprintf("join self %s is forbidden", cfg.Join))
 	}
 

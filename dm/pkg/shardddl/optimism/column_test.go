@@ -37,21 +37,25 @@ func (t *testColumn) TestColumnETCD(c *C) {
 		info1      = NewInfo(task, source1, upSchema1, upTable1, downSchema, downTable, nil, nil, nil)
 		lockID     = genDDLLockID(info1)
 	)
-	rev1, putted, err := PutDroppedColumn(etcdTestCli, lockID, "a", source1, upSchema1, upTable1, DropNotDone)
+	rev1, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema1, upTable1, []string{"a"}, DropNotDone)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
-	rev2, putted, err := PutDroppedColumn(etcdTestCli, lockID, "b", source1, upSchema1, upTable1, DropNotDone)
+	rev2, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema1, upTable1, []string{"b"}, DropNotDone)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(rev2, Greater, rev1)
-	rev3, putted, err := PutDroppedColumn(etcdTestCli, lockID, "b", source1, upSchema2, upTable2, DropNotDone)
+	rev3, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema2, upTable2, []string{"b"}, DropNotDone)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(rev3, Greater, rev2)
-	rev4, putted, err := PutDroppedColumn(etcdTestCli, lockID, "b", source2, upSchema1, upTable1, DropNotDone)
+	rev4, putted, err := PutDroppedColumns(etcdTestCli, lockID, source2, upSchema1, upTable1, []string{"b"}, DropNotDone)
 	c.Assert(err, IsNil)
 	c.Assert(putted, IsTrue)
 	c.Assert(rev4, Greater, rev3)
+	rev5, putted, err := PutDroppedColumns(etcdTestCli, lockID, source2, upSchema1, upTable1, []string{"b", "c"}, DropNotDone)
+	c.Assert(err, IsNil)
+	c.Assert(putted, IsTrue)
+	c.Assert(rev5, Greater, rev4)
 
 	expectedColm := map[string]map[string]map[string]map[string]map[string]DropColumnStage{
 		lockID: {
@@ -63,21 +67,25 @@ func (t *testColumn) TestColumnETCD(c *C) {
 				},
 				source2: {upSchema1: {upTable1: DropNotDone}},
 			},
+			"c": {
+				source2: {upSchema1: {upTable1: DropNotDone}},
+			},
 		},
 	}
-	colm, rev5, err := GetAllDroppedColumns(etcdTestCli)
+	colm, rev6, err := GetAllDroppedColumns(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(colm, DeepEquals, expectedColm)
-	c.Assert(rev5, Equals, rev4)
+	c.Assert(rev6, Equals, rev5)
 
-	rev6, deleted, err := DeleteDroppedColumns(etcdTestCli, lockID, "b")
+	rev7, deleted, err := DeleteDroppedColumns(etcdTestCli, lockID, "b", "c")
 	c.Assert(err, IsNil)
 	c.Assert(deleted, IsTrue)
-	c.Assert(rev6, Greater, rev5)
+	c.Assert(rev7, Greater, rev6)
 
 	delete(expectedColm[lockID], "b")
-	colm, rev7, err := GetAllDroppedColumns(etcdTestCli)
+	delete(expectedColm[lockID], "c")
+	colm, rev8, err := GetAllDroppedColumns(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(colm, DeepEquals, expectedColm)
-	c.Assert(rev7, Equals, rev6)
+	c.Assert(rev8, Equals, rev7)
 }

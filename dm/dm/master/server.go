@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -42,6 +42,7 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -136,7 +137,7 @@ func NewServer(cfg *Config) *Server {
 		scheduler: scheduler.NewScheduler(&logger, cfg.Security),
 		ap:        NewAgentPool(&RateLimitConfig{rate: cfg.RPCRateLimit, burst: cfg.RPCRateBurst}),
 	}
-	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskResources)
+	server.pessimist = shardddl.NewPessimist(&logger, server.getTaskSourceNameList)
 	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
 	server.closed.Store(true)
 	setUseTLS(&cfg.Security)
@@ -209,14 +210,14 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	gRPCSvr := func(gs *grpc.Server) { pb.RegisterMasterServer(gs, s) }
 
 	// start embed etcd server, gRPC API server and HTTP (API, status and debug) server.
-	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, userHandles, etcdStartTimeout)
+	s.etcd, err = startEtcd(etcdCfg, gRPCSvr, userHandles, 10*time.Second)
 	if err != nil {
 		return
 	}
 
 	// create an etcd client used in the whole server instance.
 	// NOTE: we only use the local member's address now, but we can use all endpoints of the cluster if needed.
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, tls.TLSConfig())
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.AdvertiseAddr)}, tls.TLSConfig())
 	if err != nil {
 		return
 	}
@@ -562,7 +563,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 				return respWithErr(terror.Annotate(err, "while putting task command line arguments"))
 			}
 		}
-		err = s.scheduler.AddSubTasks(latched, subtaskCfgPointersToInstances(stCfgs...)...)
+		err = s.scheduler.AddSubTasks(latched, pb.Stage_Running, subtaskCfgPointersToInstances(stCfgs...)...)
 		if err != nil {
 			return respWithErr(err)
 		}
@@ -575,7 +576,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 
 		resp.Result = true
 		if cfg.RemoveMeta {
-			resp.Msg += "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
+			resp.Msg = "`remove-meta` in task config is deprecated, please use `start-task ... --remove-meta` instead"
 		}
 		sourceResps = s.getSourceRespsAfterOperation(ctx, cfg.Name, sources, []string{}, req)
 	}
@@ -602,7 +603,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 
 	sources := req.Sources
 	if len(req.Sources) == 0 {
-		sources = s.getTaskResources(req.Name)
+		sources = s.getTaskSourceNameList(req.Name)
 	}
 	if len(sources) == 0 {
 		resp.Msg = fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.Name)
@@ -614,14 +615,14 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 		expect = pb.Stage_Paused
 	case pb.TaskOp_Resume:
 		expect = pb.Stage_Running
-	case pb.TaskOp_Stop:
-		expect = pb.Stage_Stopped
+	case pb.TaskOp_Delete:
+		// op_delete means delete this running subtask, we not have the expected stage now
 	default:
 		resp.Msg = terror.ErrMasterInvalidOperateOp.Generate(req.Op.String(), "task").Error()
 		return resp, nil
 	}
 	var err error
-	if expect == pb.Stage_Stopped {
+	if req.Op == pb.TaskOp_Delete {
 		err = s.scheduler.RemoveSubTasks(req.Name, sources...)
 	} else {
 		err = s.scheduler.UpdateExpectSubTaskStage(expect, req.Name, sources...)
@@ -635,7 +636,7 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	resp.Result = true
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
 
-	if expect == pb.Stage_Stopped {
+	if req.Op == pb.TaskOp_Delete {
 		// delete meta data for optimist
 		if len(req.Sources) == 0 {
 			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
@@ -778,7 +779,7 @@ func extractSources(s *Server, req hasWokers) (sources []string, specifiedSource
 		specifiedSource = true
 	case len(req.GetName()) > 0:
 		// query specified task's sources
-		sources = s.getTaskResources(req.GetName())
+		sources = s.getTaskSourceNameList(req.GetName())
 		if len(sources) == 0 {
 			return nil, false, errors.Errorf("task %s has no source or not exist", req.GetName())
 		}
@@ -1064,11 +1065,11 @@ func (s *Server) OperateWorkerRelayTask(ctx context.Context, req *pb.OperateWork
 	return resp, nil
 }
 
-// getTaskResources gets workers relevant to specified task.
-func (s *Server) getTaskResources(task string) []string {
+// getTaskSourceNameList gets workers relevant to specified task.
+func (s *Server) getTaskSourceNameList(taskName string) []string {
 	s.Lock()
 	defer s.Unlock()
-	cfgM := s.scheduler.GetSubTaskCfgsByTask(task)
+	cfgM := s.scheduler.GetSubTaskCfgsByTask(taskName)
 	// do a copy
 	ret := make([]string, 0, len(cfgM))
 	for source := range cfgM {
@@ -1719,8 +1720,7 @@ func (s *Server) waitOperationOk(
 			expect = pb.Stage_Running
 		case pb.TaskOp_Pause:
 			expect = pb.Stage_Paused
-		case pb.TaskOp_Stop:
-			expect = pb.Stage_Stopped
+		case pb.TaskOp_Delete:
 		}
 	case *pb.OperateWorkerRelayRequest:
 		switch req.Op {
@@ -1804,7 +1804,7 @@ func (s *Server) waitOperationOk(
 					}
 				}
 			case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.OperateTaskRequest:
-				if expect == pb.Stage_Stopped && len(queryResp.SubTaskStatus) == 0 {
+				if opTaskReq, ok := masterReq.(*pb.OperateTaskRequest); ok && opTaskReq.Op == pb.TaskOp_Delete && len(queryResp.SubTaskStatus) == 0 {
 					return true, "", queryResp, nil
 				}
 				if len(queryResp.SubTaskStatus) == 1 {
@@ -1819,8 +1819,8 @@ func (s *Server) waitOperationOk(
 						if expect == pb.Stage_Running {
 							finished = pb.Stage_Finished
 						}
-						if expect == pb.Stage_Stopped {
-							if st, ok2 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok2 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
+						if opTaskReq, ok2 := masterReq.(*pb.OperateTaskRequest); ok2 && opTaskReq.Op == pb.TaskOp_Delete {
+							if st, ok3 := subtaskStatus.Status.(*pb.SubTaskStatus_Msg); ok3 && st.Msg == dmcommon.NoSubTaskMsg(taskName) {
 								ok = true
 							} else {
 								// make sure there is no subtask
@@ -2410,7 +2410,7 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleErrorRequest) (*
 
 	sources := req.Sources
 	if len(sources) == 0 {
-		sources = s.getTaskResources(req.Task)
+		sources = s.getTaskSourceNameList(req.Task)
 		log.L().Info(fmt.Sprintf("sources: %s", sources))
 		if len(sources) == 0 {
 			return &pb.HandleErrorResponse{
@@ -2587,4 +2587,196 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	reflect.ValueOf(respPointer).Elem().Set(reflect.Zero(respType))
 	*errPointer = terror.ErrMasterRequestIsNotForwardToLeader
 	return true
+}
+
+func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
+	var (
+		resp2       *pb.StartValidationResponse
+		err, err2   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StartValidationResponse{}
+	if req.Mode != config.ValidationFull && req.Mode != config.ValidationFast {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: wait for #4479 and update the validator stage in etcd
+	// get the validator stage: common.StageValidatorKeyAdapter.Encode(source, task-name)
+	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
+	// if the validator stage is `RUNNING`: then report error
+	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+	for taskName := range subTaskCfgs {
+		for sourceID := range subTaskCfgs[taskName] {
+			cfg := subTaskCfgs[taskName][sourceID]
+			cfg.ValidatorCfg.Mode = req.Mode
+			subTaskCfgs[taskName][sourceID] = cfg
+		}
+	}
+	err = s.scheduler.OperateValidationTask(pb.Stage_Running, subTaskCfgs)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	resp.Result = true
+	resp.Msg = "success"
+	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
+	var (
+		resp2       *pb.StopValidationResponse
+		err, err2   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.StopValidationResponse{}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		name := req.TaskName
+		if name == "" {
+			name = "all"
+		}
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		// nolint:nilerr
+		return resp, nil
+	}
+	err = s.scheduler.OperateValidationTask(pb.Stage_Stopped, subTaskCfgs)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	resp.Result = true
+	resp.Msg = "success"
+	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
+	return resp, nil
+}
+
+func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	var (
+		resp2       *pb.GetValidationStatusResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.FilterStatus != strings.ToLower(pb.Stage_Running.String()) && req.FilterStatus != strings.ToLower(pb.Stage_Stopped.String()) {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
+		return resp, err
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: get validation status from worker
+	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
+}
+
+func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	var (
+		resp2       *pb.GetValidationErrorResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.GetValidationErrorResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: get validation error from worker
+	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
+}
+
+func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	var (
+		resp2       *pb.OperateValidationErrorResponse
+		err2, err   error
+		subTaskCfgs map[string]map[string]config.SubTaskConfig
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	if shouldRet {
+		return resp2, err2
+	}
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	if req.TaskName == "" {
+		resp.Result = false
+		resp.Msg = "task name should be specified"
+		return resp, nil
+	}
+	if req.IsAllError && req.ErrId != "" {
+		resp.Result = false
+		resp.Msg = "either `all` error flags or `error id` should be set"
+		return resp, nil
+	}
+	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
+	if len(subTaskCfgs) == 0 {
+		resp.Result = false
+		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		// nolint:nilerr
+		return resp, nil
+	}
+	// TODO: operate validation error at worker
+	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
+	return resp, err
 }
