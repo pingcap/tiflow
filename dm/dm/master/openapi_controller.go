@@ -391,6 +391,11 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 				return terror.ErrOpenAPICommonError.Generatef("task %s have running subtasks, please stop them or delete task with force.", taskName)
 			}
 		}
+	} else {
+		task, err = s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{})
+		if err != nil {
+			return err
+		}
 	}
 
 	// remove meta
