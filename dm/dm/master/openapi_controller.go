@@ -99,7 +99,11 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 	if oldCfg == nil {
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
-	if err := s.scheduler.UpdateSourceCfg(config.OpenAPISourceToSourceCfg(req.Source)); err != nil {
+	newCfg := config.OpenAPISourceToSourceCfg(req.Source)
+	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
+		return nil, err
+	}
+	if err := s.scheduler.UpdateSourceCfg(newCfg); err != nil {
 		return nil, err
 	}
 	return &req.Source, nil

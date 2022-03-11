@@ -483,6 +483,7 @@ def do_complex_operations(task_name):
 
     # get task
     task = requests.get(task_url).json()
+
     # update task failed
     update_task_req = {"task": task}
     resp = requests.put(task_url, json=update_task_req)
@@ -498,12 +499,16 @@ def do_complex_operations(task_name):
     task["source_config"]["incr_migrate_conf"]["repl_threads"] = 1
     update_task_req = {"task": task}
     resp = requests.put(task_url, json=update_task_req)
+    if resp.status_code != 200:
+        print("update task failed", resp.json())
     assert resp.status_code == 200
     task_after_updated = requests.get(task_url).json()
     assert task_after_updated["source_config"]["incr_migrate_conf"]["repl_threads"] == 1
 
     # start again
     resp = requests.post(start_url)
+    if resp.status_code != 200:
+        print("start task failed", resp.json())
     assert resp.status_code == 200
     status = requests.get(status_url).json()
     for s in status["data"]:
@@ -511,6 +516,8 @@ def do_complex_operations(task_name):
 
     # disable source1, task on source is paused
     resp = requests.post(disable_source_url)
+    if resp.status_code != 200:
+        print("disable source failed", resp.json())
     assert resp.status_code == 200
     status = requests.get(status_url).json()
     for s in status["data"]:
@@ -521,6 +528,8 @@ def do_complex_operations(task_name):
 
     # enable source task will start again
     resp = requests.post(enable_source_url)
+    if resp.status_code != 200:
+        print("enable source failed", resp.json())
     assert resp.status_code == 200
     status = requests.get(status_url).json()
     for s in status["data"]:
@@ -533,6 +542,8 @@ def do_complex_operations(task_name):
             source1_migrate_rules.append(rule)
 
     resp = requests.get(migrate_targets_url)
+    if resp.status_code != 200:
+        print("list migrate targets failed", resp.json())
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == len(source1_migrate_rules)

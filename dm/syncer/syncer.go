@@ -3575,6 +3575,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
 // 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
@@ -3596,8 +3597,9 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
 	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+	// TODO(ehco) support copyConfigFromSource
 	if oldCfg.String() != newCfg.String() {
-		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can not update subtask config because new config is not valid task: %s", s.cfg.Name)
 	}
 	return nil
 }
@@ -3701,6 +3703,9 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 	// update syncer config
 	s.cfg.SyncerConfig = cfg.SyncerConfig
+
+	// update enable GTID
+	s.cfg.EnableGTID = cfg.EnableGTID
 	return nil
 }
 

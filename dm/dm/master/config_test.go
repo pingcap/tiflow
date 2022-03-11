@@ -167,7 +167,6 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 
 	cfg4 := *cfg1
 	cfg4.AdvertisePeerUrls = "127.0.0.1:\n8291"
-
 	_, err = cfg4.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err), check.IsTrue)
 	c.Assert(err, check.ErrorMatches, "(?m).*invalid advertise-peer-urls.*")
