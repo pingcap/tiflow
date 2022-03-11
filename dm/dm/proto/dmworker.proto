@@ -19,6 +19,9 @@ service Worker {
     rpc HandleError(HandleWorkerErrorRequest) returns(CommonWorkerResponse) {}
 
     rpc GetWorkerCfg(GetWorkerCfgRequest) returns(GetWorkerCfgResponse) {}
+
+    // only some fields of the configuration of the subtask in the sync phase can be updated
+    rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
 }
 
 enum TaskOp {
@@ -146,6 +149,8 @@ message SyncStatus {
     bool synced = 10;  // whether sync is catched-up in this moment
     string binlogType = 11;
     int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
+    string blockDDLOwner = 13; // block ddl upstream info, format "task-`upstreamDatabase`.`upstreamTable`"
+    string conflictMsg = 14; // block ddl conflict reason
 }
 
 // SourceStatus represents status for source runing on dm-worker
@@ -390,4 +395,11 @@ enum ValidatorOp {
     InvalidValidatorOp = 0;
     StartValidator = 1;
     StopValidator = 2;
+}
+
+message CheckSubtasksCanUpdateRequest { string subtaskCfgTomlString = 1; }
+
+message CheckSubtasksCanUpdateResponse {
+  bool success = 1;
+  string msg = 2; // message when error occurred
 }

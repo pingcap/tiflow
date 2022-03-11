@@ -54,7 +54,8 @@ function DM_037_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT DEFAULT -1' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -125,7 +126,8 @@ function DM_040_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8MB4' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -173,7 +175,8 @@ function DM_043_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS(`id`+2) VIRTUAL' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -243,7 +246,7 @@ function restart_worker() {
 function DM_DROP_COLUMN_EXEC_ERROR_CASE() {
 	# get worker of source1
 	w="1"
-	got=$(grep "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+	got=$(grep -a "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi
@@ -276,12 +279,20 @@ function DM_DROP_COLUMN_EXEC_ERROR_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1 \
 		"add column b that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1
 
 	restart_worker $w ""
+
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column b varchar(10);"
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-02 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,'ddd');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,'eee');"
@@ -304,7 +315,7 @@ function DM_DROP_COLUMN_EXEC_ERROR() {
 function DM_DROP_COLUMN_ALL_DONE_CASE() {
 	# get worker of source1
 	w="1"
-	got=$(grep "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+	got=$(grep -a "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi
@@ -337,12 +348,18 @@ function DM_DROP_COLUMN_ALL_DONE_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1 \
 		"add column b that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` VARCHAR(10)' 1
 
 	restart_worker $w ""
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column b varchar(10);"
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-02 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,'ddd');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,'eee');"
@@ -469,8 +486,11 @@ function DM_DropAddColumn_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b`' 1 \
 		"add column b that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b`' 1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 3 'fail'
 	# no ddl error but have un-synced ddl
@@ -478,11 +498,10 @@ function DM_DropAddColumn_CASE() {
 	# 9223372036854775807 is 2**63 -1
 	check_metric $MASTER_PORT 'dm_master_ddl_state_number{task="test",type="Un-synced"}' 3 0 9223372036854775807
 
-	# skip this error
+	# skip this lock
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \

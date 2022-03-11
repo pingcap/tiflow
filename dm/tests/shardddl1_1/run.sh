@@ -302,7 +302,8 @@ function DM_031_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` VARCHAR(10)' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
