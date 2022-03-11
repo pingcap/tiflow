@@ -34,7 +34,6 @@ function run() {
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 1000
-
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
