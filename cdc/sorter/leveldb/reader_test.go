@@ -531,12 +531,12 @@ func TestReaderStateIterator(t *testing.T) {
 	state.iterMaxAliveDuration = 100 * time.Millisecond
 
 	// First get returns a request.
-	req, ok := state.tryGetIterator(1, 1, 1, 1)
+	req, ok := state.tryGetIterator(1, 1)
 	require.False(t, ok)
 	require.NotNil(t, req)
 
 	// Still wait for iterator response.
-	req1, ok := state.tryGetIterator(1, 1, 1, 1)
+	req1, ok := state.tryGetIterator(1, 1)
 	require.False(t, ok)
 	require.Nil(t, req1)
 
@@ -550,11 +550,11 @@ func TestReaderStateIterator(t *testing.T) {
 	_, ok = readerMb.Receive()
 	require.True(t, ok)
 	// Get iterator successfully.
-	req2, ok := state.tryGetIterator(1, 1, 1, 1)
+	req2, ok := state.tryGetIterator(1, 1)
 	require.True(t, ok)
 	require.Nil(t, req2)
 	// Get iterator successfully again.
-	req2, ok = state.tryGetIterator(1, 1, 1, 1)
+	req2, ok = state.tryGetIterator(1, 1)
 	require.True(t, ok)
 	require.Nil(t, req2)
 
@@ -579,7 +579,7 @@ func TestReaderStateIterator(t *testing.T) {
 	require.Nil(t, state.tryReleaseIterator())
 
 	// Slow first must send a compaction task.
-	req3, ok := state.tryGetIterator(1, 1, 1, 1)
+	req3, ok := state.tryGetIterator(1, 1)
 	require.False(t, ok)
 	require.NotNil(t, req3)
 	require.Nil(t, sema.Acquire(ctx, 1))
@@ -595,7 +595,7 @@ func TestReaderStateIterator(t *testing.T) {
 	require.False(t, ok)
 	// Always slow.
 	state.iterFirstSlowDuration = time.Duration(0)
-	_, ok = state.tryGetIterator(1, 1, 1, 1)
+	_, ok = state.tryGetIterator(1, 1)
 	require.True(t, ok)
 	require.NotNil(t, state.iter)
 	// Must recv a compaction task.

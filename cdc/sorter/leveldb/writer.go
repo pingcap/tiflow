@@ -35,6 +35,9 @@ type writer struct {
 	readerRouter  *actor.Router
 	readerActorID actor.ID
 
+	maxResolvedTs uint64
+	maxCommitTs   uint64
+
 	metricTotalEventsKV         prometheus.Counter
 	metricTotalEventsResolvedTs prometheus.Counter
 }
@@ -42,7 +45,6 @@ type writer struct {
 var _ actor.Actor = (*writer)(nil)
 
 func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running bool) {
-	maxCommitTs, maxResolvedTs := uint64(0), uint64(0)
 	kvEventCount, resolvedEventCount := 0, 0
 	writes := make(map[message.Key][]byte)
 	for i := range msgs {
@@ -56,14 +58,14 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 
 		ev := msgs[i].SorterTask.InputEvent
 		if ev.RawKV.OpType == model.OpTypeResolved {
-			if maxResolvedTs < ev.CRTs {
-				maxResolvedTs = ev.CRTs
+			if w.maxResolvedTs < ev.CRTs {
+				w.maxResolvedTs = ev.CRTs
 			}
 			resolvedEventCount++
 			continue
 		}
-		if maxCommitTs < ev.CRTs {
-			maxCommitTs = ev.CRTs
+		if w.maxCommitTs < ev.CRTs {
+			w.maxCommitTs = ev.CRTs
 		}
 		kvEventCount++
 
@@ -89,6 +91,10 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		}
 	}
 
+	if w.maxResolvedTs == 0 {
+		// Resolved ts has not advanced yet, skip notify reader.
+		return true
+	}
 	// Notify reader that there is something to read.
 	//
 	// It's ok to noify reader immediately without waiting writes done,
@@ -101,8 +107,19 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		UID:     w.uid,
 		TableID: w.tableID,
 		ReadTs: message.ReadTs{
-			MaxCommitTs:   maxCommitTs,
-			MaxResolvedTs: maxResolvedTs,
+			// The maxCommitTs and maxResolvedTs must be sent together,
+			// otherwise reader may output resolved ts wrongly.
+			// As reader employs maxCommitTs and maxResolvedTs to skip taking
+			// iterators when maxResolvedTs > maxCommitTs and
+			// exhaustedResolvedTs >= maxCommitTs.
+			//
+			// If maxCommitTs and maxResolvedTs are sent separately,
+			// data in (exhaustedResolvedTs, actaul maxCommitTs] is lost:
+			//        --------------------------------------------->
+			// writer:                          ^ actaul maxCommitTs
+			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
+			MaxCommitTs:   w.maxCommitTs,
+			MaxResolvedTs: w.maxResolvedTs,
 		},
 	})
 	// It's ok if send fails, as resolved ts events are received periodically.

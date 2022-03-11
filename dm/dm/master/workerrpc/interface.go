@@ -47,6 +47,7 @@ const (
 	CmdOperateV1Meta
 	CmdHandleError
 	CmdGetWorkerCfg
+	CmdCheckSubtasksCanUpdate
 )
 
 // Request wraps all dm-worker rpc requests.
@@ -62,6 +63,8 @@ type Request struct {
 	OperateV1Meta *pb.OperateV1MetaRequest
 	HandleError   *pb.HandleWorkerErrorRequest
 	GetWorkerCfg  *pb.GetWorkerCfgRequest
+
+	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateRequest
 }
 
 // Response wraps all dm-worker rpc responses.
@@ -77,6 +80,8 @@ type Response struct {
 	OperateV1Meta *pb.OperateV1MetaResponse
 	HandleError   *pb.CommonWorkerResponse
 	GetWorkerCfg  *pb.GetWorkerCfgResponse
+
+	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateResponse
 }
 
 // Client is a client that sends RPC.

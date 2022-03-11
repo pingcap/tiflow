@@ -308,9 +308,7 @@ func (state *pollState) advanceMaxTs(maxCommitTs, maxResolvedTs uint64) {
 // tryGetIterator tries to get an iterator.
 // When it returns a request, caller must send it.
 // When it returns true, it means there is an iterator that can be used.
-func (state *pollState) tryGetIterator(
-	uid uint32, tableID uint64, lastSentResolvedTs, lastSentCommitTs uint64,
-) (*message.IterRequest, bool) {
+func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.IterRequest, bool) {
 	if state.iter != nil && state.iterCh != nil {
 		log.Panic("assert failed, there can only be one of iter or iterCh",
 			zap.Any("iter", state.iter), zap.Uint64("tableID", tableID),
@@ -350,10 +348,6 @@ func (state *pollState) tryGetIterator(
 	// Try receive iterator.
 	select {
 	case iter := <-state.iterCh:
-		seekTs := lastSentCommitTs
-		if lastSentResolvedTs >= lastSentCommitTs {
-			seekTs = lastSentResolvedTs + 1
-		}
 		// Iterator received, reset state.iterCh
 		state.iterCh = nil
 		state.iter = iter
@@ -361,7 +355,7 @@ func (state *pollState) tryGetIterator(
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
 		state.iterHasRead = false
-		state.iter.Seek(encoding.EncodeTsKey(uid, tableID, seekTs))
+		state.iter.Seek(encoding.EncodeTsKey(uid, tableID, 0))
 		duration := time.Since(start)
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
@@ -461,8 +455,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	}
 
 	var hasIter bool
-	task.IterReq, hasIter = r.state.tryGetIterator(
-		r.uid, r.tableID, r.lastSentResolvedTs, r.lastSentCommitTs)
+	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, r.tableID)
 	// Send delete/read task to leveldb.
 	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.SorterMessage(task))
 	if err != nil {
