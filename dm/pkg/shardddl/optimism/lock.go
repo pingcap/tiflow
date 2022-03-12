@@ -202,7 +202,8 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 				metrics.ReportDDLPending(l.Task, metrics.DDLPendingUnSynced, metrics.DDLPendingSynced)
 			}
 		}
-		if len(newDDLs) > 0 || (err != nil && terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err)) {
+		if len(newDDLs) > 0 || (err != nil && (terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) ||
+			terror.ErrShardDDLOptimismTrySyncFail.Equal(err))) {
 			// revert the `done` status if need to wait for the new operation to be done.
 			// Now, we wait for the new operation to be done if any DDLs returned.
 			l.tryRevertDone(callerSource, callerSchema, callerTable)
@@ -366,6 +367,20 @@ func (l *Lock) HasTables() bool {
 		}
 	}
 	return false
+}
+
+// UpdateTableAfterUnlock updates table's schema info after unlock exec action.
+func (l *Lock) UpdateTableAfterUnlock(info Info) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var ok bool
+	if _, ok = l.tables[info.Source]; !ok {
+		l.tables[info.Source] = make(map[string]map[string]schemacmp.Table)
+	}
+	if _, ok = l.tables[info.Source][info.UpSchema]; !ok {
+		l.tables[info.Source][info.UpSchema] = make(map[string]schemacmp.Table)
+	}
+	l.tables[info.Source][info.UpSchema][info.UpTable] = schemacmp.Encode(info.TableInfosAfter[len(info.TableInfosAfter)-1])
 }
 
 // IsSynced returns whether the lock has synced.

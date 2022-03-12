@@ -451,6 +451,7 @@ func NewTaskConfig() *TaskConfig {
 		Syncers:                 make(map[string]*SyncerConfig),
 		Validators:              make(map[string]*ValidatorConfig),
 		CleanDumpFile:           true,
+		OnlineDDL:               true,
 		CollationCompatible:     defaultCollationCompatible,
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
@@ -1113,6 +1114,7 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
 	}
+	c.OnlineDDL = false
 }
 
 // Yaml returns YAML format representation of config.

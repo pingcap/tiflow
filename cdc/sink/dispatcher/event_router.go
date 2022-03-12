@@ -107,13 +107,23 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 	}, nil
 }
 
-// DispatchRowChangedEvent returns the target topic and partition.
-func (s *EventRouter) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (string, int32) {
-	topicDispatcher, partitionDispatcher := s.matchDispatcher(row.Table.Schema, row.Table.Table)
-	topic := topicDispatcher.DispatchRowChangedEvent(row)
-	partition := partitionDispatcher.DispatchRowChangedEvent(row, partitionNum)
+// GetTopic returns the target topic.
+func (s *EventRouter) GetTopic(row *model.RowChangedEvent) string {
+	topicDispatcher, _ := s.matchDispatcher(row.Table.Schema, row.Table.Table)
+	return topicDispatcher.DispatchRowChangedEvent(row)
+}
 
-	return topic, partition
+// GetPartition returns the target partition.
+func (s *EventRouter) GetPartition(
+	row *model.RowChangedEvent,
+	partitionNum int32,
+) int32 {
+	_, partitionDispatcher := s.matchDispatcher(row.Table.Schema,
+		row.Table.Table)
+	partition := partitionDispatcher.DispatchRowChangedEvent(row,
+		partitionNum)
+
+	return partition
 }
 
 // GetActiveTopics returns a list of the corresponding topics
