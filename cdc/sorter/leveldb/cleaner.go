@@ -39,6 +39,7 @@ type CleanerActor struct {
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	limiter *rate.Limiter
@@ -76,9 +77,11 @@ func NewCleanerActor(
 func (clean *CleanerActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
-		clean.close(ctx.Err())
 		return false
 	default:
+	}
+	if clean.stopped {
+		return false
 	}
 
 	reschedulePos := -1
@@ -92,7 +95,6 @@ TASKS:
 		case actormsg.TypeSorterTask:
 			task = msg.SorterTask
 		case actormsg.TypeStop:
-			clean.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
@@ -156,9 +158,13 @@ TASKS:
 	return true
 }
 
-func (clean *CleanerActor) close(err error) {
-	log.Info("cleaner actor quit",
-		zap.Uint64("ID", uint64(clean.id)), zap.Error(err))
+// OnClose releases DBActor resource.
+func (clean *CleanerActor) OnClose() {
+	if clean.stopped {
+		return
+	}
+	clean.stopped = true
+	log.Info("clean actor quit", zap.Uint64("ID", uint64(clean.id)))
 	clean.closedWg.Done()
 }
 
