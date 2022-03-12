@@ -86,6 +86,7 @@ type DBActor struct {
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
@@ -133,9 +134,18 @@ func NewDBActor(
 	}, mb, nil
 }
 
+<<<<<<< HEAD
 func (ldb *DBActor) close(err error) {
 	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
 	ldb.closedWg.Done()
+=======
+func (ldb *DBActor) tryScheduleCompact() {
+	// Schedule a compact task when there are too many deletion.
+	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		ldb.deleteCount = 0
+	}
+>>>>>>> 953072b2d (pkg,sorter,processor(ticdc): support graceful close (#4819))
 }
 
 func (ldb *DBActor) maybeWrite(force bool) error {
@@ -195,7 +205,6 @@ func (ldb *DBActor) acquireIterators() {
 func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
-		ldb.close(ctx.Err())
 		return false
 	default:
 	}
@@ -209,7 +218,6 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		case actormsg.TypeSorterTask:
 			task = msg.SorterTask
 		case actormsg.TypeStop:
-			ldb.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
@@ -243,4 +251,14 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	ldb.acquireIterators()
 
 	return true
+}
+
+// OnClose releases DBActor resource.
+func (ldb *DBActor) OnClose() {
+	if ldb.stopped {
+		return
+	}
+	ldb.stopped = true
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)))
+	ldb.closedWg.Done()
 }

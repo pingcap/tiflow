@@ -248,8 +248,13 @@ var (
 	ErrSorterClosed                    = errors.Normalize("sorter is closed", errors.RFCCodeText("CDC:ErrSorterClosed"))
 
 	// processor errors
-	ErrTableProcessorStoppedSafely  = errors.Normalize("table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
 	ErrProcessorDuplicateOperations = errors.Normalize("table processor duplicate operation, table-id: %d", errors.RFCCodeText("CDC:ErrProcessorDuplicateOperations"))
+	// TODO Remove ErrTableProcessorStoppedSafely as it not an error actually.
+	// It is used to tell node runner to stop, and ignored by callers of node runner.
+	// See pkg/pipeline/runner.go nodeRunner.run()
+	//     and cdc/processor/processor.go processor.createTablePipelineImpl()
+	ErrTableProcessorStoppedSafely = errors.Normalize(
+		"table processor stopped safely", errors.RFCCodeText("CDC:ErrTableProcessorStoppedSafely"))
 
 	// owner errors
 	ErrOwnerChangedUnexpectedly = errors.Normalize("owner changed unexpectedly", errors.RFCCodeText("CDC:ErrOwnerChangedUnexpectedly"))

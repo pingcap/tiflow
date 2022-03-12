@@ -63,7 +63,6 @@ func NewCompactActor(
 func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
-		c.close(ctx.Err())
 		return false
 	default:
 	}
@@ -74,7 +73,6 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 		switch msg.Tp {
 		case actormsg.TypeTick:
 		case actormsg.TypeStop:
-			c.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
@@ -93,9 +91,9 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	return true
 }
 
-func (c *CompactActor) close(err error) {
-	log.Info("compactor actor quit",
-		zap.Uint64("ID", uint64(c.id)), zap.Error(err))
+// OnClose releases CompactActor resource.
+func (c *CompactActor) OnClose() {
+	log.Info("compactor actor quit", zap.Uint64("ID", uint64(c.id)))
 	c.closedWg.Done()
 }
 
