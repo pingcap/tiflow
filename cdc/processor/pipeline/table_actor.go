@@ -392,7 +392,9 @@ func (t *tableActor) stop(err error) {
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
 	t.stop(err)
-	t.reportErr(err)
+	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+		t.reportErr(err)
+	}
 }
 
 // ============ Implement TablePipline, must be threadsafe ============

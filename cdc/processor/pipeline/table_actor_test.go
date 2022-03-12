@@ -276,15 +276,12 @@ func TestNewTableActor(t *testing.T) {
 	}()
 
 	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
 	sys := system.NewSystem()
 	require.Nil(t, sys.Start(ctx))
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}
-	defer func() {
-		cancel()
-		_ = sys.Stop()
-	}()
 
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
@@ -324,6 +321,8 @@ func TestNewTableActor(t *testing.T) {
 		}, &mockSink{}, 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
+
+	require.Nil(t, sys.Stop())
 }
 
 func TestTableActorStart(t *testing.T) {
