@@ -97,20 +97,19 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-type topicConfig struct {
-	autoCreate        bool
-	name              string
-	partitionNum      int32
-	replicationFactor int16
+// AutoCreateTopicConfig is used to create topic configuration.
+type AutoCreateTopicConfig struct {
+	AutoCreate        bool
+	PartitionNum      int32
+	ReplicationFactor int16
 }
 
 // DeriveTopicConfig derive a `topicConfig` from the `Config`
-func (c *Config) DeriveTopicConfig(topicName string) *topicConfig {
-	return &topicConfig{
-		name:              topicName,
-		autoCreate:        c.AutoCreate,
-		partitionNum:      c.PartitionNum,
-		replicationFactor: c.ReplicationFactor,
+func (c *Config) DeriveTopicConfig() *AutoCreateTopicConfig {
+	return &AutoCreateTopicConfig{
+		AutoCreate:        c.AutoCreate,
+		PartitionNum:      c.PartitionNum,
+		ReplicationFactor: c.ReplicationFactor,
 	}
 }
 
