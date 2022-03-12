@@ -125,7 +125,7 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	ss := make([]*leveldb.Sorter, 0, 1000)
 	scancels := make([]context.CancelFunc, 0, 1000)
 	for i := uint64(0); i < 1000; i++ {
-		dbActorID := sys.DBActorID(uint64(i))
+		dbActorID := sys.DBActorID(i)
 		s, err := leveldb.NewSorter(
 			ctx, int64(i), i, sys.DBRouter, dbActorID,
 			sys.WriterSystem, sys.WriterRouter,

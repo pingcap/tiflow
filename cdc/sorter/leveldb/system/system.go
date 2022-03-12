@@ -206,7 +206,7 @@ func (s *System) Stop() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// TODO: compact is not context-awared, it may block.
+	// TODO: compact is not context-aware, it may block.
 	err = s.compactSystem.Stop()
 	if err != nil {
 		return errors.Trace(err)
