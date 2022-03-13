@@ -26,11 +26,11 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
@@ -158,7 +158,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 
 	startTS := mustGetTimestamp(t, storage)
 
-	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
 		err := cli.EventFeed(ctx,
@@ -249,7 +249,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
 
 	startTS := mustGetTimestamp(t, storage)
-	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
 		err := cli.EventFeed(ctx,

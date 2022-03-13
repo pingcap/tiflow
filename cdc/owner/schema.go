@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"go.uber.org/zap"
 )
 
@@ -114,11 +114,11 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
+			zap.Any("role", identity.RoleOwner), zap.String("changefeed", s.id))
 		return errors.Trace(err)
 	}
 	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job),
-		zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
+		zap.Any("role", identity.RoleOwner), zap.String("changefeed", s.id))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
 	return nil

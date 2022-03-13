@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -101,7 +102,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	log.Debug("DDL puller started", zap.String("changefeed", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	stdCtx = util.PutRoleInCtx(stdCtx, identity.RoleProcessor)
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	lastResolvedTsAdvancedTime := h.clock.Now()
 

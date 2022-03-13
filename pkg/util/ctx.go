@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"go.uber.org/zap"
 )
 
@@ -124,16 +125,16 @@ func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Cont
 
 // RoleFromCtx returns a role stored in the specified context.
 // It returns RoleUnknown if there's no valid role found
-func RoleFromCtx(ctx context.Context) Role {
-	role, ok := ctx.Value(ctxKeyRole).(Role)
+func RoleFromCtx(ctx context.Context) identity.Role {
+	role, ok := ctx.Value(ctxKeyRole).(identity.Role)
 	if !ok {
-		return RoleUnknown
+		return identity.RoleUnknown
 	}
 	return role
 }
 
 // PutRoleInCtx return a new child context with the specified role stored.
-func PutRoleInCtx(ctx context.Context, role Role) context.Context {
+func PutRoleInCtx(ctx context.Context, role identity.Role) context.Context {
 	return context.WithValue(ctx, ctxKeyRole, role)
 }
 

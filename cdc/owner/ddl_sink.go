@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -97,7 +98,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	}
 
 	stdCtx := util.PutChangefeedIDInCtx(ctx, id)
-	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleOwner)
+	stdCtx = util.PutRoleInCtx(stdCtx, identity.RoleOwner)
 	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 	if err != nil {
 		return errors.Trace(err)

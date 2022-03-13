@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -67,7 +68,7 @@ type mqSink struct {
 
 	statistics *Statistics
 
-	role util.Role
+	role identity.Role
 	id   model.ChangeFeedID
 }
 

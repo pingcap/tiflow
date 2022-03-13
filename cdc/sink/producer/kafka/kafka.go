@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -76,7 +77,7 @@ type kafkaSaramaProducer struct {
 	// atomic flag indicating whether the producer is closing
 	closing kafkaProducerClosingFlag
 
-	role util.Role
+	role identity.Role
 	id   model.ChangeFeedID
 
 	metricsMonitor *saramaMetricsMonitor

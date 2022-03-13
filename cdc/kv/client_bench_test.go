@@ -26,12 +26,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
@@ -187,7 +187,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}
 	}
 
-	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -279,7 +279,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
 	}
 
-	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
