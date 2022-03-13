@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,10 +51,11 @@ type common struct {
 	dbActorID actor.ID
 	dbRouter  *actor.Router
 
-	uid     uint32
-	tableID uint64
-	serde   *encoding.MsgPackGenSerde
-	errCh   chan error
+	uid      uint32
+	tableID  uint64
+	serde    *encoding.MsgPackGenSerde
+	errCh    chan error
+	closedWg *sync.WaitGroup
 }
 
 // reportError notifies Sorter to return an error and close.
@@ -108,6 +110,7 @@ func NewSorter(
 		tableID:   uint64(tableID),
 		serde:     &encoding.MsgPackGenSerde{},
 		errCh:     make(chan error, 1),
+		closedWg:  &sync.WaitGroup{},
 	}
 
 	w := &writer{
@@ -123,6 +126,7 @@ func NewSorter(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	outputCh := make(chan *model.PolymorphicEvent, sorterOutputCap)
 
@@ -163,6 +167,7 @@ func NewSorter(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	return &Sorter{
 		common:        c,
@@ -182,15 +187,14 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		err = ctx.Err()
 	case err = <-ls.errCh:
 	}
-	// TODO caller should pass context.
-	deadline := time.Now().Add(1 * time.Second)
-	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
+	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	atomic.StoreInt32(&ls.closed, 1)
 	_ = ls.writerRouter.SendB(
 		ctx, ls.writerActorID, actormsg.StopMessage())
 	_ = ls.readerRouter.SendB(
 		ctx, ls.readerActorID, actormsg.StopMessage())
+	ls.closedWg.Wait()
 	return errors.Trace(err)
 }
 
