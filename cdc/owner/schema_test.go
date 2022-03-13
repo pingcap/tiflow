@@ -22,12 +22,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
-)
-
-const (
-	dummyChangeFeedID = "dummy_changefeed"
 )
 
 func TestAllPhysicalTables(t *testing.T) {
@@ -36,7 +33,7 @@ func TestAllPhysicalTables(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), identity.DummyChangeFeed)
 	require.Nil(t, err)
 	require.Len(t, schema.AllPhysicalTables(), 0)
 	// add normal table
@@ -83,7 +80,7 @@ func TestAllTableNames(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), identity.DummyChangeFeed)
 	require.Nil(t, err)
 	require.Len(t, schema.AllTableNames(), 0)
 	// add normal table
@@ -101,7 +98,7 @@ func TestIsIneligibleTableID(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), identity.DummyChangeFeed)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -122,7 +119,7 @@ func TestBuildDDLEvent(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), identity.DummyChangeFeed)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")

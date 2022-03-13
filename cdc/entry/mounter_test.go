@@ -29,14 +29,11 @@ import (
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
-)
-
-const (
-	dummyChangeFeedID = "dummy_changefeed"
 )
 
 func TestMounterDisableOldValue(t *testing.T) {
@@ -269,13 +266,13 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	jobs, err := getAllHistoryDDLJob(store)
 	require.Nil(t, err)
-	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+	schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, identity.DummyChangeFeed)
 	require.Nil(t, err)
 	for _, job := range jobs {
-		err := scheamStorage.HandleDDLJob(job)
+		err := schemaStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}
-	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
+	tableInfo, ok := schemaStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
 	require.True(t, ok)
 	if tableInfo.IsCommonHandle {
 		// we can check this log to make sure if the clustered-index is enabled
@@ -289,8 +286,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	scheamStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	mounter := NewMounter(schemaStorage, 1, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 

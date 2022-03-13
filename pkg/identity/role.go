@@ -13,6 +13,14 @@
 
 package identity
 
+// ChangeFeedID is the type for change feed ID
+// it can be used as the key for changefeed information
+// also, can be helpful to logging and monitoring
+type ChangeFeedID = string
+
+// DummyChangeFeed can be used when the changefeed' id is unknown, such as test.
+const DummyChangeFeed = "dummy_changefeed"
+
 // Role is the operator role, mainly used for logging at the moment.
 type Role int
 
@@ -52,6 +60,3 @@ func (r Role) String() string {
 	}
 	return "unknown"
 }
-
-// ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
