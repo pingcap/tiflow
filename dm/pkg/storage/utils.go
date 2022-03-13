@@ -45,7 +45,7 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	}
 	// u.Path is an unescaped string and can be used as normal
 	if !strings.HasSuffix(u.Path, uniqueID) {
-		u.Path = u.Path + uniqueID
+		u.Path += uniqueID
 		// u.String will return escaped url and can be used safely in other steps
 		return u.String(), err
 	}
