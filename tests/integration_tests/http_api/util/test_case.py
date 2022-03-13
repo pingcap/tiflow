@@ -16,7 +16,7 @@ def create_changefeed(sink_uri):
     # create changefeed
     for i in range(1, 4):
         data = {
-            "changefeed_id": identity.DummyChangeFeed+str(i),
+            "changefeed_id": "changefeed-test"+str(i),
             "sink_uri": "blackhole://",
             "ignore_ineligible_table": True
         }
@@ -31,7 +31,7 @@ def create_changefeed(sink_uri):
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
-        "changefeed_id": identity.DummyChangeFeed,
+        "changefeed_id": "changefeed-test",
         "sink_uri": "mysql://127.0.0.1:1111",
         "ignore_ineligible_table": True
     })
@@ -68,7 +68,7 @@ def list_changefeed():
 
 def get_changefeed():
     # test get changefeed success
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed1"
+    url = BASE_URL0+"/changefeeds/changefeed-test1"
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
@@ -84,7 +84,7 @@ def get_changefeed():
 
 def pause_changefeed():
     # pause changefeed
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed2/pause"
+    url = BASE_URL0+"/changefeeds/changefeed-test2/pause"
     for i in range(RETRY_TIME):
         resp = rq.post(url, cert=CERT, verify=VERIFY)
         if resp.status_code == rq.codes.accepted:
@@ -92,7 +92,7 @@ def pause_changefeed():
         time.sleep(1)
     assert resp.status_code == rq.codes.accepted
     # check if pause changefeed success
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed2"
+    url = BASE_URL0+"/changefeeds/changefeed-test2"
     for i in range(RETRY_TIME):
         resp = rq.get(url, cert=CERT, verify=VERIFY)
         assert resp.status_code == rq.codes.ok
@@ -113,14 +113,14 @@ def pause_changefeed():
 def update_changefeed():
     # update fail
     # can only update a stopped changefeed
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed1"
+    url = BASE_URL0+"/changefeeds/changefeed-test1"
     data = json.dumps({"mounter_worker_num": 32})
     headers = {"Content-Type": "application/json"}
     resp = rq.put(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.bad_request
 
     # update success
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed2"
+    url = BASE_URL0+"/changefeeds/changefeed-test2"
     data = json.dumps({"mounter_worker_num": 32})
     headers = {"Content-Type": "application/json"}
     resp = rq.put(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
@@ -128,7 +128,7 @@ def update_changefeed():
 
     # update fail
     # can't update start_ts
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed2"
+    url = BASE_URL0+"/changefeeds/changefeed-test2"
     data = json.dumps({"start_ts": 0})
     headers = {"Content-Type": "application/json"}
     resp = rq.put(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
@@ -139,12 +139,12 @@ def update_changefeed():
 
 def resume_changefeed():
     # resume changefeed
-    url = BASE_URL1+"/changefeeds/identity.DummyChangeFeed2/resume"
+    url = BASE_URL1+"/changefeeds/changefeed-test2/resume"
     resp = rq.post(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # check if resume changefeed success
-    url = BASE_URL1+"/changefeeds/identity.DummyChangeFeed2"
+    url = BASE_URL1+"/changefeeds/changefeed-test2"
     for i in range(RETRY_TIME):
         resp = rq.get(url, cert=CERT, verify=VERIFY)
         assert resp.status_code == rq.codes.ok
@@ -166,12 +166,12 @@ def resume_changefeed():
 
 def remove_changefeed():
     # remove changefeed
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed3"
+    url = BASE_URL0+"/changefeeds/changefeed-test3"
     resp = rq.delete(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     # check if remove changefeed success
-    url = BASE_URL0+"/changefeeds/identity.DummyChangeFeed3"
+    url = BASE_URL0+"/changefeeds/changefeed-test3"
     for i in range(RETRY_TIME):
         resp = rq.get(url, cert=CERT, verify=VERIFY)
         if resp.status_code == rq.codes.bad_request:
@@ -192,7 +192,7 @@ def remove_changefeed():
 
 def rebalance_table():
     # rebalance_table
-    url = BASE_URL0 + "/changefeeds/identity.DummyChangeFeed1/tables/rebalance_table"
+    url = BASE_URL0 + "/changefeeds/changefeed-test1/tables/rebalance_table"
     resp = rq.post(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
@@ -201,7 +201,7 @@ def rebalance_table():
 
 def move_table():
     # move table
-    url = BASE_URL0 + "/changefeeds/identity.DummyChangeFeed1/tables/move_table"
+    url = BASE_URL0 + "/changefeeds/changefeed-test1/tables/move_table"
     data = json.dumps({"capture_id": "test-aaa-aa", "table_id": 11})
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
