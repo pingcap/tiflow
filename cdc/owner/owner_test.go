@@ -379,7 +379,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 			t.Fatal("must not update")
 			return 0, nil
 		}
-	changefeedID1 := "changefeed-test1"
+	changefeedID1 := "identity.DummyChangeFeed1"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
@@ -393,7 +393,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	require.Nil(t, err)
 
 	// switch the state of changefeed to normal, it must update GC safepoint to
-	// 1 (checkpoint Ts of changefeed-test1).
+	// 1 (checkpoint Ts of identity.DummyChangeFeed1).
 	ch := make(chan struct{}, 1)
 	mockPDClient.UpdateServiceGCSafePointFunc =
 		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -419,7 +419,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	}
 
 	// add another changefeed, it must update GC safepoint.
-	changefeedID2 := "changefeed-test2"
+	changefeedID2 := "identity.DummyChangeFeed2"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))

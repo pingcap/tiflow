@@ -187,7 +187,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 		}
 	}
 
-	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", identity.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, identity.DummyChangeFeed, identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -279,7 +279,7 @@ func prepareBench(b *testing.B, regionNum int) (
 		cluster.SplitRaw(regionID-1, regionID, []byte(fmt.Sprintf("b%d", regionID)), []uint64{peerID}, peerID)
 	}
 
-	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", identity.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, identity.DummyChangeFeed, identity.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()

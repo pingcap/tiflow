@@ -446,7 +446,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
-	dir, err := ioutil.TempDir("", "remove-changefeed-test")
+	dir, err := ioutil.TempDir("", "remove-identity.DummyChangeFeed")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	info.Config.Consistent = &config.ConsistentConfig{
@@ -465,7 +465,7 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
-	dir, err := ioutil.TempDir("", "remove-paused-changefeed-test")
+	dir, err := ioutil.TempDir("", "remove-paused-identity.DummyChangeFeed")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	info.Config.Consistent = &config.ConsistentConfig{
