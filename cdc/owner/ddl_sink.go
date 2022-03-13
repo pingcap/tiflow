@@ -41,7 +41,7 @@ const (
 // If `SyncPointEnabled`, also send `syncPoint` to downstream.
 type DDLSink interface {
 	// run the DDLSink
-	run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo)
+	run(ctx cdcContext.Context, id identity.ChangeFeedID, info *model.ChangeFeedInfo)
 	// emitCheckpointTs emits the checkpoint Ts to downstream data source
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
@@ -89,9 +89,9 @@ func newDDLSink() DDLSink {
 	}
 }
 
-type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
+type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id identity.ChangeFeedID, info *model.ChangeFeedInfo) error
 
-func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
+func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id identity.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return errors.Trace(err)
@@ -120,7 +120,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	return nil
 }
 
-func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
+func (s *ddlSinkImpl) run(ctx cdcContext.Context, id identity.ChangeFeedID, info *model.ChangeFeedInfo) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 

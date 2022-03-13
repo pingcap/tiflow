@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -25,7 +26,7 @@ import (
 // FIXME a detailed documentation on the interaction will be added later in a separate file.
 
 // DispatchTableTopic returns a message topic for dispatching a table.
-func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
+func DispatchTableTopic(changefeedID identity.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("dispatch/%s", changefeedID)
 }
 
@@ -39,7 +40,7 @@ type DispatchTableMessage struct {
 
 // DispatchTableResponseTopic returns a message topic for the result of
 // dispatching a table. It is sent from the Processor to the Owner.
-func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
+func DispatchTableResponseTopic(changefeedID identity.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("dispatch-resp/%s", changefeedID)
 }
 
@@ -50,7 +51,7 @@ type DispatchTableResponseMessage struct {
 }
 
 // AnnounceTopic returns a message topic for announcing an ownership change.
-func AnnounceTopic(changefeedID ChangeFeedID) p2p.Topic {
+func AnnounceTopic(changefeedID identity.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status/%s", changefeedID)
 }
 
@@ -62,7 +63,7 @@ type AnnounceMessage struct {
 }
 
 // SyncTopic returns a message body for syncing the current states of a processor.
-func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
+func SyncTopic(changefeedID identity.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status-resp/%s", changefeedID)
 }
 
@@ -101,7 +102,7 @@ func (m *SyncMessage) Unmarshal(data []byte) error {
 
 // CheckpointTopic returns a topic for sending the latest checkpoint from
 // the Processor to the Owner.
-func CheckpointTopic(changefeedID ChangeFeedID) p2p.Topic {
+func CheckpointTopic(changefeedID identity.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("checkpoint/%s", changefeedID)
 }
 

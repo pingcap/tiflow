@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -290,7 +291,7 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
 
-	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
+	changefeeds := map[identity.ChangeFeedID]*model.ChangeFeedStatus{
 		"cf1": {
 			ResolvedTs:   100,
 			CheckpointTs: 90,

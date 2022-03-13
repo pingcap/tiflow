@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"go.uber.org/zap"
 )
 
@@ -313,7 +314,7 @@ func (ts *TaskStatus) AppliedTs() Ts {
 }
 
 // Snapshot takes a snapshot of `*TaskStatus` and returns a new `*ProcInfoSnap`
-func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpointTs Ts) *ProcInfoSnap {
+func (ts *TaskStatus) Snapshot(cfID identity.ChangeFeedID, captureID CaptureID, checkpointTs Ts) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
@@ -363,9 +364,6 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 
 // CaptureID is the type for capture ID
 type CaptureID = string
-
-// ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
 
 // TableID is the ID of the table
 type TableID = int64

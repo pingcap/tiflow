@@ -38,6 +38,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	tifilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -83,7 +84,7 @@ var _ Sink = &mysqlSink{}
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(
 	ctx context.Context,
-	changefeedID model.ChangeFeedID,
+	changefeedID identity.ChangeFeedID,
 	sinkURI *url.URL,
 	filter *tifilter.Filter,
 	replicaConfig *config.ReplicaConfig,

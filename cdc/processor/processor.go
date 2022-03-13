@@ -54,7 +54,7 @@ const (
 )
 
 type processor struct {
-	changefeedID model.ChangeFeedID
+	changefeedID identity.ChangeFeedID
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
 

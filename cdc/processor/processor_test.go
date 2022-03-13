@@ -32,6 +32,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
 )
@@ -924,7 +925,7 @@ func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, capt
 	tester.MustApplyPatches()
 }
 
-func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
+func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID identity.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
 	key := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: cfID,

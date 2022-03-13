@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -728,12 +729,12 @@ type schemaStorageImpl struct {
 	filter         *filter.Filter
 	forceReplicate bool
 
-	id model.ChangeFeedID
+	id identity.ChangeFeedID
 }
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
-	forceReplicate bool, id model.ChangeFeedID) (SchemaStorage, error) {
+	forceReplicate bool, id identity.ChangeFeedID) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {

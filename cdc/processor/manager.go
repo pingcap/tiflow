@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -48,7 +48,7 @@ type command struct {
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
-	processors map[model.ChangeFeedID]*processor
+	processors map[identity.ChangeFeedID]*processor
 
 	commandQueue chan *command
 
@@ -63,7 +63,7 @@ type Manager struct {
 func NewManager() *Manager {
 	conf := config.GetGlobalServerConfig()
 	return &Manager{
-		processors:                   make(map[model.ChangeFeedID]*processor),
+		processors:                   make(map[identity.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
 		newProcessor:                 newProcessor,
 		enableNewScheduler:           conf.Debug.EnableNewScheduler,
@@ -132,7 +132,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 	return state, nil
 }
 
-func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
+func (m *Manager) closeProcessor(changefeedID identity.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		startTime := time.Now()
 		captureID := processor.captureInfo.ID

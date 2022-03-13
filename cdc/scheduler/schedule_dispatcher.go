@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +59,7 @@ type ScheduleDispatcher interface {
 type ScheduleDispatcherCommunicator interface {
 	// DispatchTable should send a dispatch command to the Processor.
 	DispatchTable(ctx context.Context,
-		changeFeedID model.ChangeFeedID,
+		changeFeedID identity.ChangeFeedID,
 		tableID model.TableID,
 		captureID model.CaptureID,
 		isDelete bool,
@@ -67,7 +68,7 @@ type ScheduleDispatcherCommunicator interface {
 
 	// Announce announces to the specified capture that the current node has become the Owner.
 	Announce(ctx context.Context,
-		changeFeedID model.ChangeFeedID,
+		changeFeedID identity.ChangeFeedID,
 		captureID model.CaptureID) (done bool, err error)
 }
 
@@ -93,14 +94,14 @@ type BaseScheduleDispatcher struct {
 	needRebalance        bool
 
 	// read only fields
-	changeFeedID model.ChangeFeedID
+	changeFeedID identity.ChangeFeedID
 	communicator ScheduleDispatcherCommunicator
 	logger       *zap.Logger
 }
 
 // NewBaseScheduleDispatcher creates a new BaseScheduleDispatcher.
 func NewBaseScheduleDispatcher(
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	communicator ScheduleDispatcherCommunicator,
 	checkpointTs model.Ts,
 ) *BaseScheduleDispatcher {

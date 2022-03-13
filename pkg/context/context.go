@@ -25,6 +25,7 @@ import (
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -60,7 +61,7 @@ type GlobalVars struct {
 // the lifecycle of vars in the ChangefeedVars should be aligned with the changefeed.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type ChangefeedVars struct {
-	ID   model.ChangeFeedID
+	ID   identity.ChangeFeedID
 	Info *model.ChangeFeedInfo
 }
 

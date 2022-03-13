@@ -69,7 +69,7 @@ type mqSink struct {
 	statistics *Statistics
 
 	role identity.Role
-	id   model.ChangeFeedID
+	id   identity.ChangeFeedID
 }
 
 func newMqSink(

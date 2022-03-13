@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -60,7 +61,7 @@ type schedulerV2 struct {
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
 
-	changeFeedID  model.ChangeFeedID
+	changeFeedID  identity.ChangeFeedID
 	handlerErrChs []<-chan error
 
 	stats *schedulerStats
@@ -69,7 +70,7 @@ type schedulerV2 struct {
 // NewSchedulerV2 creates a new schedulerV2
 func NewSchedulerV2(
 	ctx context.Context,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
@@ -123,7 +124,7 @@ func (s *schedulerV2) Tick(
 
 func (s *schedulerV2) DispatchTable(
 	ctx context.Context,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	tableID model.TableID,
 	captureID model.CaptureID,
 	isDelete bool,
@@ -166,7 +167,7 @@ func (s *schedulerV2) DispatchTable(
 
 func (s *schedulerV2) Announce(
 	ctx context.Context,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	captureID model.CaptureID,
 ) (done bool, err error) {
 	topic := model.AnnounceTopic(changeFeedID)
@@ -346,7 +347,7 @@ func (s *schedulerV2) checkForHandlerErrors(ctx context.Context) error {
 }
 
 type schedulerStats struct {
-	ChangefeedID model.ChangeFeedID
+	ChangefeedID identity.ChangeFeedID
 
 	AnnounceSentCount            int64
 	SyncReceiveCount             int64

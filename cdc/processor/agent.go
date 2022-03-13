@@ -17,6 +17,7 @@ import (
 	stdContext "context"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/identity"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/benbjohnson/clock"
@@ -65,7 +66,7 @@ type agentImpl struct {
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
 
-	changeFeed     model.ChangeFeedID
+	changeFeed     identity.ChangeFeedID
 	ownerCaptureID model.CaptureID
 
 	clock              clock.Clock
@@ -84,7 +85,7 @@ func newAgent(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	executor scheduler.TableExecutor,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 ) (processorAgent, error) {
 	ret := &agentImpl{
 		messageServer: messageServer,

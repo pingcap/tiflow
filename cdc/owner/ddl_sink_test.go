@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 )
@@ -67,7 +68,7 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 func newDDLSink4Test() (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink()
-	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
+	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ identity.ChangeFeedID, _ *model.ChangeFeedInfo) error {
 		a.sink = mockSink
 		return nil
 	}

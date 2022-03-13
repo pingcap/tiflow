@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -54,7 +55,7 @@ const versionInconsistentLogRate = 1
 // Export field names for pretty printing.
 type ownerJob struct {
 	Tp           ownerJobType
-	ChangefeedID model.ChangeFeedID
+	ChangefeedID identity.ChangeFeedID
 
 	// for ScheduleTable only
 	TargetCaptureID model.CaptureID
@@ -79,9 +80,9 @@ type ownerJob struct {
 type Owner interface {
 	orchestrator.Reactor
 	EnqueueJob(adminJob model.AdminJob, done chan<- error)
-	RebalanceTables(cfID model.ChangeFeedID, done chan<- error)
+	RebalanceTables(cfID identity.ChangeFeedID, done chan<- error)
 	ScheduleTable(
-		cfID model.ChangeFeedID, toCapture model.CaptureID,
+		cfID identity.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
 	WriteDebugInfo(w io.Writer, done chan<- error)
@@ -90,7 +91,7 @@ type Owner interface {
 }
 
 type ownerImpl struct {
-	changefeeds map[model.ChangeFeedID]*changefeed
+	changefeeds map[identity.ChangeFeedID]*changefeed
 	captures    map[model.CaptureID]*model.CaptureInfo
 
 	gcManager gc.Manager
@@ -107,13 +108,13 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	bootstrapped bool
 
-	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
+	newChangefeed func(id identity.ChangeFeedID, gcManager gc.Manager) *changefeed
 }
 
 // NewOwner creates a new Owner
 func NewOwner(pdClient pd.Client) Owner {
 	return &ownerImpl{
-		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
+		changefeeds:   make(map[identity.ChangeFeedID]*changefeed),
 		gcManager:     gc.NewManager(pdClient),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
@@ -130,7 +131,7 @@ func NewOwner4Test(
 	o := NewOwner(pdClient).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
+	o.newChangefeed = func(id identity.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
 	}
 	return o
@@ -229,7 +230,7 @@ func (o *ownerImpl) EnqueueJob(adminJob model.AdminJob, done chan<- error) {
 
 // RebalanceTables triggers a rebalance for the specified changefeed
 // `done` must be buffered to prevernt blocking owner.
-func (o *ownerImpl) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) {
+func (o *ownerImpl) RebalanceTables(cfID identity.ChangeFeedID, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:           ownerJobTypeRebalance,
 		ChangefeedID: cfID,
@@ -240,7 +241,7 @@ func (o *ownerImpl) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) 
 // ScheduleTable moves a table from a capture to another capture
 // `done` must be buffered to prevernt blocking owner.
 func (o *ownerImpl) ScheduleTable(
-	cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID,
+	cfID identity.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
@@ -436,7 +437,7 @@ func (o *ownerImpl) handleJobs() {
 func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedStatuses:
-		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
+		ret := map[identity.ChangeFeedID]*model.ChangeFeedStatus{}
 		for cfID, cfReactor := range o.changefeeds {
 			ret[cfID] = &model.ChangeFeedStatus{}
 			if cfReactor.state == nil {
@@ -451,7 +452,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryAllChangeFeedInfo:
-		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
+		ret := map[identity.ChangeFeedID]*model.ChangeFeedInfo{}
 		for cfID, cfReactor := range o.changefeeds {
 			if cfReactor.state == nil {
 				continue

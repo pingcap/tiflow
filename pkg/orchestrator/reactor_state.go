@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
@@ -30,7 +31,7 @@ import (
 type GlobalReactorState struct {
 	Owner          map[string]struct{}
 	Captures       map[model.CaptureID]*model.CaptureInfo
-	Changefeeds    map[model.ChangeFeedID]*ChangefeedReactorState
+	Changefeeds    map[identity.ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]DataPatch
 
 	// onCaptureAdded and onCaptureRemoved are hook functions
@@ -44,7 +45,7 @@ func NewGlobalState() *GlobalReactorState {
 	return &GlobalReactorState{
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
-		Changefeeds: make(map[model.ChangeFeedID]*ChangefeedReactorState),
+		Changefeeds: make(map[identity.ChangeFeedID]*ChangefeedReactorState),
 	}
 }
 
@@ -136,7 +137,7 @@ func (s *GlobalReactorState) SetOnCaptureRemoved(f func(captureID model.CaptureI
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD
 type ChangefeedReactorState struct {
-	ID            model.ChangeFeedID
+	ID            identity.ChangeFeedID
 	Info          *model.ChangeFeedInfo
 	Status        *model.ChangeFeedStatus
 	TaskPositions map[model.CaptureID]*model.TaskPosition
@@ -148,7 +149,7 @@ type ChangefeedReactorState struct {
 }
 
 // NewChangefeedReactorState creates a new changefeed reactor state
-func NewChangefeedReactorState(id model.ChangeFeedID) *ChangefeedReactorState {
+func NewChangefeedReactorState(id identity.ChangeFeedID) *ChangefeedReactorState {
 	return &ChangefeedReactorState{
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -89,7 +90,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
 func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClient,
-	id model.ChangeFeedID, credential *security.Credential,
+	id identity.ChangeFeedID, credential *security.Credential,
 ) (string, error) {
 	owner, err := getOwnerCapture(ctx, etcdClient)
 	if err != nil {

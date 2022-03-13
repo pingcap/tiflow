@@ -20,12 +20,13 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
 )
 
 type schedulerTester struct {
-	changefeedID model.ChangeFeedID
+	changefeedID identity.ChangeFeedID
 	state        *orchestrator.ChangefeedReactorState
 	tester       *orchestrator.ReactorStateTester
 	captures     map[model.CaptureID]*model.CaptureInfo

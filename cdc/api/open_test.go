@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -49,33 +50,33 @@ type testCase struct {
 	method string
 }
 
-func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedStatus, error) {
 	args := p.Called(ctx)
-	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedStatus), args.Error(1)
+	return args.Get(0).(map[identity.ChangeFeedID]*model.ChangeFeedStatus), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+func (p *mockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedStatus, error) {
 	args := p.Called(ctx, changefeedID)
 	log.Info("err", zap.Error(args.Error(1)))
 	return args.Get(0).(*model.ChangeFeedStatus), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+func (p *mockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedInfo, error) {
 	args := p.Called(ctx)
-	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedInfo), args.Error(1)
+	return args.Get(0).(map[identity.ChangeFeedID]*model.ChangeFeedInfo), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+func (p *mockStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedInfo, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(*model.ChangeFeedInfo), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
+func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.CaptureID]*model.TaskStatus), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
+func (p *mockStatusProvider) GetTaskPositions(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.CaptureID]*model.TaskPosition), args.Error(1)
 }
@@ -114,13 +115,13 @@ func newStatusProvider() *mockStatusProvider {
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
-		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
+		Return(map[identity.ChangeFeedID]*model.ChangeFeedStatus{
 			changeFeedID + "1": {CheckpointTs: 1},
 			changeFeedID + "2": {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
-		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
+		Return(map[identity.ChangeFeedID]*model.ChangeFeedInfo{
 			changeFeedID + "1": {State: model.StateNormal},
 			changeFeedID + "2": {State: model.StateStopped},
 		}, nil)
@@ -371,7 +372,7 @@ func TestRebalanceTables(t *testing.T) {
 	// test rebalance table succeeded
 	mo.EXPECT().
 		RebalanceTables(gomock.Any(), gomock.Any()).
-		Do(func(cfID model.ChangeFeedID, done chan<- error) {
+		Do(func(cfID identity.ChangeFeedID, done chan<- error) {
 			require.EqualValues(t, cfID, changeFeedID)
 			close(done)
 		})
@@ -387,7 +388,7 @@ func TestRebalanceTables(t *testing.T) {
 	// test rebalance table failed from owner side.
 	mo.EXPECT().
 		RebalanceTables(gomock.Any(), gomock.Any()).
-		Do(func(cfID model.ChangeFeedID, done chan<- error) {
+		Do(func(cfID identity.ChangeFeedID, done chan<- error) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(cfID)
 			close(done)
 		})
@@ -438,7 +439,7 @@ func TestMoveTable(t *testing.T) {
 	mo.EXPECT().
 		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(
-			cfID model.ChangeFeedID, toCapture model.CaptureID,
+			cfID identity.ChangeFeedID, toCapture model.CaptureID,
 			tableID model.TableID, done chan<- error,
 		) {
 			require.EqualValues(t, cfID, changeFeedID)
@@ -466,7 +467,7 @@ func TestMoveTable(t *testing.T) {
 	mo.EXPECT().
 		ScheduleTable(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(
-			cfID model.ChangeFeedID, toCapture model.CaptureID,
+			cfID identity.ChangeFeedID, toCapture model.CaptureID,
 			tableID model.TableID, done chan<- error,
 		) {
 			require.EqualValues(t, cfID, changeFeedID)

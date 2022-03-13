@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -80,7 +81,7 @@ type mockDDLSink struct {
 	wg sync.WaitGroup
 }
 
-func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) {
+func (m *mockDDLSink) run(ctx cdcContext.Context, _ identity.ChangeFeedID, _ *model.ChangeFeedInfo) {
 	m.wg.Add(1)
 	go func() {
 		<-ctx.Done()

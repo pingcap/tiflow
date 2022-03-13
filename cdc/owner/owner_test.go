@@ -26,6 +26,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ type mockManager struct {
 }
 
 func (m *mockManager) CheckStaleCheckpointTs(
-	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
+	ctx context.Context, changefeedID identity.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
 }
@@ -519,7 +520,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	defer cancel()
 
 	var errIn error
-	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
+	var infos map[identity.ChangeFeedID]*model.ChangeFeedInfo
 	done := make(chan struct{})
 	go func() {
 		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)

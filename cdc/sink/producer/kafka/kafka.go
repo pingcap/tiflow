@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/identity"
@@ -78,7 +77,7 @@ type kafkaSaramaProducer struct {
 	closing kafkaProducerClosingFlag
 
 	role identity.Role
-	id   model.ChangeFeedID
+	id   identity.ChangeFeedID
 
 	metricsMonitor *saramaMetricsMonitor
 }

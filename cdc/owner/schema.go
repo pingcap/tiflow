@@ -37,11 +37,11 @@ type schemaWrap4Owner struct {
 	allPhysicalTablesCache []model.TableID
 	ddlHandledTs           model.Ts
 
-	id model.ChangeFeedID
+	id identity.ChangeFeedID
 }
 
 func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts,
-	config *config.ReplicaConfig, id model.ChangeFeedID) (*schemaWrap4Owner, error) {
+	config *config.ReplicaConfig, id identity.ChangeFeedID) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error

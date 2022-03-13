@@ -17,6 +17,7 @@ import (
 	"context"
 
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -26,22 +27,22 @@ import (
 // The interface is thread-safe.
 type StatusProvider interface {
 	// GetAllChangeFeedStatuses returns all changefeeds' runtime status.
-	GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error)
+	GetAllChangeFeedStatuses(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedStatus, error)
 
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
-	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedStatus, error)
 
 	// GetAllChangeFeedInfo returns all changefeeds' info.
-	GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error)
+	GetAllChangeFeedInfo(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedInfo, error)
 
 	// GetChangeFeedInfo returns a changefeeds' info.
-	GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error)
+	GetChangeFeedInfo(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedInfo, error)
 
 	// GetAllTaskStatuses returns the task statuses for the specified changefeed.
-	GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error)
+	GetAllTaskStatuses(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error)
 
 	// GetTaskPositions returns the task positions for the specified changefeed.
-	GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error)
+	GetTaskPositions(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error)
 
 	// GetProcessors returns the statuses of all processors
 	GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error)
@@ -71,7 +72,7 @@ const (
 // Query wraps query command and return results.
 type Query struct {
 	Tp           QueryType
-	ChangeFeedID model.ChangeFeedID
+	ChangeFeedID identity.ChangeFeedID
 
 	Data interface{}
 }
@@ -85,17 +86,17 @@ type ownerStatusProvider struct {
 	owner Owner
 }
 
-func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedStatus, error) {
 	query := &Query{
 		Tp: QueryAllChangeFeedStatuses,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedStatus), nil
+	return query.Data.(map[identity.ChangeFeedID]*model.ChangeFeedStatus), nil
 }
 
-func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedStatus, error) {
 	statuses, err := p.GetAllChangeFeedStatuses(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -107,17 +108,17 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefee
 	return status, nil
 }
 
-func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[identity.ChangeFeedID]*model.ChangeFeedInfo, error) {
 	query := &Query{
 		Tp: QueryAllChangeFeedInfo,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+	return query.Data.(map[identity.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
-func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID identity.ChangeFeedID) (*model.ChangeFeedInfo, error) {
 	infos, err := p.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -129,7 +130,7 @@ func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedI
 	return info, nil
 }
 
-func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
+func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
 	query := &Query{
 		Tp:           QueryAllTaskStatuses,
 		ChangeFeedID: changefeedID,
@@ -140,7 +141,7 @@ func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeed
 	return query.Data.(map[model.CaptureID]*model.TaskStatus), nil
 }
 
-func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
+func (p *ownerStatusProvider) GetTaskPositions(ctx context.Context, changefeedID identity.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
 	query := &Query{
 		Tp:           QueryTaskPositions,
 		ChangeFeedID: changefeedID,

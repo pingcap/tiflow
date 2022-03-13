@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -39,14 +40,14 @@ type Manager struct {
 
 	drawbackChan chan drawbackMsg
 
-	changefeedID              model.ChangeFeedID
+	changefeedID              identity.ChangeFeedID
 	metricsTableSinkTotalRows prometheus.Counter
 }
 
 // NewManager creates a new Sink manager
 func NewManager(
 	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
-	captureAddr string, changefeedID model.ChangeFeedID,
+	captureAddr string, changefeedID identity.ChangeFeedID,
 ) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
 	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)

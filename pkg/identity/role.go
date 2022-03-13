@@ -52,3 +52,6 @@ func (r Role) String() string {
 	}
 	return "unknown"
 }
+
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID = string

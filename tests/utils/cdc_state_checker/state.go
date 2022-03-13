@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
@@ -29,9 +30,9 @@ import (
 type cdcReactorState struct {
 	Owner              model.CaptureID
 	Captures           map[model.CaptureID]*model.CaptureInfo
-	ChangefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
-	TaskPositions      map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
-	TaskStatuses       map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
+	ChangefeedStatuses map[identity.ChangeFeedID]*model.ChangeFeedStatus
+	TaskPositions      map[identity.ChangeFeedID]map[model.CaptureID]*model.TaskPosition
+	TaskStatuses       map[identity.ChangeFeedID]map[model.CaptureID]*model.TaskStatus
 }
 
 var (
@@ -44,9 +45,9 @@ var (
 func newCDCReactorState() *cdcReactorState {
 	return &cdcReactorState{
 		Captures:           make(map[model.CaptureID]*model.CaptureInfo),
-		ChangefeedStatuses: make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		TaskPositions:      make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
-		TaskStatuses:       make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
+		ChangefeedStatuses: make(map[identity.ChangeFeedID]*model.ChangeFeedStatus),
+		TaskPositions:      make(map[identity.ChangeFeedID]map[model.CaptureID]*model.TaskPosition),
+		TaskStatuses:       make(map[identity.ChangeFeedID]map[model.CaptureID]*model.TaskStatus),
 	}
 }
 

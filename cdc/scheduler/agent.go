@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -134,7 +135,7 @@ type BaseAgent struct {
 
 // NewBaseAgent creates a new BaseAgent.
 func NewBaseAgent(
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	executor TableExecutor,
 	messenger ProcessorMessenger,
 	config *BaseAgentConfig,

@@ -30,6 +30,7 @@ import (
 	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -39,7 +40,7 @@ import (
 )
 
 type changefeed struct {
-	id    model.ChangeFeedID
+	id    identity.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
 	scheduler        scheduler
@@ -84,7 +85,7 @@ type changefeed struct {
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
+func newChangefeed(id identity.ChangeFeedID, gcManager gc.Manager) *changefeed {
 	c := &changefeed{
 		id: id,
 		// The scheduler will be created lazily.
@@ -104,7 +105,7 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager gc.Manager,
+	id identity.ChangeFeedID, gcManager gc.Manager,
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {

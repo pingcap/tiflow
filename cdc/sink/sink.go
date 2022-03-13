@@ -84,17 +84,17 @@ type Sink interface {
 
 var sinkIniterMap = make(map[string]sinkInitFunc)
 
-type sinkInitFunc func(context.Context, model.ChangeFeedID, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
+type sinkInitFunc func(context.Context, identity.ChangeFeedID, *url.URL, *filter.Filter, *config.ReplicaConfig, map[string]string, chan error) (Sink, error)
 
 func init() {
 	// register blackhole sink
-	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+	sinkIniterMap["blackhole"] = func(ctx context.Context, changefeedID identity.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newBlackHoleSink(ctx), nil
 	}
 
 	// register mysql sink
-	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+	sinkIniterMap["mysql"] = func(ctx context.Context, changefeedID identity.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, config, opts)
 	}
@@ -103,14 +103,14 @@ func init() {
 	sinkIniterMap["tidb+ssl"] = sinkIniterMap["mysql"]
 
 	// register kafka sink
-	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+	sinkIniterMap["kafka"] = func(ctx context.Context, changefeedID identity.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
 	// register pulsar sink
-	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID identity.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
@@ -118,7 +118,7 @@ func init() {
 }
 
 // New creates a new sink with the sink-uri
-func New(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+func New(ctx context.Context, changefeedID identity.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {

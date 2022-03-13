@@ -12,6 +12,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/identity"
 	orchestrator "github.com/pingcap/tiflow/pkg/orchestrator"
 )
 
@@ -75,7 +76,7 @@ func (mr *MockOwnerMockRecorder) Query(query, done interface{}) *gomock.Call {
 }
 
 // RebalanceTables mocks base method.
-func (m *MockOwner) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) {
+func (m *MockOwner) RebalanceTables(cfID identity.ChangeFeedID, done chan<- error) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RebalanceTables", cfID, done)
 }
@@ -87,7 +88,7 @@ func (mr *MockOwnerMockRecorder) RebalanceTables(cfID, done interface{}) *gomock
 }
 
 // ScheduleTable mocks base method.
-func (m *MockOwner) ScheduleTable(cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID, done chan<- error) {
+func (m *MockOwner) ScheduleTable(cfID identity.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID, done chan<- error) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ScheduleTable", cfID, toCapture, tableID, done)
 }

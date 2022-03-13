@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -57,7 +58,7 @@ func (m *mockScheduleDispatcherCommunicator) Reset() {
 
 func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 	ctx cdcContext.Context,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	tableID model.TableID,
 	captureID model.CaptureID,
 	isDelete bool,
@@ -82,7 +83,7 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 
 func (m *mockScheduleDispatcherCommunicator) Announce(
 	ctx cdcContext.Context,
-	changeFeedID model.ChangeFeedID,
+	changeFeedID identity.ChangeFeedID,
 	captureID model.CaptureID,
 ) (done bool, err error) {
 	args := m.Called(ctx, changeFeedID, captureID)

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/stretchr/testify/require"
 )
@@ -566,7 +567,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 					ID:            "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
-				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
+				Changefeeds: map[identity.ChangeFeedID]*ChangefeedReactorState{
 					"test1": {
 						ID:           "test1",
 						TaskStatuses: map[string]*model.TaskStatus{},
@@ -615,7 +616,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 			expected: GlobalReactorState{
 				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
 				Captures: map[model.CaptureID]*model.CaptureInfo{},
-				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
+				Changefeeds: map[identity.ChangeFeedID]*ChangefeedReactorState{
 					"test2": {
 						ID:            "test2",
 						TaskStatuses:  map[string]*model.TaskStatus{},

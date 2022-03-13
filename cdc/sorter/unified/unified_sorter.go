@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/identity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,7 +45,7 @@ type Sorter struct {
 }
 
 type metricsInfo struct {
-	changeFeedID model.ChangeFeedID
+	changeFeedID identity.ChangeFeedID
 	tableName    string
 	tableID      model.TableID
 }
@@ -53,7 +54,7 @@ type ctxKey struct{}
 
 // NewUnifiedSorter creates a new Sorter
 func NewUnifiedSorter(
-	dir string, changeFeedID model.ChangeFeedID, tableName string, tableID model.TableID,
+	dir string, changeFeedID identity.ChangeFeedID, tableName string, tableID model.TableID,
 ) (*Sorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
