@@ -96,17 +96,17 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		for _, testPath := range testPaths {
 			for _, testSeparator := range testSeparators {
 				// ""
-				res, err := AdjustPath("", "", testSeparator, true)
+				res, err := AdjustPath("", "")
 				require.NoError(t, err)
 				require.Equal(t, "", res)
-				res, err = AdjustPath(testPath.rawPath, "", testSeparator, true)
+				res, err = AdjustPath(testPath.rawPath, "")
 				require.NoError(t, err)
 				require.Equal(t, testPath.rawPath, res)
-				res, err = AdjustPath("", testUniqueID.test, testSeparator, true)
+				res, err = AdjustPath("", testSeparator+testUniqueID.test)
 				require.NoError(t, err)
 				require.Equal(t, "", res)
 				// error
-				_, err = AdjustPath("1invalid:", testUniqueID.test, testSeparator, true)
+				_, err = AdjustPath("1invalid:", testSeparator+testUniqueID.test)
 				require.Error(t, err)
 				require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
 				// normal
@@ -116,23 +116,13 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 				} else {
 					expectPath = strings.ReplaceAll(testPath.expectPath, "_placeholder", testSeparator+testUniqueID.test)
 				}
-				res, err = AdjustPath(testPath.rawPath, testUniqueID.test, testSeparator, true)
+				res, err = AdjustPath(testPath.rawPath, testSeparator+testUniqueID.test)
 				require.NoError(t, err)
 				require.Equal(t, expectPath, res)
 				// repeat
-				res, err = AdjustPath(expectPath, testUniqueID.test, testSeparator, true)
+				res, err = AdjustPath(expectPath, testSeparator+testUniqueID.test)
 				require.NoError(t, err)
 				require.Equal(t, expectPath, res)
-				// not check repeat
-				var repeatPath string
-				if testPath.isURLFormat {
-					repeatPath = strings.ReplaceAll(testPath.expectPath, "_placeholder", testSeparator+testUniqueID.expect+testSeparator+testUniqueID.expect)
-				} else {
-					repeatPath = strings.ReplaceAll(testPath.expectPath, "_placeholder", testSeparator+testUniqueID.test+testSeparator+testUniqueID.test)
-				}
-				res, err = AdjustPath(expectPath, testUniqueID.test, testSeparator, false)
-				require.NoError(t, err)
-				require.Equal(t, repeatPath, res)
 			}
 		}
 	}

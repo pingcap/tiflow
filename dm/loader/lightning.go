@@ -237,7 +237,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
 		var cpPath string
-		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName, string(filepath.Separator), false)
+		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
 		if err != nil {
 			return err
 		}
