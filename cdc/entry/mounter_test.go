@@ -35,6 +35,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	dummyChangeFeedID = "dummy_changefeed"
+)
+
 func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
@@ -265,7 +269,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	jobs, err := getAllHistoryDDLJob(store)
 	require.Nil(t, err)
-	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)

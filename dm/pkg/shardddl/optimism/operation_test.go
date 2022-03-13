@@ -73,6 +73,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	// watch should only get op11.
 	c.Assert(len(ech), Equals, 0)
 	c.Assert(len(wch), Equals, 1)
+	op11.Revision = rev2
 	c.Assert(<-wch, DeepEquals, op11)
 
 	// put for another task.
@@ -93,6 +94,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(len(ech), Equals, 0)
 	c.Assert(len(wch), Equals, 2)
 	c.Assert(<-wch, DeepEquals, op11)
+	op21.Revision = rev3
 	c.Assert(<-wch, DeepEquals, op21)
 
 	// get all operations.
@@ -103,8 +105,10 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	c.Assert(opm, HasKey, task1)
 	c.Assert(opm, HasKey, task2)
 	c.Assert(opm[task1], HasLen, 1)
+	op11.Revision = rev2
 	c.Assert(opm[task1][source1][upSchema][upTable], DeepEquals, op11)
 	c.Assert(opm[task2], HasLen, 1)
+	op21.Revision = rev3
 	c.Assert(opm[task2][source1][upSchema][upTable], DeepEquals, op21)
 
 	// put for `skipDone` with `done` in etcd, the operations should not be skipped.
@@ -134,6 +138,7 @@ func (t *testForEtcd) TestOperationEtcd(c *C) {
 	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm[task1], HasLen, 1)
+	op11.Revision = rev6
 	c.Assert(opm[task1][source1][upSchema][upTable], DeepEquals, op11)
 
 	// update op11 to `done`.
