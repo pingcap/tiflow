@@ -155,9 +155,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			select {
 			case ddl := <-s.ddlCh:
 				if ddl.CommitTs <= lastCheckpointTs {
-					log.Panic("DDL CommitTs <= checkpointTs",
-						zap.Uint64("CommitTs", ddl.CommitTs),
-						zap.Uint64("lastCheckpointTs", lastCheckpointTs),
+					log.Panic("DDL CommitTs <= checkpointTs, please report a bug",
+						zap.Uint64("checkpointTs", lastCheckpointTs),
 						zap.Any("DDL", ddl))
 				}
 
