@@ -155,7 +155,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			select {
 			case ddl := <-s.ddlCh:
 				if ddl.CommitTs <= lastCheckpointTs {
-					log.Panic("DDL CommitTs < checkpointTs",
+					log.Panic("DDL CommitTs <= checkpointTs",
 						zap.Uint64("CommitTs", ddl.CommitTs),
 						zap.Uint64("lastCheckpointTs", lastCheckpointTs),
 						zap.Any("DDL", ddl))
@@ -188,6 +188,9 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			<-ticker.C
 			s.mu.Lock()
 			checkpointTs := s.mu.checkpointTs
+			// checkpoint should be sent after all DDL events whoes `CommitTs` not greater than it flushed
+			// sometimes, DDL's commitTs may equal to the checkpointTs, but emit DDL is not finished yet,
+			// || checkpointTs <= s.ddlFinishedTs
 			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 				s.mu.Unlock()
 				continue
@@ -199,6 +202,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				return
 			}
 			lastCheckpointTs = checkpointTs
+			log.Info("emit checkpointTs to downstream sink success",
+				zap.Uint64("checkpointTs", lastCheckpointTs))
 		}
 	}()
 }
@@ -221,7 +226,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
 		log.Info("ddl is not finished yet",
-			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl),
+			zap.Uint64("ddlSentTs", s.ddlSentTs),
+			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl),
 			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
