@@ -606,8 +606,6 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	if c.processorManager != nil {
 		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(ctx, w, doneM)
-	} else {
-		close(doneM)
 	}
 	// wait the debug info printed
 	wait(doneM)
