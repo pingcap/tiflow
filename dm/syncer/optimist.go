@@ -163,17 +163,20 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
+	s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
 	if !skipOp {
-		s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
-		op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
-		if err != nil {
-			return err
+		for {
+			op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
+			if err != nil {
+				return err
+			}
+			s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
+			if op.ConflictStage != optimism.ConflictDetected {
+				break
+			}
+			rev = op.Revision
+			s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}
-		s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
-	}
-
-	if op.ConflictStage == optimism.ConflictDetected {
-		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	}
 
 	// TODO: support redirect for DM worker

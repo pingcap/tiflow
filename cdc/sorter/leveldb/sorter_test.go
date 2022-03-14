@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ func newTestSorter(name string, capacity int) (Sorter, actor.Mailbox) {
 			dbRouter:  router,
 			dbActorID: mb.ID(),
 			errCh:     make(chan error, 1),
+			closedWg:  &sync.WaitGroup{},
 		},
 		writerRouter:  router,
 		writerActorID: mb.ID(),
