@@ -189,16 +189,16 @@ func (ls *Sorter) Run(ctx context.Context) error {
 	}
 	atomic.StoreInt32(&ls.closed, 1)
 	// We should never lost message, make sure StopMessage is sent.
-	ctxTODO := context.TODO()
+	ctx1 := context.TODO()
 	// As the context can't be cancelled. SendB can only return an error
 	// ActorStopped or ActorNotFound, and they mean actors have closed.
 	_ = ls.writerRouter.SendB(
-		ctxTODO, ls.writerActorID, actormsg.StopMessage())
+		ctx1, ls.writerActorID, actormsg.StopMessage())
 	_ = ls.readerRouter.SendB(
-		ctxTODO, ls.ReaderActorID, actormsg.StopMessage())
+		ctx1, ls.ReaderActorID, actormsg.StopMessage())
 	ls.closedWg.Wait()
 
-	_ = ls.cleanup(ctxTODO)
+	_ = ls.cleanup(ctx1)
 	return errors.Trace(err)
 }
 
