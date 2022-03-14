@@ -20,6 +20,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -43,11 +44,12 @@ const (
 )
 
 type validatorPersistHelper struct {
-	tctx      *tcontext.Context
-	cfg       *config.SubTaskConfig
-	db        *conn.BaseDB
-	dbConn    *dbconn.DBConn
-	validator *DataValidator
+	tctx       *tcontext.Context
+	cfg        *config.SubTaskConfig
+	db         *conn.BaseDB
+	dbConn     *dbconn.DBConn
+	validator  *DataValidator
+	schemaInit atomic.Bool
 
 	checkpointTableName    string
 	pendingChangeTableName string
@@ -93,11 +95,15 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 		dbconn.CloseBaseDB(newCtx, c.db)
 	}()
 
-	if err = c.createSchema(newCtx); err != nil {
-		return err
-	}
+	if !c.schemaInit.Load() {
+		if err = c.createSchema(newCtx); err != nil {
+			return err
+		}
 
-	err = c.createTable(newCtx)
+		err = c.createTable(newCtx)
+
+		c.schemaInit.Store(true)
+	}
 	return err
 }
 
