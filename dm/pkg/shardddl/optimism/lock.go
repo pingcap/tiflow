@@ -596,9 +596,11 @@ func (l *Lock) AddDroppedColumns(source, schema, table string, cols []string) er
 	}
 	log.L().Info("add partially dropped columns", zap.Strings("columns", newCols), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
 
-	_, _, err := PutDroppedColumns(l.cli, l.ID, source, schema, table, newCols, DropNotDone)
-	if err != nil {
-		return err
+	if len(newCols) > 0 {
+		_, _, err := PutDroppedColumns(l.cli, l.ID, source, schema, table, newCols, DropNotDone)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, col := range newCols {

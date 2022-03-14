@@ -179,6 +179,9 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
+	if op.ConflictStage == optimism.ConflictError {
+		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
+	}
 	// TODO: support redirect for DM worker
 	// return error to pass IT now
 	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
