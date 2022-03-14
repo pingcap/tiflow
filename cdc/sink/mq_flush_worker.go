@@ -117,22 +117,22 @@ func (w *flushWorker) batch(
 }
 
 // group is responsible for grouping messages by the partition.
-func (w *flushWorker) group(events []mqEvent) map[int32][]mqEvent {
-	paritionedEvents := make(map[int32][]mqEvent)
+func (w *flushWorker) group(events []mqEvent) map[int32][]*model.RowChangedEvent {
+	paritionedRows := make(map[int32][]*model.RowChangedEvent)
 	for _, event := range events {
-		if _, ok := paritionedEvents[event.partition]; !ok {
-			paritionedEvents[event.partition] = make([]mqEvent, 0)
+		if _, ok := paritionedRows[event.partition]; !ok {
+			paritionedRows[event.partition] = make([]*model.RowChangedEvent, 0)
 		}
-		paritionedEvents[event.partition] = append(paritionedEvents[event.partition], event)
+		paritionedRows[event.partition] = append(paritionedRows[event.partition], event.row)
 	}
-	return paritionedEvents
+	return paritionedRows
 }
 
 // asyncSend is responsible for sending messages to the Kafka producer.
-func (w *flushWorker) asyncSend(ctx context.Context, paritionedEvents map[int32][]mqEvent) error {
-	for partition, events := range paritionedEvents {
+func (w *flushWorker) asyncSend(ctx context.Context, paritionedRows map[int32][]*model.RowChangedEvent) error {
+	for partition, events := range paritionedRows {
 		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(event.row)
+			err := w.encoder.AppendRowChangedEvent(event)
 			if err != nil {
 				return err
 			}
@@ -182,8 +182,8 @@ func (w *flushWorker) run(ctx context.Context) error {
 			continue
 		}
 		msgs := eventsBuf[:endIndex]
-		paritionedEvents := w.group(msgs)
-		err = w.asyncSend(ctx, paritionedEvents)
+		paritionedRows := w.group(msgs)
+		err = w.asyncSend(ctx, paritionedRows)
 		if err != nil {
 			return errors.Trace(err)
 		}

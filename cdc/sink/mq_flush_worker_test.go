@@ -210,12 +210,12 @@ func TestGroup(t *testing.T) {
 		},
 	}
 
-	paritionedEvents := worker.group(events)
-	require.Len(t, paritionedEvents, 2)
-	require.Len(t, paritionedEvents[1], 3)
+	paritionedRows := worker.group(events)
+	require.Len(t, paritionedRows, 2)
+	require.Len(t, paritionedRows[1], 3)
 	// We must ensure that the sequence is not broken.
-	require.LessOrEqual(t, paritionedEvents[1][0].row.CommitTs, paritionedEvents[1][1].row.CommitTs, paritionedEvents[1][2].row.CommitTs)
-	require.Len(t, paritionedEvents[2], 1)
+	require.LessOrEqual(t, paritionedRows[1][0].CommitTs, paritionedRows[1][1].CommitTs, paritionedRows[1][2].CommitTs)
+	require.Len(t, paritionedRows[2], 1)
 }
 
 func TestAsyncSend(t *testing.T) {
@@ -273,8 +273,8 @@ func TestAsyncSend(t *testing.T) {
 		},
 	}
 
-	paritionedEvents := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedEvents)
+	paritionedRows := worker.group(events)
+	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
 	require.Len(t, producer.mqEvent, 3)
 	require.Len(t, producer.mqEvent[1], 3)
@@ -327,8 +327,8 @@ func TestFlush(t *testing.T) {
 		require.Equal(t, 3, endIndex)
 		require.True(t, worker.needSyncFlush)
 		msgs := batchBuf[:endIndex]
-		paritionedEvents := worker.group(msgs)
-		err = worker.asyncSend(ctx, paritionedEvents)
+		paritionedRows := worker.group(msgs)
+		err = worker.asyncSend(ctx, paritionedRows)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
 		require.False(t, worker.needSyncFlush)
