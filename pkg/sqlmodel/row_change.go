@@ -24,7 +24,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -67,8 +66,8 @@ type RowChange struct {
 
 	tiSessionCtx sessionctx.Context
 
-	tp           RowChangeType
-	identityInfo *schema.DownstreamTableInfo
+	tp          RowChangeType
+	whereHandle *WhereHandle
 }
 
 // NewRowChange creates a new RowChange.
@@ -166,18 +165,18 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used when caller has calculated and cached
-// identityInfo, to avoid every RowChange lazily initialize it.
-func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
-	r.identityInfo = info
+// SetWhereHandle can be used when caller has cached whereHandle, to avoid every
+// RowChange lazily initialize it.
+func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
+	r.whereHandle = whereHandle
 }
 
-func (r *RowChange) lazyInitIdentityInfo() {
-	if r.identityInfo != nil {
+func (r *RowChange) lazyInitWhereHandle() {
+	if r.whereHandle != nil {
 		return
 	}
 
-	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
+	r.whereHandle = GetWhereHandle(r.sourceTableInfo, r.targetTableInfo)
 }
 
 func getColsAndValuesOfIdx(
@@ -198,14 +197,11 @@ func getColsAndValuesOfIdx(
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
-	r.lazyInitIdentityInfo()
-
-	uniqueIndex := r.identityInfo.AbsoluteUKIndexInfo
-	if uniqueIndex == nil {
-		uniqueIndex = schema.GetIdentityUKByData(r.identityInfo, r.preValues)
-	}
+	r.lazyInitWhereHandle()
 
 	columns, values := r.sourceTableInfo.Columns, r.preValues
+
+	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
 		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
 	}

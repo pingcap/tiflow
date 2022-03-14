@@ -199,7 +199,7 @@ func TestGetCausalityString(t *testing.T) {
 	for _, ca := range testCases {
 		ti := mockTableInfo(t, ca.schema)
 		change := NewRowChange(source, nil, nil, ca.values, ti, nil, nil)
-		change.lazyInitIdentityInfo()
+		change.lazyInitWhereHandle()
 		require.Equal(t, ca.keys, change.getCausalityString(ca.values))
 	}
 }
