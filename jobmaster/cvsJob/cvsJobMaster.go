@@ -99,13 +99,20 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		}
 		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
 	}
-	jm.status = lib.WorkerStatusNormal
-	return jm.UpdateJobStatus(ctx, jm.Status())
+	return nil
 }
 
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	filesNum := 0
 	jm.counter = 0
+	if jm.status != lib.WorkerStatusNormal {
+		err := jm.UpdateJobStatus(ctx, jm.Status())
+		if err != nil {
+			log.L().Warn("update job status failed", zap.Any("id", jm.workerID), zap.Error(err))
+		} else {
+			jm.status = lib.WorkerStatusNormal
+		}
+	}
 	for _, worker := range jm.syncFilesInfo {
 		if worker.handle == nil {
 			continue
@@ -133,6 +140,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.status))
 	}
 	if filesNum == jm.filesNum {
+		jm.status = lib.WorkerStatusFinished
 		log.L().Info("cvs job master finished")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}

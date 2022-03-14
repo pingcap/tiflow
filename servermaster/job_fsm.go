@@ -128,25 +128,11 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 			}
 		} else if jobInfo != nil {
 			resp.JobMasterInfo = jobInfo
-		} else if job.IsTombStone() {
-			resp.JobMasterInfo = &pb.WorkerInfo{}
-			resp.JobMasterInfo.IsTombstone = true
-			status := job.Status()
-			if status != nil {
-				var err error
-				resp.JobMasterInfo.Status, err = status.Marshal()
-				if err != nil {
-					resp.Err = &pb.Error{
-						Code:    pb.ErrorCode_UnknownError,
-						Message: err.Error(),
-					}
-				}
-			}
 		} else {
-			// TODO think about
-			log.L().Panic("Unexpected Job Info")
+			// job master is just timeout but have not call OnOffline.
+			return nil
 		}
-		return nil
+		return resp
 	}
 
 	if resp := checkPendingJob(); resp != nil {

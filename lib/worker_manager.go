@@ -558,7 +558,7 @@ func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool 
 	duration := clock.Since(w.lastHeartbeatReceiveTime)
 	if duration > config.workerTimeoutDuration {
 		// TODO add details about the worker.
-		log.L().Warn("Worker timed out", zap.Duration("duration", duration))
+		log.L().Warn("Worker timed out", zap.Duration("duration", duration), zap.String("id", w.ID))
 		return true
 	}
 	return false

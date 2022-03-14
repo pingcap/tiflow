@@ -52,6 +52,44 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
 }
 
+func TestJobManagerOnlineJob(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "submit-job-test")
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mockMaster.MasterClient().On(
+		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
+		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
+	)
+	mgr := &JobManagerImplV2{
+		BaseMaster: mockMaster.DefaultBaseMaster,
+		JobFsm:     NewJobFsm(),
+		uuidGen:    uuid.NewGenerator(),
+	}
+	// set master impl to JobManagerImplV2
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.Nil(t, err)
+	req := &pb.SubmitJobRequest{
+		Tp:     pb.JobType_CVSDemo,
+		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
+	}
+	resp := mgr.SubmitJob(ctx, req)
+	require.Nil(t, resp.Err)
+
+	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: resp.JobIdStr}
+	mockWorkerHandler.On("ToPB").Return(&pb.WorkerInfo{Id: resp.JobIdStr}, nil)
+	err = mgr.JobFsm.JobOnline(mockWorkerHandler)
+	require.Nil(t, err)
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	require.Nil(t, queryResp.Err)
+	require.Equal(t, pb.QueryJobResponse_online, queryResp.Status)
+	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobIdStr)
+}
+
 func TestJobManagerRecover(t *testing.T) {
 	t.Parallel()
 

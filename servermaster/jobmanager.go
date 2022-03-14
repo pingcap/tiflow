@@ -59,7 +59,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	}
 	mcli := lib.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
 	if masterMeta, err := mcli.Load(ctx); err != nil {
-		log.L().Warn("failed to load master kv meta from meta store", zap.Error(err))
+		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
 		if masterMeta != nil && masterMeta.StatusCode == lib.MasterStatusFinished {
 			resp := &pb.QueryJobResponse{
@@ -68,6 +68,9 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 				Status: pb.QueryJobResponse_finished,
 			}
 			return resp
+		}
+		if masterMeta != nil {
+			log.L().Warn("load master kv meta from meta store, but status is not expected", zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode))
 		}
 	}
 	return &pb.QueryJobResponse{

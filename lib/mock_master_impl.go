@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
@@ -191,4 +192,39 @@ func (s *dummyStatus) Marshal() ([]byte, error) {
 
 func (s *dummyStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
+}
+
+type MockWorkerHandler struct {
+	mock.Mock
+
+	WorkerID WorkerID
+}
+
+func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+	args := m.Called(ctx, topic, message)
+	return args.Error(0)
+}
+
+func (m *MockWorkerHandler) Status() *WorkerStatus {
+	args := m.Called()
+	return args.Get(0).(*WorkerStatus)
+}
+
+func (m *MockWorkerHandler) ID() WorkerID {
+	return m.WorkerID
+}
+
+func (m *MockWorkerHandler) IsTombStone() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
+	args := m.Called()
+	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
+}
+
+func (m *MockWorkerHandler) DeleteTombStone(ctx context.Context) (bool, error) {
+	args := m.Called()
+	return args.Bool(0), args.Error(1)
 }

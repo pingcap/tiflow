@@ -394,7 +394,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		}
 
 		for _, workerInfo := range offlinedWorkers {
-			log.L().Info("worker is offline", zap.Any("worker-info", workerInfo))
+			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
 			status, ok := m.workerManager.GetStatus(workerInfo.ID)
 			if !ok {
 				log.L().Panic(
@@ -421,7 +421,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 func (m *DefaultBaseMaster) OnError(err error) {
 	if errors.Cause(err) == context.Canceled {
 		// TODO think about how to gracefully handle cancellation here.
-		log.L().Warn("BaseMaster is being canceled", zap.Error(err))
+		log.L().Warn("BaseMaster is being canceled", zap.String("id", m.id), zap.Error(err))
 		return
 	}
 	select {
@@ -512,7 +512,8 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
-		zap.Any("worker-config", config))
+		zap.Any("worker-config", config),
+		zap.String("master-id", m.id))
 
 	if !m.createWorkerQuota.TryConsume() {
 		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
@@ -586,7 +587,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 			return
 		}
 		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
-		log.L().Info("Worker dispatched", zap.Any("response", dispatchTaskResp))
+		log.L().Info("Worker dispatched", zap.Any("master-id", m.id), zap.Any("response", dispatchTaskResp))
 		errCode := dispatchTaskResp.GetErrorCode()
 		if errCode != pb.DispatchTaskErrorCode_OK {
 			err1 := m.Impl.OnWorkerDispatched(dispatchFailedDummyHandler,

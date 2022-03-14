@@ -9,3 +9,7 @@ executor_port: 10241
 df_data_prefix: /data/df-data-{{ cluster_name }}
 df_bin_dir: "{{ df_data_prefix }}/bin"
 df_script_dir: "{{ df_data_prefix }}/script"
+
+log_level: info
+df_executor_std_log: "{{ df_data_prefix }}/executor_std.log"
+
