@@ -1223,6 +1223,7 @@ func (s *Scheduler) BoundSources() []string {
 }
 
 // UnboundSources returns all unbound source IDs in increasing order.
+// we don't lock this because all the situations that use this function has required lock
 func (s *Scheduler) UnboundSources() []string {
 	capIDs := len(s.sourceCfgs) - len(s.bounds)
 	IDs := make([]string, 0, capIDs)

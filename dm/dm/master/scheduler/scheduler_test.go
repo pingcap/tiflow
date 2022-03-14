@@ -88,6 +88,12 @@ func checkRelaySource(t *testing.T, relaySources map[string]struct{}, sources ..
 	}
 }
 
+func getUnboundedSourcesWithLock(s *Scheduler) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.UnboundSources()
+}
+
 func (t *testSchedulerSuite) TestScheduler() {
 	t.testSchedulerProgress(noRestart)
 	t.testSchedulerProgress(restartOnly)
@@ -310,7 +316,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	wg.Wait()
 	// wait for source1 unbound from worker1.
 	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
-		unbounds := s.UnboundSources()
+		unbounds := getUnboundedSourcesWithLock(s)
 		return len(unbounds) == 1 && unbounds[0] == sourceID1
 	}))
 	t.sourceBounds(s, []string{}, []string{sourceID1})
@@ -731,7 +737,7 @@ func (t *testSchedulerSuite) workerBound(s *Scheduler, bound ha.SourceBound) {
 func (t *testSchedulerSuite) sourceBounds(s *Scheduler, expectBounds, expectUnbounds []string) {
 	t.T().Helper()
 	require.Equal(t.T(), expectBounds, s.BoundSources())
-	require.Equal(t.T(), expectUnbounds, s.UnboundSources())
+	require.Equal(t.T(), expectUnbounds, getUnboundedSourcesWithLock(s))
 
 	wToB, _, err := ha.GetSourceBound(t.etcdTestCli, "", "")
 	require.NoError(t.T(), err)
@@ -927,7 +933,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.Len(t.T(), sourceBoundCh, 0)
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 0)
-	unbounds := s.UnboundSources()
+	unbounds := getUnboundedSourcesWithLock(s)
 	require.Len(t.T(), unbounds, 1)
 	require.Equal(t.T(), sourceID1, unbounds[0])
 	sourceBound1.IsDeleted = true
@@ -978,7 +984,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	w := s.workers[workerName2]
 	require.Equal(t.T(), WorkerBound, w.stage)
 	require.Contains(t.T(), w.Bounds(), sourceID1)
-	unbounds = s.UnboundSources()
+	unbounds = getUnboundedSourcesWithLock(s)
 	require.Len(t.T(), unbounds, 0)
 }
 
@@ -1092,16 +1098,18 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		require.NoError(t.T(), s.observeWorkerEvent(ctx2, startRev))
 	}()
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
+	s.mu.Lock()
 	time.Sleep(time.Second)
 	// unbound source2, to test whether we can observe a new worker and bound this source to it
 	s.updateStatusToUnbound(sourceID2)
+	s.mu.Unlock()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName4, keepAliveTTL))
 	}()
 	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		unbounds := s.UnboundSources()
+		unbounds := getUnboundedSourcesWithLock(s)
 		return len(unbounds) == 0
 	}))
 	require.Equal(t.T(), []string{sourceID1, sourceID2}, s.BoundSources())
@@ -1119,7 +1127,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		bounds := s.BoundSources()
 		return len(bounds) == 0
 	}))
-	require.Equal(t.T(), []string{sourceID1, sourceID2}, s.UnboundSources())
+	require.Equal(t.T(), []string{sourceID1, sourceID2}, getUnboundedSourcesWithLock(s))
 	cancel3()
 	wg.Wait()
 }
@@ -1718,7 +1726,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	require.NoError(t.T(), s.transferWorkerAndSource("", sourceID2, workerName2, ""))
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 	require.Equal(t.T(), worker2, s.bounds[sourceID2])
-	require.Len(t.T(), s.UnboundSources(), 0)
+	require.Len(t.T(), getUnboundedSourcesWithLock(s), 0)
 
 	// test transfer bounded source to free worker
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName4, ""))
@@ -1744,7 +1752,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	// sourceID1 bound to last bound worker
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 
-	require.Len(t.T(), s.UnboundSources(), 0)
+	require.Len(t.T(), getUnboundedSourcesWithLock(s), 0)
 
 	// test transfer two bounded sources
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName2, sourceID2))
