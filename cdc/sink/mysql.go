@@ -392,21 +392,16 @@ func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
 
 // check whether the target charset is supported
 func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (bool, error) {
-	var (
-		charSet          string
-		description      string
-		defaultCollation string
-		maxLen           int
-	)
-
 	// validate charsetName
 	_, err := charset.GetCharsetInfo(charsetName)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 
-	err = db.QueryRowContext(ctx, "show character set where charset = '"+charsetName+"';").
-		Scan(&charSet, &description, &defaultCollation, &maxLen)
+	var characterSetName string
+	querySql := fmt.Sprintf("select character_set_name from information_schema.character_sets "+
+		"where character_set_name = '%s';", charsetName)
+	err = db.QueryRowContext(ctx, querySql).Scan(&characterSetName)
 	if err != nil && err != sql.ErrNoRows {
 		return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}

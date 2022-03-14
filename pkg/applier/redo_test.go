@@ -140,10 +140,9 @@ func TestApplyDMLs(t *testing.T) {
 			mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
 				sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
 			)
-			columns = []string{"Charset", "Description", "Default collation", "Maxlen"}
-			mock.ExpectQuery("show character set where charset = 'gbk';").WillReturnRows(
-				sqlmock.NewRows(columns).AddRow("gbk", "GBK Simplified Chinese",
-					"gbk_chinese_ci", 2),
+			mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+				"where character_set_name = 'gbk';").WillReturnRows(
+				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
 			)
 			mock.ExpectClose()
 			return db, nil

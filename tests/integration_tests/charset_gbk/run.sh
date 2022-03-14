@@ -28,6 +28,8 @@ function run() {
 	check_table_exists charset_gbk_test0.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists charset_gbk_test0.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists charset_gbk_test1.t0 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
 	echo "check table exists success"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60
 

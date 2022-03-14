@@ -66,3 +66,41 @@ VALUES (1, '测试', "中国", "上海", "你好,世界"
 INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
+
+/* this is a DLL test for column */
+CREATE TABLE t1 (
+	id INT,
+	名称 varchar(128),
+	PRIMARY KEY (id)
+) ENGINE = InnoDB;
+
+ALTER TABLE t1 ADD COLUMN 城市 char(32);
+
+ALTER TABLE t1 MODIFY COLUMN 城市 varchar(32);
+
+ALTER TABLE t1 DROP COLUMN 城市;
+
+/* this is a DDL test for table */
+CREATE TABLE 表2 (
+	id INT,
+	name varchar(128),
+	PRIMARY KEY (id)
+) ENGINE = InnoDB;
+
+RENAME TABLE 表2 TO 表3;
+
+DROP TABLE 表3;
+
+/* this is a DDL test for database */
+DROP DATABASE IF EXISTS `测试库`;
+
+CREATE DATABASE `测试库` CHARACTER SET GBK;
+
+DROP DATABASE `测试库`;
+
+USE `test`;
+
+CREATE TABLE finish_mark
+(
+    id int PRIMARY KEY
+);
