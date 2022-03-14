@@ -65,17 +65,13 @@ function complex_behaviour() {
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $update_num -eq 3 ]
 
-<<<<<<< HEAD
-=======
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test"
 
 	ls $WORK_DIR/worker1/schema-tracker* && exit 1 || echo "schema tracker path has been cleaned"
 
 	cleanup_process $*
->>>>>>> d4cdb438d (tracker(dm): write unistore files in working dir and clean it (#4732))
 	cleanup_data expr_filter
-	cleanup_process $*
 }
 
 function run() {
