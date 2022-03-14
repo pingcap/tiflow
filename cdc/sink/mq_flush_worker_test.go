@@ -214,7 +214,11 @@ func TestGroup(t *testing.T) {
 	require.Len(t, paritionedRows, 2)
 	require.Len(t, paritionedRows[1], 3)
 	// We must ensure that the sequence is not broken.
-	require.LessOrEqual(t, paritionedRows[1][0].CommitTs, paritionedRows[1][1].CommitTs, paritionedRows[1][2].CommitTs)
+	require.LessOrEqual(
+		t,
+		paritionedRows[1][0].CommitTs, paritionedRows[1][1].CommitTs,
+		paritionedRows[1][2].CommitTs,
+	)
 	require.Len(t, paritionedRows[2], 1)
 }
 
