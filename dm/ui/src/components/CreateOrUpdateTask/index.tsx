@@ -23,7 +23,7 @@ import { isEmptyObject } from '~/utils/isEmptyObject'
 
 const { Step } = Steps
 
-const defaultValue = {
+const defaultValue: Partial<TaskFormData> = {
   name: '',
   task_mode: TaskMode.ALL,
   meta_schema: '',
@@ -37,6 +37,9 @@ const defaultValue = {
   },
   source_config: {
     source_conf: [],
+    full_migrate_conf: {
+      data_dir: '/data',
+    },
   },
   table_migrate_rule: [],
 }
@@ -58,7 +61,9 @@ const CreateTaskConfig: React.FC<{
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [currentStep, setCurrentStep] = useState(0)
-  const [taskData, setTaskData] = useState<TaskFormData>(defaultValue)
+  const [taskData, setTaskData] = useState<TaskFormData>(
+    defaultValue as TaskFormData
+  )
   const [createTask] = useDmapiCreateTaskMutation()
   const [updateTask] = useDmapiUpdateTaskMutation()
   const [startTask] = useDmapiStartTaskMutation()
@@ -91,6 +96,11 @@ const CreateTaskConfig: React.FC<{
     }
     if ('start_after_saved' in payload) {
       delete payload.start_after_saved
+    }
+    if (payload.table_migrate_rule.length > 0) {
+      payload.table_migrate_rule.forEach(i =>
+        isEmptyObject(i.target) ? delete i.target : null
+      )
     }
     const handler = isEditing ? updateTask : createTask
     try {

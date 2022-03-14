@@ -291,7 +291,9 @@ const SourceList: React.FC = () => {
             <Button icon={<RedoOutlined />} onClick={refetch}>
               {t('refresh')}
             </Button>
-            <Dropdown
+            <Dropdown.Button
+              onClick={handleDisableSource}
+              icon={<DownOutlined />}
               overlay={
                 <Menu>
                   <Menu.Item
@@ -311,12 +313,12 @@ const SourceList: React.FC = () => {
                 </Menu>
               }
             >
-              <Button onClick={handleDisableSource}>
-                <PauseCircleOutlined />
-                {t('disable')} <DownOutlined />
-              </Button>
-            </Dropdown>
-            <Dropdown
+              <PauseCircleOutlined />
+              {t('disable')}
+            </Dropdown.Button>
+            <Dropdown.Button
+              onClick={handleEnableRelay}
+              icon={<DownOutlined />}
               overlay={
                 <Menu>
                   <Menu.Item
@@ -329,11 +331,9 @@ const SourceList: React.FC = () => {
                 </Menu>
               }
             >
-              <Button onClick={handleEnableRelay}>
-                <DoubleRightOutlined />
-                {t('enable relay')} <DownOutlined />
-              </Button>
-            </Dropdown>
+              <DoubleRightOutlined />
+              {t('enable relay')}
+            </Dropdown.Button>
           </Space>
         </Col>
         <Col span={2}>

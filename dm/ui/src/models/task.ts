@@ -268,6 +268,7 @@ export enum TaskMode {
 export enum TaskShardMode {
   PESSIMISTIC = 'pessimistic',
   OPTIMISTIC = 'optimistic',
+  NONE = 'none',
 }
 
 export enum OnDuplicateBehavior {

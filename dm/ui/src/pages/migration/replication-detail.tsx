@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebounce } from 'ahooks'
 
@@ -21,7 +21,6 @@ import {
   useDmapiGetTaskMigrateTargetsQuery,
 } from '~/models/task'
 import { useDmapiGetSourceQuery } from '~/models/source'
-import { useFuseSearch } from '~/utils/search'
 
 const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
@@ -56,21 +55,9 @@ const ReplicationDetail: React.FC = () => {
   )
   const loading = isFetchingTaskList || isFetchingMigrateTarget
 
-  const dataSource = useMemo(() => {
-    return (
-      migrateTagetData?.data?.map((i, index) => ({
-        ...i,
-        key: index,
-        tag: i.source_schema + ' ' + i.source_table, // for fuse search
-      })) ?? []
-    )
-  }, [migrateTagetData])
+  const dataSource = migrateTagetData?.data
 
-  const { result, setKeyword } = useFuseSearch(dataSource, {
-    keys: ['tag'],
-  })
-
-  const columns: TableColumnsType<TaskMigrateTarget & { key: number }> = [
+  const columns: TableColumnsType<TaskMigrateTarget> = [
     {
       title: t('task name'),
       key: 'taskname',
@@ -111,12 +98,6 @@ const ReplicationDetail: React.FC = () => {
       dataIndex: 'target_table',
     },
   ]
-
-  useEffect(() => {
-    if (dbPattern || tablePattern) {
-      setKeyword(dbPattern + ' ' + tablePattern)
-    }
-  }, [dbPattern, tablePattern])
 
   useEffect(() => {
     if (!currentTask && taskList && taskList.data[0]) {
@@ -180,7 +161,7 @@ const ReplicationDetail: React.FC = () => {
 
       <Table
         className="p-4"
-        dataSource={result}
+        dataSource={dataSource}
         columns={columns}
         loading={loading}
         rowKey="key"

@@ -82,7 +82,7 @@ const BasicInfo: StepCompnent = ({ initialValues, isEditing }) => {
         tooltip={t('create task data_dir tooltip')}
         name={['source_config', 'full_migrate_conf', 'data_dir']}
       >
-        <Input placeholder="/data" />
+        <Input placeholder="./dump_data " />
       </Form.Item>
 
       <Form.Item>

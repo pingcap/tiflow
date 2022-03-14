@@ -34,6 +34,7 @@ const MasterTable: React.FC = () => {
   const handleConfirmOffline = (name: string) => {
     Modal.confirm({
       title: t('are you sure to offline this master'),
+      content: t('offline master confirm description'),
       icon: <ExclamationCircleOutlined />,
       async onOk() {
         const key = 'offlineMasterNode-' + Date.now()
@@ -123,6 +124,7 @@ const WorkerTable: React.FC = () => {
   const handleConfirmOffline = (name: string) => {
     Modal.confirm({
       title: t('are you sure to offline this worker'),
+      content: t('offline worker confirm description'),
       icon: <ExclamationCircleOutlined />,
       async onOk() {
         const key = 'offlineWorkerNode-' + Date.now()

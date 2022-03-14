@@ -275,7 +275,6 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
                 onClick={() =>
                   add({
                     source: { schema: '', table: '' },
-                    target: { schema: '', table: '' },
                     binlog_filter_rule: [],
                   })
                 }

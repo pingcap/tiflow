@@ -136,7 +136,6 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
           <Select
             className="min-w-120px"
             placeholder="Stage"
-            allowClear
             value={stage}
             onChange={setStage}
           >
@@ -152,7 +151,6 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
           <Select
             className="min-w-100px"
             placeholder="Unit"
-            allowClear
             value={unit}
             onChange={setUnit}
           >
@@ -329,6 +327,10 @@ const TaskList: React.FC = () => {
       },
     },
     {
+      title: t('mode'),
+      dataIndex: 'task_mode',
+    },
+    {
       title: t('source info'),
       render(data) {
         const sourceConfig = data.source_config
@@ -450,7 +452,9 @@ const TaskList: React.FC = () => {
               {t('refresh')}
             </Button>
 
-            <Dropdown
+            <Dropdown.Button
+              icon={<DownOutlined />}
+              onClick={handleStartTask}
               overlay={
                 <Menu>
                   <Menu.Item
@@ -458,7 +462,7 @@ const TaskList: React.FC = () => {
                     key="stop"
                     onClick={handleStopTask}
                   >
-                    {t('stop')}
+                    {t('stop', { context: 'task list' })}
                   </Menu.Item>
                   <Menu.Item
                     icon={<CloseCircleOutlined />}
@@ -470,11 +474,9 @@ const TaskList: React.FC = () => {
                 </Menu>
               }
             >
-              <Button onClick={handleStartTask}>
-                <PlayCircleOutlined />
-                {t('start')} <DownOutlined />
-              </Button>
-            </Dropdown>
+              <PlayCircleOutlined />
+              {t('start')}
+            </Dropdown.Button>
           </Space>
         </Col>
         <Col span={2}>
