@@ -3598,7 +3598,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
 	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
 
-	// support fileds that changed in func `copyConfigFromSource`
+	// support fields that changed in func `copyConfigFromSource`
 	oldCfg.From = newCfg.From
 	oldCfg.Flavor = newCfg.Flavor
 	oldCfg.ServerID = newCfg.ServerID

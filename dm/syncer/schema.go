@@ -172,6 +172,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	return "", nil
 }
 
+// listMigrateTargets list all synced schema and table names in tracker.
 func (s *Syncer) listMigrateTargets(req *pb.OperateWorkerSchemaRequest) (string, error) {
 	var schemaList []string
 	if req.Schema != "" {

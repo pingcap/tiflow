@@ -1188,7 +1188,7 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 	return clone
 }
 
-// GetSubTaskCfgs gets all subconfig, return nil when error happens.
+// GetSubTaskCfgs gets all subTask config pointer, return nil when error happens.
 func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskConfig {
 	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]*config.SubTaskConfig)

@@ -162,7 +162,7 @@ func (s *Server) listSource(ctx context.Context, req openapi.DMAPIGetSourceListP
 	// fill status and filter
 	for _, sourceCfg := range sourceCfgM {
 		// filter by enable_relay
-		// TODO(ehco),maybe worker should use sourceConfig.EnableRelay to determine wheather start relay
+		// TODO(ehco),maybe worker should use sourceConfig.EnableRelay to determine whether start relay
 		if req.EnableRelay != nil {
 			relayWorkers, err := s.scheduler.GetRelayWorkers(sourceCfg.SourceID)
 			if err != nil {
@@ -195,6 +195,14 @@ func (s *Server) enableRelay(ctx context.Context, sourceName string, req openapi
 	if sourceCfg == nil {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
+	if req.WorkerNameList == nil {
+		worker := s.scheduler.GetWorkerBySource(sourceName)
+		if worker == nil {
+			return terror.ErrWorkerNoStart.Generate()
+		}
+		req.WorkerNameList = &openapi.WorkerNameList{worker.BaseInfo().Name}
+	}
+
 	needUpdate := false
 	// update relay related in source cfg
 	if req.RelayBinlogName != nil && sourceCfg.RelayBinLogName != *req.RelayBinlogName {
@@ -214,13 +222,6 @@ func (s *Server) enableRelay(ctx context.Context, sourceName string, req openapi
 		if err := s.scheduler.UpdateSourceCfg(sourceCfg); err != nil {
 			return err
 		}
-	}
-	if req.WorkerNameList == nil {
-		worker := s.scheduler.GetWorkerBySource(sourceName)
-		if worker == nil {
-			return terror.ErrWorkerNoStart.Generate()
-		}
-		req.WorkerNameList = &openapi.WorkerNameList{worker.BaseInfo().Name}
 	}
 	return s.scheduler.StartRelay(sourceName, *req.WorkerNameList)
 }
@@ -249,6 +250,7 @@ func (s *Server) purgeRelay(ctx context.Context, sourceName string, req openapi.
 	if req.RelayDir != nil {
 		purgeReq.PurgeRelay.SubDir = *req.RelayDir
 	}
+	// NOTE not all worker that enabled relay is recorded in scheduler, we need refine this later
 	workers, err := s.scheduler.GetRelayWorkers(sourceName)
 	if err != nil {
 		return err
@@ -380,14 +382,14 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	var task *openapi.Task
 	var err error
 	if !force {
-		withStatus := true
-		task, err = s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{WithStatus: &withStatus})
+		task, err = s.getTask(ctx, taskName, openapi.DMAPIGetTaskParams{})
 		if err != nil {
 			return err
 		}
-		for _, status := range *task.StatusList {
+		for _, sourceConf := range task.SourceConfig.SourceConf {
+			stage := s.scheduler.GetExpectSubTaskStage(taskName, sourceConf.SourceName)
 			// TODO delete  openapi.TaskStagePasused when use openapi to impl dmctl
-			if status.Stage != openapi.TaskStageStopped && status.Stage != openapi.TaskStage("Paused") {
+			if stage.Expect != pb.Stage_Paused && stage.Expect != pb.Stage_Stopped {
 				return terror.ErrOpenAPICommonError.Generatef("task %s have running subtasks, please stop them or delete task with force.", taskName)
 			}
 		}
@@ -441,7 +443,6 @@ func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPI
 }
 
 func (s *Server) getTaskStatus(ctx context.Context, taskName string, req openapi.DMAPIGetTaskStatusParams) ([]openapi.SubTaskStatus, error) {
-	// start all subtasks for this task
 	if req.SourceNameList == nil || len(*req.SourceNameList) == 0 {
 		sourceNameList := openapi.SourceNameList(s.getTaskSourceNameList(taskName))
 		req.SourceNameList = &sourceNameList
@@ -542,7 +543,6 @@ func (s *Server) listTask(ctx context.Context, req openapi.DMAPIGetTaskListParam
 	taskList := config.SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	taskArray := make([]openapi.Task, 0, len(taskList))
 
-	// need filter by stage
 	if req.Stage != nil || (req.WithStatus != nil && *req.WithStatus) {
 		for idx := range taskList {
 			subTaskStatusList, err := s.getTaskStatus(ctx, taskList[idx].Name, openapi.DMAPIGetTaskStatusParams{})
