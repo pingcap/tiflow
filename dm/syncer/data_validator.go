@@ -46,7 +46,6 @@ const (
 	checkInterval           = 5 * time.Second
 	validationInterval      = 10 * time.Second
 	validatorStatusInterval = 30 * time.Second
-	checkpointFlushInterval = 1 * time.Minute
 
 	moreColumnInBinlogMsg     = "binlog has more columns than current table"
 	tableWithoutPrimaryKeyMsg = "no primary key"

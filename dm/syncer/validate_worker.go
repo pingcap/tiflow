@@ -40,6 +40,8 @@ import (
 const (
 	workerChannelSize = 1000
 
+	MaxAccumulatedRowBeforeValidate = 1000
+
 	maxBatchSize           = 100 // todo: choose a proper value, or configurable?
 	failedRowRetryDuration = 1 * time.Hour
 )
@@ -69,6 +71,7 @@ type validateWorker struct {
 	rowChangeCh       chan *rowChange
 	pendingChangesMap map[string]*tableChange
 	pendingRowCount   atomic.Int64
+	accuRowFromChanel atomic.Int64 // accumulated row count from channel
 	batchSize         int
 	maxFailedCount    int
 	errorRows         []*validateFailedRow
@@ -96,6 +99,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 }
 
 func (vw *validateWorker) run() {
+	validatedBeforeTimer := false
 outer:
 	for {
 		select {
@@ -105,25 +109,26 @@ outer:
 			}
 			if change.Tp == flushCheckpoint {
 				// validate before flush to reduce the number of row changes
-				err := vw.validateTableChange()
-				if err != nil {
-					// todo: better error handling
-					vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
-				}
+				vw.validateTableChange()
+				validatedBeforeTimer = true
 				change.wg.Done()
 				break
 			}
-			// todo: limit number of pending rows.
-			// todo: trigger validation when pending rows count reaches a threshold, but we don't want trigger it too often
-			// todo: since it may not reduce the number of pending row changes as the downstream may have changed again,
-			// todo: we need to catchup with the progress of syncer first, so row changes which are changed again can be merged.
+
 			vw.updateRowChange(change)
-		case <-time.After(vw.interval):
-			err := vw.validateTableChange()
-			if err != nil {
-				// todo: better error handling
-				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
+			vw.accuRowFromChanel.Add(1)
+			// reduce number of pending rows
+			if vw.accuRowFromChanel.Load() >= MaxAccumulatedRowBeforeValidate {
+				vw.validateTableChange()
+				validatedBeforeTimer = true
 			}
+		case <-time.After(vw.interval):
+			// reduce the number of validation
+			if validatedBeforeTimer {
+				validatedBeforeTimer = false
+				break
+			}
+			vw.validateTableChange()
 		}
 	}
 }
@@ -150,7 +155,18 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 	}
 }
 
-func (vw *validateWorker) validateTableChange() error {
+func (vw *validateWorker) validateTableChange() {
+	var err error
+	defer func() {
+		if err != nil {
+			// todo: better error handling
+			vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
+		}
+	}()
+
+	// clear accumulated row counter
+	vw.accuRowFromChanel.Store(0)
+
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowChange
@@ -166,20 +182,20 @@ func (vw *validateWorker) validateTableChange() error {
 			if len(rows) == 0 {
 				return nil
 			}
-			failedRows, err := vw.validateRowChanges(tblChange.table, rows, isDelete)
-			if err != nil {
-				return err
+			failedRows, err2 := vw.validateRowChanges(tblChange.table, rows, isDelete)
+			if err2 != nil {
+				return err2
 			}
 			for key, val := range failedRows {
 				allFailedRows[key] = val
 			}
 			return nil
 		}
-		if err := validateFunc(insertUpdateChanges, false); err != nil {
-			return err
+		if err = validateFunc(insertUpdateChanges, false); err != nil {
+			return
 		}
-		if err := validateFunc(deleteChanges, true); err != nil {
-			return err
+		if err = validateFunc(deleteChanges, true); err != nil {
+			return
 		}
 		if len(allFailedRows) > 0 {
 			failedChanges[k] = allFailedRows
@@ -187,7 +203,6 @@ func (vw *validateWorker) validateTableChange() error {
 	}
 
 	vw.updatePendingAndErrorRows(failedChanges)
-	return nil
 }
 
 func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map[string]*validateFailedRow) {
