@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { ghcolors } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 
 import {
   Table,
@@ -51,6 +51,7 @@ import {
   TaskStage,
   TaskUnit,
   SubTaskStatus,
+  useDmapiConverterTaskMutation,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
@@ -58,7 +59,7 @@ import { actions, useAppDispatch, useAppSelector } from '~/models'
 import { Source, useDmapiGetSourceListQuery } from '~/models/source'
 import TaskUnitTag from '~/components/SimpleTaskPanel/TaskUnitTag'
 
-SyntaxHighlighter.registerLanguage('json', json)
+SyntaxHighlighter.registerLanguage('yaml', yaml)
 
 enum CreateTaskMethod {
   ByGuide,
@@ -219,6 +220,7 @@ const TaskList: React.FC = () => {
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
+  const [currentTaskConfigFile, setCurrentTaskConfigFile] = useState('')
   const selectedTask = useAppSelector(state => state.globals.preloadedTask)
   const navigate = useNavigate()
 
@@ -239,6 +241,7 @@ const TaskList: React.FC = () => {
     )
     return sources.data.filter(i => names.has(i.source_name))
   }, [currentTask, sources])
+  const [convertTaskDataToConfigFile] = useDmapiConverterTaskMutation()
 
   const [stopTask] = useDmapiStopTaskMutation()
   const [startTask] = useDmapiStartTaskMutation()
@@ -426,6 +429,17 @@ const TaskList: React.FC = () => {
     dispatch(actions.setPreloadedTask(null))
   }, [])
 
+  useEffect(() => {
+    if (currentTask) {
+      const { status_list, ...rest } = currentTask
+      convertTaskDataToConfigFile({ task: rest })
+        .unwrap()
+        .then(res => {
+          setCurrentTaskConfigFile(res.task_config_file)
+        })
+    }
+  }, [currentTask])
+
   return (
     <div>
       <div className="p-4">
@@ -516,8 +530,8 @@ const TaskList: React.FC = () => {
               <SubTaskTable subs={currentTaskStatus.data} />
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('runtime config')} key="2">
-              <SyntaxHighlighter style={ghcolors} language="json">
-                {JSON.stringify(currentTask, null, 2)}
+              <SyntaxHighlighter style={ghcolors} language="yaml">
+                {currentTaskConfigFile}
               </SyntaxHighlighter>
             </Tabs.TabPane>
           </Tabs>
