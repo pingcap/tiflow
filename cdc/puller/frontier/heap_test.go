@@ -16,18 +16,14 @@ package frontier
 import (
 	"math"
 	"math/rand"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type tsHeapSuite struct{}
-
-var _ = check.Suite(&tsHeapSuite{})
-
-func (s *tsHeapSuite) TestInsert(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestInsert(t *testing.T) {
+	t.Parallel()
 	var heap fibonacciHeap
 	target := uint64(15000)
 
@@ -36,11 +32,11 @@ func (s *tsHeapSuite) TestInsert(c *check.C) {
 	}
 	heap.Insert(target)
 
-	c.Assert(heap.GetMinKey(), check.Equals, target)
+	require.Equal(t, target, heap.GetMinKey())
 }
 
-func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestUpdateTs(t *testing.T) {
+	t.Parallel()
 	seed := time.Now().Unix()
 	rand.Seed(seed)
 	var heap fibonacciHeap
@@ -57,7 +53,7 @@ func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 	var key uint64
 	for i := range nodes {
 		min := heap.GetMinKey()
-		c.Assert(min, check.Equals, expectedMin, check.Commentf("seed:%d", seed))
+		require.Equal(t, expectedMin, min, "seed:%d", seed)
 		if rand.Intn(2) == 0 {
 			key = nodes[i].key + uint64(10000)
 			heap.UpdateKey(nodes[i], key)
@@ -71,8 +67,8 @@ func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 	}
 }
 
-func (s *tsHeapSuite) TestRemoveNode(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestRemoveNode(t *testing.T) {
+	t.Parallel()
 	seed := time.Now().Unix()
 	rand.Seed(seed)
 	var heap fibonacciHeap
@@ -99,13 +95,13 @@ func (s *tsHeapSuite) TestRemoveNode(c *check.C) {
 				}
 			}
 		}
-		c.Assert(min, check.Equals, expectedMin, check.Commentf("seed:%d", seed))
+		require.Equal(t, expectedMin, min, "seed:%d", seed)
 		preKey = nodes[i].key
 		heap.Remove(nodes[i])
 	}
 	for _, n := range nodes {
 		if !isRemoved(n) {
-			c.Fatal("all of the node shoule be removed")
+			t.Fatal("all of the node shoule be removed")
 		}
 	}
 }
