@@ -419,7 +419,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		var (
 			decoder codec.EventBatchDecoder
 			err     error
@@ -593,8 +592,6 @@ func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 }
 
 // Run the Consumer
-// 1. if there is DDL which can be executed, do it first
-// 2. update global resolved ts, then flush all DMLs which buffered in the MySQL sink.
 func (c *Consumer) Run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -613,6 +610,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 		// handle DDL
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
+			// flush DMLs
+			if err := c.forEachSink(func(sink *partitionSink) error {
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+			}); err != nil {
+				return errors.Trace(err)
+			}
+
 			// DDL can be executed, do it first.
 			if err := c.ddlSink.EmitDDLEvent(ctx, todoDDL); err != nil {
 				return errors.Trace(err)
