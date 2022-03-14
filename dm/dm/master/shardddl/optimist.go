@@ -739,15 +739,16 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
 			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	case err != nil:
-		if terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+		switch {
+		case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
 			cfStage = optimism.ConflictSkipWaitRedirect
 			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
-		} else if terror.ErrShardDDLOptimismTrySyncFail.Equal(err) {
+		case terror.ErrShardDDLOptimismTrySyncFail.Equal(err):
 			cfStage = optimism.ConflictDetected
 			cfMsg = err.Error()
 			o.logger.Warn("conflict occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
 				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
-		} else {
+		default:
 			cfStage = optimism.ConflictError // we treat any errors returned from `TrySync` as conflict detected now.
 			cfMsg = err.Error()
 			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL error happened",

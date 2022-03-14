@@ -550,6 +550,10 @@ function DM_117_CASE {
 		"\"result\": true" 2 \
 		"\"source 'mysql-replica-02' has no error\"" 1
 
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12,12);"
+
 	run_sql_tidb "update ${shardddl}.${tb} set b=null, c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
