@@ -3,6 +3,8 @@ package resource
 import (
 	"context"
 	"errors"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -101,7 +103,8 @@ func newProxy(ctx context.Context, pathPrefix, id string) (*proxy, error) {
 // Broker is singleton per executor, it communicates with Manager of server master.
 type Broker struct {
 	// map[ID]struct{}
-	allocated sync.Map
+	allocated        sync.Map
+	collectLocalOnce sync.Once
 
 	executorID string
 	pathPrefix string
@@ -114,10 +117,6 @@ func NewBroker(executorID, pathPrefix string, masterCli client.MasterClient) *Br
 		pathPrefix: pathPrefix,
 		masterCli:  masterCli,
 	}
-}
-
-var MockBroker = Broker{
-	pathPrefix: "resources",
 }
 
 func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error) {
@@ -134,18 +133,41 @@ func (b *Broker) NewProxyForWorker(ctx context.Context, id string) (Proxy, error
 	return p, nil
 }
 
+// Remove the allocated information and local resource folder (if applicable) for
+// the given ID. Manager should make sure no worker is using the resource.
 func (b *Broker) Remove(id string) {
-	// TODO: what if the worker is still using the resource by proxy?
+	folder := filepath.Join(b.pathPrefix, id)
+	err := os.RemoveAll(folder)
+	if err != nil {
+		log.L().Error("failed to remove resource folder",
+			zap.String("folder", folder), zap.Error(err))
+	}
 	b.allocated.Delete(ID(id))
 }
 
 func (b *Broker) AllocatedIDs() []string {
+	b.collectLocalOnce.Do(b.collectLocal)
+
 	var ids []string
 	b.allocated.Range(func(k, v interface{}) bool {
 		ids = append(ids, string(k.(ID)))
 		return true
 	})
 	return ids
+}
+
+func (b *Broker) collectLocal() {
+	entries, err := ioutil.ReadDir(b.pathPrefix)
+	if err != nil {
+		log.L().Error("failed to read local resources", zap.Error(err))
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		b.allocated.Store(ID(entry.Name()), struct{}{})
+	}
 }
 
 type MockProxyWithMasterCli struct {

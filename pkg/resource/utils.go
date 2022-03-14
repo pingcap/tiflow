@@ -11,8 +11,8 @@ import (
 
 // ignoreAfterSuccClient will ignore the invocations after the first success,
 // to reduce unnecessary requests.
-// Currently it only implements PersistResource of MasterClient, calling other
-// method will panic.
+// Currently it only implements above behaviour for PersistResource. Other
+// methods are same as MasterClient.
 type ignoreAfterSuccClient struct {
 	client.MasterClient
 	success atomic.Bool
