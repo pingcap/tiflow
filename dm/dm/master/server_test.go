@@ -385,13 +385,11 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 			defer wg.Done()
 			c.Assert(ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL), check.IsNil)
 		}(ctx1, name)
+		// wait the mock worker has alive
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-			kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
-			if err != nil {
-				return false
-			}
-			_, ok := kam[name]
-			return ok
+			resp, err2 := t.etcdTestCli.Get(ctx, common2.WorkerKeepAliveKeyAdapter.Encode(name))
+			c.Assert(err2, check.IsNil)
+			return resp.Count == 1
 		}), check.IsTrue)
 		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		idx := i
@@ -418,7 +416,6 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
@@ -433,6 +430,7 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 			c.Assert(err2, check.IsNil)
 			return resp.Count == 1
 		}), check.IsTrue)
+		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 
 		c.Assert(scheduler2.StartRelay(sources[i], []string{workers[i]}), check.IsNil)
 		idx := i

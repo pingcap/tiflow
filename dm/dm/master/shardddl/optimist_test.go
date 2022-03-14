@@ -372,6 +372,10 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	c.Assert(o.ShowLocks("", nil), HasLen, 0)
 
 	// no shard DDL info or lock operation exists.
+	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+		ifm, _, err := optimism.GetAllInfo(cli)
+		return err == nil && len(ifm) == 0
+	}), IsTrue)
 	ifm, _, err := optimism.GetAllInfo(cli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm, HasLen, 0)
