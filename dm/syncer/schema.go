@@ -192,10 +192,10 @@ func (s *Syncer) listMigrateTargets(req *pb.OperateWorkerSchemaRequest) (string,
 	}
 
 	var targets []openapi.TaskMigrateTarget
-	routeAndFilter := func(schema, table string) {
+	routeAndAppendTarget := func(schema, table string) {
 		sourceTable := &filter.Table{Schema: schema, Name: table}
 		targetTable := s.route(sourceTable)
-		if !s.skipByTable(targetTable) {
+		if targetTable != nil {
 			targets = append(targets, openapi.TaskMigrateTarget{
 				SourceSchema: schema,
 				SourceTable:  table,
@@ -216,12 +216,12 @@ func (s *Syncer) listMigrateTargets(req *pb.OperateWorkerSchemaRequest) (string,
 			}
 			for _, tableName := range tables {
 				if tableR.MatchString(tableName) {
-					routeAndFilter(schemaName, tableName)
+					routeAndAppendTarget(schemaName, tableName)
 				}
 			}
 		} else {
 			for _, tableName := range tables {
-				routeAndFilter(schemaName, tableName)
+				routeAndAppendTarget(schemaName, tableName)
 			}
 		}
 	}
