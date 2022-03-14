@@ -1111,7 +1111,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Debug("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1147,7 +1147,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Debug("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
