@@ -120,7 +120,6 @@ type DataValidator struct {
 
 	// such as table without primary key
 	unsupportedTable map[string]string
-	waitSyncerTimer  *time.Timer
 	mode             string
 }
 
@@ -138,7 +137,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.validateInterval = validationInterval
 
 	v.unsupportedTable = make(map[string]string)
-	v.waitSyncerTimer = utils.NewStoppedTimer()
 
 	return v
 }
