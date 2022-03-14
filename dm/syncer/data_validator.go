@@ -470,6 +470,7 @@ func (v *DataValidator) doValidate() {
 				v.errChan <- terror.Annotate(err, "failed to set gtid")
 				return
 			}
+			// TODO: if this routine block on get event, should make sure checkpoint is flushed normally
 			if time.Since(lastFlushCheckpointTime) > metaFlushInterval {
 				lastFlushCheckpointTime = time.Now()
 				if err = v.flushCheckpointAndData(locationForFlush); err != nil {

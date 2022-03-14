@@ -118,6 +118,8 @@ func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 }
 
 func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
+	// TODO: length of row_pk is set to 128 for now, need to make sure it can store the longest pk in mysql
+	// TODO: maybe use hash digest
 	sqls := []string{
 		`CREATE TABLE IF NOT EXISTS ` + c.checkpointTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
