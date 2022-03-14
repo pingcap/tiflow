@@ -62,7 +62,7 @@ type LogConfig struct {
 var defaultServerConfig = &ServerConfig{
 	Addr:          "127.0.0.1:8300",
 	AdvertiseAddr: "",
-	LogFile:       "",
+	LogFile:       "cdc.log",
 	LogLevel:      "info",
 	Log: &LogConfig{
 		File: &LogFileConfig{
