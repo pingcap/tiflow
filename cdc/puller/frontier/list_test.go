@@ -16,23 +16,19 @@ package frontier
 import (
 	"bytes"
 	"math/rand"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type spanListSuite struct{}
-
-var _ = check.Suite(&spanListSuite{})
-
-func (s *spanListSuite) insertIntoList(l *skipList, keys ...[]byte) {
+func insertIntoList(l *skipList, keys ...[]byte) {
 	for _, k := range keys {
 		l.Insert(k, nil)
 	}
 }
 
-func (s *spanListSuite) TestInsertAndRemove(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestInsertAndRemove(t *testing.T) {
+	t.Parallel()
 	list := newSpanList()
 	var keys [][]byte
 	for i := 0; i < 100000; i++ {
@@ -46,9 +42,9 @@ func (s *spanListSuite) TestInsertAndRemove(c *check.C) {
 	for _, k := range keys {
 		a := list.Seek(k).Node().Key()
 		cmp := bytes.Compare(a, k)
-		c.Assert(cmp, check.Equals, 0)
+		require.Equal(t, 0, cmp)
 	}
-	checkList(c, list)
+	checkList(t, list)
 
 	for i := 0; i < 10000; i++ {
 		indexToRemove := rand.Intn(10000)
@@ -62,19 +58,19 @@ func (s *spanListSuite) TestInsertAndRemove(c *check.C) {
 		// check the node is already removed
 		a := list.Seek(removedKey).Node().Key()
 		cmp := bytes.Compare(a, removedKey)
-		c.Assert(cmp, check.LessEqual, 0)
+		require.LessOrEqual(t, cmp, 0)
 	}
-	checkList(c, list)
+	checkList(t, list)
 }
 
-func checkList(c *check.C, list *skipList) {
+func checkList(t *testing.T, list *skipList) {
 	// check the order of the keys in list
 	var lastKey []byte
 	var nodeNum int
 	for node := list.First(); node != nil; node = node.Next() {
 		if len(lastKey) != 0 {
 			cmp := bytes.Compare(lastKey, node.Key())
-			c.Assert(cmp, check.LessEqual, 0)
+			require.LessOrEqual(t, cmp, 0)
 		}
 		lastKey = node.Key()
 		nodeNum++
@@ -88,14 +84,14 @@ func checkList(c *check.C, list *skipList) {
 
 	for node := list.First(); node != nil; node = node.Next() {
 		for i := 0; i < len(node.nexts); i++ {
-			c.Assert(prevs[i], check.Equals, node)
+			require.Equal(t, node, prevs[i])
 			prevs[i] = node.nexts[i]
 		}
 	}
 }
 
-func (s *spanListSuite) TestSeek(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSeek(t *testing.T) {
+	t.Parallel()
 	key1 := []byte("15")
 	keyA := []byte("a5")
 	keyB := []byte("b5")
@@ -109,54 +105,54 @@ func (s *spanListSuite) TestSeek(c *check.C) {
 
 	list := newSpanList()
 
-	c.Assert(list.Seek(keyA).Node(), check.IsNil)
+	require.Nil(t, list.Seek(keyA).Node())
 
 	// insert keyA to keyH
-	s.insertIntoList(list, keyC, keyF, keyE, keyH, keyG, keyD, keyA, keyB)
+	insertIntoList(list, keyC, keyF, keyE, keyH, keyG, keyD, keyA, keyB)
 
 	// Point to the first node, if seek key is smaller than the first key in list.
-	c.Assert(list.Seek(key1).Node().Key(), check.IsNil)
+	require.Nil(t, list.Seek(key1).Node().Key())
 
 	// Point to the last node with key smaller than seek key.
-	c.Assert(list.Seek(keyH).Node().key, check.BytesEquals, keyH)
+	require.Equal(t, keyH, list.Seek(keyH).Node().key)
 
 	// Point to itself.
-	c.Assert(list.Seek(keyG).Node().key, check.BytesEquals, keyG)
+	require.Equal(t, keyG, list.Seek(keyG).Node().key)
 
 	// Ensure there is no problem to seek a larger key.
-	c.Assert(list.Seek(keyZ).Node().key, check.BytesEquals, keyH)
+	require.Equal(t, keyH, list.Seek(keyZ).Node().key)
 
-	c.Assert(list.Seek([]byte("b0")).Node().key, check.BytesEquals, keyA)
-	c.Assert(list.Seek([]byte("c0")).Node().key, check.BytesEquals, keyB)
-	c.Assert(list.Seek([]byte("d0")).Node().key, check.BytesEquals, keyC)
-	c.Assert(list.Seek([]byte("e0")).Node().key, check.BytesEquals, keyD)
-	c.Assert(list.Seek([]byte("f0")).Node().key, check.BytesEquals, keyE)
-	c.Assert(list.Seek([]byte("g0")).Node().key, check.BytesEquals, keyF)
-	c.Assert(list.Seek([]byte("h0")).Node().key, check.BytesEquals, keyG)
-	c.Assert(list.Seek([]byte("i0")).Node().key, check.BytesEquals, keyH)
-	c.Assert(list.String(), check.Equals, "[a5] [b5] [c5] [d5] [e5] [f5] [g5] [h5] ")
-	checkList(c, list)
+	require.Equal(t, keyA, list.Seek([]byte("b0")).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("c0")).Node().key)
+	require.Equal(t, keyC, list.Seek([]byte("d0")).Node().key)
+	require.Equal(t, keyD, list.Seek([]byte("e0")).Node().key)
+	require.Equal(t, keyE, list.Seek([]byte("f0")).Node().key)
+	require.Equal(t, keyF, list.Seek([]byte("g0")).Node().key)
+	require.Equal(t, keyG, list.Seek([]byte("h0")).Node().key)
+	require.Equal(t, keyH, list.Seek([]byte("i0")).Node().key)
+	require.Equal(t, "[a5] [b5] [c5] [d5] [e5] [f5] [g5] [h5] ", list.String())
+	checkList(t, list)
 
 	// remove c5
 	seekRes := list.Seek([]byte("c0"))
 	list.Remove(seekRes, seekRes.Node().Next())
-	c.Assert(list.Seek([]byte("c0")).Node().key, check.BytesEquals, keyB)
-	c.Assert(list.Seek([]byte("d0")).Node().key, check.BytesEquals, keyB)
-	c.Assert(list.Seek([]byte("e0")).Node().key, check.BytesEquals, keyD)
-	c.Assert(list.String(), check.Equals, "[a5] [b5] [d5] [e5] [f5] [g5] [h5] ")
-	checkList(c, list)
+	require.Equal(t, keyB, list.Seek([]byte("c0")).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("d0")).Node().key)
+	require.Equal(t, keyD, list.Seek([]byte("e0")).Node().key)
+	require.Equal(t, "[a5] [b5] [d5] [e5] [f5] [g5] [h5] ", list.String())
+	checkList(t, list)
 
 	// remove d5
 	list.Remove(seekRes, seekRes.Node().Next())
-	c.Assert(list.Seek([]byte("d0")).Node().key, check.BytesEquals, keyB)
-	c.Assert(list.Seek([]byte("e0")).Node().key, check.BytesEquals, keyB)
-	c.Assert(list.Seek([]byte("f0")).Node().key, check.BytesEquals, keyE)
-	c.Assert(list.String(), check.Equals, "[a5] [b5] [e5] [f5] [g5] [h5] ")
-	checkList(c, list)
+	require.Equal(t, keyB, list.Seek([]byte("d0")).Node().key)
+	require.Equal(t, keyB, list.Seek([]byte("e0")).Node().key)
+	require.Equal(t, keyE, list.Seek([]byte("f0")).Node().key)
+	require.Equal(t, "[a5] [b5] [e5] [f5] [g5] [h5] ", list.String())
+	checkList(t, list)
 
 	// remove the first node
 	seekRes = list.Seek([]byte("10"))
 	list.Remove(seekRes, seekRes.Node().Next())
-	c.Assert(list.String(), check.Equals, "[b5] [e5] [f5] [g5] [h5] ")
-	checkList(c, list)
+	require.Equal(t, "[b5] [e5] [f5] [g5] [h5] ", list.String())
+	checkList(t, list)
 }
