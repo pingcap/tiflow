@@ -336,6 +336,7 @@ type Consumer struct {
 	ddlSink              sink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
+	// initialize to 0 by default
 	globalResolvedTs uint64
 
 	protocol            config.Protocol
@@ -502,7 +503,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
-				} else if ts > resolvedTs {
+				}
+				if ts > resolvedTs {
 					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
@@ -523,23 +525,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	return nil
 }
 
+// append DDL wait to be handled, only consider the constraint among DDLs.
+// for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.CommitTs <= c.maxDDLReceivedTs {
-		log.Info("ignore ddl event", zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs), zap.Any("ddl", ddl))
+	// DDL CommitTs fallback, just crash it to indicate the bug.
+	if ddl.CommitTs < c.maxDDLReceivedTs {
+		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Any("DDL", ddl))
+	}
+
+	if ddl.CommitTs == c.maxDDLReceivedTs {
+		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+			zap.Any("DDL", ddl))
 		return
 	}
-	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.CommitTs < globalResolvedTs {
-		log.Panic("unexpected ddl event, commitTs < globalResolvedTs", zap.Any("ddl", ddl))
-	}
-	if ddl.CommitTs == globalResolvedTs {
-		log.Warn("ignore redundant ddl event, commitTs == globalResolvedTs", zap.Any("ddl", ddl))
-		return
-	}
+
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("ddl event received", zap.Uint64("globalResolvedTs", globalResolvedTs), zap.Any("ddl", ddl))
+	log.Info("DDL event received", zap.Any("DDL", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
@@ -574,9 +580,22 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 	return nil
 }
 
-// Run runs the Consumer
+func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
+	result = uint64(math.MaxUint64)
+	err = c.forEachSink(func(sink *partitionSink) error {
+		a := atomic.LoadUint64(&sink.resolvedTs)
+		if a < result {
+			result = a
+		}
+		return nil
+	})
+	return result, err
+}
+
+// Run the Consumer
+// 1. if there is DDL which can be executed, do it first
+// 2. update global resolved ts, then flush all DMLs which buffered in the MySQL sink.
 func (c *Consumer) Run(ctx context.Context) error {
-	var lastGlobalResolvedTs uint64
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -585,58 +604,48 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
-		globalResolvedTs := uint64(math.MaxUint64)
-		err := c.forEachSink(func(sink *partitionSink) error {
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < globalResolvedTs {
-				globalResolvedTs = resolvedTs
-			}
-			return nil
-		})
+
+		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// handle ddl
-		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
-			// flush DMLs
-			err := c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
 
-			// execute ddl
-			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-			if err != nil {
+		// handle DDL
+		todoDDL := c.getFrontDDL()
+		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
+			// DDL can be executed, do it first.
+			if err := c.ddlSink.EmitDDLEvent(ctx, todoDDL); err != nil {
 				return errors.Trace(err)
 			}
 			c.popDDL()
+
+			if todoDDL.CommitTs < minPartitionResolvedTs {
+				log.Info("update minPartitionResolvedTs by DDL",
+					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.Any("DDL", todoDDL))
+			}
+			minPartitionResolvedTs = todoDDL.CommitTs
+		}
+
+		// update global resolved ts
+		if c.globalResolvedTs > minPartitionResolvedTs {
+			log.Panic("global ResolvedTs fallback",
+				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
+		}
+
+		if c.globalResolvedTs == minPartitionResolvedTs {
 			continue
 		}
 
-		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
-			globalResolvedTs = todoDDL.CommitTs
-		}
-		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Any("lastGlobalResolvedTs", lastGlobalResolvedTs),
-				zap.Any("globalResolvedTs", globalResolvedTs))
-		}
+		c.globalResolvedTs = minPartitionResolvedTs
+		log.Info("update globalResolvedTs",
+			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
-		if globalResolvedTs > lastGlobalResolvedTs {
-			lastGlobalResolvedTs = globalResolvedTs
-			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
-
-			err = c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
+		if err := c.forEachSink(func(sink *partitionSink) error {
+			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+		}); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
