@@ -82,11 +82,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 				ChangeFeedID: n.changefeed,
 				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
 			})
-
 		if err != nil {
 			log.Error("newModuleVerification fail", zap.String("changefeed", n.changefeed), zap.Error(err), zap.String("module", "puller"))
 		}
 	}
+	ctxC = util.PutRoleInCtx(ctxC, util.RoleProcessor)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(

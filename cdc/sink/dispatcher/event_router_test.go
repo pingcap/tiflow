@@ -35,12 +35,34 @@ func TestEventRouter(t *testing.T) {
 	d, err = NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "")
@@ -80,12 +102,34 @@ func TestGetActiveTopics(t *testing.T) {
 	d, err := NewEventRouter(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test_default1.*"}, PartitionRule: "default"},
-				{Matcher: []string{"test_default2.*"}, PartitionRule: "unknown-dispatcher"},
-				{Matcher: []string{"test_table.*"}, PartitionRule: "table", TopicRule: "hello_{schema}_world"},
-				{Matcher: []string{"test_index_value.*"}, PartitionRule: "index-value", TopicRule: "{schema}_world"},
-				{Matcher: []string{"test.*"}, PartitionRule: "rowid", TopicRule: "hello_{schema}"},
-				{Matcher: []string{"*.*", "!*.test"}, PartitionRule: "ts", TopicRule: "{schema}_{table}"},
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
 			},
 		},
 	}, "test")
@@ -100,4 +144,156 @@ func TestGetActiveTopics(t *testing.T) {
 	}
 	topics := d.GetActiveTopics(names)
 	require.Equal(t, []string{"test", "hello_test_table_world", "test_index_value_world", "hello_test", "sbs_table"}, topics)
+}
+
+func TestGetTopic(t *testing.T) {
+	t.Parallel()
+
+	d, err := NewEventRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
+			},
+		},
+	}, "test")
+	require.Nil(t, err)
+
+	topicName := d.GetTopic(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_default1", Table: "table"},
+	})
+	require.Equal(t, "test", topicName)
+	topicName = d.GetTopic(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_default2", Table: "table"},
+	})
+	require.Equal(t, "test", topicName)
+	topicName = d.GetTopic(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_table", Table: "table"},
+	})
+	require.Equal(t, "hello_test_table_world", topicName)
+	topicName = d.GetTopic(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
+	})
+	require.Equal(t, "test_index_value_world", topicName)
+	topicName = d.GetTopic(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "a", Table: "table"},
+	})
+	require.Equal(t, "a_table", topicName)
+}
+
+func TestGetPartition(t *testing.T) {
+	t.Parallel()
+
+	d, err := NewEventRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
+			},
+		},
+	}, "test")
+	require.Nil(t, err)
+
+	p := d.GetPartition(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_default1", Table: "table"},
+		Columns: []*model.Column{
+			{
+				Name:  "id",
+				Value: 1,
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+			},
+		},
+		IndexColumns: [][]int{{0}},
+	}, 16)
+	require.Equal(t, int32(10), p)
+	p = d.GetPartition(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_default2", Table: "table"},
+		Columns: []*model.Column{
+			{
+				Name:  "id",
+				Value: 1,
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+			},
+		},
+		IndexColumns: [][]int{{0}},
+	}, 16)
+	require.Equal(t, int32(4), p)
+
+	p = d.GetPartition(&model.RowChangedEvent{
+		Table:    &model.TableName{Schema: "test_table", Table: "table"},
+		CommitTs: 1,
+	}, 16)
+	require.Equal(t, int32(15), p)
+	p = d.GetPartition(&model.RowChangedEvent{
+		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
+		Columns: []*model.Column{
+			{
+				Name:  "a",
+				Value: 11,
+				Flag:  model.HandleKeyFlag,
+			}, {
+				Name:  "b",
+				Value: 22,
+				Flag:  0,
+			},
+		},
+	}, 10)
+	require.Equal(t, int32(1), p)
+	p = d.GetPartition(&model.RowChangedEvent{
+		Table:    &model.TableName{Schema: "a", Table: "table"},
+		CommitTs: 1,
+	}, 2)
+	require.Equal(t, int32(1), p)
 }
