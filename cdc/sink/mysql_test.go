@@ -1259,8 +1259,8 @@ func TestGBKSupported(t *testing.T) {
 	sink, err := newMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
-	// no warning log will be output because GBK charset is supported
-	require.Equal(t, logs.Len(), 0)
+	// no gbk-related warning log will be output because GBK charset is supported
+	require.Equal(t, logs.FilterMessage("gbk charset is not supported").Len(), 0)
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)
