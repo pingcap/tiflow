@@ -41,8 +41,6 @@ const (
 	apiOpVarCaptureID = "capture_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
-	// getOwnerRetryMaxTime is the retry max time to get an owner
-	getOwnerRetryMaxTime = 3
 )
 
 // openAPI provides capture APIs.
