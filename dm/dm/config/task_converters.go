@@ -224,11 +224,15 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		filterRules := []*bf.BinlogEventRule{}
 		for j, rule := range tableMigrateRuleMap[sourceCfg.SourceName] {
 			// route
-			if rule.Target != nil {
-				routeRules = append(routeRules, &router.TableRule{
-					SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table,
-					TargetSchema: rule.Target.Schema, TargetTable: rule.Target.Table,
-				})
+			if rule.Target != nil && (rule.Target.Schema != nil || rule.Target.Table != nil) {
+				tableRule := &router.TableRule{SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table}
+				if rule.Target.Schema != nil {
+					tableRule.TargetSchema = *rule.Target.Schema
+				}
+				if rule.Target.Table != nil {
+					tableRule.TargetTable = *rule.Target.Table
+				}
+				routeRules = append(routeRules, tableRule)
 			}
 			// filter
 			if rule.BinlogFilterRule != nil {
@@ -489,11 +493,11 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		}
 		if targetSchema != "" || tartgetTable != "" {
 			tableMigrateRule.Target = &struct {
-				Schema string `json:"schema"`
-				Table  string `json:"table"`
+				Schema *string `json:"schema,omitempty"`
+				Table  *string `json:"table,omitempty"`
 			}{
-				Schema: targetSchema,
-				Table:  tartgetTable,
+				Schema: &targetSchema,
+				Table:  &tartgetTable,
 			}
 		}
 		if filterRuleList, ok := filterMap[sourceName]; ok {

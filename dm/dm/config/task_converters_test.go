@@ -101,8 +101,8 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 
 	c.Assert(rule.SchemaPattern, check.Equals, sourceSchema)
 	c.Assert(rule.TablePattern, check.Equals, sourceTable)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	c.Assert(subTaskConfig.FilterRules, check.HasLen, 0)
 	// check balist
@@ -174,8 +174,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	tartgetTable := task.TableMigrateRule[0].Target.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source1Schema)
 	c.Assert(rule.TablePattern, check.Equals, source1Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	filterARule, ok := task.BinlogFilterRule.Get("filterA")
 	c.Assert(ok, check.IsTrue)
@@ -235,8 +235,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	source2Table := task.TableMigrateRule[1].Source.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source2Schema)
 	c.Assert(rule.TablePattern, check.Equals, source2Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	_, ok = task.BinlogFilterRule.Get("filterB")
 	c.Assert(ok, check.IsFalse)
