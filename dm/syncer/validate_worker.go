@@ -42,8 +42,7 @@ const (
 
 	MaxAccumulatedRowBeforeValidate = 1000
 
-	maxBatchSize           = 100 // todo: choose a proper value, or configurable?
-	failedRowRetryDuration = 1 * time.Hour
+	maxBatchSize = 100 // todo: choose a proper value, or configurable?
 )
 
 type validateFailedType int
@@ -73,7 +72,6 @@ type validateWorker struct {
 	pendingRowCount   atomic.Int64
 	accuRowFromChanel atomic.Int64 // accumulated row count from channel
 	batchSize         int
-	maxFailedCount    int
 	errorRows         []*validateFailedRow
 	sync.Mutex
 	rowErrorDelayInSec int64
@@ -83,17 +81,15 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
 	rowErrorDelayInSec := int64(v.cfg.ValidatorCfg.RowErrorDelay.Duration.Seconds())
 	return &validateWorker{
-		cfg:               v.cfg.ValidatorCfg,
-		ctx:               v.ctx,
-		interval:          v.validateInterval,
-		validator:         v,
-		L:                 workerLog,
-		conn:              v.toDBConns[id],
-		rowChangeCh:       make(chan *rowChange, workerChannelSize),
-		pendingChangesMap: make(map[string]*tableChange),
-		batchSize:         maxBatchSize,
-		// =600 if using default validate interval=10s
-		maxFailedCount:     int(failedRowRetryDuration / v.validateInterval),
+		cfg:                v.cfg.ValidatorCfg,
+		ctx:                v.ctx,
+		interval:           v.validateInterval,
+		validator:          v,
+		L:                  workerLog,
+		conn:               v.toDBConns[id],
+		rowChangeCh:        make(chan *rowChange, workerChannelSize),
+		pendingChangesMap:  make(map[string]*tableChange),
+		batchSize:          maxBatchSize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
 	}
 }
