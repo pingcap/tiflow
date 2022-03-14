@@ -120,7 +120,6 @@ type DataValidator struct {
 
 	// such as table without primary key
 	unsupportedTable map[string]string
-	mode             string
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
@@ -416,7 +415,7 @@ func (v *DataValidator) Stage() pb.Stage {
 func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
-		worker := newValidateWorker(v, i, v.mode)
+		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
 		go func() {
 			v.wg.Done()

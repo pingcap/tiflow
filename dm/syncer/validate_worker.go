@@ -68,11 +68,9 @@ type validateWorker struct {
 	pendingRowCount   atomic.Int64
 	batchSize         int
 	sync.Mutex
-
-	mode string
 }
 
-func newValidateWorker(v *DataValidator, id int, mode string) *validateWorker {
+func newValidateWorker(v *DataValidator, id int) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
 	return &validateWorker{
 		cfg:               v.cfg.ValidatorCfg,
@@ -84,7 +82,6 @@ func newValidateWorker(v *DataValidator, id int, mode string) *validateWorker {
 		rowChangeCh:       make(chan *rowChange, workerChannelSize),
 		pendingChangesMap: make(map[string]*tableChange),
 		batchSize:         maxBatchSize,
-		mode:              mode,
 	}
 }
 
@@ -260,7 +257,7 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 			failedRows[key] = &validateFailedRow{tp: rowNotExist}
 			continue
 		}
-		if vw.mode == config.ValidationFull {
+		if vw.cfg.Mode == config.ValidationFull {
 			// only compare the whole row in full mode
 			eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
 			if err != nil {

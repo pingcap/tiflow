@@ -48,6 +48,7 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 			"create table tbl3(a varchar(100) primary key, b varchar(100))")
 
 		cfg := genSubtaskConfig(t)
+		cfg.ValidatorCfg.Mode = mode
 		_, mock, err := conn.InitMockDBFull()
 		mock.MatchExpectationsInOrder(false)
 		require.NoError(t, err)
@@ -60,7 +61,7 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		defer validator.cancel()
 
 		// insert & update same table, both row are validated failed
-		worker := newValidateWorker(validator, 0, mode)
+		worker := newValidateWorker(validator, 0)
 		worker.updateRowChange(&rowChange{
 			table:      tableInfo1,
 			key:        "1",
