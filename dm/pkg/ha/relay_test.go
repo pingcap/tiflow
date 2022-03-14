@@ -52,7 +52,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	c.Assert(rev4, Equals, rev3)
 	c.Assert(cfg2, DeepEquals, cfg)
 
-	rev5, err := DeleteRelayConfig(etcdTestCli, worker)
+	rev5, err := DeleteRelayConfig(etcdTestCli, source, worker)
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Greater, rev4)
 
