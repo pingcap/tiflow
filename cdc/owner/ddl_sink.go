@@ -154,6 +154,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 			select {
 			case ddl := <-s.ddlCh:
+				if ddl.CommitTs <= lastCheckpointTs {
+					log.Panic("DDL CommitTs fallback, please report a bug",
+						zap.Uint64("CommitTs", ddl.CommitTs),
+						zap.Uint64("lastCheckpointTs", lastCheckpointTs),
+						zap.Any("DDL", ddl))
+				}
+
 				log.Info("emit ddl event", zap.Any("DDL", ddl))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
@@ -163,7 +170,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					log.Info("Execute DDL succeeded",
 						zap.String("changefeed", ctx.ChangefeedVars().ID),
 						zap.Bool("ignored", err != nil),
-						zap.Reflect("ddl", ddl))
+						zap.Any("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
@@ -172,7 +179,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				log.Error("Execute DDL failed",
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
-					zap.Reflect("ddl", ddl))
+					zap.Any("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
 				return
 			default:
@@ -187,11 +194,11 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			}
 			tables := s.mu.currentTableNames
 			s.mu.Unlock()
-			lastCheckpointTs = checkpointTs
 			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
 				ctx.Throw(errors.Trace(err))
 				return
 			}
+			lastCheckpointTs = checkpointTs
 		}
 	}()
 }
@@ -224,7 +231,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
 		s.ddlSentTs = ddl.CommitTs
-		log.Info("ddl is sent", zap.Uint64("ddlSentTs", s.ddlSentTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.Uint64("ddlSentTs", s.ddlSentTs),

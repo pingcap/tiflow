@@ -255,8 +255,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+	log.Debug("emit ddl event",
+		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
 	err = k.writeToProducer(ctx, msg, partition)
 	return errors.Trace(err)
