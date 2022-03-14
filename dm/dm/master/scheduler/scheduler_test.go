@@ -181,11 +181,6 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	fake.SourceID = "not a source id"
 	require.True(t.T(), terror.ErrSchedulerSourceCfgNotExist.Equal(s.UpdateSourceCfg(fake)))
 
-	// update field not related to relay-log will failed
-	fake2 := newCfg.Clone()
-	fake2.AutoFixGTID = !fake2.AutoFixGTID
-	require.True(t.T(), terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(fake2)))
-
 	// one unbound source exist (because no free worker).
 	t.sourceBounds(s, []string{}, []string{sourceID1})
 	rebuildScheduler(ctx)
@@ -267,9 +262,6 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_Running)
 	t.downstreamMetaExist(s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
 	t.downstreamMetaNotExist(s, taskName2)
-
-	// update source config when task already started will failed
-	require.True(t.T(), terror.ErrSchedulerSourceOpTaskExist.Equal(s.UpdateSourceCfg(sourceCfg1)))
 
 	// try start a task with two sources, some sources not bound.
 	require.True(t.T(), terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)))
@@ -2043,4 +2035,102 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
 	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
+}
+
+func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
+	defer t.clearTestInfoOperation()
+
+	var (
+		logger       = log.L()
+		s            = NewScheduler(&logger, config.Security{})
+		sourceID1    = "mysql-replica-1"
+		taskName1    = "task-1"
+		workerName1  = "dm-worker-1"
+		workerAddr1  = "127.0.0.1:8262"
+		subtaskCfg1  config.SubTaskConfig
+		keepAliveTTL = int64(5)
+		ctx          = context.Background()
+	)
+	sourceCfg1, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t.T(), err)
+	sourceCfg1.SourceID = sourceID1
+
+	require.NoError(t.T(), subtaskCfg1.Decode(config.SampleSubtaskConfig, true))
+	subtaskCfg1.SourceID = sourceID1
+	subtaskCfg1.Name = taskName1
+	require.NoError(t.T(), subtaskCfg1.Adjust(true))
+
+	// not started scheduler can't update
+	t.True(terror.ErrSchedulerNotStarted.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
+	t.True(terror.ErrSchedulerNotStarted.Equal(s.UpdateSourceCfg(sourceCfg1)))
+
+	// start the scheduler
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	t.NoError(s.Start(ctx, t.etcdTestCli))
+
+	// can't update source when source not added
+	t.True(terror.ErrSchedulerSourceCfgNotExist.Equal(s.UpdateSourceCfg(sourceCfg1)))
+
+	subtaskCfg2 := subtaskCfg1
+	subtaskCfg2.Name = "fake name"
+	// can't update subtask with different task name
+	t.True(terror.ErrSchedulerMultiTask.Equal(s.UpdateSubTasks(ctx, subtaskCfg1, subtaskCfg2)))
+
+	// can't update not added subtask
+	t.True(terror.ErrSchedulerTaskNotExist.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
+
+	// start worker,add source and subtask
+	t.NoError(s.AddSourceCfg(sourceCfg1))
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
+	t.NoError(s.AddWorker(workerName1, workerAddr1))
+	go func() {
+		t.NoError(ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
+	}()
+	// wait for source1 bound to worker1.
+	t.Eventually(func() bool {
+		bounds := s.BoundSources()
+		return len(bounds) == 1 && bounds[0] == sourceID1
+	}, 100*30*time.Millisecond, 30*time.Millisecond)
+	t.NoError(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg1))
+
+	// can't update subtask not in scheduler
+	subtaskCfg2.Name = subtaskCfg1.Name
+	subtaskCfg2.SourceID = "fake source name"
+	t.True(terror.ErrSchedulerSubTaskNotExist.Equal(s.UpdateSubTasks(ctx, subtaskCfg2)))
+
+	// can't update subtask in running stage
+	t.True(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
+	// can't update source when there is running tasks
+	t.True(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)))
+
+	// pause task
+	t.NoError(s.UpdateExpectSubTaskStage(pb.Stage_Paused, taskName1, sourceID1))
+
+	// can't update source when there is a relay worker for this source
+	t.NoError(s.StartRelay(sourceID1, []string{workerName1}))
+	t.True(terror.ErrSchedulerSourceCfgUpdate.Equal(s.UpdateSourceCfg(sourceCfg1)))
+	t.NoError(s.StopRelay(sourceID1, []string{workerName1}))
+
+	// can't updated when worker rpc error
+	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("error")`))
+	t.Regexp("query error", s.UpdateSubTasks(ctx, subtaskCfg1))
+	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
+
+	// can't updated when worker rpc check not pass
+	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("failed")`))
+	t.True(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, subtaskCfg1)))
+	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
+
+	// update success
+	subtaskCfg1.Batch = 1000
+	t.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
+	t.NoError(s.UpdateSubTasks(ctx, subtaskCfg1))
+	t.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
+	t.Equal(s.getSubTaskCfgByTaskSource(taskName1, sourceID1).Batch, subtaskCfg1.Batch)
+
+	sourceCfg1.MetaDir = "new meta"
+	t.NoError(s.UpdateSourceCfg(sourceCfg1))
+	t.Equal(s.GetSourceCfgByID(sourceID1).MetaDir, sourceCfg1.MetaDir)
 }

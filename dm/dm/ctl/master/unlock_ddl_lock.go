@@ -16,7 +16,6 @@ package master
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
@@ -35,6 +34,9 @@ func NewUnlockDDLLockCmd() *cobra.Command {
 	}
 	cmd.Flags().StringP("owner", "o", "", "source to replace the default owner")
 	cmd.Flags().BoolP("force-remove", "f", false, "force to remove DDL lock")
+	cmd.Flags().StringP("action", "a", "skip", "accept skip/exec values which means whether to skip or execute ddls")
+	cmd.Flags().StringP("database", "d", "", "database name of the table")
+	cmd.Flags().StringP("table", "t", "", "table name")
 	return cmd
 }
 
@@ -53,15 +55,39 @@ func unlockDDLLockFunc(cmd *cobra.Command, _ []string) error {
 
 	lockID := cmd.Flags().Arg(0)
 
-	sources, _ := common.GetSourceArgs(cmd)
-	if len(sources) > 0 {
-		fmt.Println("should not specify any sources")
-		return errors.New("please check output to see error")
+	sources, err := common.GetSourceArgs(cmd)
+	if err != nil {
+		return err
 	}
 
 	forceRemove, err := cmd.Flags().GetBool("force-remove")
 	if err != nil {
 		return err
+	}
+
+	database, err := cmd.Flags().GetString("database")
+	if err != nil {
+		return err
+	}
+
+	table, err := cmd.Flags().GetString("table")
+	if err != nil {
+		return err
+	}
+
+	action, err := cmd.Flags().GetString("action")
+	if err != nil {
+		return err
+	}
+
+	var op pb.UnlockDDLLockOp
+	switch action {
+	case "exec":
+		op = pb.UnlockDDLLockOp_ExecLock
+	case "skip":
+		op = pb.UnlockDDLLockOp_SkipLock
+	default:
+		return errors.New("please check --action argument, only exec/skip are acceptable")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -75,6 +101,10 @@ func unlockDDLLockFunc(cmd *cobra.Command, _ []string) error {
 			ID:           lockID,
 			ReplaceOwner: owner,
 			ForceRemove:  forceRemove,
+			Sources:      sources,
+			Database:     database,
+			Table:        table,
+			Op:           op,
 		},
 		&resp,
 	)
