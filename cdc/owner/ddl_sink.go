@@ -188,10 +188,9 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			<-ticker.C
 			s.mu.Lock()
 			checkpointTs := s.mu.checkpointTs
-			// checkpoint should be sent after all DDL events whoes `CommitTs` not greater than it flushed
-			// sometimes, DDL's commitTs may equal to the checkpointTs, but emit DDL is not finished yet,
-			// || checkpointTs <= s.ddlFinishedTs
-			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+			// checkpoint should be sent after all DDL events
+			// whoes `CommitTs` not greater than it have flushed.
+			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs || s.hasDDLInflight() {
 				s.mu.Unlock()
 				continue
 			}
@@ -246,6 +245,12 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		// just return false and send the ddl in the next round.
 	}
 	return false, nil
+}
+
+// return true if DDL is inflight, which means
+// the DDL is received but not flushed to downstream sink yet.
+func (s *ddlSinkImpl) hasDDLInflight() bool {
+	return s.ddlSentTs > atomic.LoadUint64(&s.ddlFinishedTs)
 }
 
 func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
