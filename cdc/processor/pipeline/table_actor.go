@@ -159,6 +159,11 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	return table, nil
 }
 
+// Close implements Actor interface.
+// TODO: implements table actor stop here.
+func (t *tableActor) OnClose() {
+}
+
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	for i := range msgs {
 		if atomic.LoadUint32(&t.stopped) == stopped {
@@ -387,7 +392,9 @@ func (t *tableActor) stop(err error) {
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
 	t.stop(err)
-	t.reportErr(err)
+	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+		t.reportErr(err)
+	}
 }
 
 // ============ Implement TablePipline, must be threadsafe ============
