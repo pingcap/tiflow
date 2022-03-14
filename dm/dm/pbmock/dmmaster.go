@@ -116,6 +116,46 @@ func (mr *MockMasterClientMockRecorder) GetSubTaskCfg(arg0, arg1 interface{}, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubTaskCfg", reflect.TypeOf((*MockMasterClient)(nil).GetSubTaskCfg), varargs...)
 }
 
+// GetValidationError mocks base method.
+func (m *MockMasterClient) GetValidationError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetValidationError", varargs...)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationError indicates an expected call of GetValidationError.
+func (mr *MockMasterClientMockRecorder) GetValidationError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationError", reflect.TypeOf((*MockMasterClient)(nil).GetValidationError), varargs...)
+}
+
+// GetValidationStatus mocks base method.
+func (m *MockMasterClient) GetValidationStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest, arg2 ...grpc.CallOption) (*pb.GetValidationStatusResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetValidationStatus", varargs...)
+	ret0, _ := ret[0].(*pb.GetValidationStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationStatus indicates an expected call of GetValidationStatus.
+func (mr *MockMasterClientMockRecorder) GetValidationStatus(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationStatus", reflect.TypeOf((*MockMasterClient)(nil).GetValidationStatus), varargs...)
+}
+
 // HandleError mocks base method.
 func (m *MockMasterClient) HandleError(arg0 context.Context, arg1 *pb.HandleErrorRequest, arg2 ...grpc.CallOption) (*pb.HandleErrorResponse, error) {
 	m.ctrl.T.Helper()
@@ -276,6 +316,26 @@ func (mr *MockMasterClientMockRecorder) OperateTask(arg0, arg1 interface{}, arg2
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateTask", reflect.TypeOf((*MockMasterClient)(nil).OperateTask), varargs...)
 }
 
+// OperateValidationError mocks base method.
+func (m *MockMasterClient) OperateValidationError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "OperateValidationError", varargs...)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidationError indicates an expected call of OperateValidationError.
+func (mr *MockMasterClientMockRecorder) OperateValidationError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidationError", reflect.TypeOf((*MockMasterClient)(nil).OperateValidationError), varargs...)
+}
+
 // OperateWorkerRelayTask mocks base method.
 func (m *MockMasterClient) OperateWorkerRelayTask(arg0 context.Context, arg1 *pb.OperateWorkerRelayRequest, arg2 ...grpc.CallOption) (*pb.OperateWorkerRelayResponse, error) {
 	m.ctrl.T.Helper()
@@ -394,6 +454,46 @@ func (mr *MockMasterClientMockRecorder) StartTask(arg0, arg1 interface{}, arg2 .
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTask", reflect.TypeOf((*MockMasterClient)(nil).StartTask), varargs...)
+}
+
+// StartValidation mocks base method.
+func (m *MockMasterClient) StartValidation(arg0 context.Context, arg1 *pb.StartValidationRequest, arg2 ...grpc.CallOption) (*pb.StartValidationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartValidation", varargs...)
+	ret0, _ := ret[0].(*pb.StartValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartValidation indicates an expected call of StartValidation.
+func (mr *MockMasterClientMockRecorder) StartValidation(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidation", reflect.TypeOf((*MockMasterClient)(nil).StartValidation), varargs...)
+}
+
+// StopValidation mocks base method.
+func (m *MockMasterClient) StopValidation(arg0 context.Context, arg1 *pb.StopValidationRequest, arg2 ...grpc.CallOption) (*pb.StopValidationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StopValidation", varargs...)
+	ret0, _ := ret[0].(*pb.StopValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopValidation indicates an expected call of StopValidation.
+func (mr *MockMasterClientMockRecorder) StopValidation(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidation", reflect.TypeOf((*MockMasterClient)(nil).StopValidation), varargs...)
 }
 
 // TransferSource mocks base method.
@@ -539,6 +639,36 @@ func (mr *MockMasterServerMockRecorder) GetSubTaskCfg(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubTaskCfg", reflect.TypeOf((*MockMasterServer)(nil).GetSubTaskCfg), arg0, arg1)
 }
 
+// GetValidationError mocks base method.
+func (m *MockMasterServer) GetValidationError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidationError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationError indicates an expected call of GetValidationError.
+func (mr *MockMasterServerMockRecorder) GetValidationError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationError", reflect.TypeOf((*MockMasterServer)(nil).GetValidationError), arg0, arg1)
+}
+
+// GetValidationStatus mocks base method.
+func (m *MockMasterServer) GetValidationStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidationStatus", arg0, arg1)
+	ret0, _ := ret[0].(*pb.GetValidationStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationStatus indicates an expected call of GetValidationStatus.
+func (mr *MockMasterServerMockRecorder) GetValidationStatus(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationStatus", reflect.TypeOf((*MockMasterServer)(nil).GetValidationStatus), arg0, arg1)
+}
+
 // HandleError mocks base method.
 func (m *MockMasterServer) HandleError(arg0 context.Context, arg1 *pb.HandleErrorRequest) (*pb.HandleErrorResponse, error) {
 	m.ctrl.T.Helper()
@@ -659,6 +789,21 @@ func (mr *MockMasterServerMockRecorder) OperateTask(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateTask", reflect.TypeOf((*MockMasterServer)(nil).OperateTask), arg0, arg1)
 }
 
+// OperateValidationError mocks base method.
+func (m *MockMasterServer) OperateValidationError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperateValidationError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidationError indicates an expected call of OperateValidationError.
+func (mr *MockMasterServerMockRecorder) OperateValidationError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidationError", reflect.TypeOf((*MockMasterServer)(nil).OperateValidationError), arg0, arg1)
+}
+
 // OperateWorkerRelayTask mocks base method.
 func (m *MockMasterServer) OperateWorkerRelayTask(arg0 context.Context, arg1 *pb.OperateWorkerRelayRequest) (*pb.OperateWorkerRelayResponse, error) {
 	m.ctrl.T.Helper()
@@ -747,6 +892,36 @@ func (m *MockMasterServer) StartTask(arg0 context.Context, arg1 *pb.StartTaskReq
 func (mr *MockMasterServerMockRecorder) StartTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTask", reflect.TypeOf((*MockMasterServer)(nil).StartTask), arg0, arg1)
+}
+
+// StartValidation mocks base method.
+func (m *MockMasterServer) StartValidation(arg0 context.Context, arg1 *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartValidation", arg0, arg1)
+	ret0, _ := ret[0].(*pb.StartValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartValidation indicates an expected call of StartValidation.
+func (mr *MockMasterServerMockRecorder) StartValidation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidation", reflect.TypeOf((*MockMasterServer)(nil).StartValidation), arg0, arg1)
+}
+
+// StopValidation mocks base method.
+func (m *MockMasterServer) StopValidation(arg0 context.Context, arg1 *pb.StopValidationRequest) (*pb.StopValidationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopValidation", arg0, arg1)
+	ret0, _ := ret[0].(*pb.StopValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopValidation indicates an expected call of StopValidation.
+func (mr *MockMasterServerMockRecorder) StopValidation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidation", reflect.TypeOf((*MockMasterServer)(nil).StopValidation), arg0, arg1)
 }
 
 // TransferSource mocks base method.

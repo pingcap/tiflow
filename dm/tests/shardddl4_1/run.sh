@@ -562,19 +562,16 @@ function DM_147_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
 		"add column c that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1
 
 	# try to fix data
-	echo 'create table tbl(a int primary key, b int, c int) engine=innodb default charset=latin1 collate=latin1_bin;' >${WORK_DIR}/schema.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update test ${shardddl1} ${tb1} ${WORK_DIR}/schema.sql -s mysql-replica-01" \
-		"\"result\": true" 2
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test \"alter table ${shardddl1}.${tb1} drop column b\"" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_tidb "update ${shardddl}.${tb} set c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -834,18 +831,16 @@ function DM_153_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
 		"add column c that wasn't fully dropped in downstream" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1
 
 	# try to fix data
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update test ${shardddl1} ${tb1} -s mysql-replica-01 --from-target" \
-		"\"result\": true" 2
-
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test \"alter table ${shardddl1}.${tb1} drop column b\"" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_tidb "update ${shardddl}.${tb} set c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -873,20 +868,18 @@ function DM_154_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1 \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1 \
 		"add column c that wasn't fully dropped in downstream" 1
-
-	# try to fix data
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update test ${shardddl1} ${tb1} -s mysql-replica-01 --from-source" \
-		"\"result\": true" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"shard-ddl-lock" \
+		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` INT' 1
 
 	run_sql_tidb "alter table ${shardddl}.${tb} drop column b;"
 
+	# try to fix data
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2 \
-		"\"source 'mysql-replica-02' has no error\"" 1
+		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
+		"\"result\": true" 1
 
 	run_sql_tidb "update ${shardddl}.${tb} set c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

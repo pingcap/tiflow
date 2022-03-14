@@ -40,6 +40,7 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
@@ -1877,4 +1878,26 @@ func TestSyncerGetTableInfo(t *testing.T) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}))
 	_, err = syncer.getTableInfo(tctx, noExistTbl, noExistTbl)
 	require.Error(t, err)
+}
+
+func TestCheckCanUpdateCfg(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+
+	// update to a not change cfg is ok
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+
+	cfg2 := genDefaultSubTaskConfig4Test()
+	cfg2.Name = "new name"
+	// updated to a not allowed field
+	require.True(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(syncer.CheckCanUpdateCfg(cfg2)))
+
+	// update ba list or route rules or filter rules is ok or syncerCfg
+	cfg2.Name = cfg.Name
+
+	cfg2.BAList = &filter.Rules{DoDBs: []string{"test"}}
+	cfg2.RouteRules = []*router.TableRule{{SchemaPattern: "test", TargetSchema: "test1"}}
+	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
+	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
 }
