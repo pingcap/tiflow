@@ -251,14 +251,14 @@ func (t *testPessimistSuite) testPessimistProgress(restart int) {
 			Unsynced: []string{i23.Source},
 		},
 	}
-	c.Assert(p.ShowLocks("", []string{}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks(i21.Task, []string{}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks("", []string{i21.Source}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks("", []string{i23.Source}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks("", []string{i22.Source, i23.Source}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks(i21.Task, []string{i22.Source, i23.Source}), DeepEquals, expectedLock)
-	c.Assert(p.ShowLocks("not-exist", []string{}), HasLen, 0)
-	c.Assert(p.ShowLocks("", []string{"not-exist"}), HasLen, 0)
+	require.Equal(t.T(), expectedLock, p.ShowLocks("", []string{}))
+	require.Equal(t.T(), expectedLock, p.ShowLocks(i21.Task, []string{}))
+	require.Equal(t.T(), expectedLock, p.ShowLocks("", []string{i21.Source}))
+	require.Equal(t.T(), expectedLock, p.ShowLocks("", []string{i23.Source}))
+	require.Equal(t.T(), expectedLock, p.ShowLocks("", []string{i22.Source, i23.Source}))
+	require.Equal(t.T(), expectedLock, p.ShowLocks(i21.Task, []string{i22.Source, i23.Source}))
+	require.Len(t.T(), p.ShowLocks("not-exist", []string{}), 0)
+	require.Len(t.T(), p.ShowLocks("", []string{"not-exist"}), 0)
 
 	// PUT i23, then the lock will become synced.
 	rev3, err := pessimism.PutInfo(t.etcdTestCli, i23)
