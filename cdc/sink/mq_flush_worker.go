@@ -65,23 +65,25 @@ func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer,
 }
 
 // batch collects a batch of messages to be sent to the Kafka producer.
-func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
-	var events []mqEvent
+func (w *flushWorker) batch(ctx context.Context, events []mqEvent) (int, error) {
+	index := 0
+	max := len(events)
 	// We need to receive at least one message or be interrupted,
 	// otherwise it will lead to idling.
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return index, ctx.Err()
 	case msg := <-w.msgChan:
 		// When the resolved ts is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.resolvedTs != 0 {
 			w.needSyncFlush = true
-			return events, nil
+			return index, nil
 		}
 
 		if msg.row != nil {
-			events = append(events, msg)
+			events[index] = msg
+			index++
 		}
 	}
 
@@ -90,22 +92,23 @@ func (w *flushWorker) batch(ctx context.Context) ([]mqEvent, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return index, ctx.Err()
 		case msg := <-w.msgChan:
 			if msg.resolvedTs != 0 {
 				w.needSyncFlush = true
-				return events, nil
+				return index, nil
 			}
 
 			if msg.row != nil {
-				events = append(events, msg)
+				events[index] = msg
+				index++
 			}
 
-			if len(events) >= flushBatchSize {
-				return events, nil
+			if index >= max {
+				return index, nil
 			}
 		case <-w.ticker.C:
-			return events, nil
+			return index, nil
 		}
 	}
 }
@@ -166,12 +169,17 @@ func (w *flushWorker) asyncSend(ctx context.Context, paritionedEvents map[int32]
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) error {
 	defer w.ticker.Stop()
+	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
-		events, err := w.batch(ctx)
+		n, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		paritionedEvents := w.group(events)
+		if n == 0 {
+			continue
+		}
+		msgs := eventsBuf[:n]
+		paritionedEvents := w.group(msgs)
 		err = w.asyncSend(ctx, paritionedEvents)
 		if err != nil {
 			return errors.Trace(err)

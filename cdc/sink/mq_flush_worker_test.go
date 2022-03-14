@@ -79,46 +79,101 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 }
 
 func TestBatch(t *testing.T) {
+	t.Parallel()
+
 	worker, _ := newTestWorker()
-	events := []mqEvent{
+	tests := []struct {
+		name      string
+		events    []mqEvent
+		expectedN int
+	}{
 		{
-			resolvedTs: 0,
+			name: "Normal batching",
+			events: []mqEvent{
+				{
+					resolvedTs: 0,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 1,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					},
+					partition: 1,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 2,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					},
+					partition: 1,
+				},
+			},
+			expectedN: 2,
 		},
 		{
-			row: &model.RowChangedEvent{
-				CommitTs: 1,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			name: "No row change events",
+			events: []mqEvent{
+				{
+					resolvedTs: 1,
+				},
 			},
-			partition: 1,
+			expectedN: 0,
 		},
 		{
-			row: &model.RowChangedEvent{
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			name: "The resolved ts event appears in the middle",
+			events: []mqEvent{
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 1,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					},
+					partition: 1,
+				},
+				{
+					resolvedTs: 1,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 2,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					},
+					partition: 1,
+				},
 			},
-			partition: 1,
+			expectedN: 1,
 		},
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		result, err := worker.batch(context.Background())
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-	}()
+	ctx := context.Background()
+	batch := make([]mqEvent, 3)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				n, err := worker.batch(ctx, batch)
+				require.NoError(t, err)
+				require.Equal(t, test.expectedN, n)
+			}()
 
-	for _, event := range events {
-		worker.msgChan <- event
+			go func() {
+				for _, event := range test.events {
+					worker.msgChan <- event
+				}
+			}()
+			wg.Wait()
+		})
 	}
-
-	wg.Wait()
 }
 
 func TestGroup(t *testing.T) {
+	t.Parallel()
+
 	worker, _ := newTestWorker()
 	events := []mqEvent{
 		{
@@ -164,6 +219,8 @@ func TestGroup(t *testing.T) {
 }
 
 func TestAsyncSend(t *testing.T) {
+	t.Parallel()
+
 	worker, producer := newTestWorker()
 	events := []mqEvent{
 		{
@@ -226,6 +283,8 @@ func TestAsyncSend(t *testing.T) {
 }
 
 func TestFlush(t *testing.T) {
+	t.Parallel()
+
 	worker, producer := newTestWorker()
 	events := []mqEvent{
 		{
@@ -261,12 +320,14 @@ func TestFlush(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		batchBuf := make([]mqEvent, 4)
 		ctx := context.Background()
-		batch, err := worker.batch(ctx)
+		n, err := worker.batch(ctx, batchBuf)
 		require.NoError(t, err)
-		require.Len(t, batch, 3)
+		require.Equal(t, 3, n)
 		require.True(t, worker.needSyncFlush)
-		paritionedEvents := worker.group(batch)
+		msgs := batchBuf[:n]
+		paritionedEvents := worker.group(msgs)
 		err = worker.asyncSend(ctx, paritionedEvents)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
@@ -281,6 +342,8 @@ func TestFlush(t *testing.T) {
 }
 
 func TestAbort(t *testing.T) {
+	t.Parallel()
+
 	worker, _ := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 
