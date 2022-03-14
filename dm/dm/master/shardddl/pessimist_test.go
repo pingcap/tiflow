@@ -21,6 +21,8 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -45,50 +47,50 @@ const (
 	restartNewInstance        // restart with build a new instance. mock progress restore from failure
 )
 
-type testPessimist struct {
+func TestPessimistSuite(t *testing.T) {
+	suite.Run(t, new(testPessimistSuite))
+}
+
+type testPessimistSuite struct {
+	suite.Suite
 	mockCluster *integration.ClusterV3
 	etcdTestCli *clientv3.Client
 }
 
-var _ = Suite(&testPessimist{})
+func (t *testPessimistSuite) SetupSuite() {
+	require.NoError(t.T(), log.InitLogger(&log.Config{}))
 
-func TestShardDDL(t *testing.T) {
-	err := log.InitLogger(&log.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tt = t
-
-	integration.BeforeTestExternal(t)
-
-	TestingT(t)
-}
-
-// clear keys in etcd test cluster.
-func (t *testPessimist) clearTestInfoOperation(c *C) {
-	clearInfo := clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
-	clearOp := clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
-	_, err := t.etcdTestCli.Txn(context.Background()).Then(clearInfo, clearOp).Commit()
-	c.Assert(err, IsNil)
-}
-
-func (t *testPessimist) SetUpSuite(c *C) {
-	t.mockCluster = integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 1})
+	integration.BeforeTestExternal(t.T())
+	t.mockCluster = integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 1})
 	t.etcdTestCli = t.mockCluster.RandClient()
 }
 
-func (t *testPessimist) TearDownSuite(c *C) {
-	t.mockCluster.Terminate(tt)
+func (t *testPessimistSuite) TearDownSuite() {
+	t.mockCluster.Terminate(t.T())
 }
 
-func (t *testPessimist) TestPessimist(c *C) {
+func (t *testPessimistSuite) TearDownTest() {
+	t.clearTestInfoOperation()
+}
+
+// clear keys in etcd test cluster.
+func (t *testPessimistSuite) clearTestInfoOperation() {
+	t.T().Helper()
+
+	clearInfo := clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
+	clearOp := clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
+	_, err := t.etcdTestCli.Txn(context.Background()).Then(clearInfo, clearOp).Commit()
+	require.NoError(t.T(), err)
+}
+
+func (t *testPessimistSuite) TestPessimist(c *C) {
 	t.testPessimistProgress(c, noRestart)
 	t.testPessimistProgress(c, restartOnly)
 	t.testPessimistProgress(c, restartNewInstance)
 }
 
-func (t *testPessimist) testPessimistProgress(c *C, restart int) {
-	defer t.clearTestInfoOperation(c)
+func (t *testPessimistSuite) testPessimistProgress(c *C, restart int) {
+	defer t.clearTestInfoOperation()
 
 	var (
 		watchTimeout  = 3 * time.Second
@@ -125,11 +127,11 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 			switch restart {
 			case restartOnly:
 				p.Close()
-				c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
+				require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
 			case restartNewInstance:
 				p.Close()
 				p = NewPessimist(&logger, sources)
-				c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
+				require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
 			}
 		}
 	)
@@ -138,29 +140,28 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 	defer cancel()
 
 	// CASE 1: start without any previous kv and no etcd operation.
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 	p.Close()
 	p.Close() // close multiple times.
 
 	// CASE 2: start again without any previous kv.
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 
 	// PUT i11, will create a lock but not synced.
 	_, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return len(p.Locks()) == 1
 	}), IsTrue)
-	c.Assert(p.Locks(), HasKey, ID1)
+	require.Contains(t.T(), p.Locks(), ID1)
 	synced, remain := p.Locks()[ID1].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
-
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 	// PUT i12, the lock will be synced, then an operation PUT for the owner will be triggered.
 	rev1, err := pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		synced, _ = p.Locks()[ID1].IsSynced()
 		return synced
@@ -174,18 +175,18 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), 0, len(errCh))
+	require.Equal(t.T(), 1, len(opCh))
 	op11 := <-opCh
-	c.Assert(op11.Exec, IsTrue)
-	c.Assert(op11.Done, IsFalse)
+	require.True(t.T(), op11.Exec)
+	require.False(t.T(), op11.Done)
 
 	// mark exec operation for the owner as `done` (and delete the info).
 	op11c := op11
 	op11c.Done = true
 	done, rev2, err := pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op11c, i11)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID1].IsDone(source1)
 	}), IsTrue)
@@ -198,31 +199,31 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), 0, len(errCh))
+	require.Equal(t.T(), 1, len(opCh))
 	op12 := <-opCh
-	c.Assert(op12.Exec, IsFalse)
-	c.Assert(op12.Done, IsFalse)
+	require.False(t.T(), op12.Exec)
+	require.False(t.T(), op12.Done)
 
 	// mark skip operation for the non-owner as `done` (and delete the info).
 	// the lock should become resolved and deleted.
 	op12c := op12
 	op12c.Done = true
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op12c, i12)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(50, 100*time.Millisecond, func() bool {
 		_, ok := p.Locks()[ID1]
 		return !ok
 	}), IsTrue)
-	c.Assert(p.Locks(), HasLen, 0)
-	c.Assert(p.ShowLocks("", nil), HasLen, 0)
+	require.Len(t.T(), p.Locks(), 0)
+	require.Len(t.T(), p.ShowLocks("", nil), 0)
 
 	// PUT i21, i22, this will create a lock.
 	_, err = pessimism.PutInfo(t.etcdTestCli, i21)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	_, err = pessimism.PutInfo(t.etcdTestCli, i22)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		lock := p.Locks()[ID2]
 		if lock == nil {
@@ -234,12 +235,11 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 
 	// CASE 3: start again with some previous shard DDL info and the lock is un-synced.
 	rebuildPessimist(ctx)
-	c.Assert(p.Locks(), HasLen, 1)
-	c.Assert(p.Locks(), HasKey, ID2)
+	require.Len(t.T(), p.Locks(), 1)
+	require.Contains(t.T(), p.Locks(), ID2)
 	synced, remain = p.Locks()[ID2].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
-
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 	// check ShowLocks.
 	expectedLock := []*pb.DDLLock{
 		{
@@ -263,7 +263,7 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 
 	// PUT i23, then the lock will become synced.
 	rev3, err := pessimism.PutInfo(t.etcdTestCli, i23)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		synced, _ = p.Locks()[ID2].IsSynced()
 		return synced
@@ -279,80 +279,78 @@ func (t *testPessimist) testPessimistProgress(c *C, restart int) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Len(t.T(), errCh, 0)
+	require.Len(t.T(), opCh, 1)
 	op21 := <-opCh
-	c.Assert(op21.Exec, IsTrue)
-	c.Assert(op21.Done, IsFalse)
+	require.True(t.T(), op21.Exec)
+	require.False(t.T(), op21.Done)
 
 	// CASE 4: start again with some previous shard DDL info and non-`done` operation.
 	rebuildPessimist(ctx)
-	c.Assert(p.Locks(), HasLen, 1)
-	c.Assert(p.Locks(), HasKey, ID2)
+	require.Len(t.T(), p.Locks(), 1)
+	require.Contains(t.T(), p.Locks(), ID2)
 	synced, _ = p.Locks()[ID2].IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source1), IsFalse)
+	require.True(t.T(), synced)
+	require.False(t.T(), p.Locks()[ID2].IsDone(source1))
 
 	// mark exec operation for the owner as `done` (and delete the info).
 	op21c := op21
 	op21c.Done = true
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op21c, i21)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID2].IsDone(source1)
 	}), IsTrue)
 
 	// CASE 5: start again with some previous shard DDL info and `done` operation for the owner.
 	rebuildPessimist(ctx)
-	c.Assert(p.Locks(), HasLen, 1)
-	c.Assert(p.Locks(), HasKey, ID2)
+	require.Len(t.T(), p.Locks(), 1)
+	require.Contains(t.T(), p.Locks(), ID2)
 	synced, _ = p.Locks()[ID2].IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source1), IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source2), IsFalse)
+	require.True(t.T(), synced)
+	require.True(t.T(), p.Locks()[ID2].IsDone(source1))
+	require.False(t.T(), p.Locks()[ID2].IsDone(source2))
 
 	// mark exec operation for one non-owner as `done` (and delete the info).
 	op22c := pessimism.NewOperation(ID2, task2, source2, DDLs, false, true)
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op22c, i22)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID2].IsDone(source2)
 	}), IsTrue)
 
 	// CASE 6: start again with some previous shard DDL info and `done` operation for the owner and non-owner.
 	rebuildPessimist(ctx)
-	c.Assert(p.Locks(), HasLen, 1)
-	c.Assert(p.Locks(), HasKey, ID2)
+	require.Len(t.T(), p.Locks(), 1)
+	require.Contains(t.T(), p.Locks(), ID2)
 	synced, _ = p.Locks()[ID2].IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source1), IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source2), IsTrue)
-	c.Assert(p.Locks()[ID2].IsDone(source3), IsFalse)
+	require.True(t.T(), synced)
+	require.True(t.T(), p.Locks()[ID2].IsDone(source1))
+	require.True(t.T(), p.Locks()[ID2].IsDone(source2))
+	require.False(t.T(), p.Locks()[ID2].IsDone(source3))
 
 	// mark skip operation for the non-owner as `done` (and delete the info).
 	// the lock should become resolved and deleted.
 	op23c := pessimism.NewOperation(ID2, task2, source3, DDLs, false, true)
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op23c, i23)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		_, ok := p.Locks()[ID2]
 		return !ok
 	}), IsTrue)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.Len(t.T(), p.Locks(), 0)
 
 	// CASE 7: start again after all shard DDL locks have been resolved.
 	rebuildPessimist(ctx)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.Len(t.T(), p.Locks(), 0)
 	p.Close() // close the Pessimist.
 }
 
-func (t *testPessimist) TestSourceReEntrant(c *C) {
+func (t *testPessimistSuite) TestSourceReEntrant(c *C) {
 	// sources (owner or non-owner) may be interrupted and re-run the sequence again.
-	defer t.clearTestInfoOperation(c)
-
 	var (
 		watchTimeout  = 3 * time.Second
 		task          = "task-source-re-entrant"
@@ -383,15 +381,15 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 	defer cancel()
 
 	// 0. start the pessimist.
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 	defer p.Close()
 
 	// 1. PUT i11 and i12, will create a lock but not synced.
 	_, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	_, err = pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		lock := p.Locks()[ID]
 		if lock == nil {
@@ -403,11 +401,11 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 
 	// 2. re-PUT i11, to simulate the re-entrant of the owner before the lock become synced.
 	rev1, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	// 3. re-PUT i12, to simulate the re-entrant of the non-owner before the lock become synced.
 	rev2, err := pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	// 4. wait exec operation for the owner become available.
 	var wg sync.WaitGroup
@@ -421,21 +419,21 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 		cancel2()
 		close(opCh)
 		close(errCh)
-		c.Assert(len(errCh), Equals, 0)
-		c.Assert(len(opCh), Equals, 1)
+		require.Len(t.T(), errCh, 0)
+		require.Len(t.T(), opCh, 1)
 		op := <-opCh
-		c.Assert(op.Exec, IsTrue)
-		c.Assert(op.Done, IsFalse)
+		require.True(t.T(), op.Exec)
+		require.False(t.T(), op.Done)
 	}()
 
 	// 5. put i13, the lock will become synced, then an operation PUT for the owner will be triggered.
 	_, err = pessimism.PutInfo(t.etcdTestCli, i13)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	wg.Wait()
 
 	// 6. re-PUT i11, to simulate the re-entrant of the owner after the lock become synced.
 	rev1, err = pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	// 8. wait exec operation for the owner become available again (with new revision).
 	opCh := make(chan pessimism.Operation, 10)
@@ -445,11 +443,11 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), errCh, 0)
+	require.Equal(t.T(), opCh, 1)
 	op11 := <-opCh
-	c.Assert(op11.Exec, IsTrue)
-	c.Assert(op11.Done, IsFalse)
+	require.True(t.T(), op11.Exec)
+	require.False(t.T(), op11.Done)
 
 	// 9. wait exec operation for the non-owner become available.
 	wg.Add(1)
@@ -462,19 +460,19 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 		cancel2()
 		close(opCh)
 		close(errCh)
-		c.Assert(len(errCh), Equals, 0)
-		c.Assert(len(opCh), Equals, 1)
+		require.Equal(t.T(), errCh, 0)
+		require.Equal(t.T(), opCh, 1)
 		op := <-opCh
-		c.Assert(op.Exec, IsFalse)
-		c.Assert(op.Done, IsFalse)
+		require.False(t.T(), op.Exec)
+		require.False(t.T(), op.Done)
 	}()
 
 	// 10. mark exec operation for the owner as `done` (and delete the info).
 	op11c := op11
 	op11c.Done = true
 	done, _, err := pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op11c, i11)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID].IsDone(source1)
 	}), IsTrue)
@@ -482,7 +480,7 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 
 	// 11. re-PUT i12, to simulate the re-entrant of the non-owner after the lock become synced.
 	rev2, err = pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	// 12. wait skip operation for the non-owner become available again (with new revision, without existing done).
 	opCh = make(chan pessimism.Operation, 10)
@@ -492,25 +490,25 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), errCh, 0)
+	require.Equal(t.T(), opCh, 1)
 	op12 := <-opCh
-	c.Assert(op12.Exec, IsFalse)
-	c.Assert(op12.Done, IsFalse)
+	require.False(t.T(), op12.Exec)
+	require.False(t.T(), op12.Done)
 
 	// 13. mark skip operation for the non-owner as `done` (and delete the info).
 	op12c := op12
 	op12c.Done = true
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op12c, i12)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID].IsDone(source2)
 	}), IsTrue)
 
 	// 14. re-PUT i13, to simulate the re-entrant of the owner after the lock become synced.
 	rev3, err := pessimism.PutInfo(t.etcdTestCli, i13)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	// 15. wait skip operation for the non-owner become available again (with new revision, with existing done).
 	opCh = make(chan pessimism.Operation, 10)
@@ -520,19 +518,19 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), errCh, 0)
+	require.Equal(t.T(), opCh, 1)
 	op13 := <-opCh
-	c.Assert(op13.Exec, IsFalse)
-	c.Assert(op13.Done, IsFalse)
+	require.False(t.T(), op13.Exec)
+	require.False(t.T(), op13.Done)
 
 	// 16. mark skip operation for the non-owner as `done` (and delete the info).
 	// the lock should become resolved now.
 	op13c := op13
 	op13c.Done = true
 	done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op13c, i13)
-	c.Assert(err, IsNil)
-	c.Assert(done, IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), done)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		_, ok := p.Locks()[ID]
 		return !ok
@@ -540,9 +538,8 @@ func (t *testPessimist) TestSourceReEntrant(c *C) {
 	t.noLockExist(c, p)
 }
 
-func (t *testPessimist) TestUnlockSourceMissBeforeSynced(c *C) {
+func (t *testPessimistSuite) TestUnlockSourceMissBeforeSynced(c *C) {
 	// some sources may be deleted (miss) before the lock become synced.
-	defer t.clearTestInfoOperation(c)
 
 	oriUnlockWaitOwnerInterval := unlockWaitInterval
 	unlockWaitInterval = 100 * time.Millisecond
@@ -579,20 +576,20 @@ func (t *testPessimist) TestUnlockSourceMissBeforeSynced(c *C) {
 	defer cancel()
 
 	// 0. start the pessimist.
-	c.Assert(terror.ErrMasterPessimistNotStarted.Equal(p.UnlockLock(ctx, ID, "", false)), IsTrue)
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.True(t.T(), terror.ErrMasterPessimistNotStarted.Equal(p.UnlockLock(ctx, ID, "", false)))
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 	defer p.Close()
 
 	// no lock need to be unlock now.
-	c.Assert(terror.ErrMasterLockNotFound.Equal(p.UnlockLock(ctx, ID, "", false)), IsTrue)
+	require.True(t.T(), terror.ErrMasterLockNotFound.Equal(p.UnlockLock(ctx, ID, "", false)))
 
 	// 1. PUT i11 & i12, will create a lock but now synced.
 	// not PUT info for source3 to simulate the deletion of it.
 	_, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	rev1, err := pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		if len(p.Locks()) != 1 {
 			return false
@@ -600,18 +597,18 @@ func (t *testPessimist) TestUnlockSourceMissBeforeSynced(c *C) {
 		_, remain := p.Locks()[ID].IsSynced()
 		return remain == 1
 	}), IsTrue)
-	c.Assert(p.Locks(), HasKey, ID)
+	require.Contains(t.T(), p.Locks(), ID)
 	synced, _ := p.Locks()[ID].IsSynced()
-	c.Assert(synced, IsFalse)
+	require.False(t.T(), synced)
 	ready := p.Locks()[ID].Ready()
-	c.Assert(ready, HasLen, 3)
-	c.Assert(ready[source1], IsTrue)
-	c.Assert(ready[source2], IsTrue)
-	c.Assert(ready[source3], IsFalse)
+	require.Len(t.T(), ready, 3)
+	require.True(t.T(), ready[source1])
+	require.True(t.T(), ready[source2])
+	require.False(t.T(), ready[source3])
 
 	// 2. try to unlock the lock manually, but the owner has not done the operation.
 	// this will put `exec` operation for the done.
-	c.Assert(terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, "", false)), IsTrue)
+	require.True(t.T(), terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, "", false)))
 
 	// 3. try to unlock the lock manually, and the owner done the operation.
 	var wg sync.WaitGroup
@@ -626,16 +623,15 @@ func (t *testPessimist) TestUnlockSourceMissBeforeSynced(c *C) {
 		// put done for the synced `source2`, no need to put done for the un-synced `source3`.
 		t.putDoneForSource(ctx, task, source2, i12, false, rev1+1, watchTimeout, c)
 	}()
-	c.Assert(p.UnlockLock(ctx, ID, "", false), IsNil)
+	require.NoError(t.T(), p.UnlockLock(ctx, ID, "", false))
 	wg.Wait()
 
 	// 4. the lock should be removed now.
 	t.noLockExist(c, p)
 }
 
-func (t *testPessimist) TestUnlockSourceInterrupt(c *C) {
+func (t *testPessimistSuite) TestUnlockSourceInterrupt(c *C) {
 	// operations may be done but not be deleted, and then interrupted.
-	defer t.clearTestInfoOperation(c)
 
 	oriUnlockWaitOwnerInterval := unlockWaitInterval
 	unlockWaitInterval = 100 * time.Millisecond
@@ -671,16 +667,16 @@ func (t *testPessimist) TestUnlockSourceInterrupt(c *C) {
 	defer cancel()
 
 	// 0. start the pessimist.
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 	defer p.Close()
 
 	// CASE 1: owner interrupted.
 	// 1. PUT i11 & i12, will create a lock and synced.
 	rev1, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	_, err = pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		if len(p.Locks()) != 1 {
 			return false
@@ -688,11 +684,11 @@ func (t *testPessimist) TestUnlockSourceInterrupt(c *C) {
 		synced, remain := p.Locks()[ID].IsSynced()
 		return synced && remain == 0
 	}), IsTrue)
-	c.Assert(p.Locks(), HasKey, ID)
+	require.Contains(t.T(), p.Locks(), ID)
 	ready := p.Locks()[ID].Ready()
-	c.Assert(ready, HasLen, 2)
-	c.Assert(ready[source1], IsTrue)
-	c.Assert(ready[source2], IsTrue)
+	require.Len(t.T(), ready, 2)
+	require.True(t.T(), ready[source1])
+	require.True(t.T(), ready[source2])
 
 	// 2. watch until get not-done operation for the owner.
 	opCh := make(chan pessimism.Operation, 10)
@@ -702,28 +698,28 @@ func (t *testPessimist) TestUnlockSourceInterrupt(c *C) {
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(errCh), Equals, 0)
-	c.Assert(len(opCh), Equals, 1)
+	require.Equal(t.T(), errCh, 0)
+	require.Equal(t.T(), opCh, 1)
 	op := <-opCh
-	c.Assert(op.Source, Equals, source1)
-	c.Assert(op.Exec, IsTrue)
-	c.Assert(op.Done, IsFalse)
-	c.Assert(p.Locks()[ID].IsResolved(), IsFalse)
+	require.Equal(t.T(), source1, op.Source)
+	require.True(t.T(), op.Exec)
+	require.False(t.T(), op.Done)
+	require.False(t.T(), p.Locks()[ID].IsResolved())
 
 	// 3. try to unlock the lock, but no `done` marked for the owner.
-	c.Assert(terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, "", false)), IsTrue)
-	c.Assert(p.Locks()[ID].IsResolved(), IsFalse)
+	require.True(t.T(), terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, "", false)))
+	require.False(t.T(), p.Locks()[ID].IsResolved())
 
 	// 4. force to remove the lock even no `done` marked for the owner.
-	c.Assert(p.UnlockLock(ctx, ID, "", true), IsNil)
+	require.NoError(t.T(), p.UnlockLock(ctx, ID, "", true))
 	t.noLockExist(c, p)
 
 	// CASE 2: non-owner interrupted.
 	// 1. PUT i11 & i12, will create a lock and synced.
 	rev1, err = pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	_, err = pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		if len(p.Locks()) != 1 {
 			return false
@@ -731,27 +727,26 @@ func (t *testPessimist) TestUnlockSourceInterrupt(c *C) {
 		synced, remain := p.Locks()[ID].IsSynced()
 		return synced && remain == 0
 	}), IsTrue)
-	c.Assert(p.Locks(), HasKey, ID)
+	require.Contains(t.T(), p.Locks(), ID)
 	ready = p.Locks()[ID].Ready()
-	c.Assert(ready, HasLen, 2)
-	c.Assert(ready[source1], IsTrue)
-	c.Assert(ready[source2], IsTrue)
+	require.Len(t.T(), ready, 2)
+	require.True(t.T(), ready[source1])
+	require.True(t.T(), ready[source2])
 
 	// 2. putDone for the owner.
 	t.putDoneForSource(ctx, task, source1, i11, true, rev1+1, watchTimeout, c)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return p.Locks()[ID].IsDone(source1)
 	}), IsTrue)
-	c.Assert(p.Locks()[ID].IsDone(source2), IsFalse)
+	require.False(t.T(), p.Locks()[ID].IsDone(source2))
 
 	// 3. unlock the lock.
-	c.Assert(p.UnlockLock(ctx, ID, "", false), IsNil)
+	require.NoError(t.T(), p.UnlockLock(ctx, ID, "", false))
 	t.noLockExist(c, p)
 }
 
-func (t *testPessimist) TestUnlockSourceOwnerRemoved(c *C) {
+func (t *testPessimistSuite) TestUnlockSourceOwnerRemoved(c *C) {
 	// the owner may be deleted before the lock become synced.
-	defer t.clearTestInfoOperation(c)
 
 	oriUnlockWaitOwnerInterval := unlockWaitInterval
 	unlockWaitInterval = 100 * time.Millisecond
@@ -788,18 +783,18 @@ func (t *testPessimist) TestUnlockSourceOwnerRemoved(c *C) {
 	defer cancel()
 
 	// 0. start the pessimist.
-	c.Assert(p.Start(ctx, t.etcdTestCli), IsNil)
-	c.Assert(p.Locks(), HasLen, 0)
+	require.NoError(t.T(), p.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), p.Locks(), 0)
 	defer p.Close()
 
 	// no lock need to be unlock now.
-	c.Assert(terror.ErrMasterLockNotFound.Equal(p.UnlockLock(ctx, ID, "", false)), IsTrue)
+	require.True(t.T(), terror.ErrMasterLockNotFound.Equal(p.UnlockLock(ctx, ID, "", false)))
 
 	// 1. PUT i11 & i12, will create a lock but now synced.
 	_, err := pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	rev1, err := pessimism.PutInfo(t.etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		if len(p.Locks()) != 1 {
 			return false
@@ -807,21 +802,21 @@ func (t *testPessimist) TestUnlockSourceOwnerRemoved(c *C) {
 		_, remain := p.Locks()[ID].IsSynced()
 		return remain == 1
 	}), IsTrue)
-	c.Assert(p.Locks(), HasKey, ID)
+	require.Contains(t.T(), p.Locks(), ID)
 	synced, _ := p.Locks()[ID].IsSynced()
-	c.Assert(synced, IsFalse)
+	require.False(t.T(), synced)
 	ready := p.Locks()[ID].Ready()
-	c.Assert(ready, HasLen, 3)
-	c.Assert(ready[source1], IsTrue)
-	c.Assert(ready[source2], IsTrue)
-	c.Assert(ready[source3], IsFalse)
+	require.Len(t.T(), ready, 3)
+	require.True(t.T(), ready[source1])
+	require.True(t.T(), ready[source2])
+	require.False(t.T(), ready[source3])
 
 	// 2. try to unlock the lock with an un-synced replace owner.
-	c.Assert(terror.ErrMasterWorkerNotWaitLock.Equal(p.UnlockLock(ctx, ID, source3, false)), IsTrue)
+	require.True(t.T(), terror.ErrMasterWorkerNotWaitLock.Equal(p.UnlockLock(ctx, ID, source3, false)))
 
 	// 3. try to unlock the lock with a synced replace owner, but the replace owner has not done the operation.
 	// this will put `exec` operation for the done.
-	c.Assert(terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, source2, false)), IsTrue)
+	require.True(t.T(), terror.ErrMasterOwnerExecDDL.Equal(p.UnlockLock(ctx, ID, source2, false)))
 
 	// 4. put done for the replace owner then can unlock the lock.
 	var wg sync.WaitGroup
@@ -830,15 +825,14 @@ func (t *testPessimist) TestUnlockSourceOwnerRemoved(c *C) {
 		defer wg.Done()
 		t.putDoneForSource(ctx, task, source2, i11, true, rev1+1, watchTimeout, c)
 	}()
-	c.Assert(p.UnlockLock(ctx, ID, source2, false), IsNil)
+	require.NoError(t.T(), p.UnlockLock(ctx, ID, source2, false))
 	wg.Wait()
 
 	// 4. the lock should be removed now.
 	t.noLockExist(c, p)
 }
 
-func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
-	defer t.clearTestInfoOperation(c)
+func (t *testPessimistSuite) TestMeetEtcdCompactError(c *C) {
 
 	var (
 		watchTimeout  = 3 * time.Second
@@ -887,19 +881,19 @@ func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
 		} else {
 			var putted bool
 			revCompacted, putted, err = pessimism.PutOperations(t.etcdTestCli, false, op)
-			c.Assert(putted, IsTrue)
+			require.True(t.T(), putted)
 		}
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		if i == 0 {
 			_, err = pessimism.DeleteInfosOperations(t.etcdTestCli, []pessimism.Info{i11}, []pessimism.Operation{})
 		} else {
 			_, err = pessimism.DeleteOperations(t.etcdTestCli, op)
 		}
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		revThreshold, err := pessimism.PutInfo(t.etcdTestCli, i11)
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		_, err = t.etcdTestCli.Compact(ctx, revThreshold)
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 
 		infoCh = make(chan pessimism.Info, 10)
 		errCh = make(chan error, 10)
@@ -927,20 +921,20 @@ func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
 			if i == 1 {
 				rev1, rev2 = rev2, rev1
 			}
-			c.Assert(p.run(ctx2, t.etcdTestCli, rev1, rev2), IsNil)
+			require.NoError(t.T(), p.run(ctx2, t.etcdTestCli, rev1, rev2))
 		}()
 		// PUT i11, will create a lock but not synced.
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			return len(p.Locks()) == 1
 		}), IsTrue)
-		c.Assert(p.Locks(), HasKey, ID1)
+		require.Contains(t.T(), p.Locks(), ID1)
 		synced, remain := p.Locks()[ID1].IsSynced()
 		c.Assert(synced, IsFalse)
 		c.Assert(remain, Equals, 1)
 
 		// PUT i12, the lock will be synced, then an operation PUT for the owner will be triggered.
 		rev1, err := pessimism.PutInfo(t.etcdTestCli, i12)
-		c.Assert(err, IsNil)
+		require.NoError(t.T(), err)
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			synced, _ = p.Locks()[ID1].IsSynced()
 			return synced
@@ -964,8 +958,8 @@ func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
 		op11c := op11
 		op11c.Done = true
 		done, rev2, err := pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op11c, i11)
-		c.Assert(err, IsNil)
-		c.Assert(done, IsTrue)
+		require.NoError(t.T(), err)
+		require.True(t.T(), done)
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			return p.Locks()[ID1].IsDone(source1)
 		}), IsTrue)
@@ -989,20 +983,20 @@ func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
 		op12c := op12
 		op12c.Done = true
 		done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op12c, i12)
-		c.Assert(err, IsNil)
-		c.Assert(done, IsTrue)
+		require.NoError(t.T(), err)
+		require.True(t.T(), done)
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			_, ok := p.Locks()[ID1]
 			return !ok
 		}), IsTrue)
-		c.Assert(p.Locks(), HasLen, 0)
+		require.Len(t.T(), p.Locks(), 0)
 
 		cancel2()
 		wg.Wait()
 	}
 }
 
-func (t *testPessimist) putDoneForSource(
+func (t *testPessimistSuite) putDoneForSource(
 	ctx context.Context, task, source string, info pessimism.Info, exec bool,
 	watchRev int64, watchTimeout time.Duration, c *C) {
 	var (
@@ -1033,8 +1027,8 @@ func (t *testPessimist) putDoneForSource(
 			c.Assert(op.Done, IsFalse)
 			op.Done = true
 			done, _, err := pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op, info)
-			c.Assert(err, IsNil)
-			c.Assert(done, IsTrue)
+			require.NoError(t.T(), err)
+			require.True(t.T(), done)
 		case err := <-errCh:
 			c.Fatal(err)
 		}
@@ -1042,12 +1036,12 @@ func (t *testPessimist) putDoneForSource(
 	wg.Wait()
 }
 
-func (t *testPessimist) noLockExist(c *C, p *Pessimist) {
-	c.Assert(p.Locks(), HasLen, 0)
+func (t *testPessimistSuite) noLockExist(c *C, p *Pessimist) {
+	require.Len(t.T(), p.Locks(), 0)
 	ifm, _, err := pessimism.GetAllInfo(t.etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), ifm, 0)
 	opm, _, err := pessimism.GetAllOperations(t.etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), opm, 0)
 }
