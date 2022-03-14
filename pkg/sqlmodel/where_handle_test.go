@@ -140,7 +140,7 @@ CREATE TABLE t (
 	handle = GetWhereHandle(ti, targetTI)
 	require.Len(t, handle.UniqueNotNullIdx.Columns, 2)
 	require.Equal(t, handle.UniqueNotNullIdx.Columns[0].Offset, 0)
-	require.Equal(t, handle.UniqueNotNullIdx.Columns[1].Offset, 2)
+	require.Equal(t, handle.UniqueNotNullIdx.Columns[1].Offset, 1)
 	require.Len(t, handle.UniqueIdxs, 3)
 }
 
