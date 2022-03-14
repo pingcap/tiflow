@@ -1875,6 +1875,6 @@ func TestSyncerGetTableInfo(t *testing.T) {
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}))
-	ti, err = syncer.getTableInfo(tctx, noExistTbl, noExistTbl)
+	_, err = syncer.getTableInfo(tctx, noExistTbl, noExistTbl)
 	require.Error(t, err)
 }

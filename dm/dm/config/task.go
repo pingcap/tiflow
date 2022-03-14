@@ -348,7 +348,7 @@ type ValidatorConfig struct {
 	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
 }
 
-func (v *ValidatorConfig) adjust() error {
+func (v *ValidatorConfig) Adjust() error {
 	if v.Mode == "" {
 		v.Mode = ValidationNone
 	}
@@ -619,7 +619,7 @@ func (c *TaskConfig) adjust() error {
 	}
 
 	for _, validatorCfg := range c.Validators {
-		if err := validatorCfg.adjust(); err != nil {
+		if err := validatorCfg.Adjust(); err != nil {
 			return err
 		}
 	}

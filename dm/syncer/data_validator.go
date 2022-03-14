@@ -51,9 +51,7 @@ const (
 	tableWithoutPrimaryKeyMsg = "no primary key"
 )
 
-var (
-	noPrimaryKeyErr = errors.New("no primary key")
-)
+var errNoPrimaryKey = errors.New("no primary key")
 
 type validateTableInfo struct {
 	Source     *filter.Table
@@ -572,7 +570,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*valida
 	// todo: only use downstream DDL when the task is incremental only, will support this case later.
 	if primaryIdx == nil {
 		// return partial initialized result
-		return table, noPrimaryKeyErr
+		return table, errNoPrimaryKey
 	}
 	table.PrimaryKey = primaryIdx
 
@@ -619,7 +617,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		if schema.IsTableNotExists(err) {
 			// not a table need to sync
 			return nil
-		} else if err == noPrimaryKeyErr {
+		} else if err == errNoPrimaryKey {
 			v.tableStatus[fullTableName] = &tableValidateStatus{
 				source:  *sourceTable,
 				target:  *table.Target,

@@ -513,15 +513,16 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.NoError(t, err)
 	downstreamTrackConn := &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
 	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn)
-	defer schemaTracker.Close()
+	require.NoError(t, err)
+	defer schemaTracker.Close() //nolint
 
 	tbl1 := &filter.Table{Schema: "test", Name: "tbl1"}
 	tbl2 := &filter.Table{Schema: "test", Name: "tbl2"}
 
 	// before load
-	tableInfo, err := schemaTracker.GetTableInfo(tbl1)
+	_, err = schemaTracker.GetTableInfo(tbl1)
 	require.Error(t, err)
-	tableInfo, err = schemaTracker.GetTableInfo(tbl2)
+	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
 
 	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
@@ -543,9 +544,9 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	// after load
 	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
 	require.NoError(t, err)
-	tableInfo, err = schemaTracker.GetTableInfo(tbl1)
+	tableInfo, err := schemaTracker.GetTableInfo(tbl1)
 	require.NoError(t, err)
 	require.Len(t, tableInfo.Columns, 1)
-	tableInfo, err = schemaTracker.GetTableInfo(tbl2)
+	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
 }

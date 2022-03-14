@@ -39,17 +39,19 @@ type validateErrorState int
 const (
 	// todo: maybe move to some common place, dmctl may use it
 	newValidateErrorRow validateErrorState = iota
+	//nolint
 	ignoredValidateErrorRow
+	//nolint
 	resolvedValidateErrorRow
 )
 
 type validatorPersistHelper struct {
-	tctx       *tcontext.Context
-	cfg        *config.SubTaskConfig
-	db         *conn.BaseDB
-	dbConn     *dbconn.DBConn
-	validator  *DataValidator
-	schemaInit atomic.Bool
+	tctx              *tcontext.Context
+	cfg               *config.SubTaskConfig
+	db                *conn.BaseDB
+	dbConn            *dbconn.DBConn
+	validator         *DataValidator
+	schemaInitialized atomic.Bool
 
 	checkpointTableName    string
 	pendingChangeTableName string
@@ -95,14 +97,14 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 		dbconn.CloseBaseDB(newCtx, c.db)
 	}()
 
-	if !c.schemaInit.Load() {
+	if !c.schemaInitialized.Load() {
 		if err = c.createSchema(newCtx); err != nil {
 			return err
 		}
 
 		err = c.createTable(newCtx)
 
-		c.schemaInit.Store(true)
+		c.schemaInitialized.Store(true)
 	}
 	return err
 }
@@ -176,8 +178,15 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 }
 
 func (c *validatorPersistHelper) persist(loc binlog.Location) error {
-	var queries []string
-	var args [][]interface{}
+	count := len(c.validator.tableStatus)
+	for _, worker := range c.validator.workers {
+		for _, tblChange := range worker.getPendingChangesMap() {
+			count += len(tblChange.rows)
+		}
+		count += len(worker.errorRows)
+	}
+	queries := make([]string, 0, count+2)
+	args := make([][]interface{}, 0, count+2)
 	nextRevision := c.revision + 1
 
 	c.tctx.L().Info("persist checkpoint and intermediate data")
@@ -196,7 +205,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	for _, worker := range c.validator.workers {
 		for _, tblChange := range worker.getPendingChangesMap() {
 			for key, row := range tblChange.rows {
-				rowJson, err := json.Marshal(&row)
+				rowJSON, err := json.Marshal(&row)
 				if err != nil {
 					return err
 				}
@@ -215,7 +224,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 					row.table.Source.Schema,
 					row.table.Source.Name,
 					key,
-					rowJson,
+					rowJSON,
 					nextRevision,
 				})
 			}
@@ -242,7 +251,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		queries = append(queries, sql)
 		args = append(args, []interface{}{
 			c.cfg.SourceID, state.source.Schema, state.source.Name, state.target.Schema, state.target.Name,
-			int(state.stage), state.message},
+			int(state.stage), state.message,
+		},
 		)
 	}
 	// error rows
@@ -328,9 +338,9 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 		if err != nil {
 			return nil, err
 		}
-		gset, err := gtid.ParserGTID(c.cfg.Flavor, binlogGtidStr) // default to "".
-		if err != nil {
-			return nil, err
+		gset, err2 := gtid.ParserGTID(c.cfg.Flavor, binlogGtidStr)
+		if err2 != nil {
+			return nil, err2
 		}
 		tmpLoc := binlog.InitLocation(mysql.Position{Name: binlogName, Pos: binlogPos}, gset)
 		location = &tmpLoc

@@ -297,7 +297,7 @@ type CheckPoint interface {
 	// String return text of global position
 	String() string
 
-	// LoadIntoSchemaTracker loads table infos of all points into schema tracker
+	// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
 	LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error
 
 	// CheckAndUpdate check the checkpoint data consistency and try to fix them if possible
@@ -1103,7 +1103,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
 }
 
-// LoadIntoSchemaTracker loads table infos of all points into schema tracker
+// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
 func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error {
 	cp.RLock()
 	defer cp.RUnlock()

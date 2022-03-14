@@ -464,7 +464,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if err := c.LoaderConfig.adjust(); err != nil {
 		return err
 	}
-	if err := c.ValidatorCfg.adjust(); err != nil {
+	if err := c.ValidatorCfg.Adjust(); err != nil {
 		return err
 	}
 

@@ -29,10 +29,10 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-// split into 3 cases, since it may be unstable when put together.
-func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
+func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
 	tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
@@ -52,32 +52,35 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	}()
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	defer validator.cancel()
+	validator.reachedSyncer.Store(true)
 
 	// insert & update same table, both row are validated failed
 	worker := newValidateWorker(validator, 0)
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "1",
-		Data:       []interface{}{1, "a"},
-		Tp:         rowInsert,
+		table: tableInfo1,
+		Key:   "1",
+		Data:  []interface{}{1, "a"},
+		Tp:    rowInsert,
 	})
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "1",
-		Data:       []interface{}{1, "b"},
-		Tp:         rowUpdated,
+		table: tableInfo1,
+		Key:   "1",
+		Data:  []interface{}{1, "b"},
+		Tp:    rowUpdated,
 	})
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "2",
-		Data:       []interface{}{2, "2b"},
-		Tp:         rowInsert,
+		table: tableInfo1,
+		Key:   "2",
+		Data:  []interface{}{2, "2b"},
+		Tp:    rowInsert,
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
-	require.NoError(t, worker.validateTableChange())
+	worker.validateTableChange()
+	require.Zero(t, validator.result.Errors)
 	require.Equal(t, int64(2), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 1)
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
@@ -92,7 +95,8 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	// validate again, this time row with pk=2 validate success
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "2b"))
-	require.NoError(t, worker.validateTableChange())
+	worker.validateTableChange()
+	require.Zero(t, validator.result.Errors)
 	require.Equal(t, int64(1), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 1)
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
@@ -104,16 +108,16 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	//
 	// add 2 delete row of tbl2 and tbl3
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo2,
-		Key:        "a",
-		Data:       []interface{}{"a", "b"},
-		Tp:         rowDeleted,
+		table: tableInfo2,
+		Key:   "a",
+		Data:  []interface{}{"a", "b"},
+		Tp:    rowDeleted,
 	})
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo3,
-		Key:        "aa",
-		Data:       []interface{}{"aa", "b"},
-		Tp:         rowDeleted,
+		table: tableInfo3,
+		Key:   "aa",
+		Data:  []interface{}{"aa", "b"},
+		Tp:    rowDeleted,
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}))
@@ -121,7 +125,8 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		sqlmock.NewRows([]string{"a", "b"}))
 	mock.ExpectQuery("SELECT .* FROM .*tbl3.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow("aa", "b"))
-	require.NoError(t, worker.validateTableChange())
+	worker.validateTableChange()
+	require.Zero(t, validator.result.Errors)
 	require.Equal(t, int64(2), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 2)
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
@@ -141,7 +146,8 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "b"))
 	mock.ExpectQuery("SELECT .* FROM .*tbl3.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}))
-	require.NoError(t, worker.validateTableChange())
+	worker.validateTableChange()
+	require.Zero(t, validator.result.Errors)
 	require.Equal(t, int64(0), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 0)
 
@@ -149,28 +155,29 @@ func TestValidatorWorkerRunInsertUpdate(t *testing.T) {
 	// validate with batch size = 2
 	worker.batchSize = 2
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "1",
-		Data:       []interface{}{1, "a"},
-		Tp:         rowInsert,
+		table: tableInfo1,
+		Key:   "1",
+		Data:  []interface{}{1, "a"},
+		Tp:    rowInsert,
 	})
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "2",
-		Data:       []interface{}{2, "2b"},
-		Tp:         rowInsert,
+		table: tableInfo1,
+		Key:   "2",
+		Data:  []interface{}{2, "2b"},
+		Tp:    rowInsert,
 	})
 	worker.updateRowChange(&rowChange{
-		table:      tableInfo1,
-		Key:        "3",
-		Data:       []interface{}{3, "3c"},
-		Tp:         rowInsert,
+		table: tableInfo1,
+		Key:   "3",
+		Data:  []interface{}{3, "3c"},
+		Tp:    rowInsert,
 	})
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
 	mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 		sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
-	require.NoError(t, worker.validateTableChange())
+	worker.validateTableChange()
+	require.Zero(t, validator.result.Errors)
 	require.Equal(t, int64(1), worker.pendingRowCount.Load())
 	require.Len(t, worker.pendingChangesMap, 1)
 	require.Contains(t, worker.pendingChangesMap, tbl1.String())
@@ -301,6 +308,7 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 		worker := &validateWorker{
 			ctx:  context.Background(),
 			conn: dbConn,
+			L:    log.L(),
 		}
 		targetRows, err2 := worker.getTargetRows(cond)
 		require.NoError(t, err2)
@@ -330,6 +338,7 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 	worker := &validateWorker{
 		ctx:  context.Background(),
 		conn: genDBConn(t, db, genSubtaskConfig(t)),
+		L:    log.L(),
 	}
 
 	// query error

@@ -177,7 +177,7 @@ func (vw *validateWorker) validateTableChange() {
 				insertUpdateChanges = append(insertUpdateChanges, r)
 			}
 		}
-		allFailedRows := make(map[string]*validateFailedRow, 0)
+		allFailedRows := make(map[string]*validateFailedRow)
 		validateFunc := func(rows []*rowChange, isDelete bool) error {
 			if len(rows) == 0 {
 				return nil
@@ -285,7 +285,7 @@ func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows
 	for _, r := range rows {
 		vals := make([]string, 0, len(table.pkIndices))
 		for _, idx := range table.pkIndices {
-			vals = append(vals, string(genColData(r.Data[idx])))
+			vals = append(vals, genColData(r.Data[idx]))
 		}
 		pkValues = append(pkValues, vals)
 	}
