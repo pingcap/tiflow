@@ -117,9 +117,14 @@ func (o *Optimist) Locks() map[string]*optimism.Lock {
 }
 
 // ShowLocks is used by `show-ddl-locks` command.
-func (o *Optimist) ShowLocks(task string, sources []string) []*pb.DDLLock {
+func (o *Optimist) ShowLocks(task string, sources []string) ([]*pb.DDLLock, error) {
 	locks := o.lk.Locks()
 	ret := make([]*pb.DDLLock, 0, len(locks))
+	var ifm map[string]map[string]map[string]map[string]optimism.Info
+	opm, _, err := optimism.GetAllOperations(o.cli)
+	if err == nil {
+		ifm, _, err = optimism.GetAllInfo(o.cli)
+	}
 	for _, lock := range locks {
 		if task != "" && task != lock.Task {
 			continue // specify task but mismatch
@@ -134,31 +139,161 @@ func (o *Optimist) ShowLocks(task string, sources []string) []*pb.DDLLock {
 			continue // specify sources but mismath
 		}
 	FOUND:
-		l := &pb.DDLLock{
-			ID:       lock.ID,
-			Task:     lock.Task,
-			Mode:     config.ShardOptimistic,
-			Owner:    "",  // N/A for the optimistic mode
-			DDLs:     nil, // N/A for the optimistic mode
-			Synced:   make([]string, 0, len(ready)),
-			Unsynced: make([]string, 0, len(ready)),
-		}
-		for source, schemaTables := range ready {
-			for schema, tables := range schemaTables {
-				for table, synced := range tables {
-					if synced {
-						l.Synced = append(l.Synced, fmt.Sprintf("%s-%s", source, dbutil.TableName(schema, table)))
-					} else {
-						l.Unsynced = append(l.Unsynced, fmt.Sprintf("%s-%s", source, dbutil.TableName(schema, table)))
+		var (
+			owners    []string
+			ddlGroups [][]string
+		)
+
+		appendOwnerDDLs := func(opmss map[string]map[string]optimism.Operation, source string) {
+			for schema, opmsst := range opmss {
+				for table, op := range opmsst {
+					if op.ConflictStage != optimism.ConflictDetected {
+						continue
+					}
+					if _, ok := ifm[lock.Task]; !ok {
+						continue
+					}
+					if _, ok := ifm[lock.Task][source]; !ok {
+						continue
+					}
+					if _, ok := ifm[lock.Task][source][schema]; !ok {
+						continue
+					}
+					if info, ok := ifm[lock.Task][source][schema][table]; ok {
+						owners = append(owners, utils.GenDDLLockID(source, schema, table))
+						ddlGroups = append(ddlGroups, info.DDLs)
 					}
 				}
 			}
 		}
-		sort.Strings(l.Synced)
-		sort.Strings(l.Unsynced)
-		ret = append(ret, l)
+		if opms, ok := opm[lock.Task]; ok {
+			if len(sources) > 0 {
+				for _, source := range sources {
+					if opmss, ok := opms[source]; ok {
+						appendOwnerDDLs(opmss, source)
+					}
+				}
+			} else {
+				for source, opmss := range opms {
+					appendOwnerDDLs(opmss, source)
+				}
+			}
+		}
+		lockSynced := make([]string, 0, len(ready))
+		lockUnsynced := make([]string, 0, len(ready))
+		for source, schemaTables := range ready {
+			for schema, tables := range schemaTables {
+				for table, synced := range tables {
+					if synced {
+						lockSynced = append(lockSynced, fmt.Sprintf("%s-%s", source, dbutil.TableName(schema, table)))
+					} else {
+						lockUnsynced = append(lockUnsynced, fmt.Sprintf("%s-%s", source, dbutil.TableName(schema, table)))
+					}
+				}
+			}
+		}
+		sort.Strings(lockSynced)
+		sort.Strings(lockUnsynced)
+
+		if len(owners) == 0 {
+			owners = append(owners, "")
+			ddlGroups = append(ddlGroups, nil)
+		}
+		for i, owner := range owners {
+			ret = append(ret, &pb.DDLLock{
+				ID:       lock.ID,
+				Task:     lock.Task,
+				Mode:     config.ShardOptimistic,
+				Owner:    owner,
+				DDLs:     ddlGroups[i],
+				Synced:   lockSynced,
+				Unsynced: lockUnsynced,
+			})
+		}
 	}
-	return ret
+	return ret, err
+}
+
+// UnlockLock unlocks a shard DDL lock manually only when using `unlock-ddl-lock` command.
+// ID: the shard DDL lock ID.
+// source, upstreamSchema, upstreamTable: reveal the upstream table's info which we need to skip/exec
+// action: whether to skip/exec the blocking DDLs for the specified upstream table
+// NOTE: this function has side effects, if it failed, some status can't revert anymore.
+// NOTE: this function should not be called if the lock is still in automatic resolving.
+func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, upstreamTable string, action pb.UnlockDDLLockOp) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.closed {
+		return terror.ErrMasterOptimistNotStarted.Generate()
+	}
+	task := utils.ExtractTaskFromLockID(id)
+	// 1. find the lock.
+	lock := o.lk.FindLock(id)
+	if lock == nil {
+		return terror.ErrMasterLockNotFound.Generate(id)
+	}
+
+	// 2. check whether has resolved before (this often should not happen).
+	if lock.IsResolved() {
+		_, err := o.removeLock(lock)
+		return err
+	}
+
+	// 3. find out related info & operation
+	infos, ops, _, err := optimism.GetInfosOperationsByTask(o.cli, task)
+	if err != nil {
+		return terror.ErrMasterLockIsResolving.Generatef("fail to get info and operation for task %s", task)
+	}
+	l := 0
+	for i, info := range infos {
+		if info.Task == task && info.Source == source && info.UpSchema == upstreamSchema && info.UpTable == upstreamTable {
+			infos[l] = infos[i]
+			l++
+		}
+	}
+	// TODO: change this condition after unlock ddl supports unlock several tables at one time
+	if l != 1 {
+		return terror.ErrMasterLockIsResolving.Generatef("fail to find related info for lock %s", id)
+	}
+	infos = infos[:l]
+
+	l = 0
+	for j, op := range ops {
+		if op.Task == task && op.Source == source && op.UpSchema == upstreamSchema && op.UpTable == upstreamTable {
+			// TODO: adjust waiting for redirect conflict status
+			if op.ConflictStage != optimism.ConflictDetected {
+				return terror.ErrMasterLockIsResolving.Generatef("lock %s is in %s status, not conflicted", id, op.ConflictStage)
+			}
+			ops[l] = ops[j]
+			l++
+		}
+	}
+	// TODO: change this condition after unlock ddl supports unlock several tables at one time
+	if l != 1 {
+		return terror.ErrMasterLockIsResolving.Generatef("fail to find related operation for lock %s", id)
+	}
+	ops = ops[:l]
+
+	// 4. rewrite operation.DDLs to skip/exec DDLs
+	switch action {
+	case pb.UnlockDDLLockOp_ExecLock:
+		ops[0].DDLs = infos[0].DDLs
+	case pb.UnlockDDLLockOp_SkipLock:
+		ops[0].DDLs = ops[0].DDLs[:0]
+	}
+	ops[0].ConflictStage = optimism.ConflictUnlocked
+
+	// 5. put operation into etcd for workers to execute
+	rev, succ, err := optimism.PutOperation(o.cli, false, ops[0], ops[0].Revision+1)
+	if err != nil {
+		return err
+	}
+	if action == pb.UnlockDDLLockOp_ExecLock {
+		lock.UpdateTableAfterUnlock(infos[0])
+	}
+	o.logger.Info("put shard DDL lock operation", zap.String("lock", id),
+		zap.Stringer("operation", ops[0]), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
+	return nil
 }
 
 // RemoveMetaDataWithTask removes meta data for a specified task
@@ -371,6 +506,10 @@ func (o *Optimist) recoverLocks(
 						if err != nil {
 							o.logger.Error("fail to update lock columns", zap.Error(err))
 						}
+						// should remove resolved lock or it will be kept until next DDL
+						if lock.IsResolved() {
+							o.removeLockOptional(op, lock)
+						}
 					}
 				}
 			}
@@ -579,7 +718,10 @@ func (o *Optimist) handleOperation(op optimism.Operation) {
 		o.logger.Info("the lock is still not resolved", zap.Stringer("operation", op))
 		return
 	}
+	o.removeLockOptional(op, lock)
+}
 
+func (o *Optimist) removeLockOptional(op optimism.Operation, lock *optimism.Lock) {
 	// the lock has done, remove the lock.
 	o.logger.Info("the lock for the shard DDL lock operation has been resolved", zap.Stringer("operation", op))
 	deleted, err := o.removeLock(lock)

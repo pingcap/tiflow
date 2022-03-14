@@ -133,6 +133,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 	// wait for the lock operation.
 	op1c, err := o.GetOperation(ctx, info1, rev1)
 	c.Assert(err, IsNil)
+	op1.Revision = rev2
 	c.Assert(op1c, DeepEquals, op1)
 
 	// have operation in pending.
@@ -162,6 +163,8 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(opm[task], HasLen, 1)
 	c.Assert(opm[task][source], HasLen, 1)
 	c.Assert(opm[task][source][op1.UpSchema], HasLen, 1)
+	// Revision is in DoneOperation, skip this check
+	opc.Revision = opm[task][source][op1.UpSchema][op1.UpTable].Revision
 	c.Assert(opm[task][source][op1.UpSchema][op1.UpTable], DeepEquals, opc)
 
 	// no info and operation in pending now.
@@ -198,6 +201,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 	_, err = o.GetOperation(ctx, info2, rev5)
 	c.Assert(err, IsNil)
 	c.Assert(o.PendingOperation(), NotNil)
+	op2.Revision = rev6
 	c.Assert(*o.PendingOperation(), DeepEquals, op2)
 
 	// reset the optimist.
