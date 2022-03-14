@@ -156,9 +156,9 @@ func TestBatch(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				n, err := worker.batch(ctx, batch)
+				endIndex, err := worker.batch(ctx, batch)
 				require.NoError(t, err)
-				require.Equal(t, test.expectedN, n)
+				require.Equal(t, test.expectedN, endIndex)
 			}()
 
 			go func() {
@@ -322,11 +322,11 @@ func TestFlush(t *testing.T) {
 		defer wg.Done()
 		batchBuf := make([]mqEvent, 4)
 		ctx := context.Background()
-		n, err := worker.batch(ctx, batchBuf)
+		endIndex, err := worker.batch(ctx, batchBuf)
 		require.NoError(t, err)
-		require.Equal(t, 3, n)
+		require.Equal(t, 3, endIndex)
 		require.True(t, worker.needSyncFlush)
-		msgs := batchBuf[:n]
+		msgs := batchBuf[:endIndex]
 		paritionedEvents := worker.group(msgs)
 		err = worker.asyncSend(ctx, paritionedEvents)
 		require.NoError(t, err)

@@ -65,7 +65,10 @@ func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer,
 }
 
 // batch collects a batch of messages to be sent to the Kafka producer.
-func (w *flushWorker) batch(ctx context.Context, events []mqEvent) (int, error) {
+func (w *flushWorker) batch(
+	ctx context.Context,
+	events []mqEvent,
+) (int, error) {
 	index := 0
 	max := len(events)
 	// We need to receive at least one message or be interrupted,
@@ -171,14 +174,14 @@ func (w *flushWorker) run(ctx context.Context) error {
 	defer w.ticker.Stop()
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
-		n, err := w.batch(ctx, eventsBuf)
+		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if n == 0 {
+		if endIndex == 0 {
 			continue
 		}
-		msgs := eventsBuf[:n]
+		msgs := eventsBuf[:endIndex]
 		paritionedEvents := w.group(msgs)
 		err = w.asyncSend(ctx, paritionedEvents)
 		if err != nil {
