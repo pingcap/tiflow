@@ -1783,12 +1783,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			currentLocation = nextLocation
 			lastLocation = nextLocation
-			s.tctx.L().Info("shardingReSync not allResolved", zap.Stringer("currentLocation", currentLocation), zap.Stringer("lastLocation", lastLocation))
 		} else {
 			currentLocation = savedGlobalLastLocation
 			lastLocation = savedGlobalLastLocation // restore global last pos
-			s.tctx.L().Info("shardingReSync allResolved",
-				zap.Stringer("currentLocation", currentLocation), zap.Stringer("lastLocation", lastLocation))
 		}
 		// if suffix>0, we are replacing error
 		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
@@ -2052,13 +2049,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			s.tctx.L().Info("now info!!!", zap.Stringer("startlocation", startLocation), zap.Stringer("currentLocation", currentLocation), zap.Any("Event", e))
 			// set endLocation.Suffix=0 of last replace or inject event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				s.isReplacingOrInjectingErr = false
+				currentLocation.Suffix = 0
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
-					currentLocation.Suffix = 0
 					// replace operator need redirect to currentLocation
 					if err = s.streamerController.RedirectStreamer(s.runCtx, currentLocation); err != nil {
 						return err

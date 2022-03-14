@@ -177,8 +177,6 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.logger.Info("try to match and apply a operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Any("currentEvent", currentEvent))
-
 	key := startLocation.Position.String()
 	operator, ok := h.operators[key]
 	if !ok {
@@ -217,7 +215,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 		}
 	}
 
-	h.logger.Info("match and apply a operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Any("currentEvent", currentEvent), zap.Stringer("operator", operator))
+	h.logger.Info("match and apply an operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Stringer("operator", operator))
 
 	return true, operator.op
 }
