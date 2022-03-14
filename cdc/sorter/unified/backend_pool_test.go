@@ -19,30 +19,24 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/fsutil"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type backendPoolSuite struct{}
-
-var _ = check.SerialSuites(&backendPoolSuite{})
-
-func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dataDir := c.MkDir()
+func TestBasicFunction(t *testing.T) {
+	dataDir := t.TempDir()
 	err := os.MkdirAll(dataDir, 0o755)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
 	err = os.MkdirAll(sortDir, 0o755)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
@@ -52,73 +46,75 @@ func (s *backendPoolSuite) TestBasicFunction(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	backEndPool, err := newBackEndPool(sortDir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool)
 	defer backEndPool.terminate()
 
 	backEnd, err := backEndPool.alloc(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEnd, check.FitsTypeOf, &fileBackEnd{})
+	require.Nil(t, err)
+	require.IsType(t, &fileBackEnd{}, backEnd)
 	fileName := backEnd.(*fileBackEnd).fileName
-	c.Assert(fileName, check.Not(check.Equals), "")
+	require.NotEqual(t, "", fileName)
 
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(34359738368)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	backEnd1, err := backEndPool.alloc(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEnd1, check.FitsTypeOf, &fileBackEnd{})
+	require.Nil(t, err)
+	require.IsType(t, &fileBackEnd{}, backEnd1)
 	fileName1 := backEnd1.(*fileBackEnd).fileName
-	c.Assert(fileName1, check.Not(check.Equals), "")
-	c.Assert(fileName1, check.Not(check.Equals), fileName)
+	require.NotEqual(t, "", fileName1)
+	require.NotEqual(t, fileName, fileName1)
 
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(0)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryUsageInjectPoint", "return(0)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	backEnd2, err := backEndPool.alloc(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEnd2, check.FitsTypeOf, &memoryBackEnd{})
+	require.Nil(t, err)
+	require.IsType(t, &memoryBackEnd{}, backEnd2)
 
 	err = backEndPool.dealloc(backEnd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = backEndPool.dealloc(backEnd1)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = backEndPool.dealloc(backEnd2)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	time.Sleep(backgroundJobInterval * 3 / 2)
 
 	_, err = os.Stat(fileName)
-	c.Assert(os.IsNotExist(err), check.IsTrue)
+	require.True(t, os.IsNotExist(err))
 
 	_, err = os.Stat(fileName1)
-	c.Assert(os.IsNotExist(err), check.IsTrue)
+	require.True(t, os.IsNotExist(err))
 }
 
 // TestDirectoryBadPermission verifies that no permission to ls the directory does not prevent using it
 // as a temporary file directory.
-func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dataDir := c.MkDir()
+func TestDirectoryBadPermission(t *testing.T) {
+	dataDir := t.TempDir()
 	sortDir := filepath.Join(dataDir, config.DefaultSortDir)
 	err := os.MkdirAll(sortDir, 0o755)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = os.Chmod(sortDir, 0o311) // no permission to `ls`
-	c.Assert(err, check.IsNil)
+	defer func() {
+		err := os.Chmod(sortDir, 0o755)
+		require.Nil(t, err)
+	}()
+	require.Nil(t, err)
 
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dataDir
@@ -126,33 +122,31 @@ func (s *backendPoolSuite) TestDirectoryBadPermission(c *check.C) {
 	conf.Sorter.MaxMemoryPercentage = 0 // force using files
 
 	backEndPool, err := newBackEndPool(sortDir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool)
 	defer backEndPool.terminate()
 
 	backEnd, err := backEndPool.alloc(context.Background())
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer backEnd.free() //nolint:errcheck
 
 	fileName := backEnd.(*fileBackEnd).fileName
 	_, err = os.Stat(fileName)
-	c.Assert(err, check.IsNil) // assert that the file exists
+	require.Nil(t, err)
 
 	err = backEndPool.dealloc(backEnd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
 // TestCleanUpSelf verifies that the backendPool correctly cleans up files used by itself on exit.
-func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dataDir := c.MkDir()
+func TestCleanUpSelf(t *testing.T) {
+	dataDir := t.TempDir()
 	err := os.Chmod(dataDir, 0o755)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	sorterDir := filepath.Join(dataDir, config.DefaultSortDir)
 	err = os.MkdirAll(sorterDir, 0o755)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	conf := config.GetDefaultServerConfig()
 	conf.DataDir = dataDir
@@ -162,12 +156,12 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	config.StoreGlobalServerConfig(conf)
 
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint", "return(100)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/memoryPressureInjectPoint") //nolint:errcheck
 
 	backEndPool, err := newBackEndPool(sorterDir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
@@ -175,25 +169,25 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 	var fileNames []string
 	for i := 0; i < 20; i++ {
 		backEnd, err := backEndPool.alloc(ctx)
-		c.Assert(err, check.IsNil)
-		c.Assert(backEnd, check.FitsTypeOf, &fileBackEnd{})
+		require.Nil(t, err)
+		require.IsType(t, &fileBackEnd{}, backEnd)
 
 		fileName := backEnd.(*fileBackEnd).fileName
 		_, err = os.Stat(fileName)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		fileNames = append(fileNames, fileName)
 	}
 
 	prefix := backEndPool.filePrefix
-	c.Assert(prefix, check.Not(check.Equals), "")
+	require.NotEqual(t, "", prefix)
 
 	for j := 100; j < 120; j++ {
 		fileName := prefix + strconv.Itoa(j) + ".tmp"
 		f, err := os.Create(fileName)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		err = f.Close()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		fileNames = append(fileNames, fileName)
 	}
@@ -202,7 +196,7 @@ func (s *backendPoolSuite) TestCleanUpSelf(c *check.C) {
 
 	for _, fileName := range fileNames {
 		_, err = os.Stat(fileName)
-		c.Assert(os.IsNotExist(err), check.IsTrue)
+		require.True(t, os.IsNotExist(err))
 	}
 }
 
@@ -213,13 +207,13 @@ type mockOtherProcess struct {
 	files  []string
 }
 
-func newMockOtherProcess(c *check.C, dir string, prefix string) *mockOtherProcess {
+func newMockOtherProcess(t *testing.T, dir string, prefix string) *mockOtherProcess {
 	prefixLockPath := fmt.Sprintf("%s/%s", dir, sortDirLockFileName)
 	flock, err := fsutil.NewFileLock(prefixLockPath)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = flock.Lock()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	return &mockOtherProcess{
 		dir:    dir,
@@ -228,114 +222,107 @@ func newMockOtherProcess(c *check.C, dir string, prefix string) *mockOtherProces
 	}
 }
 
-func (p *mockOtherProcess) writeMockFiles(c *check.C, num int) {
+func (p *mockOtherProcess) writeMockFiles(t *testing.T, num int) {
 	for i := 0; i < num; i++ {
 		fileName := fmt.Sprintf("%s%d", p.prefix, i)
 		f, err := os.Create(fileName)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		_ = f.Close()
 		p.files = append(p.files, fileName)
 	}
 }
 
-func (p *mockOtherProcess) changeLockPermission(c *check.C, mode os.FileMode) {
+func (p *mockOtherProcess) changeLockPermission(t *testing.T, mode os.FileMode) {
 	prefixLockPath := fmt.Sprintf("%s/%s", p.dir, sortDirLockFileName)
 	err := os.Chmod(prefixLockPath, mode)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
-func (p *mockOtherProcess) unlock(c *check.C) {
+func (p *mockOtherProcess) unlock(t *testing.T) {
 	err := p.flock.Unlock()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
-func (p *mockOtherProcess) assertFilesExist(c *check.C) {
+func (p *mockOtherProcess) assertFilesExist(t *testing.T) {
 	for _, file := range p.files {
 		_, err := os.Stat(file)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 }
 
-func (p *mockOtherProcess) assertFilesNotExist(c *check.C) {
+func (p *mockOtherProcess) assertFilesNotExist(t *testing.T) {
 	for _, file := range p.files {
 		_, err := os.Stat(file)
-		c.Assert(os.IsNotExist(err), check.IsTrue)
+		require.True(t, os.IsNotExist(err))
 	}
 }
 
 // TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
 // left by other CDC processes that have exited abnormally.
-func (s *backendPoolSuite) TestCleanUpStaleBasic(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dir := c.MkDir()
+func TestCleanUpStaleBasic(t *testing.T) {
+	dir := t.TempDir()
 	prefix := dir + "/sort-1-"
 
-	mockP := newMockOtherProcess(c, dir, prefix)
-	mockP.writeMockFiles(c, 100)
-	mockP.unlock(c)
-	mockP.assertFilesExist(c)
+	mockP := newMockOtherProcess(t, dir, prefix)
+	mockP.writeMockFiles(t, 100)
+	mockP.unlock(t)
+	mockP.assertFilesExist(t)
 
 	backEndPool, err := newBackEndPool(dir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool)
 	defer backEndPool.terminate()
 
-	mockP.assertFilesNotExist(c)
+	mockP.assertFilesNotExist(t)
 }
 
 // TestFileLockConflict tests that if two backEndPools were to use the same sort-dir,
 // and error would be returned by one of them.
-func (s *backendPoolSuite) TestFileLockConflict(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dir := c.MkDir()
+func TestFileLockConflict(t *testing.T) {
+	dir := t.TempDir()
 
 	backEndPool1, err := newBackEndPool(dir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool1, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool1)
 	defer backEndPool1.terminate()
 
 	backEndPool2, err := newBackEndPool(dir)
-	c.Assert(err, check.ErrorMatches, ".*file lock conflict.*")
-	c.Assert(backEndPool2, check.IsNil)
+	require.Regexp(t, ".*file lock conflict.*", err)
+	require.Nil(t, backEndPool2)
 }
 
 // TestCleanUpStaleBasic verifies that the backendPool correctly cleans up stale temporary files
 // left by other CDC processes that have exited abnormally.
-func (s *backendPoolSuite) TestCleanUpStaleLockNoPermission(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	dir := c.MkDir()
+func TestCleanUpStaleLockNoPermission(t *testing.T) {
+	dir := t.TempDir()
 	prefix := dir + "/sort-1-"
 
-	mockP := newMockOtherProcess(c, dir, prefix)
-	mockP.writeMockFiles(c, 100)
+	mockP := newMockOtherProcess(t, dir, prefix)
+	mockP.writeMockFiles(t, 100)
 	// set a bad permission
-	mockP.changeLockPermission(c, 0o000)
+	mockP.changeLockPermission(t, 0o000)
 
 	backEndPool, err := newBackEndPool(dir)
-	c.Assert(err, check.ErrorMatches, ".*permission denied.*")
-	c.Assert(backEndPool, check.IsNil)
+	require.Regexp(t, ".*permission denied.*", err)
+	require.Nil(t, backEndPool)
 
-	mockP.assertFilesExist(c)
+	mockP.assertFilesExist(t)
 }
 
 // TestGetMemoryPressureFailure verifies that the backendPool can handle gracefully failures that happen when
 // getting the current system memory pressure. Such a failure is usually caused by a lack of file descriptor quota
 // set by the operating system.
-func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestGetMemoryPressureFailure(t *testing.T) {
 	origin := memory.MemTotal
 	defer func() {
 		memory.MemTotal = origin
 	}()
 	memory.MemTotal = func() (uint64, error) { return 0, nil }
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	backEndPool, err := newBackEndPool(dir)
-	c.Assert(err, check.IsNil)
-	c.Assert(backEndPool, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, backEndPool)
 	defer backEndPool.terminate()
 
 	after := time.After(time.Second * 20)
@@ -343,7 +330,7 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	for {
 		select {
 		case <-after:
-			c.Fatal("TestGetMemoryPressureFailure timed out")
+			t.Fatal("TestGetMemoryPressureFailure timed out")
 		case <-tick:
 			if backEndPool.memoryPressure() == 100 {
 				return
@@ -352,15 +339,16 @@ func (s *backendPoolSuite) TestGetMemoryPressureFailure(c *check.C) {
 	}
 }
 
-func (s *backendPoolSuite) TestCheckDataDirSatisfied(c *check.C) {
-	defer testleak.AfterTest(c)()
-	dir := c.MkDir()
+func TestCheckDataDirSatisfied(t *testing.T) {
+	dir := t.TempDir()
 	conf := config.GetGlobalServerConfig()
 	conf.DataDir = dir
 	config.StoreGlobalServerConfig(conf)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied", ""), check.IsNil)
+	p := "github.com/pingcap/tiflow/cdc/sorter/unified/" +
+		"InjectCheckDataDirSatisfied"
+	require.Nil(t, failpoint.Enable(p, ""))
 	err := checkDataDirSatisfied()
-	c.Assert(err, check.IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/InjectCheckDataDirSatisfied"), check.IsNil)
+	require.Nil(t, err)
+	require.Nil(t, failpoint.Disable(p))
 }

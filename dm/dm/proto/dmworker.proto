@@ -149,6 +149,8 @@ message SyncStatus {
     bool synced = 10;  // whether sync is catched-up in this moment
     string binlogType = 11;
     int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
+    string blockDDLOwner = 13; // block ddl upstream info, format "task-`upstreamDatabase`.`upstreamTable`"
+    string conflictMsg = 14; // block ddl conflict reason
 }
 
 // SourceStatus represents status for source runing on dm-worker

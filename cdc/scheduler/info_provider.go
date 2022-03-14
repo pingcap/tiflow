@@ -74,6 +74,13 @@ func (s *BaseScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.T
 		}
 	}
 
+	// Fill empty entries for those captures with no tables.
+	for captureID := range s.captures {
+		if _, exists := ret[captureID]; !exists {
+			ret[captureID] = &model.TaskStatus{}
+		}
+	}
+
 	return ret, nil
 }
 

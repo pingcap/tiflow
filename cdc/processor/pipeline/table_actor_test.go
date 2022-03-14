@@ -49,6 +49,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		router:    tableActorRouter,
 		cancel:    func() {},
 		reportErr: func(err error) {},
+		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
 	}
 	require.True(t, tbl.AsyncStop(1))
 
@@ -57,7 +58,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
 	require.Nil(t, tableActorSystem.Stop())
-	require.False(t, tbl.AsyncStop(1))
+	require.True(t, tbl.AsyncStop(1))
 }
 
 func TestTableActorInterface(t *testing.T) {
@@ -275,15 +276,12 @@ func TestNewTableActor(t *testing.T) {
 	}()
 
 	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
 	sys := system.NewSystem()
 	require.Nil(t, sys.Start(ctx))
 	globalVars := &cdcContext.GlobalVars{
 		TableActorSystem: sys,
 	}
-	defer func() {
-		cancel()
-		_ = sys.Stop()
-	}()
 
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
@@ -323,6 +321,8 @@ func TestNewTableActor(t *testing.T) {
 		}, &mockSink{}, 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
+
+	require.Nil(t, sys.Stop())
 }
 
 func TestTableActorStart(t *testing.T) {

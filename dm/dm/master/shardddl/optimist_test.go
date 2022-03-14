@@ -110,6 +110,32 @@ func watchExactOneOperation(
 	return op, nil
 }
 
+func checkLocks(c *C, o *Optimist, expectedLocks []*pb.DDLLock, task string, sources []string) {
+	lock, err := o.ShowLocks(task, sources)
+	c.Assert(err, IsNil)
+	if expectedLocks == nil {
+		c.Assert(lock, HasLen, 0)
+	} else {
+		c.Assert(lock, DeepEquals, expectedLocks)
+	}
+}
+
+func checkLocksByMap(c *C, o *Optimist, expectedLocks map[string]*pb.DDLLock, sources []string, lockIDs ...string) {
+	lock, err := o.ShowLocks("", sources)
+	c.Assert(err, IsNil)
+	c.Assert(lock, HasLen, len(lockIDs))
+	lockIDMap := make(map[string]struct{})
+	for _, lockID := range lockIDs {
+		lockIDMap[lockID] = struct{}{}
+	}
+	for i := range lockIDs {
+		_, ok := lockIDMap[lock[i].ID]
+		c.Assert(ok, IsTrue)
+		delete(lockIDMap, lock[i].ID)
+		c.Assert(lock[i], DeepEquals, expectedLocks[lock[i].ID])
+	}
+}
+
 func (t *testOptimist) TestOptimistSourceTables(c *C) {
 	defer t.clearOptimistTestSourceInfoOperation(c)
 
@@ -302,14 +328,14 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// wait operation for i11 become available.
 	op11, err := watchExactOneOperation(ctx, cli, i11.Task, i11.Source, i11.UpSchema, i11.UpTable, rev1)
 	c.Assert(err, IsNil)
 	c.Assert(op11.DDLs, DeepEquals, DDLs1)
 	c.Assert(op11.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// mark op11 as done.
 	op11c := op11
@@ -325,7 +351,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 		return lock.IsDone(op11.Source, op11.UpSchema, op11.UpTable)
 	}), IsTrue)
 	c.Assert(o.Locks()[lockID].IsDone(i12.Source, i12.UpSchema, i12.UpTable), IsFalse)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// PUT i12, the lock will be synced.
 	rev2, err := optimism.PutInfo(cli, i12)
@@ -349,14 +375,14 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			Unsynced: []string{},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// wait operation for i12 become available.
 	op12, err := watchExactOneOperation(ctx, cli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev2)
 	c.Assert(err, IsNil)
 	c.Assert(op12.DDLs, DeepEquals, DDLs1)
 	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// mark op12 as done, the lock should be resolved.
 	op12c := op12
@@ -369,7 +395,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 		return !ok
 	}), IsTrue)
 	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	checkLocks(c, o, nil, "", nil)
 
 	// no shard DDL info or lock operation exists.
 	ifm, _, err := optimism.GetAllInfo(cli)
@@ -437,14 +463,14 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks(task, []string{}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source1}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source1, source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks(task, []string{source1, source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("not-exist", []string{}), HasLen, 0)
-	c.Assert(o.ShowLocks("", []string{"not-exist"}), HasLen, 0)
+	checkLocks(c, o, expectedLock, "", []string{})
+	checkLocks(c, o, expectedLock, task, []string{})
+	checkLocks(c, o, expectedLock, "", []string{source1})
+	checkLocks(c, o, expectedLock, "", []string{source2})
+	checkLocks(c, o, expectedLock, "", []string{source1, source2})
+	checkLocks(c, o, expectedLock, task, []string{source1, source2})
+	checkLocks(c, o, nil, "not-exist", []string{})
+	checkLocks(c, o, nil, "", []string{"not-exist"})
 
 	// wait operation for i23 become available.
 	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
@@ -546,14 +572,14 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// wait operation for i31 become available.
 	op31, err := watchExactOneOperation(ctx, cli, i31.Task, i31.Source, i31.UpSchema, i31.UpTable, rev1)
 	c.Assert(err, IsNil)
 	c.Assert(op31.DDLs, DeepEquals, []string{})
 	c.Assert(op31.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// mark op31 as done.
 	op31c := op31
@@ -564,7 +590,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		return o.Locks()[lockID].IsDone(op31c.Source, op31c.UpSchema, op31c.UpTable)
 	}), IsTrue)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// PUT i33, the lock will be synced.
 	rev3, err = optimism.PutInfo(cli, i33)
@@ -588,14 +614,14 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			Unsynced: []string{},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// wait operation for i33 become available.
 	op33, err := watchExactOneOperation(ctx, cli, i33.Task, i33.Source, i33.UpSchema, i33.UpTable, rev3)
 	c.Assert(err, IsNil)
 	c.Assert(op33.DDLs, DeepEquals, DDLs3)
 	c.Assert(op33.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(c, o, expectedLock, "", []string{})
 
 	// mark op33 as done, the lock should be resolved.
 	op33c := op33
@@ -608,7 +634,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 		return !ok
 	}), IsTrue)
 	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	checkLocks(c, o, nil, "", nil)
 
 	// CASE 6: start again after all shard DDL locks have been resolved.
 	rebuildOptimist(ctx)
@@ -809,10 +835,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 			},
 		},
 	}
-	locks := o.ShowLocks("", []string{})
-	c.Assert(locks, HasLen, 2)
-	c.Assert(locks[0], DeepEquals, expectedLock[locks[0].ID])
-	c.Assert(locks[1], DeepEquals, expectedLock[locks[1].ID])
+	checkLocksByMap(c, o, expectedLock, []string{}, lockID1, lockID2)
 
 	// put i12 and i22, both of locks will be synced.
 	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
@@ -835,10 +858,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 		fmt.Sprintf("%s-%s", i22.Source, dbutil.TableName(i22.UpSchema, i22.UpTable)),
 	}
 	expectedLock[lockID2].Unsynced = []string{}
-	locks = o.ShowLocks("", []string{})
-	c.Assert(locks, HasLen, 2)
-	c.Assert(locks[0], DeepEquals, expectedLock[locks[0].ID])
-	c.Assert(locks[1], DeepEquals, expectedLock[locks[1].ID])
+	checkLocksByMap(c, o, expectedLock, []string{}, lockID1, lockID2)
 
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
@@ -876,8 +896,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 		return !ok
 	}), IsTrue)
 	c.Assert(o.Locks(), HasLen, 1)
-	c.Assert(o.ShowLocks("", nil), HasLen, 1)
-	c.Assert(o.ShowLocks("", nil)[0], DeepEquals, expectedLock[lockID2])
+	checkLocksByMap(c, o, expectedLock, nil, lockID2)
 
 	// wait operation for i22 become available.
 	opCh = make(chan optimism.Operation, 10)
@@ -915,7 +934,7 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 		return !ok
 	}), IsTrue)
 	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	checkLocksByMap(c, o, expectedLock, nil)
 }
 
 func (t *testOptimist) TestOptimistInitSchema(c *C) {
