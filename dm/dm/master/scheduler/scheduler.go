@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Scheduler schedules tasks for DM-worker instances, including:
@@ -1497,32 +1496,13 @@ func (s *Scheduler) recoverSubTasks() error {
 }
 
 // recoverRelayConfigs recovers history relay configs for each worker from etcd.
-// This function also removes conflicting relay schedule types, which means if a source has both `enable-relay` and
-// (source, worker) relay config, we remove the latter.
-// should be called after recoverSources.
 func (s *Scheduler) recoverRelayConfigs() error {
 	relayWorkers, _, err := ha.GetAllRelayConfig(s.etcdCli)
 	if err != nil {
 		return err
 	}
-
-	for source, workers := range relayWorkers {
-		sourceCfg, ok := s.sourceCfgs[source]
-		if !ok {
-			s.logger.Warn("found a not existing source by relay config", zap.String("source", source))
-			continue
-		}
-		if sourceCfg.EnableRelay {
-			// current etcd max-txn-op is 2048
-			_, err2 := ha.DeleteRelayConfig(s.etcdCli, utils.SetToSlice(workers)...)
-			if err2 != nil {
-				return err2
-			}
-			delete(relayWorkers, source)
-		}
-	}
-
 	s.relayWorkers = relayWorkers
+
 	return nil
 }
 
