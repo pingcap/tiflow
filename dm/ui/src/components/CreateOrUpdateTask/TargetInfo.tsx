@@ -2,10 +2,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Form, Input, Button, InputNumber } from '~/uikit'
-import { StepCompnent } from '~/components/CreateTaskConfig/shared'
-
-const IPv4Pattern =
-  /\b(?:(?:2(?:[0-4][0-9]|5[0-5])|[0-1]?[0-9]?[0-9])\.){3}(?:(?:2([0-4][0-9]|5[0-5])|[0-1]?[0-9]?[0-9]))\b/
+import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 
 const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
   const [t] = useTranslation()
@@ -20,15 +17,10 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
       <div className="flex">
         <div className="flex-1">
           <Form.Item
-            label={t('ip')}
+            label={t('host')}
             name={['target_config', 'host']}
-            rules={[
-              { required: true, message: t('host is required') },
-              {
-                pattern: IPv4Pattern,
-                message: t('host bad format'),
-              },
-            ]}
+            tooltip={t('create task target host tooltip')}
+            rules={[{ required: true, message: t('host is required') }]}
           >
             <Input placeholder="1.1.1.1" />
           </Form.Item>
@@ -36,6 +28,7 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
           <Form.Item
             label={t('port')}
             name={['target_config', 'port']}
+            tooltip={t('create task target port tooltip')}
             rules={[{ required: true, message: t('port is required') }]}
           >
             <InputNumber min={1} max={65535} />
@@ -44,6 +37,7 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
           <Form.Item
             label={t('user name')}
             name={['target_config', 'user']}
+            tooltip={t('create task target user tooltip')}
             rules={[
               {
                 required: true,
@@ -55,7 +49,11 @@ const TargetInfo: StepCompnent = ({ prev, initialValues }) => {
             <Input placeholder="root" />
           </Form.Item>
 
-          <Form.Item label={t('password')} name={['target_config', 'password']}>
+          <Form.Item
+            label={t('password')}
+            tooltip={t('create task target password tooltip')}
+            name={['target_config', 'password']}
+          >
             <Input type="password" />
           </Form.Item>
         </div>

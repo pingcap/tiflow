@@ -4,28 +4,21 @@ import { useTranslation } from 'react-i18next'
 import { Form, Row, Col, Button, Input, InputNumber, Switch } from '~/uikit'
 import { Source } from '~/models/source'
 
-const defaultFormValues = {
+const defaultFormValues: Partial<Source> = {
   source_name: '',
   host: '',
-  port: '',
+  port: 3306,
   password: '',
   enable_gtid: false,
+  enable: false,
 
-  security: {
-    ssl_ca_content: '',
-    ssl_cert_content: '',
-    ssl_key_content: '',
-  },
-
-  relay: {
-    relay_enable: false,
-    binlog_name: '',
-    binlog_location: '',
+  relay_config: {
+    enable_relay: false,
   },
 }
 
 const CreateOrUpdateSource: React.FC<{
-  onSubmit?: (values: Partial<Source>) => void
+  onSubmit?: (values: Source) => void
   onCancel?: () => void
   currentSource?: Source | null
 }> = ({ onCancel, onSubmit, currentSource }) => {
@@ -54,6 +47,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="source_name"
               label={t('source name')}
+              tooltip={t('source form name tooltip')}
               rules={[
                 { required: true, message: t('source name is required') },
               ]}
@@ -67,6 +61,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="host"
               label={t('host')}
+              tooltip={t('source form host tooltip')}
               rules={[{ required: true, message: t('host is required') }]}
             >
               <Input placeholder="1.1.1.1" />
@@ -83,6 +78,7 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="user"
               label={t('user name')}
+              tooltip={t('source form user tooltip')}
               rules={[{ required: true, message: t('user name is required') }]}
             >
               <Input placeholder="root" />
@@ -91,12 +87,18 @@ const CreateOrUpdateSource: React.FC<{
             <Form.Item
               name="password"
               label={t('password')}
+              tooltip={t('source form password tooltip')}
               rules={[{ required: true, message: t('password is required') }]}
             >
               <Input type="password" />
             </Form.Item>
 
-            <Form.Item name="enable_gtid" label="GTID" valuePropName="checked">
+            <Form.Item
+              name="enable_gtid"
+              label="GTID"
+              valuePropName="checked"
+              tooltip={t('source form gtid tooltip')}
+            >
               <Switch defaultChecked={false} />
             </Form.Item>
           </section>
@@ -123,22 +125,11 @@ const CreateOrUpdateSource: React.FC<{
               {t('relay config (optional)')}
             </h1>
             <Form.Item
-              name={['relay', 'relay_enable']}
+              name={['relay_config', 'enable_relay']}
               label={t('enable relay')}
               valuePropName="checked"
             >
               <Switch defaultChecked={false} />
-            </Form.Item>
-
-            <Form.Item name={['relay', 'binlog_name']} label={t('binlog name')}>
-              <Input placeholder={t('binlog name or gtid')} />
-            </Form.Item>
-
-            <Form.Item
-              name={['relay', 'binlog_location']}
-              label={t('binlog location')}
-            >
-              <Input placeholder="/location" />
             </Form.Item>
           </section>
         </Col>
