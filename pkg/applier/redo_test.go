@@ -230,7 +230,7 @@ func TestApplyDMLs(t *testing.T) {
 	close(ddlEventCh)
 
 	cfg := &RedoApplierConfig{
-		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1&tidb_placement_mode=ignore"
+		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1&tidb_placement_mode=ignore",
 	}
 	ap := NewRedoApplier(cfg)
 	err := ap.Apply(ctx)
