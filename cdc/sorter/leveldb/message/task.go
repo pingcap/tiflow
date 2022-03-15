@@ -15,6 +15,7 @@ package message
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -44,6 +45,9 @@ type Task struct {
 	// Deletes all of the key-values in the range.
 	// reader -> leveldb and leveldb -> compactor
 	DeleteReq *DeleteRequest
+
+	// A test message.
+	Test *Test
 }
 
 // DeleteRequest a request to delete range.
@@ -70,6 +74,11 @@ type IterRequest struct {
 	// IterCallback is callback to send iterator back.
 	// It must be buffered channel to avoid blocking.
 	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
+}
+
+// Test is a message for testing actors.
+type Test struct {
+	Sleep time.Duration
 }
 
 // Key is the key that is written to db.
