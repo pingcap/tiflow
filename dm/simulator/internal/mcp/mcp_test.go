@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -65,6 +66,51 @@ func (s *testMCPSuite) TestNextUK() {
 	}
 	s.Assert().Greater(totalOccurredRowIDs, 1, "there should be more than 1 occurred row IDs")
 	s.Assert().Equal(repeatCnt, totalOccurredTimes, "total occurred UKs should equal the iteration count")
+}
+
+func (s *testMCPSuite) TestParallelNextUK() {
+	allHitRowIDs := map[int]int{}
+	repeatCnt := 20
+	workerCnt := 5
+	rowIDCh := make(chan int, workerCnt)
+	var wg sync.WaitGroup
+	wg.Add(workerCnt)
+	for i := 0; i < workerCnt; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < repeatCnt; i++ {
+				theUK := s.mcp.NextUK()
+				if theUK != nil {
+					rowIDCh <- theUK.GetRowID()
+				}
+			}
+		}()
+	}
+	collectionFinishCh := func() <-chan struct{} {
+		ch := make(chan struct{})
+		go func() {
+			defer close(ch)
+			for rowID := range rowIDCh {
+				if _, ok := allHitRowIDs[rowID]; !ok {
+					allHitRowIDs[rowID] = 0
+				}
+				allHitRowIDs[rowID]++
+			}
+		}()
+		return ch
+	}()
+	wg.Wait()
+	close(rowIDCh)
+	<-collectionFinishCh
+
+	totalOccurredTimes := 0
+	totalOccurredRowIDs := 0
+	for _, times := range allHitRowIDs {
+		totalOccurredRowIDs++
+		totalOccurredTimes += times
+	}
+	s.Assert().Greater(totalOccurredRowIDs, 1, "there should be more than 1 occurred row IDs")
+	s.Assert().Equal(repeatCnt*workerCnt, totalOccurredTimes, "total occurred UKs should equal the iteration count")
 }
 
 func (s *testMCPSuite) TestMCPAddDeleteBasic() {

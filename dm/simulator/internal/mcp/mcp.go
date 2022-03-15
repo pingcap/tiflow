@@ -27,8 +27,9 @@ import (
 // ModificationCandidatePool is the core container storing all the current unique keys for a table.
 type ModificationCandidatePool struct {
 	sync.RWMutex
-	keyPool []*UniqueKey
-	theRand *rand.Rand
+	keyPool  []*UniqueKey
+	theRand  *rand.Rand
+	randLock sync.Mutex
 }
 
 // NewModificationCandidatePool create a new MCP.
@@ -48,7 +49,9 @@ func (mcp *ModificationCandidatePool) NextUK() *UniqueKey {
 	if len(mcp.keyPool) == 0 {
 		return nil
 	}
+	mcp.randLock.Lock()
 	idx := mcp.theRand.Intn(len(mcp.keyPool))
+	mcp.randLock.Unlock()
 	return mcp.keyPool[idx] // pass by reference
 }
 
