@@ -142,19 +142,35 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
+
 			select {
 			case <-ctx.Done():
 				return
 			case err := <-s.errCh:
 				ctx.Throw(err)
 				return
-			case <-ticker.C:
+			default:
 			}
 
+			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
+			// does not matter which one emit first, since TiCDC allow DDL with
+			// CommitTs equal to the last CheckpointTs be emitted later.
 			select {
+			case <-ticker.C:
+				s.mu.Lock()
+				checkpointTs := s.mu.checkpointTs
+				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+					s.mu.Unlock()
+					continue
+				}
+				tables := s.mu.currentTableNames
+				s.mu.Unlock()
+				lastCheckpointTs = checkpointTs
+				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
+					ctx.Throw(errors.Trace(err))
+					return
+				}
 			case ddl := <-s.ddlCh:
-				log.Info("emit ddl event", zap.Any("DDL", ddl),
-					zap.String("changefeed", ctx.ChangefeedVars().ID))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
@@ -175,25 +191,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					zap.Any("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
 				return
-			default:
 			}
-
-			s.mu.Lock()
-			checkpointTs := s.mu.checkpointTs
-			// checkpoint should be sent after all DDL events have been flushed.
-			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs || s.hasDDLInflight() {
-				s.mu.Unlock()
-				continue
-			}
-			tables := s.mu.currentTableNames
-			s.mu.Unlock()
-			if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-				ctx.Throw(errors.Trace(err))
-				return
-			}
-			lastCheckpointTs = checkpointTs
-			log.Info("emit checkpointTs to downstream sink success",
-				zap.Uint64("checkpointTs", lastCheckpointTs))
 		}
 	}()
 }
@@ -207,7 +205,6 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
-	ddlSentTs := atomic.LoadUint64(&s.ddlSentTs)
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
@@ -215,10 +212,9 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		return true, nil
 	}
-	if ddl.CommitTs <= ddlSentTs {
+	if ddl.CommitTs <= s.ddlSentTs {
 		log.Info("ddl is not finished yet",
-			zap.Uint64("ddlSentTs", ddlSentTs),
-			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl),
+			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl),
 			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
@@ -227,7 +223,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
-		atomic.StoreUint64(&s.ddlSentTs, ddl.CommitTs)
+		s.ddlSentTs = ddl.CommitTs
+		log.Info("ddl is sent", zap.Uint64("ddlSentTs", s.ddlSentTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.Uint64("ddlSentTs", s.ddlSentTs),
@@ -237,12 +234,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		// just return false and send the ddl in the next round.
 	}
 	return false, nil
-}
-
-// return true if DDL is inflight, which means
-// the DDL is received but not flushed to downstream sink yet.
-func (s *ddlSinkImpl) hasDDLInflight() bool {
-	return atomic.LoadUint64(&s.ddlSentTs) > atomic.LoadUint64(&s.ddlFinishedTs)
 }
 
 func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error {
