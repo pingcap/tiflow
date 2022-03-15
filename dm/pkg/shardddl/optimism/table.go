@@ -189,6 +189,8 @@ func DiffSourceTables(lhs, rhs SourceTables) (map[RouteTable]struct{}, map[Route
 	for table := range lhsTables {
 		if _, ok := rhsTables[table]; !ok {
 			droppedTables[table] = struct{}{}
+		} else {
+			delete(rhsTables, table)
 		}
 	}
 

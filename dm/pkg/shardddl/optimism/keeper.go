@@ -241,9 +241,7 @@ func (tk *TableKeeper) Update(st SourceTables) (map[RouteTable]struct{}, map[Rou
 	if _, ok := tk.tables[st.Task]; !ok {
 		tk.tables[st.Task] = make(map[string]SourceTables)
 	}
-	if _, ok := tk.tables[st.Task][st.Source]; ok {
-		oldST = tk.tables[st.Task][st.Source]
-	}
+	oldST = tk.tables[st.Task][st.Source]
 	newST = st
 	tk.tables[st.Task][st.Source] = st
 	log.L().Info("update source tables", zap.Stringer("old source table", oldST), zap.Stringer("new source table", newST))

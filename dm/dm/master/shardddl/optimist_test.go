@@ -273,10 +273,9 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 		i11              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i12              = optimism.NewInfo(task, source1, "foo", "bar-2", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i21              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
-		i23              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable,
-			[]string{`CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`}, ti2, []*model.TableInfo{ti2})
-		i31 = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
-		i33 = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
+		i23              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
+		i31              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
+		i33              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
 	)
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
@@ -431,20 +430,36 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	c.Assert(remain, Equals, 1)
 
 	// put table info for a new table (to simulate `CREATE TABLE`).
-	rev3, err := optimism.PutSourceTablesInfo(cli, st32, i23)
+	// lock will fetch the new table info from downstream.
+	// here will use ti1
+	_, err = optimism.PutSourceTables(cli, st32)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		ready := o.Locks()[lockID].Ready()
 		return ready[source2][i23.UpSchema][i23.UpTable]
-	}), IsTrue)
+	}), IsFalse)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	c.Assert(remain, Equals, 2)
 	tts := o.tk.FindTables(task, downSchema, downTable)
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[1].Source, Equals, source2)
 	c.Assert(tts[1].UpTables, HasKey, i23.UpSchema)
 	c.Assert(tts[1].UpTables[i23.UpSchema], HasKey, i23.UpTable)
+
+	// ddl for new table
+	rev3, err := optimism.PutInfo(cli, i23)
+	c.Assert(err, IsNil)
+	// wait operation for i23 become available.
+	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
+	c.Assert(err, IsNil)
+	c.Assert(op23.DDLs, DeepEquals, i23.DDLs)
+	c.Assert(op23.ConflictStage, Equals, optimism.ConflictNone)
+
+	c.Assert(o.Locks(), HasKey, lockID)
+	synced, remain = o.Locks()[lockID].IsSynced()
+	c.Assert(synced, IsFalse)
+	c.Assert(remain, Equals, 1)
 
 	// check ShowLocks.
 	expectedLock = []*pb.DDLLock{
@@ -472,12 +487,6 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	checkLocks(c, o, nil, "not-exist", []string{})
 	checkLocks(c, o, nil, "", []string{"not-exist"})
 
-	// wait operation for i23 become available.
-	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
-	c.Assert(err, IsNil)
-	c.Assert(op23.DDLs, DeepEquals, i23.DDLs)
-	c.Assert(op23.ConflictStage, Equals, optimism.ConflictNone)
-
 	// delete i12 for a table (to simulate `DROP TABLE`), the lock should become synced again.
 	rev2, err = optimism.PutInfo(cli, i12) // put i12 first to trigger DELETE for i12.
 	c.Assert(err, IsNil)
@@ -485,7 +494,7 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 	_, err = watchExactOneOperation(ctx, cli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev2)
 	c.Assert(err, IsNil)
 
-	_, err = optimism.PutSourceTablesDeleteInfo(cli, st31, i12)
+	_, err = optimism.PutSourceTables(cli, st31)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
