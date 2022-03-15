@@ -1190,6 +1190,8 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 
 // GetSubTaskCfgs gets all subTask config pointer, return nil when error happens.
 func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]*config.SubTaskConfig)
 	s.subTaskCfgs.Range(func(k, v interface{}) bool {
