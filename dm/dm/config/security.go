@@ -80,19 +80,29 @@ func (s *Security) LoadTLSContent() error {
 // dump certs to dm-worker folder and change the cert path.
 // see more here https://github.com/pingcap/tiflow/pull/3260#discussion_r749052994
 func (s *Security) DumpTLSContent(baseDirPath string) error {
-	if s.SSLCA == "" || !utils.IsFileExists(s.SSLCA) {
+	isSSLCANotExist := s.SSLCA == "" || !utils.IsFileExists(s.SSLCA)
+	isSSLCertNotExist := s.SSLCert == "" || !utils.IsFileExists(s.SSLCert)
+	isSSLKeyNotExist := s.SSLKey == "" || !utils.IsFileExists(s.SSLKey)
+	if isSSLCANotExist || isSSLCertNotExist || isSSLKeyNotExist {
+		if !utils.IsDirExists(baseDirPath) {
+			if err := os.MkdirAll(baseDirPath, 0o700); err != nil {
+				return err
+			}
+		}
+	}
+	if isSSLCANotExist {
 		s.SSLCA = path.Join(baseDirPath, "ca.pem")
 		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
 			return err
 		}
 	}
-	if s.SSLCert == "" || !utils.IsFileExists(s.SSLCert) {
+	if isSSLCertNotExist {
 		s.SSLCert = path.Join(baseDirPath, "cert.pem")
 		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
 			return err
 		}
 	}
-	if s.SSLKey == "" || !utils.IsFileExists(s.SSLKey) {
+	if isSSLKeyNotExist {
 		s.SSLKey = path.Join(baseDirPath, "key.pem")
 		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
 			return err
