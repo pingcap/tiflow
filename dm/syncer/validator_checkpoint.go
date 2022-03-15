@@ -18,6 +18,8 @@ import (
 	"fmt"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/atomic"
@@ -301,7 +303,16 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	}
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
-	_, err := c.dbConn.ExecuteSQL(c.tctx, queries, args...)
+	var err error
+	failpoint.Inject("SkipExecuteSQL", func(val failpoint.Value) {
+		str := val.(string)
+		if str != "" {
+			err = errors.New(str)
+		}
+		failpoint.Goto("afterExecuteSQL")
+	})
+	_, err = c.dbConn.ExecuteSQL(c.tctx, queries, args...)
+	failpoint.Label("afterExecuteSQL")
 	if err != nil {
 		return err
 	}

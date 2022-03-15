@@ -298,9 +298,14 @@ func TestValidatorDoValidate(t *testing.T) {
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
-	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(dbMock.NewRows(nil))
-	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(dbMock.NewRows(nil))
-	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(dbMock.NewRows(nil))
+	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
+	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
+			// insert with pk=11
+			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
+	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.schemaLoaded.Store(true)
@@ -434,6 +439,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.streamerController = &StreamerController{
@@ -443,10 +449,24 @@ func TestValidatorDoValidate(t *testing.T) {
 	}
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
+	validator.Stop()
 	require.Equal(t, int64(1), validator.changeEventCount[rowInsert].Load())
 	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
 	require.Equal(t, int64(1), validator.changeEventCount[rowDeleted].Load())
-	ft := filter.Table{Schema: schemaName, Name: tableName2}
+
+	require.NotNil(t, validator.location)
+	require.Equal(t, mysql.Position{Name: "mysql-bin.000001", Pos: 100}, validator.location.Position)
+	require.Equal(t, "", validator.location.GTIDSetStr())
+	require.Len(t, validator.loadedPendingChanges, 1)
+	ft := filter.Table{Schema: schemaName, Name: tableName}
+	require.Contains(t, validator.loadedPendingChanges, ft.String())
+	require.Len(t, validator.loadedPendingChanges[ft.String()].rows, 1)
+	require.Contains(t, validator.loadedPendingChanges[ft.String()].rows, "11")
+	require.Equal(t, validator.loadedPendingChanges[ft.String()].rows["11"].Tp, rowInsert)
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
+
+	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
 	require.Equal(t, moreColumnInBinlogMsg, validator.tableStatus[ft.String()].message)
