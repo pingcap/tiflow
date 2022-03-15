@@ -148,7 +148,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
 		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
 			WillReturnRows(
-				sqlmock.NewRows(columns).AddRow("tidb_placement_mode", "IGNORE"),
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
 			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
@@ -171,7 +172,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 		)
 		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
 			WillReturnRows(
-				sqlmock.NewRows(columns).AddRow("tidb_placement_mode", "IGNORE"),
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
 			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
