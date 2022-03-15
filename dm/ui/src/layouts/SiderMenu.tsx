@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { groupBy } from 'lodash'
+import { groupBy } from 'lodash-es'
 
 import { pages } from '~/routes'
 import { Menu } from '~/uikit'

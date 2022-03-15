@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -10,6 +10,7 @@ import {
   Badge,
   message,
   Modal,
+  Breadcrumb,
 } from '~/uikit'
 import {
   RedoOutlined,
@@ -33,14 +34,17 @@ const MasterTable: React.FC = () => {
   const handleConfirmOffline = (name: string) => {
     Modal.confirm({
       title: t('are you sure to offline this master'),
+      content: t('offline master confirm description'),
       icon: <ExclamationCircleOutlined />,
-      onOk() {
+      async onOk() {
         const key = 'offlineMasterNode-' + Date.now()
         message.loading({ content: t('requesting'), key })
-        offlineMasterNode(name)
-          .unwrap()
-          .then(() => message.success({ content: t('request success') }))
-          .catch(() => message.destroy(key))
+        try {
+          await offlineMasterNode(name).unwrap()
+          message.success({ content: t('request success') })
+        } catch (e) {
+          message.destroy(key)
+        }
       },
     })
   }
@@ -120,14 +124,17 @@ const WorkerTable: React.FC = () => {
   const handleConfirmOffline = (name: string) => {
     Modal.confirm({
       title: t('are you sure to offline this worker'),
+      content: t('offline worker confirm description'),
       icon: <ExclamationCircleOutlined />,
-      onOk() {
+      async onOk() {
         const key = 'offlineWorkerNode-' + Date.now()
         message.loading({ content: t('requesting'), key })
-        offlineWorkerNode(name)
-          .unwrap()
-          .then(() => message.success({ content: t('request success') }))
-          .catch(() => message.destroy(key))
+        try {
+          await offlineWorkerNode(name).unwrap()
+          message.success({ content: t('request success') })
+        } catch (e) {
+          message.destroy(key)
+        }
       },
     })
   }
@@ -163,8 +170,6 @@ const WorkerTable: React.FC = () => {
       render(name: string) {
         return (
           <Space>
-            <Button type="link">{t('edit')}</Button>
-
             <Button
               type="link"
               danger
@@ -203,8 +208,17 @@ const WorkerTable: React.FC = () => {
 }
 
 const Member: React.FC = () => {
+  const [t] = useTranslation()
+
   return (
     <div>
+      <div className="px-4 pt-4">
+        <Breadcrumb>
+          <Breadcrumb.Item>{t('cluster management')}</Breadcrumb.Item>
+          <Breadcrumb.Item>{t('member list')}</Breadcrumb.Item>
+        </Breadcrumb>
+      </div>
+
       <Card className="!m-4">
         <Tabs defaultActiveKey="1">
           <TabPane tab="Master" key="1">
