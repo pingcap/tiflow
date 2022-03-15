@@ -338,13 +338,15 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 			failedRows[key] = &validateFailedRow{tp: rowNotExist}
 			continue
 		}
-
-		eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
-		if err != nil {
-			return nil, err
-		}
-		if !eq {
-			failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
+		if vw.cfg.Mode == config.ValidationFull {
+			// only compare the whole row in full mode
+			eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
+			if err != nil {
+				return nil, err
+			}
+			if !eq {
+				failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
+			}
 		}
 	}
 	return failedRows, nil
