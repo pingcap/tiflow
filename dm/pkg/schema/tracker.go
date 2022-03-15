@@ -429,7 +429,7 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
-func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTi *model.TableInfo) (*DownstreamTableInfo, error) {
+func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
@@ -441,7 +441,7 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 
 		dti = &DownstreamTableInfo{
 			TableInfo:        downstreamTI,
-			WhereHandleCache: sqlmodel.GetWhereHandle(originTi, downstreamTI),
+			WhereHandleCache: sqlmodel.GetWhereHandle(originTI, downstreamTI),
 		}
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
