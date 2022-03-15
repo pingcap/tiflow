@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -10,9 +10,10 @@ import {
   Select,
   Card,
 } from '~/uikit'
-import { FileAddOutlined, CloseOutlined } from '~/uikit/icons'
+import { FileAddOutlined, CloseOutlined, RetweetOutlined } from '~/uikit/icons'
 import { useDmapiGetSourceListQuery } from '~/models/source'
-import { StepCompnent } from '~/components/CreateTaskConfig/shared'
+import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
+import { TaskMigrateConsistencyLevel, TaskMode } from '~/models/task'
 
 const formLayout = {
   labelCol: { span: 6 },
@@ -26,7 +27,21 @@ const itemLayout = {
 
 const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
   const [t] = useTranslation()
-  const { data, isFetching } = useDmapiGetSourceListQuery({ withStatus: false })
+  const { data, isFetching } = useDmapiGetSourceListQuery({
+    with_status: false,
+  })
+  const disableGtidOrBinlog = initialValues?.task_mode !== TaskMode.INCREMENTAL
+  const [gtidOrBinlogStatus, setGtidOrBinlogStatus] = useState<
+    Map<number, boolean>
+  >(new Map())
+
+  const toggle = (id: number) => {
+    setGtidOrBinlogStatus(prev => {
+      const newMap = new Map(prev)
+      newMap.set(id, !prev.get(id))
+      return newMap
+    })
+  }
 
   return (
     <Form {...formLayout} name="sourceInfo" initialValues={initialValues}>
@@ -39,27 +54,32 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
               </h3>
               <Form.Item
                 label={t('export concurrency')}
+                tooltip={t('create task export_threads tooltip')}
                 name={['source_config', 'full_migrate_conf', 'export_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="4" />
               </Form.Item>
               <Form.Item
                 label={t('import concurrency')}
+                tooltip={t('create task import_threads tooltip')}
                 name={['source_config', 'full_migrate_conf', 'import_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="4" />
               </Form.Item>
-              <Form.Item
-                label={t('data dir')}
-                name={['source_config', 'full_migrate_conf', 'data_dir']}
-              >
-                <Input placeholder="/data" />
-              </Form.Item>
+
               <Form.Item
                 label={t('consistency requirement')}
                 name={['source_config', 'full_migrate_conf', 'consistency']}
               >
-                <Input />
+                <Select placeholder={TaskMigrateConsistencyLevel.Auto}>
+                  {Object.values(TaskMigrateConsistencyLevel).map(
+                    consistency => (
+                      <Select.Option key={consistency} value={consistency}>
+                        {consistency}
+                      </Select.Option>
+                    )
+                  )}
+                </Select>
               </Form.Item>
             </div>
             <div className="flex-1">
@@ -68,12 +88,14 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
               </h3>
               <Form.Item
                 label={t('synchronous concurrency')}
+                tooltip={t('create task repl_threads tooltip')}
                 name={['source_config', 'incr_migrate_conf', 'repl_threads']}
               >
                 <InputNumber className="!w-[100%]" placeholder="32" />
               </Form.Item>
               <Form.Item
                 label={t('transaction batch')}
+                tooltip={t('create task repl_batch tooltip')}
                 name={['source_config', 'incr_migrate_conf', 'repl_batch']}
               >
                 <InputNumber className="!w-[100%]" placeholder="100" />
@@ -104,7 +126,6 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                     rules={[
                       { required: true, message: t('source name is required') },
                     ]}
-                    fieldKey={[field.fieldKey, 'source_name']}
                   >
                     <Select placeholder="mysql-01" loading={isFetching}>
                       {data?.data.map(source => (
@@ -118,33 +139,54 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                     </Select>
                   </Form.Item>
 
-                  <Form.Item {...itemLayout} label={t('binlog')}>
-                    <Input.Group compact>
-                      <Form.Item noStyle name={[field.name, 'binlog_name']}>
-                        <Input
-                          className="!mr-[5%]"
-                          style={{ width: '50%' }}
-                          placeholder="name"
-                        />
-                      </Form.Item>
+                  <div className="relative">
+                    <Form.Item
+                      className="flex-1"
+                      {...itemLayout}
+                      hidden={gtidOrBinlogStatus.get(field.name)}
+                      label={t('binlog')}
+                      tooltip={t('create task binlog_name tooltip')}
+                    >
+                      <Input.Group compact>
+                        <Form.Item noStyle name={[field.name, 'binlog_name']}>
+                          <Input
+                            className="!mr-4"
+                            disabled={disableGtidOrBinlog}
+                            style={{ maxWidth: '45%' }}
+                            placeholder="name"
+                          />
+                        </Form.Item>
 
-                      <Form.Item noStyle name={[field.name, 'binlog_pos']}>
-                        <InputNumber
-                          style={{ width: '45%' }}
-                          placeholder="position"
-                        />
-                      </Form.Item>
-                    </Input.Group>
-                  </Form.Item>
+                        <Form.Item noStyle name={[field.name, 'binlog_pos']}>
+                          <InputNumber
+                            style={{ width: '40%' }}
+                            disabled={disableGtidOrBinlog}
+                            placeholder="position"
+                          />
+                        </Form.Item>
+                      </Input.Group>
+                    </Form.Item>
 
-                  <Form.Item
-                    {...itemLayout}
-                    label={t('gtid')}
-                    name={[field.name, 'binlog_gtid']}
-                    fieldKey={[field.fieldKey, 'binlog_gtid']}
-                  >
-                    <Input />
-                  </Form.Item>
+                    <Form.Item
+                      className="flex-1"
+                      {...itemLayout}
+                      hidden={!gtidOrBinlogStatus.get(field.name)}
+                      label={t('gtid')}
+                      name={[field.name, 'binlog_gtid']}
+                    >
+                      <Input
+                        className="max-w-[90%]"
+                        disabled={disableGtidOrBinlog}
+                      />
+                    </Form.Item>
+
+                    <Button
+                      className="!absolute ml-2 top-0 right-0"
+                      onClick={() => toggle(field.name)}
+                    >
+                      <RetweetOutlined />
+                    </Button>
+                  </div>
                 </Card>
               ))}
 
