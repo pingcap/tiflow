@@ -228,6 +228,9 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
 			requireIter = true
 		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
+		}
 	}
 
 	// Force write only if there is a task requires an iterator.

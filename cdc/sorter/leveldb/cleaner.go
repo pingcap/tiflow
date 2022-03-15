@@ -102,6 +102,9 @@ TASKS:
 		if !task.Cleanup {
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
+		}
 
 		start := encoding.EncodeTsKey(task.UID, task.TableID, 0)
 		limit := encoding.EncodeTsKey(task.UID, task.TableID+1, 0)

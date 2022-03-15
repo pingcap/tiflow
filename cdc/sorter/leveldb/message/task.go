@@ -15,6 +15,7 @@ package message
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -36,6 +37,9 @@ type Task struct {
 	// For clean-up table task.
 	Cleanup            bool
 	CleanupRatelimited bool
+
+	// A test message.
+	Test *Test
 }
 
 // IterRequest contains parameters that necessary to build an iterator.
@@ -48,6 +52,11 @@ type IterRequest struct {
 	Range [2][]byte
 	// Must be buffered channel to avoid blocking.
 	IterCh chan *LimitedIterator `json:"-"` // Make Task JSON printable.
+}
+
+// Test is a message for testing actors.
+type Test struct {
+	Sleep time.Duration
 }
 
 // Key is the key that is written to db.
