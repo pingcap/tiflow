@@ -542,9 +542,6 @@ function DM_117_CASE {
 		"query-status test" \
 		"because schema conflict detected" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"shard-ddl-lock" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1
 
 	# try to fix data
 	echo 'create table tb1(a int primary key, b int, c int) engine=innodb default charset=latin1 collate=latin1_bin;' >${WORK_DIR}/schema.sql
