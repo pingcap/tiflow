@@ -37,6 +37,15 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
+
+	run_sql "show create table t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "CREATE TABLE t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;" &&
+
+
+	run_sql "show create table t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "CREATE TABLE `t2` (`a` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin /*T![placement] PLACEMENT POLICY=`p2` */;" &&
+
+
 }
 
 trap stop_tidb_cluster EXIT
