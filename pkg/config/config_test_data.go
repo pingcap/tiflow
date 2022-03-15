@@ -107,39 +107,39 @@ const (
     "worker-pool-size": 0,
     "region-scan-limit": 40
   },
+  "messages": {
+    "client-max-batch-interval": 200000000,
+    "client-max-batch-size": 8388608,
+    "client-max-batch-count": 128,
+    "client-retry-rate-limit": 1,
+    "server-max-pending-message-count": 102400,
+    "server-ack-interval": 100000000,
+    "server-worker-pool-size": 4
+  },
+  "db": {
+    "count": 8,
+    "concurrency": 128,
+    "max-open-files": 10000,
+    "block-size": 65536,
+    "block-cache-size": 4294967296,
+    "writer-buffer-size": 8388608,
+    "compression": "snappy",
+    "target-file-size-base": 8388608,
+    "write-l0-slowdown-trigger": 2147483647,
+    "write-l0-pause-trigger": 2147483647,
+    "compaction-l0-trigger": 160,
+    "compaction-deletion-threshold": 10485760,
+    "compaction-period": 1800,
+    "iterator-max-alive-duration": 10000,
+    "iterator-slow-read-duration": 256
+  },
   "debug": {
     "enable-table-actor": false,
     "table-actor": {
       "event-batch-size": 32
     },
     "enable-db-sorter": true,
-    "db": {
-      "count": 8,
-      "concurrency": 128,
-      "max-open-files": 10000,
-      "block-size": 65536,
-      "block-cache-size": 4294967296,
-      "writer-buffer-size": 8388608,
-      "compression": "snappy",
-      "target-file-size-base": 8388608,
-      "write-l0-slowdown-trigger": 2147483647,
-      "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160,
-      "compaction-deletion-threshold": 10485760,
-      "compaction-period": 1800,
-      "iterator-max-alive-duration": 10000,
-      "iterator-slow-read-duration": 256
-    },
-    "enable-new-scheduler": true,
-    "messages": {
-      "client-max-batch-interval": 200000000,
-      "client-max-batch-size": 8388608,
-      "client-max-batch-count": 128,
-      "client-retry-rate-limit": 1,
-      "server-max-pending-message-count": 102400,
-      "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4
-    }
+    "enable-new-scheduler": true
   }
 }`
 

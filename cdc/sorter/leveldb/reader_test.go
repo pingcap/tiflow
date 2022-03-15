@@ -301,7 +301,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 func prepareTxnData(
 	t *testing.T, r *reader, txnCount, txnSize int,
 ) db.DB {
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	db, err := db.OpenPebble(context.Background(), 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	wb := db.Batch(0)

@@ -40,7 +40,7 @@ func (m *mockCompactDB) Compact(start, end []byte) error {
 func TestCompactorPoll(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
@@ -95,7 +95,7 @@ func TestCompactorPoll(t *testing.T) {
 func TestComactorContextCancel(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)

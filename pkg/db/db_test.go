@@ -36,7 +36,7 @@ func TestDB(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := OpenLevelDB(ctx, 1, filepath.Join(t.TempDir(), "1"), cfg)
@@ -121,7 +121,7 @@ func testDB(t *testing.T, db DB) {
 func TestPebbleMetrics(t *testing.T) {
 	t.Parallel()
 
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	id := 1
@@ -188,7 +188,7 @@ func TestPebbleMetrics(t *testing.T) {
 // BenchmarkNext/pebble/next_262144_event(s)-40                   7         149654135 ns/op            5512 B/op          3 allocs/op
 func BenchmarkNext(b *testing.B) {
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	cases := []struct {

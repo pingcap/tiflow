@@ -113,7 +113,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
-				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+				compactScheduler, config.GetGlobalServerConfig().DB)
 			if err != nil {
 				return errors.Trace(err)
 			}

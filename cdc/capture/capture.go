@@ -174,7 +174,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 		memPercentage :=
 			float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
-		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
+		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
 			return errors.Annotate(
@@ -203,11 +203,11 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.regionCache = tikv.NewRegionCache(c.PDClient)
 
 	if c.enableNewScheduler {
-		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
+		messageServerConfig := conf.Messages.ToMessageServerConfig()
 		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
 		c.grpcService.Reset(c.MessageServer)
 
-		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+		messageClientConfig := conf.Messages.ToMessageClientConfig()
 
 		// Puts the advertise-addr of the local node to the client config.
 		// This is for metrics purpose only, so that the receiver knows which

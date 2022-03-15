@@ -29,7 +29,7 @@ import (
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -44,7 +44,7 @@ func TestSystemStartStop(t *testing.T) {
 
 func TestSystemStopUnstarted(t *testing.T) {
 	t.Parallel()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -54,7 +54,7 @@ func TestSystemStopUnstarted(t *testing.T) {
 func TestCollectMetrics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 2
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -66,7 +66,7 @@ func TestCollectMetrics(t *testing.T) {
 func TestDBActorID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 2
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -82,7 +82,7 @@ func TestDBActorID(t *testing.T) {
 func TestSystemStopSlowly(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 2
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -96,7 +96,7 @@ func TestSystemStopSlowly(t *testing.T) {
 func TestSystemStopMailboxFull(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 2
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
@@ -116,7 +116,7 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 8
 
 	sys := NewSystem(t.TempDir(), 1, cfg)

@@ -43,7 +43,7 @@ func TestMaybeWrite(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
@@ -89,7 +89,7 @@ func TestCompact(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	id := 1
@@ -163,7 +163,7 @@ func TestPutReadDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
@@ -231,7 +231,7 @@ func TestPutReadDelete(t *testing.T) {
 
 func TestAcquireIterators(t *testing.T) {
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
@@ -320,7 +320,7 @@ func TestModelChecking(t *testing.T) {
 	seed := time.Now().Unix()
 	rd := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)
@@ -408,7 +408,7 @@ func TestContextCancel(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
+	cfg := config.GetDefaultServerConfig().Clone().DB
 	cfg.Count = 1
 
 	db, err := db.OpenPebble(ctx, 1, t.TempDir(), 0, cfg)

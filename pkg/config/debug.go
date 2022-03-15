@@ -13,35 +13,36 @@
 
 package config
 
-import "github.com/pingcap/errors"
+import "github.com/pingcap/log"
 
 // DebugConfig represents config for ticdc unexposed feature configurations
+// Note that any embedded config should be "omitempty",
+// and shall not be removed for compatibility.
 type DebugConfig struct {
 	// identify if the table actor is enabled for table pipeline
 	// TODO: turn on after GA.
 	EnableTableActor bool              `toml:"enable-table-actor" json:"enable-table-actor"`
-	TableActor       *TableActorConfig `toml:"table-actor" json:"table-actor"`
+	TableActor       *TableActorConfig `toml:"table-actor,omitempty" json:"table-actor,omitempty"`
 
 	// EnableDBSorter enables db sorter.
 	//
 	// The default value is false.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
-	DB             *DBConfig `toml:"db" json:"db"`
+	DB             *DBConfig `toml:"db,omitempty" json:"db,omitempty"`
 
 	// EnableNewScheduler enables the peer-messaging based new scheduler.
 	// The default value is false.
-	// TODO: turn on after GA.
 	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
-	Messages           *MessagesConfig `toml:"messages" json:"messages"`
+	Messages           *MessagesConfig `toml:"messages,omitempty" json:"messages,omitempty"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
 func (c *DebugConfig) ValidateAndAdjust() error {
-	if err := c.Messages.ValidateAndAdjust(); err != nil {
-		return errors.Trace(err)
+	if c.DB != nil {
+		log.Warn("use deprecated configuration `debug.db`, please use `db` instead.")
 	}
-	if err := c.DB.ValidateAndAdjust(); err != nil {
-		return errors.Trace(err)
+	if c.Messages != nil {
+		log.Warn("use deprecated configuration `debug.messages`, please use `messages` instead.")
 	}
 	return nil
 }
