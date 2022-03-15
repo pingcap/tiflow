@@ -154,6 +154,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			// does not matter which one emit first, since TiCDC allow DDL with
 			// CommitTs equal to the last CheckpointTs be emitted later.
 			select {
+			case <-ctx.Done():
+				return
 			case err := <-s.errCh:
 				ctx.Throw(err)
 				return
