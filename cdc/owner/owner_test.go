@@ -432,7 +432,8 @@ func TestUpdateGCSafePoint(t *testing.T) {
 			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
 		})
 	tester.MustApplyPatches()
-	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context,
+		serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(19))
