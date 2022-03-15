@@ -55,10 +55,13 @@ type sorterNode struct {
 	eg     *errgroup.Group
 	cancel context.CancelFunc
 
+<<<<<<< HEAD
 	cleanID     actor.ID
 	cleanTask   message.Message
 	cleanRouter *actor.Router
 
+=======
+>>>>>>> d62e2e70e (sorter/leveldb(ticdc): fix system stop blocks forever (#4831))
 	// The latest resolved ts that sorter has received.
 	resolvedTs model.Ts
 
@@ -113,12 +116,23 @@ func (n *sorterNode) StartActorNode(ctx pipeline.NodeContext, isTableActorMode b
 			actorID := ctx.GlobalVars().SorterSystem.ActorID(uint64(n.tableID))
 			router := ctx.GlobalVars().SorterSystem.Router()
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
+<<<<<<< HEAD
 			levelSorter := leveldb.NewSorter(
 				ctx, n.tableID, startTs, router, actorID, compactScheduler,
 				config.GetGlobalServerConfig().Debug.DB)
 			n.cleanID = actorID
 			n.cleanTask = levelSorter.CleanupTask()
 			n.cleanRouter = ctx.GlobalVars().SorterSystem.CleanerRouter()
+=======
+			levelSorter, err := leveldb.NewSorter(
+				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
+				ssystem.WriterSystem, ssystem.WriterRouter,
+				ssystem.ReaderSystem, ssystem.ReaderRouter,
+				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+			if err != nil {
+				return errors.Trace(err)
+			}
+>>>>>>> d62e2e70e (sorter/leveldb(ticdc): fix system stop blocks forever (#4831))
 			eventSorter = levelSorter
 		} else {
 			// Sorter dir has been set and checked when server starts.
@@ -305,6 +319,7 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 	}
 }
 
+<<<<<<< HEAD
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
@@ -315,6 +330,25 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
+=======
+func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
+	if barrierTs > n.BarrierTs() {
+		atomic.StoreUint64(&n.barrierTs, barrierTs)
+	}
+}
+
+func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
+	// the flowController will be blocked in a background goroutine,
+	// We need to abort the flowController manually in the nodeRunner
+	n.flowController.Abort()
+}
+
+func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
+	n.cancel()
+	n.releaseResource(ctx, ctx.ChangefeedVars().ID)
+>>>>>>> d62e2e70e (sorter/leveldb(ticdc): fix system stop blocks forever (#4831))
 	return n.eg.Wait()
 }
 
