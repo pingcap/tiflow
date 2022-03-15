@@ -957,29 +957,28 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The number of unresolved region per TiKV",
-          "editable": true,
-          "error": false,
-          "fill": 0,
-          "grid": {},
+          "description": "The number of incremental scan tasks per minute",
+          "fill": 1,
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 0,
             "y": 17
           },
-          "id": 400,
+          "id": 401,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
+            "hideEmpty": false,
+            "hideZero": true,
             "max": true,
             "min": false,
-            "rightSide": true,
+            "rightSide": false,
             "show": false,
             "sideWidth": null,
-            "sort": null,
-            "sortDesc": null,
+            "sort": "current",
+            "sortDesc": true,
             "total": false,
             "values": true
           },
@@ -998,22 +997,20 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(tikv_cdc_region_resolve_status{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", status=\"unresolved\"}) by (status)",
+              "expr": "sum(increase(tikv_cdc_scan_duration_seconds_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (type, instance)",
               "format": "time_series",
               "hide": false,
-              "intervalFactor": 2,
-              "legendFormat": "{{status}}",
-              "refId": "B",
-              "step": 10
+              "intervalFactor": 1,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "TiKV unresolved region count",
+          "title": "TiKV scan tasks/m",
           "tooltip": {
-            "msResolution": false,
             "shared": true,
             "sort": 0,
             "value_type": "individual"
@@ -1032,11 +1029,11 @@
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": "0",
+              "min": null,
               "show": true
             },
             {
-              "format": "short",
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -1448,28 +1445,29 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The number of incremental scan tasks per minute",
-          "fill": 1,
+          "description": "The number of unresolved region per TiKV",
+          "editable": true,
+          "error": false,
+          "fill": 0,
+          "grid": {},
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
             "y": 25
           },
-          "id": 401,
+          "id": 400,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "hideEmpty": false,
-            "hideZero": true,
             "max": true,
             "min": false,
-            "rightSide": false,
+            "rightSide": true,
             "show": false,
             "sideWidth": null,
-            "sort": "current",
-            "sortDesc": true,
+            "sort": null,
+            "sortDesc": null,
             "total": false,
             "values": true
           },
@@ -1488,20 +1486,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(increase(tikv_cdc_scan_duration_seconds_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (type, instance)",
+              "expr": "sum(tikv_cdc_region_resolve_status{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\", status=\"unresolved\"}) by (status)",
               "format": "time_series",
               "hide": false,
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "intervalFactor": 2,
+              "legendFormat": "{{status}}",
+              "refId": "B",
+              "step": 10
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "TiKV scan tasks/m",
+          "title": "TiKV unresolved region count",
           "tooltip": {
+            "msResolution": false,
             "shared": true,
             "sort": 0,
             "value_type": "individual"
@@ -1520,11 +1520,11 @@
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
               "show": true
             },
             {
-              "format": "none",
+              "format": "short",
               "label": null,
               "logBase": 1,
               "max": null,
