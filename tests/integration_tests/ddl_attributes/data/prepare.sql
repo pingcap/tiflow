@@ -21,9 +21,9 @@ RENAME TABLE attributes_t1_back TO attributes_t1_new;
 ALTER TABLE attributes_t2 DROP PARTITION p0;
 ALTER TABLE attributes_t2 TRUNCATE PARTITION p1;
 
-CREATE TABLE finish_mark(a INT PRIMARY KEY);
-
 DROP PLACEMENT POLICY IF EXISTS placement1
 CREATE PLACEMENT POLICY placement1 LEADER_CONSTRAINTS=\"[+region=us-east-1]\" FOLLOWER_CONSTRAINTS=\"[+region=us-east-2]\";
 CREATE TABLE t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;
+
+CREATE TABLE finish_mark(a INT PRIMARY KEY);
 
