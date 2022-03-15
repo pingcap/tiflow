@@ -53,8 +53,9 @@ func (t *testBaseConnSuite) TestBaseConn(c *C) {
 	c.Assert(err, IsNil)
 
 	// nolint:sqlclosecheck
-	_, err = baseConn.QuerySQL(tctx, "select 1")
+	rows, err := baseConn.QuerySQL(tctx, "select 1")
 	c.Assert(terror.ErrDBUnExpect.Equal(err), IsTrue)
+	c.Assert(rows.Err(), IsNil)
 
 	_, err = baseConn.ExecuteSQL(tctx, testStmtHistogram, "test", []string{""})
 	c.Assert(terror.ErrDBUnExpect.Equal(err), IsTrue)
@@ -71,8 +72,9 @@ func (t *testBaseConnSuite) TestBaseConn(c *C) {
 
 	mock.ExpectQuery("select 1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 	// nolint:sqlclosecheck
-	rows, err := baseConn.QuerySQL(tctx, "select 1")
+	rows, err = baseConn.QuerySQL(tctx, "select 1")
 	c.Assert(err, IsNil)
+	c.Assert(rows.Err(), IsNil)
 	ids := make([]int, 0, 1)
 	for rows.Next() {
 		var id int
@@ -85,8 +87,9 @@ func (t *testBaseConnSuite) TestBaseConn(c *C) {
 
 	mock.ExpectQuery("select 1").WillReturnError(errors.New("invalid connection"))
 	// nolint:sqlclosecheck
-	_, err = baseConn.QuerySQL(tctx, "select 1")
+	rows, err = baseConn.QuerySQL(tctx, "select 1")
 	c.Assert(terror.ErrDBQueryFailed.Equal(err), IsTrue)
+	c.Assert(rows.Err(), IsNil)
 
 	affected, err := baseConn.ExecuteSQL(tctx, testStmtHistogram, "test", []string{})
 	c.Assert(affected, Equals, 0)

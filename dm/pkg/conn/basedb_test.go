@@ -43,6 +43,7 @@ func (t *testBaseDBSuite) TestGetBaseConn(c *C) {
 	// nolint:sqlclosecheck
 	rows, err := dbConn.QuerySQL(tctx, "select 1")
 	c.Assert(err, IsNil)
+	c.Assert(rows.Err(), IsNil)
 	ids := make([]int, 0, 1)
 	for rows.Next() {
 		var id int

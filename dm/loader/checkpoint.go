@@ -612,6 +612,9 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 	if err != nil {
 		return lightningStatusInit, err
 	}
+	if rows.Err() != nil {
+		return lightningStatusInit, rows.Err()
+	}
 	defer rows.Close()
 	if rows.Next() {
 		var status string
