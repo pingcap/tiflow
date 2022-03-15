@@ -24,29 +24,20 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	initRandSeedOnce sync.Once
-	gMCPRand         *rand.Rand
-	gMCPRandLock     sync.Mutex
-)
-
-func init() {
-	initRandSeedOnce.Do(func() {
-		gMCPRand = rand.New(rand.NewSource(time.Now().Unix()))
-	})
-}
-
 // ModificationCandidatePool is the core container storing all the current unique keys for a table.
 type ModificationCandidatePool struct {
 	sync.RWMutex
 	keyPool []*UniqueKey
+	theRand *rand.Rand
 }
 
 // NewModificationCandidatePool create a new MCP.
-func NewModificationCandidatePool() *ModificationCandidatePool {
-	theKeyPool := make([]*UniqueKey, 0, 8192)
+func NewModificationCandidatePool(capcity int) *ModificationCandidatePool {
+	theKeyPool := make([]*UniqueKey, 0, capcity)
+	theRand := rand.New(rand.NewSource(time.Now().Unix()))
 	return &ModificationCandidatePool{
 		keyPool: theKeyPool,
+		theRand: theRand,
 	}
 }
 
@@ -57,9 +48,7 @@ func (mcp *ModificationCandidatePool) NextUK() *UniqueKey {
 	if len(mcp.keyPool) == 0 {
 		return nil
 	}
-	gMCPRandLock.Lock()
-	idx := gMCPRand.Intn(len(mcp.keyPool))
-	gMCPRandLock.Unlock()
+	idx := mcp.theRand.Intn(len(mcp.keyPool))
 	return mcp.keyPool[idx] // pass by reference
 }
 
@@ -79,9 +68,7 @@ func (mcp *ModificationCandidatePool) AddUK(uk *UniqueKey) error {
 		return errors.Trace(ErrMCPCapacityFull)
 	}
 	currentLen := len(mcp.keyPool)
-	uk.Lock()
-	uk.RowID = currentLen
-	uk.Unlock()
+	uk.SetRowID(currentLen)
 	mcp.keyPool = append(mcp.keyPool, uk)
 	return nil
 }
@@ -101,9 +88,7 @@ func (mcp *ModificationCandidatePool) DeleteUK(uk *UniqueKey) error {
 	}
 	mcp.Lock()
 	defer mcp.Unlock()
-	uk.RLock()
-	deleteIdx = uk.RowID
-	uk.RUnlock()
+	deleteIdx = uk.GetRowID()
 	if deleteIdx < 0 {
 		return errors.Trace(ErrDeleteUKNotFound)
 	}
@@ -114,19 +99,16 @@ func (mcp *ModificationCandidatePool) DeleteUK(uk *UniqueKey) error {
 	deletedUK = mcp.keyPool[deleteIdx]
 	curLen := len(mcp.keyPool)
 	lastUK := mcp.keyPool[curLen-1]
-	lastUK.Lock()
-	lastUK.RowID = deleteIdx
-	lastUK.Unlock()
+	lastUK.SetRowID(deleteIdx)
 	mcp.keyPool[deleteIdx] = lastUK
-	mcp.keyPool[curLen-1] = deletedUK
 	mcp.keyPool = mcp.keyPool[:curLen-1]
-	deletedUK.Lock()
-	deletedUK.RowID = -1
-	deletedUK.Unlock()
+	deletedUK.SetRowID(-1)
 	return nil
 }
 
 // Reset cleans up all the items in the MCP.
 func (mcp *ModificationCandidatePool) Reset() {
+	mcp.Lock()
+	defer mcp.Unlock()
 	mcp.keyPool = mcp.keyPool[:0]
 }

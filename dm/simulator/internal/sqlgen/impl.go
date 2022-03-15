@@ -36,7 +36,7 @@ type sqlGeneratorImpl struct {
 	ukMap       map[string]struct{}
 }
 
-// NewSQLGeneratorImpl generates a new implemenation object for SQL generator.
+// NewSQLGeneratorImpl generates a new implementation object for SQL generator.
 func NewSQLGeneratorImpl(tableConfig *config.TableConfig) *sqlGeneratorImpl {
 	colDefMap := make(map[string]*config.ColumnDefinition)
 	for _, colDef := range tableConfig.Columns {
@@ -133,7 +133,7 @@ func (g *sqlGeneratorImpl) GenUpdateRow(theUK *mcp.UniqueKey) (string, error) {
 			Expr: ast.NewValueExpr(util.GenerateDataItem(colInfo.DataType), "", ""),
 		})
 	}
-	whereClause, err := g.generateWhereClause(theUK.Value)
+	whereClause, err := g.generateWhereClause(theUK.GetValue())
 	if err != nil {
 		return "", errors.Annotate(err, "generate where clause error")
 	}
@@ -187,12 +187,7 @@ func (g *sqlGeneratorImpl) GenInsertRow() (string, *mcp.UniqueKey, error) {
 	if err != nil {
 		return "", nil, errors.Annotate(err, "output INSERT AST into SQL string error")
 	}
-	return sql,
-		&mcp.UniqueKey{
-			RowID: -1,
-			Value: ukValues,
-		},
-		nil
+	return sql, mcp.NewUniqueKey(-1, ukValues), nil
 }
 
 // GenDeleteRow generates a DELETE SQL for the given unique key.
@@ -201,7 +196,7 @@ func (g *sqlGeneratorImpl) GenDeleteRow(theUK *mcp.UniqueKey) (string, error) {
 	if theUK == nil {
 		return "", errors.Trace(ErrMissingUKValue)
 	}
-	whereClause, err := g.generateWhereClause(theUK.Value)
+	whereClause, err := g.generateWhereClause(theUK.GetValue())
 	if err != nil {
 		return "", errors.Annotate(err, "generate where clause error")
 	}

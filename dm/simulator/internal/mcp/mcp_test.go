@@ -17,7 +17,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -29,15 +28,15 @@ type testMCPSuite struct {
 }
 
 func (s *testMCPSuite) SetupSuite() {
-	assert.Nil(s.T(), log.InitLogger(&log.Config{}))
+	s.Require().Nil(log.InitLogger(&log.Config{}))
 }
 
 func (s *testMCPSuite) SetupTest() {
-	mcp := NewModificationCandidatePool()
+	mcp := NewModificationCandidatePool(8192)
 	for i := 0; i < 4096; i++ {
 		mcp.keyPool = append(mcp.keyPool, &UniqueKey{
-			RowID: i,
-			Value: map[string]interface{}{
+			rowID: i,
+			value: map[string]interface{}{
 				"id": i,
 			},
 		})
@@ -45,57 +44,91 @@ func (s *testMCPSuite) SetupTest() {
 	s.mcp = mcp
 }
 
-func (s *testMCPSuite) TestMCPNextUK() {
-	for i := 0; i < 10; i++ {
+func (s *testMCPSuite) TestNextUK() {
+	allHitRowIDs := map[int]int{}
+	repeatCnt := 20
+	for i := 0; i < repeatCnt; i++ {
 		theUK := s.mcp.NextUK()
+		s.Require().NotNil(theUK, "the picked UK should not be nil")
+		theRowID := theUK.GetRowID()
+		if _, ok := allHitRowIDs[theRowID]; !ok {
+			allHitRowIDs[theRowID] = 0
+		}
+		allHitRowIDs[theRowID]++
 		s.T().Logf("next UK: %v", theUK)
 	}
+	totalOccurredTimes := 0
+	totalOccurredRowIDs := 0
+	for _, times := range allHitRowIDs {
+		totalOccurredRowIDs++
+		totalOccurredTimes += times
+	}
+	s.Assert().Greater(totalOccurredRowIDs, 1, "there should be more than 1 occurred row IDs")
+	s.Assert().Equal(repeatCnt, totalOccurredTimes, "total occurred UKs should equal the iteration count")
 }
 
 func (s *testMCPSuite) TestMCPAddDeleteBasic() {
 	var (
 		curPoolSize int
+		repeatCnt   int
 		err         error
 	)
 	curPoolSize = len(s.mcp.keyPool)
-	for i := 0; i < 5; i++ {
-		err = s.mcp.AddUK(&UniqueKey{
-			RowID: -1,
-			Value: map[string]interface{}{
-				"id": rand.Int(),
-			},
+	startPoolSize := curPoolSize
+	repeatCnt = 5
+	for i := 0; i < repeatCnt; i++ {
+		theUK := NewUniqueKey(-1, map[string]interface{}{
+			"id": rand.Int(),
 		})
-		assert.Nil(s.T(), err)
-		assert.Equal(s.T(), len(s.mcp.keyPool), curPoolSize+i+1, "key pool size is not equal")
-		assert.Equal(s.T(), s.mcp.keyPool[curPoolSize+i].RowID, curPoolSize+i, "the new added UK's row ID is abnormal")
+		err = s.mcp.AddUK(theUK)
+		s.Require().Nil(err)
+		s.Assert().Equal(curPoolSize+i+1, len(s.mcp.keyPool), "key pool size is not equal")
+		s.Assert().Equal(curPoolSize+i, s.mcp.keyPool[curPoolSize+i].GetRowID(), "the new added UK's row ID is abnormal")
+		s.Assert().Equal(curPoolSize+i, theUK.GetRowID(), "the input UK's row ID is not changed")
 		s.T().Logf("new added UK: %v\n", s.mcp.keyPool[curPoolSize+i])
 	}
 	// test delete from bottom
 	curPoolSize = len(s.mcp.keyPool)
-	for i := 0; i < 5; i++ {
-		err = s.mcp.DeleteUK(&UniqueKey{
-			RowID: curPoolSize - i - 1,
-		})
-		assert.Nil(s.T(), err)
-		assert.Equal(s.T(), len(s.mcp.keyPool), curPoolSize-i-1, "key pool size is not equal")
+	for i := 0; i < repeatCnt; i++ {
+		theUK := s.mcp.keyPool[curPoolSize-i-1]
+		err = s.mcp.DeleteUK(NewUniqueKey(curPoolSize-i-1, nil))
+		s.Require().Nil(err)
+		s.Assert().Equal(-1, theUK.GetRowID(), "the deleted UK's row ID is not right")
+		s.Assert().Equal(curPoolSize-i-1, len(s.mcp.keyPool), "key pool size is not equal")
 	}
+	curPoolSize = len(s.mcp.keyPool)
+	s.Assert().Equal(startPoolSize, curPoolSize, "the MCP size is not right after adding & deleting")
 	// test delete from top
-	for i := 0; i < 5; i++ {
-		err = s.mcp.DeleteUK(&UniqueKey{
-			RowID: i,
-		})
-		assert.Nil(s.T(), err)
-		assert.Equal(s.T(), s.mcp.keyPool[i].RowID, i, "the new added UK's row ID is abnormal")
+	for i := 0; i < repeatCnt; i++ {
+		theDelUK := s.mcp.keyPool[i]
+		err = s.mcp.DeleteUK(NewUniqueKey(i, nil))
+		s.Require().Nil(err)
+		theSwappedUK := s.mcp.keyPool[i]
+		swappedUKVal := theSwappedUK.GetValue()
+		s.Assert().Equal(i, theSwappedUK.GetRowID(), "the swapped UK's row ID is abnormal")
+		s.Assert().Equal(curPoolSize-i-1, swappedUKVal["id"], "the swapped UK's value is abnormal")
+		s.Assert().Equal(-1, theDelUK.GetRowID(), "the deleted UK's row ID is not right")
 		s.T().Logf("new UK after delete on the index %d: %v\n", i, s.mcp.keyPool[i])
 	}
+	curPoolSize = len(s.mcp.keyPool)
 	// test delete at random position
-	for i := 0; i < 5; i++ {
-		theUK := s.mcp.NextUK()
-		deleteRowID := theUK.RowID
-		err = s.mcp.DeleteUK(theUK)
-		assert.Nil(s.T(), err)
-		assert.Equal(s.T(), s.mcp.keyPool[deleteRowID].RowID, deleteRowID, "the new added UK's row ID is abnormal")
+	for i := 0; i < repeatCnt; i++ {
+		theDelUK := s.mcp.NextUK()
+		deleteRowID := theDelUK.GetRowID()
+		err = s.mcp.DeleteUK(theDelUK)
+		s.Require().Nil(err)
+		theSwappedUK := s.mcp.keyPool[deleteRowID]
+		swappedUKVal := theSwappedUK.GetValue()
+		s.Assert().Equal(deleteRowID, theSwappedUK.GetRowID(), "the swapped UK's row ID is abnormal")
+		s.Assert().Equal(-1, theDelUK.GetRowID(), "the deleted UK's row ID is not right")
+		s.Assert().Equal(curPoolSize-i-1, swappedUKVal["id"], "the swapped UK's value is abnormal")
 		s.T().Logf("new UK after delete on the index %d: %v\n", deleteRowID, s.mcp.keyPool[deleteRowID])
+	}
+	// check whether all the row ID is right
+	curPoolSize = len(s.mcp.keyPool)
+	for i := 0; i < curPoolSize; i++ {
+		theUK := s.mcp.keyPool[i]
+		s.Require().Equal(i, theUK.GetRowID(), "this UK element in the MCP has a wrong row ID")
 	}
 }
 
@@ -111,12 +144,9 @@ func (s *testMCPSuite) TestMCPAddDeleteInParallel() {
 				ch <- err
 			}()
 			for i := 0; i < 5; i++ {
-				theUK := &UniqueKey{
-					RowID: -1,
-					Value: map[string]interface{}{
-						"id": rand.Int(),
-					},
-				}
+				theUK := NewUniqueKey(-1, map[string]interface{}{
+					"id": rand.Int(),
+				})
 				err = s.mcp.AddUK(theUK)
 				if err != nil {
 					return
@@ -135,18 +165,16 @@ func (s *testMCPSuite) TestMCPAddDeleteInParallel() {
 				ch <- err
 			}()
 			for i := 0; i < 5; i++ {
-				theUK := s.mcp.NextUK()
-				deletedRowID := theUK.RowID
-				err = s.mcp.DeleteUK(theUK)
+				theDelUK := s.mcp.NextUK()
+				deletedRowID := theDelUK.rowID
+				err = s.mcp.DeleteUK(theDelUK)
 				if err != nil {
 					return
 				}
-				s.T().Logf("deletedUK: %v\n", theUK)
-				if theUK != nil {
-					s.mcp.RLock()
-					s.T().Logf("new position on UK: %v\n", s.mcp.keyPool[deletedRowID])
-					s.mcp.RUnlock()
-				}
+				s.mcp.RLock()
+				theSwappedUK := s.mcp.keyPool[deletedRowID]
+				s.mcp.RUnlock()
+				s.T().Logf("deletedUK: %v, swapped UK: %v\n", theDelUK, theSwappedUK)
 			}
 		}()
 		return ch
@@ -154,10 +182,10 @@ func (s *testMCPSuite) TestMCPAddDeleteInParallel() {
 	close(pendingCh)
 	err1 := <-ch1
 	err2 := <-ch2
-	assert.Nil(s.T(), err1)
-	assert.Nil(s.T(), err2)
+	s.Require().Nil(err1)
+	s.Require().Nil(err2)
 	afterLen := s.mcp.Len()
-	assert.Equal(s.T(), beforeLen, afterLen, "the key pool size has changed after the parallel modification")
+	s.Assert().Equal(beforeLen, afterLen, "the key pool size has changed after the parallel modification")
 }
 
 func TestMCPSuite(t *testing.T) {

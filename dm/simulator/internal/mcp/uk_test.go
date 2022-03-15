@@ -14,10 +14,9 @@
 package mcp
 
 import (
-	"fmt"
+	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -28,15 +27,15 @@ type testUniqueKeySuite struct {
 }
 
 func (s *testUniqueKeySuite) SetupSuite() {
-	assert.Nil(s.T(), log.InitLogger(&log.Config{}))
+	s.Require().Nil(log.InitLogger(&log.Config{}))
 }
 
 func (s *testUniqueKeySuite) TestUKClone() {
 	origUKCol1Value := 111
 	origUKCol2Value := "COL1"
 	originalUK := &UniqueKey{
-		RowID: -1,
-		Value: map[string]interface{}{
+		rowID: -1,
+		value: map[string]interface{}{
 			"col1": origUKCol1Value,
 			"col2": origUKCol2Value,
 		},
@@ -44,63 +43,132 @@ func (s *testUniqueKeySuite) TestUKClone() {
 	newUKCol1Value := 222
 	newUKCol2Value := "COL2"
 	clonedUK := originalUK.Clone()
-	clonedUK.Value["col1"] = newUKCol1Value
-	clonedUK.Value["col2"] = newUKCol2Value
+	clonedUK.value["col1"] = newUKCol1Value
+	clonedUK.value["col2"] = newUKCol2Value
 
 	s.T().Logf("original UK: %v; cloned UK: %v\n", originalUK, clonedUK)
 
-	assert.Equal(s.T(), originalUK.Value["col1"], origUKCol1Value, fmt.Sprintf("original.col1 should be %d", origUKCol1Value))
-	assert.Equal(s.T(), originalUK.Value["col2"], origUKCol2Value, fmt.Sprintf("original.col2 should be %s", origUKCol2Value))
-	assert.Equal(s.T(), clonedUK.Value["col1"], newUKCol1Value, fmt.Sprintf("cloned.col1 should be %d", newUKCol1Value))
-	assert.Equal(s.T(), clonedUK.Value["col2"], newUKCol2Value, fmt.Sprintf("cloned.col2 should be %s", newUKCol2Value))
+	s.Assert().Equalf(origUKCol1Value, originalUK.value["col1"], "original.%s value incorrect", "col1")
+	s.Assert().Equalf(origUKCol2Value, originalUK.value["col2"], "original.%s value incorrect", "col2")
+	s.Assert().Equalf(newUKCol1Value, clonedUK.value["col1"], "cloned.%s value incorrect", "col1")
+	s.Assert().Equalf(newUKCol2Value, clonedUK.value["col2"], "cloned.%s value incorrect", "col2")
+}
+
+func (s *testUniqueKeySuite) TestUKChangeBasic() {
+	col1Value := 111
+	col2Value := "aaa"
+	theValueMap := map[string]interface{}{
+		"col1": col1Value,
+		"col2": col2Value,
+	}
+	theUK := NewUniqueKey(-1, theValueMap)
+	s.Assert().Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Assert().Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
+
+	theValueMap["col1"] = 222
+	theValueMap["col2"] = "bbb"
+	s.Assert().Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Assert().Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
+
+	assignedValueMap := theUK.GetValue()
+	s.Assert().Equalf(col1Value, assignedValueMap["col1"], "%s value incorrect", "col1")
+	s.Assert().Equalf(col2Value, assignedValueMap["col2"], "%s value incorrect", "col2")
+
+	newRowID := 999
+	theUK.SetRowID(newRowID)
+	s.Assert().Equal(newRowID, theUK.GetRowID(), "row ID value incorrect")
+
+	newCol1Value := 333
+	newCol2Value := "ccc"
+	newValueMap := map[string]interface{}{
+		"col1": newCol1Value,
+		"col2": newCol2Value,
+	}
+	theUK.SetValue(newValueMap)
+	s.Assert().Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Assert().Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
+	s.Assert().Equalf(col1Value, assignedValueMap["col1"], "assigned map's %s value incorrect", "col1")
+	s.Assert().Equalf(col2Value, assignedValueMap["col2"], "assigned map's %s value incorrect", "col2")
+
+	newValueMap["col1"] = 444
+	newValueMap["col2"] = "ddd"
+	s.Assert().Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Assert().Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
+}
+
+func (s *testUniqueKeySuite) TestUKParallelChange() {
+	theUK := NewUniqueKey(-1, nil)
+	pendingCh := make(chan struct{})
+	var wg sync.WaitGroup
+	targetID := 100
+	workerCnt := 10
+	wg.Add(workerCnt)
+	for i := 0; i < workerCnt; i++ {
+		go func() {
+			defer wg.Done()
+			<-pendingCh
+			for i := 1; i <= targetID; i++ {
+				theUK.SetRowID(i)
+				theUK.SetValue(map[string]interface{}{
+					"id": i,
+				})
+			}
+		}()
+	}
+	close(pendingCh)
+	wg.Wait()
+	s.Assert().Equal(targetID, theUK.GetRowID(), "row ID value incorrect")
+	theValue := theUK.GetValue()
+	s.Assert().Equal(targetID, theValue["id"], "ID column value incorrect")
+	s.Assert().Equal(targetID, theUK.value["id"], "ID column value in UK incorrect")
 }
 
 func (s *testUniqueKeySuite) TestUKValueEqual() {
 	col1Value := 111
 	col2Value := "aaa"
 	uk1 := &UniqueKey{
-		RowID: -1,
-		Value: map[string]interface{}{
+		rowID: -1,
+		value: map[string]interface{}{
 			"col1": col1Value,
 			"col2": col2Value,
 		},
 	}
 	uk2 := &UniqueKey{
-		RowID: 100,
-		Value: map[string]interface{}{
+		rowID: 100,
+		value: map[string]interface{}{
 			"col1": col1Value,
 			"col2": col2Value,
 		},
 	}
-	assert.Equal(s.T(), uk1.IsValueEqual(uk2), true, "uk1 should equal uk2 on value")
-	assert.Equal(s.T(), uk2.IsValueEqual(uk1), true, "uk2 should equal uk1 on value")
+	s.Assert().Equal(true, uk1.IsValueEqual(uk2), "uk1 should equal uk2 on value")
+	s.Assert().Equal(true, uk2.IsValueEqual(uk1), "uk2 should equal uk1 on value")
 	uk3 := &UniqueKey{
-		RowID: 100,
-		Value: map[string]interface{}{
+		rowID: 100,
+		value: map[string]interface{}{
 			"col1": col1Value,
 			"col2": "bbb",
 		},
 	}
-	assert.Equal(s.T(), uk1.IsValueEqual(uk3), false, "uk1 should not equal uk3 on value")
-	assert.Equal(s.T(), uk3.IsValueEqual(uk1), false, "uk3 should not equal uk1 on value")
+	s.Assert().Equal(false, uk1.IsValueEqual(uk3), "uk1 should not equal uk3 on value")
+	s.Assert().Equal(false, uk3.IsValueEqual(uk1), "uk3 should not equal uk1 on value")
 	uk4 := &UniqueKey{
-		RowID: 100,
-		Value: map[string]interface{}{
+		rowID: 100,
+		value: map[string]interface{}{
 			"col3": 321,
 		},
 	}
-	assert.Equal(s.T(), uk1.IsValueEqual(uk4), false, "uk1 should not equal uk4 on value")
-	assert.Equal(s.T(), uk4.IsValueEqual(uk1), false, "uk4 should not equal uk1 on value")
+	s.Assert().Equal(false, uk1.IsValueEqual(uk4), "uk1 should not equal uk4 on value")
+	s.Assert().Equal(false, uk4.IsValueEqual(uk1), "uk4 should not equal uk1 on value")
 	uk5 := &UniqueKey{
-		RowID: 100,
-		Value: map[string]interface{}{
+		rowID: 100,
+		value: map[string]interface{}{
 			"col3": 321,
 			"col1": col1Value,
 			"col2": col2Value,
 		},
 	}
-	assert.Equal(s.T(), uk1.IsValueEqual(uk5), false, "uk1 should not equal uk5 on value")
-	assert.Equal(s.T(), uk5.IsValueEqual(uk1), false, "uk5 should not equal uk1 on value")
+	s.Assert().Equal(false, uk1.IsValueEqual(uk5), "uk1 should not equal uk5 on value")
+	s.Assert().Equal(false, uk5.IsValueEqual(uk1), "uk5 should not equal uk1 on value")
 }
 
 func TestUniqueKeySUite(t *testing.T) {
