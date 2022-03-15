@@ -39,7 +39,7 @@ function run() {
 	cleanup_process $CDC_BINARY
 
 	run_sql "show create table t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-		check_contains "CREATE TABLE t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;" &&
+		check_contains "CREATE TABLE t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;"
 
 
 	run_sql "show create table t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
