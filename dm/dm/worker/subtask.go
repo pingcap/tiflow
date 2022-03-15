@@ -268,6 +268,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 	st.Lock()
 	defer st.Unlock()
+
 	if st.cfg.ValidatorCfg.Mode != config.ValidationFast && st.cfg.ValidatorCfg.Mode != config.ValidationFull {
 		return
 	}
