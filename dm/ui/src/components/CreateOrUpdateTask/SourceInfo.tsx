@@ -71,7 +71,7 @@ const SourceInfo: StepCompnent = ({ prev, initialValues }) => {
                 label={t('consistency requirement')}
                 name={['source_config', 'full_migrate_conf', 'consistency']}
               >
-                <Select>
+                <Select placeholder={TaskMigrateConsistencyLevel.Auto}>
                   {Object.values(TaskMigrateConsistencyLevel).map(
                     consistency => (
                       <Select.Option key={consistency} value={consistency}>

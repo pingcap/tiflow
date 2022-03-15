@@ -126,9 +126,9 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
   }
 
   useEffect(() => {
-    // reset offste when filters changed
+    // reset offset when filters changed
     setPage(1)
-  }, [stage, unit])
+  }, [stage, unit, subs])
 
   return (
     <>
@@ -187,7 +187,7 @@ const SubTaskTable: React.FC<{ subs: SubTaskStatus[] }> = ({ subs }) => {
                   </span>
                   <span>
                     <ThunderboltOutlined className="mr-2" />
-                    {item.sync_status?.seconds_behind_master}s
+                    {item.sync_status?.seconds_behind_master ?? 0}s
                   </span>
                 </div>
               }

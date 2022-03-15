@@ -8,7 +8,7 @@ import {
   OnDuplicateBehavior,
   Task,
   TaskFormData,
-  TaskMode,
+  TaskShardMode,
   useDmapiCreateTaskMutation,
   useDmapiStartTaskMutation,
   useDmapiUpdateTaskMutation,
@@ -25,7 +25,6 @@ const { Step } = Steps
 
 const defaultValue: Partial<TaskFormData> = {
   name: '',
-  task_mode: TaskMode.ALL,
   meta_schema: '',
   enhance_online_schema_change: true,
   on_duplicate: OnDuplicateBehavior.REPLACE,
@@ -37,9 +36,6 @@ const defaultValue: Partial<TaskFormData> = {
   },
   source_config: {
     source_conf: [],
-    full_migrate_conf: {
-      data_dir: '/data',
-    },
   },
   table_migrate_rule: [],
 }
@@ -88,6 +84,9 @@ const CreateTaskConfig: React.FC<{
     message.loading({ content: t('requesting'), key })
     const payload = { ...taskData }
     const startAfterSaved = payload.start_after_saved
+    if (payload.shard_mode === TaskShardMode.NONE) {
+      delete payload.shard_mode
+    }
     if ('binlog_filter_rule_array' in payload) {
       delete payload.binlog_filter_rule_array
     }
