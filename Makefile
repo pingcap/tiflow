@@ -17,7 +17,7 @@ SHELL := /usr/bin/env bash
 TEST_DIR := /tmp/tidb_cdc_test
 DM_TEST_DIR := /tmp/dm_test
 
-GO       := GO111MODULE=on go
+GO       := GO111MODULE=on go1.18rc1
 ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
