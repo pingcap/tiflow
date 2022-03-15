@@ -66,8 +66,7 @@ func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer,
 
 // batch collects a batch of messages to be sent to the Kafka producer.
 func (w *flushWorker) batch(
-	ctx context.Context,
-	events []mqEvent,
+	ctx context.Context, events []mqEvent,
 ) (int, error) {
 	index := 0
 	max := len(events)
