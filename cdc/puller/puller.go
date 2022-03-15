@@ -153,6 +153,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
+					zap.String("changefeed", changefeedID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -194,6 +195,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
+						zap.String("changefeed", changefeedID),
 						zap.Reflect("resolved", e.Resolved),
 						zap.Int64("tableID", tableID),
 						zap.Reflect("spans", p.spans),
@@ -213,8 +215,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.Duration("duration", time.Since(start)),
 						zap.String("changefeed", changefeedID),
+						zap.Duration("duration", time.Since(start)),
 						zap.Int64("tableID", tableID),
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))
