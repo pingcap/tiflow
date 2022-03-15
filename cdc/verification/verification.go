@@ -105,6 +105,7 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 	// in case run verify at the same if have multiple changefeed created
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	ticker := time.NewTicker(v.config.CheckInterval + time.Duration(r.Int63n(int64(v.config.CheckInterval/4))))
+	log.Info("runVerify interval", zap.Duration("interval", v.config.CheckInterval+time.Duration(r.Int63n(int64(v.config.CheckInterval/4)))))
 	defer ticker.Stop()
 
 	for {
@@ -126,7 +127,7 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 					zap.String("startTs", startTs),
 					zap.String("endTs", endTs),
 					zap.Error(err))
-				return
+				continue
 			}
 			log.Info("e2e verify ret",
 				zap.String("changefeed", v.config.ChangefeedID),
@@ -145,9 +146,9 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 				}
 			}
 			// just run module level gc, e2e gc is taking care of at syncPoint side
-			err = v.moduleVerification.GC(endTs)
+			err = v.moduleVerification.GC(ctx, endTs)
 			if err != nil {
-				log.Warn("module level gc fail", zap.Error(err))
+				log.Warn("module verify gc fail", zap.Error(err))
 			}
 		}
 	}
@@ -158,6 +159,7 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 // return true means no need to run next step, endTs is returned for GC
 func (v *TiDBVerification) Verify(ctx context.Context) (bool, string, string, error) {
 	if v.running.Load() {
+		log.Info("e2e Verify running")
 		return true, "", "", nil
 	}
 

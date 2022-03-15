@@ -249,7 +249,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
-				if syncPointEnabled {
+				if syncPointEnabled && msg.TrackID != nil {
 					verifier.SentTrackData(stdCtx, verification.Sorter, []verification.TrackData{{TrackID: msg.TrackID, CommitTs: msg.CRTs}})
 				}
 				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))

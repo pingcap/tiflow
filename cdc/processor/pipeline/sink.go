@@ -223,7 +223,7 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 	} else {
 		n.rowBuffer = append(n.rowBuffer, event.Row)
 	}
-	if n.verifier != nil {
+	if n.verifier != nil && event.TrackID != nil {
 		n.verifier.SentTrackData(ctx, verification.Sink, []verification.TrackData{{TrackID: event.TrackID, CommitTs: event.CRTs}})
 	}
 	if len(n.rowBuffer) >= defaultSyncResolvedBatch {

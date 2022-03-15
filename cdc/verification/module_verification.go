@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
@@ -51,12 +50,12 @@ const (
 
 //go:generate mockery --name=ModuleVerifier --inpackage
 type ModuleVerifier interface {
-	// SentTrackData sent the track data to verification, the data should send according to the order if any. data is FIFO guaranteed, in the same changefeed, same module
+	// SentTrackData sent the track data to verification
 	SentTrackData(ctx context.Context, module Module, data []TrackData)
 	// Verify run the module level consistency check base on the time range [startTs, endTs]
 	Verify(ctx context.Context, startTs, endTs string) error
 	// GC clean the checked trackData
-	GC(endTs string) error
+	GC(ctx context.Context, endTs string) error
 	// Close clean related resource
 	Close() error
 }
@@ -67,7 +66,6 @@ type ModuleVerification struct {
 	// write-only batch
 	wb           db.Batch
 	commitMu     sync.Mutex
-	committing   atomic.Bool
 	deleteCount  uint64
 	nextDeleteTs time.Time
 }
@@ -128,11 +126,6 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig) (
 	return m, nil
 }
 
-var (
-	preTsList = map[string]uint64{}
-	preLock   sync.RWMutex
-)
-
 type TrackData struct {
 	TrackID  []byte
 	CommitTs uint64
@@ -147,38 +140,10 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 	default:
 	}
 
-	// wait for commit complete
-	if m.committing.Load() {
-		m.commitMu.Lock()
-		m.commitMu.Unlock()
-	}
-
-	var preTs uint64 = 0
-	var tsKey string
-	if checkOrder(module) {
-		preLock.RLock()
-		tsKey = m.generatePreTsKey(module)
-		if v, ok := preTsList[tsKey]; ok {
-			preTs = v
-		}
-		preLock.RUnlock()
-	}
+	m.commitMu.Lock()
+	defer m.commitMu.Unlock()
 
 	for _, datum := range data {
-		if checkOrder(module) {
-			if datum.CommitTs < preTs {
-				log.Error("module level verify fail, the commitTs of the data is less than previous data",
-					zap.String("module", module.String()),
-					zap.Any("trackData", data),
-					zap.Uint64("preTs", preTs),
-					zap.String("changefeed", m.cfg.ChangeFeedID))
-			}
-			preTs = datum.CommitTs
-			preLock.Lock()
-			preTsList[tsKey] = preTs
-			preLock.Unlock()
-		}
-
 		key := encodeKey(module, datum.CommitTs, datum.TrackID)
 		m.wb.Put(key, nil)
 		size := m.cfg.DBConfig.BlockSize * writeBatchSizeFactor
@@ -192,23 +157,10 @@ func (m *ModuleVerification) generatePreTsKey(module Module) string {
 	return fmt.Sprintf("%s_%d", m.cfg.ChangeFeedID, module)
 }
 
-func checkOrder(module Module) bool {
-	if module == Sorter || module == Sink {
-		return true
-	}
-	return false
-}
-
 func (m *ModuleVerification) commitData() {
-	m.commitMu.Lock()
-	defer m.commitMu.Unlock()
-
-	m.committing.Store(true)
-	defer m.committing.Store(false)
-
 	err := m.wb.Commit()
 	if err != nil {
-		log.Error(" commitData fail", zap.Error(cerror.WrapError(cerror.ErrPebbleDBError, err)))
+		log.Error("commitData fail", zap.Error(cerror.WrapError(cerror.ErrPebbleDBError, err)))
 	}
 	m.wb.Reset()
 }
@@ -246,10 +198,13 @@ func (m *ModuleVerification) Verify(ctx context.Context, startTs, endTs string) 
 	}
 
 	// commit before check
+	m.commitMu.Lock()
 	m.commitData()
+	m.commitMu.Unlock()
+
 	ret := m.moduleDataEqual(Puller, Sink, startTs, endTs)
 	if ret {
-		log.Info("module verify pass",
+		log.Info("module verify ret pass",
 			zap.String("changefeed", m.cfg.ChangeFeedID),
 			zap.String("startTs", startTs),
 			zap.String("endTs", endTs))
@@ -286,7 +241,13 @@ func (m *ModuleVerification) deleteTrackData(endTs string) error {
 }
 
 // GC implement GC api
-func (m *ModuleVerification) GC(endTs string) error {
+func (m *ModuleVerification) GC(ctx context.Context, endTs string) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	default:
+	}
+
 	err := m.deleteTrackData(endTs)
 	if err != nil {
 		return err
@@ -310,12 +271,25 @@ func (m *ModuleVerification) GC(endTs string) error {
 }
 
 func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string) bool {
+	if lower == "" {
+		lower = "0"
+	}
 	l, err := strconv.ParseUint(lower, 10, 64)
 	if err != nil {
+		log.Error("moduleDataEqual",
+			zap.String("lower", lower),
+			zap.String("m1", m1.String()),
+			zap.String("m2", m2.String()),
+			zap.Error(err))
 		return false
 	}
 	u, err := strconv.ParseUint(upper, 10, 64)
 	if err != nil {
+		log.Error("moduleDataEqual",
+			zap.String("upper", upper),
+			zap.String("m1", m1.String()),
+			zap.String("m2", m2.String()),
+			zap.Error(err))
 		return false
 	}
 
@@ -331,6 +305,7 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 		}
 	}()
 	iter1.Seek([]byte{})
+	log.Debug("moduleDataEqual", zap.String("l", lower), zap.String("u", upper), zap.Bool("iter1", iter1.Valid()))
 
 	l2 := encodeKey(m2, l, nil)
 	u2 := encodeKey(m2, u, nil)
@@ -342,10 +317,11 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 		}
 	}()
 	iter2.Seek([]byte{})
+	log.Debug("moduleDataEqual", zap.String("l", lower), zap.String("u", upper), zap.Bool("iter2", iter2.Valid()))
 
 	for iter1.Valid() || iter2.Valid() {
 		if !iter1.Valid() || !iter2.Valid() {
-			log.Error("data count is not equal",
+			log.Error("moduleDataEqual data count is not equal",
 				zap.String("module1", m1.String()),
 				zap.String("module2", m2.String()))
 			return false
@@ -364,9 +340,15 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 
 func keyEqual(key1, key2 []byte) bool {
 	m1, c1, k1 := decodeKey(key1)
-	log.Info("k1", zap.String("module", m1.String()), zap.Uint64("commitTs", c1), zap.ByteString("key", k1))
+	log.Debug("keyEqual k1",
+		zap.String("module", m1.String()),
+		zap.Uint64("commitTs", c1),
+		zap.ByteString("key1", k1))
 	m2, c2, k2 := decodeKey(key2)
-	log.Info("k2", zap.String("module", m2.String()), zap.Uint64("commitTs", c2), zap.ByteString("key", k2))
+	log.Debug("keyEqual k2",
+		zap.String("module", m2.String()),
+		zap.Uint64("commitTs", c2),
+		zap.ByteString("key2", k2))
 	if c1 == c2 && bytes.Compare(k1, k2) == 0 {
 		return true
 	}
@@ -375,5 +357,9 @@ func keyEqual(key1, key2 []byte) bool {
 
 // Close implement the Close api
 func (m *ModuleVerification) Close() error {
+	initLock.Lock()
+	defer initLock.Unlock()
+
+	delete(verifications, m.cfg.ChangeFeedID)
 	return cerror.WrapError(cerror.ErrPebbleDBError, m.db.Close())
 }

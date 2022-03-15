@@ -54,7 +54,7 @@ func TestNewVerification(t *testing.T) {
 	require.Nil(t, err)
 	mockModuleVerifier := &MockModuleVerifier{}
 	mockModuleVerifier.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	mockModuleVerifier.On("GC", mock.Anything).Return(errors.New("oh no"))
+	mockModuleVerifier.On("GC", mock.Anything, mock.Anything).Return(errors.New("oh no"))
 	mockModuleVerifier.On("Close").Return(cerror.WrapError(cerror.ErrPebbleDBError, errors.New("who care")))
 	v := &TiDBVerification{
 		config: &Config{

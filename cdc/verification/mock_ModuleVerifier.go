@@ -40,13 +40,13 @@ func (_m *MockModuleVerifier) Close() error {
 	return r0
 }
 
-// GC provides a mock function with given fields: endTs
-func (_m *MockModuleVerifier) GC(endTs string) error {
-	ret := _m.Called(endTs)
+// GC provides a mock function with given fields: ctx, endTs
+func (_m *MockModuleVerifier) GC(ctx context.Context, endTs string) error {
+	ret := _m.Called(ctx, endTs)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string) error); ok {
-		r0 = rf(endTs)
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, endTs)
 	} else {
 		r0 = ret.Error(0)
 	}

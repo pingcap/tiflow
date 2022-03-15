@@ -39,9 +39,14 @@ func TestNewModuleVerification(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, m1, m2)
 	m3, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "2"})
-	defer m3.Close()
+	m3.Close()
 	require.Nil(t, err)
 	require.NotSame(t, m1, m3)
+
+	m4, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "2"})
+	defer m4.Close()
+	require.Nil(t, err)
+	require.NotSame(t, m4, m3)
 }
 
 func TestModuleVerification_SentTrackData(t *testing.T) {
@@ -58,20 +63,6 @@ func TestModuleVerification_SentTrackData(t *testing.T) {
 		cfg: cfg,
 	}
 	m.SentTrackData(context.Background(), Puller, []TrackData{{TrackID: []byte("1"), CommitTs: 1}})
-	require.Equal(t, preTsList, map[string]uint64{})
-
-	m.SentTrackData(context.Background(), Sorter, []TrackData{{TrackID: []byte("1"), CommitTs: 11}})
-	require.EqualValues(t, preTsList[m.generatePreTsKey(Sorter)], 11)
-
-	m.SentTrackData(context.Background(), Sink, []TrackData{{TrackID: []byte("1"), CommitTs: 111}})
-	require.EqualValues(t, preTsList[m.generatePreTsKey(Sink)], 111)
-
-	m.SentTrackData(context.Background(), Sorter, []TrackData{{TrackID: []byte("1"), CommitTs: 1111}})
-	require.EqualValues(t, preTsList[m.generatePreTsKey(Sorter)], 1111)
-	require.EqualValues(t, preTsList[m.generatePreTsKey(Sink)], 111)
-
-	m.SentTrackData(context.Background(), Sorter, []TrackData{{TrackID: []byte("1"), CommitTs: 1011}})
-	require.EqualValues(t, preTsList[m.generatePreTsKey(Sorter)], 1011)
 }
 
 func TestModuleVerification_GC(t *testing.T) {
@@ -136,7 +127,7 @@ func TestModuleVerification_GC(t *testing.T) {
 			deleteCount:  tt.args.deleteCount,
 			nextDeleteTs: tt.args.nextDeleteTs,
 		}
-		err := m.GC("11")
+		err := m.GC(context.Background(), "11")
 		require.True(t, errors.ErrorEqual(err, tt.dbErr), tt.name)
 		require.Equal(t, tt.wantDeleteCount, m.deleteCount, tt.name)
 		require.GreaterOrEqual(t, m.nextDeleteTs.Unix(), tt.wantNextTs.Unix(), tt.name)
@@ -151,7 +142,7 @@ func TestModuleVerification_Verify(t *testing.T) {
 	require.Nil(t, err)
 	wb := pebble.Batch(0)
 
-	cfg.BlockSize = 0
+	//cfg.BlockSize = 0
 	m := &ModuleVerification{
 		db:  pebble,
 		wb:  wb,
@@ -164,9 +155,11 @@ func TestModuleVerification_Verify(t *testing.T) {
 	m.SentTrackData(context.Background(), Sink, []TrackData{{[]byte("1"), 1}, {[]byte("2"), 2}})
 	ret := m.Verify(context.Background(), "1", "2")
 	require.Nil(t, ret)
+	ret = m.Verify(context.Background(), "", "2")
+	require.Nil(t, ret)
+
 	err = m.deleteTrackData("2")
 	require.Nil(t, err)
-	preTsList = map[string]uint64{}
 
 	// within [startTs,endTs] have the different data
 	m.SentTrackData(context.Background(), Puller, []TrackData{{[]byte("21"), 2}, {[]byte("1"), 1}, {[]byte("1"), 3}})
@@ -175,7 +168,6 @@ func TestModuleVerification_Verify(t *testing.T) {
 	require.NotNil(t, ret)
 	err = m.deleteTrackData("2")
 	require.Nil(t, err)
-	preTsList = map[string]uint64{}
 
 	// within [startTs,endTs] have the different data
 	m.SentTrackData(context.Background(), Puller, []TrackData{{[]byte("21"), 2}, {[]byte("1"), 1}, {[]byte("1"), 3}})
@@ -185,13 +177,14 @@ func TestModuleVerification_Verify(t *testing.T) {
 	require.NotNil(t, ret)
 	err = m.deleteTrackData("2")
 	require.Nil(t, err)
-	preTsList = map[string]uint64{}
 
 	// within [startTs,endTs] have the different data
 	m.SentTrackData(context.Background(), Puller, []TrackData{{[]byte("21"), 2}, {[]byte("1"), 1}, {[]byte("1"), 3}})
 	m.SentTrackData(context.Background(), Cyclic, []TrackData{{[]byte("21"), 2}, {[]byte("1"), 1}, {[]byte("1"), 3}})
-	m.SentTrackData(context.Background(), Sink, []TrackData{{[]byte("1"), 1}, {[]byte("2"), 2}})
-	ret = m.Verify(context.Background(), "1", "2")
+	m.SentTrackData(context.Background(), Sink, []TrackData{{[]byte("1"), 431834667399774209}})
+
+	ret = m.Verify(context.Background(), "1", "431834667399774209")
 	t.Log(ret.Error())
 	require.NotNil(t, ret)
+
 }

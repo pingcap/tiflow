@@ -112,7 +112,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if syncPointEnabled {
+				if syncPointEnabled && pEvent.TrackID != nil {
 					verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: pEvent.TrackID, CommitTs: pEvent.CRTs}})
 				}
 				if isActorMode {

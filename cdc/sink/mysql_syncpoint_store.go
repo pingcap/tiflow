@@ -86,6 +86,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL, so
 			log.Warn("Start verification fail", zap.Error(err))
 			return nil, err
 		}
+		log.Info("Start verification")
 	}
 	log.Info("Start mysql syncpoint sink")
 
