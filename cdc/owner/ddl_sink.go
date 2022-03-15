@@ -150,11 +150,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				return
 			default:
 			}
-
 			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
 			// does not matter which one emit first, since TiCDC allow DDL with
 			// CommitTs equal to the last CheckpointTs be emitted later.
 			select {
+			case err := <-s.errCh:
+				ctx.Throw(err)
+				return
 			case <-ticker.C:
 				s.mu.Lock()
 				checkpointTs := s.mu.checkpointTs
