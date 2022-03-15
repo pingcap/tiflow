@@ -110,7 +110,8 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 // OpenAPITaskToSubTaskConfigs generates sub task configs by openapi.Task.
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCfgMap map[string]*SourceConfig) (
-	[]*SubTaskConfig, error) {
+	[]*SubTaskConfig, error,
+) {
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {

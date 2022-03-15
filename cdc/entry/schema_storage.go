@@ -733,7 +733,8 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
-	forceReplicate bool, id model.ChangeFeedID) (SchemaStorage, error) {
+	forceReplicate bool, id model.ChangeFeedID,
+) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {

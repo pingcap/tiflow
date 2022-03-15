@@ -109,7 +109,8 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 
 // Put delegates request to clientV3.KV.Put
 func (c *Client) Put(ctx context.Context, key, val string,
-	opts ...clientV3.OpOption) (resp *clientV3.PutResponse, err error) {
+	opts ...clientV3.OpOption,
+) (resp *clientV3.PutResponse, err error) {
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
 		resp, inErr = c.cli.Put(ctx, key, val, opts...)
@@ -120,7 +121,8 @@ func (c *Client) Put(ctx context.Context, key, val string,
 
 // Get delegates request to clientV3.KV.Get
 func (c *Client) Get(ctx context.Context, key string,
-	opts ...clientV3.OpOption) (resp *clientV3.GetResponse, err error) {
+	opts ...clientV3.OpOption,
+) (resp *clientV3.GetResponse, err error) {
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
 		resp, inErr = c.cli.Get(ctx, key, opts...)
@@ -131,7 +133,8 @@ func (c *Client) Get(ctx context.Context, key string,
 
 // Delete delegates request to clientV3.KV.Delete
 func (c *Client) Delete(ctx context.Context, key string,
-	opts ...clientV3.OpOption) (resp *clientV3.DeleteResponse, err error) {
+	opts ...clientV3.OpOption,
+) (resp *clientV3.DeleteResponse, err error) {
 	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
@@ -142,7 +145,8 @@ func (c *Client) Delete(ctx context.Context, key string,
 // Txn delegates request to clientV3.KV.Txn. The error returned can only be a non-retryable error,
 // such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
 func (c *Client) Txn(ctx context.Context,
-	cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op) (resp *clientV3.TxnResponse, err error) {
+	cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op,
+) (resp *clientV3.TxnResponse, err error) {
 	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
@@ -155,7 +159,8 @@ func (c *Client) Txn(ctx context.Context,
 
 // Grant delegates request to clientV3.Lease.Grant
 func (c *Client) Grant(ctx context.Context,
-	ttl int64) (resp *clientV3.LeaseGrantResponse, err error) {
+	ttl int64,
+) (resp *clientV3.LeaseGrantResponse, err error) {
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
 		resp, inErr = c.cli.Grant(ctx, ttl)
@@ -188,7 +193,8 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 
 // Revoke delegates request to clientV3.Lease.Revoke
 func (c *Client) Revoke(ctx context.Context,
-	id clientV3.LeaseID) (resp *clientV3.LeaseRevokeResponse, err error) {
+	id clientV3.LeaseID,
+) (resp *clientV3.LeaseRevokeResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.Revoke(ctx, id)
@@ -199,7 +205,8 @@ func (c *Client) Revoke(ctx context.Context,
 
 // TimeToLive delegates request to clientV3.Lease.TimeToLive
 func (c *Client) TimeToLive(ctx context.Context, lease clientV3.LeaseID,
-	opts ...clientV3.LeaseOption) (resp *clientV3.LeaseTimeToLiveResponse, err error) {
+	opts ...clientV3.LeaseOption,
+) (resp *clientV3.LeaseTimeToLiveResponse, err error) {
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
 		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
@@ -219,7 +226,8 @@ func (c *Client) Watch(
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchResponse,
-	key string, role string, opts ...clientV3.OpOption) {
+	key string, role string, opts ...clientV3.OpOption,
+) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))

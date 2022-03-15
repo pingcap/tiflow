@@ -982,7 +982,6 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-
 	"H4sIAAAAAAAC/+w9W3Pbtpp/Bavdh7YjWZLtOIl3zoNjuznetZ2MrU73TCerQCQk4ZgEaAC0q5Pxfz+D",
 	"C0mQBEjKt1iN+9C6Igh8+O43gN96AY0TShARvLf/rceDJYqh+vMwSrlA7AzKf8sfEkYTxARG6jEMQ/Vr",
 	"iHjAcCIwJb199SviHNA5EEsEgpQxRASI1SSA0BD1+j30J4yTCPX2e+Ptt1ujrdHWeP/d9t641++JVSJ/",

@@ -248,7 +248,8 @@ func TestPollDataFailed(t *testing.T) {
 		}
 	}
 	var dp asyncMessageProcessorFunc = func(ctx context.Context,
-		msg pipeline.Message) (bool, error) {
+		msg pipeline.Message,
+	) (bool, error) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{

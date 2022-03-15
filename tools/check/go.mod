@@ -16,7 +16,7 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/swaggo/swag v1.7.8
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
-	mvdan.cc/gofumpt v0.2.1
+	mvdan.cc/gofumpt v0.3.0
 	mvdan.cc/sh/v3 v3.3.1
 )
 

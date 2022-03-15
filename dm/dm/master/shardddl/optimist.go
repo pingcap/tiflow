@@ -520,7 +520,8 @@ func (o *Optimist) recoverLocks(
 
 // watchSourceInfoOperation watches the etcd operation for source tables, shard DDL infos and shard DDL operations.
 func (o *Optimist) watchSourceInfoOperation(
-	pCtx context.Context, revSource, revInfo, revOperation int64) error {
+	pCtx context.Context, revSource, revInfo, revOperation int64,
+) error {
 	ctx, cancel := context.WithCancel(pCtx)
 	var wg sync.WaitGroup
 	defer func() {

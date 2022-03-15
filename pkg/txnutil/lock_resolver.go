@@ -42,7 +42,8 @@ type resolver struct {
 
 // NewLockerResolver returns a LockResolver.
 func NewLockerResolver(kvStorage tikv.Storage,
-	id model.ChangeFeedID, role util.Role) LockResolver {
+	id model.ChangeFeedID, role util.Role,
+) LockResolver {
 	return &resolver{
 		kvStorage:  kvStorage,
 		changefeed: id,

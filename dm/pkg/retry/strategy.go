@@ -67,7 +67,8 @@ type FiniteRetryStrategy struct{}
 
 // Apply for FiniteRetryStrategy, it wait `FirstRetryDuration` before it starts first retry, and then rest of retries wait time depends on BackoffStrategy.
 func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params,
-	operateFn func(*tcontext.Context) (interface{}, error)) (ret interface{}, i int, err error) {
+	operateFn func(*tcontext.Context) (interface{}, error),
+) (ret interface{}, i int, err error) {
 	for ; i < params.RetryCount; i++ {
 		ret, err = operateFn(ctx)
 		if err != nil {

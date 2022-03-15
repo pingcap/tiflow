@@ -771,7 +771,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 
 // BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
 func (s *Scheduler) BatchOperateTaskOnWorker(
-	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
+	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool,
+) error {
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
 			return err

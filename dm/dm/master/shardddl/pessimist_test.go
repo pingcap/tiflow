@@ -1004,7 +1004,8 @@ func (t *testPessimist) TestMeetEtcdCompactError(c *C) {
 
 func (t *testPessimist) putDoneForSource(
 	ctx context.Context, task, source string, info pessimism.Info, exec bool,
-	watchRev int64, watchTimeout time.Duration, c *C) {
+	watchRev int64, watchTimeout time.Duration, c *C,
+) {
 	var (
 		wg            sync.WaitGroup
 		opCh          = make(chan pessimism.Operation, 10)

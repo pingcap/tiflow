@@ -509,7 +509,8 @@ func (k *ShardingGroupKeeper) LeaveGroup(targetTable *filter.Table, sources []st
 //   remain: remain un-synced source table's count
 func (k *ShardingGroupKeeper) TrySync(
 	sourceTable, targetTable *filter.Table, location, endLocation binlog.Location, ddls []string) (
-	needShardingHandle bool, group *ShardingGroup, synced, active bool, remain int, err error) {
+	needShardingHandle bool, group *ShardingGroup, synced, active bool, remain int, err error,
+) {
 	targetTableID, schemaOnly := utils.GenTableIDAndCheckSchemaOnly(targetTable)
 	sourceTableID := utils.GenTableID(sourceTable)
 	if schemaOnly {

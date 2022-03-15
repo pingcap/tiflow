@@ -126,7 +126,8 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 }
 
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (*changefeed, *orchestrator.ChangefeedReactorState,
-	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
+	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
+) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
