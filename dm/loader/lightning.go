@@ -237,7 +237,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
 		var cpPath string
-		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust patch both local and s3.
+		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
 		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
 		if err != nil {
 			return err
