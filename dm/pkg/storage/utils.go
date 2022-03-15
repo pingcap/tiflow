@@ -26,7 +26,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// AdjustPath adjust rawURL, add uniqueId as path suffix.
+// AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path and will not change rawURL.
+// This function supports both local dir or s3 path. It can be used like the following:
+// 1. adjust subtask's `LoaderConfig.Dir`, uniqueID like `.test-mysql01`.
+// 2. add Lightning checkpoint's fileName to rawURL, uniqueID like `/tidb_lightning_checkpoint.pb`.
 func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
