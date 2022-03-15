@@ -100,7 +100,8 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Info("DDL puller started", zap.String("changefeed", h.changefeedID), zap.Uint64("resolvedTS", h.resolvedTS))
+	log.Info("DDL puller started", zap.String("changefeed", h.changefeedID),
+		zap.Uint64("resolvedTS", h.resolvedTS))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
@@ -135,14 +136,17 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			return nil
 		}
 		if h.filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job", zap.String("changefeed", h.changefeedID), zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+			log.Info("discard the ddl job", zap.String("changefeed", h.changefeedID),
+				zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
 		if job.ID == h.lastDDLJobID {
-			log.Warn("ignore duplicated DDL job", zap.String("changefeed", h.changefeedID), zap.Any("job", job))
+			log.Warn("ignore duplicated DDL job", zap.String("changefeed", h.changefeedID),
+				zap.Any("job", job))
 			return nil
 		}
-		log.Info("receive new ddl job", zap.String("changefeed", h.changefeedID), zap.Any("job", job))
+		log.Info("receive new ddl job", zap.String("changefeed", h.changefeedID),
+			zap.Any("job", job))
 
 		h.mu.Lock()
 		defer h.mu.Unlock()

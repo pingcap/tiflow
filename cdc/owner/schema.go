@@ -107,19 +107,22 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
-		log.Warn("job finishTs is less than schema handleTs, discard invalid job", zap.String("changefeed", s.id), zap.Stringer("job", job),
+		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
+			zap.String("changefeed", s.id), zap.Stringer("job", job),
 			zap.Any("ddlHandledTs", s.ddlHandledTs))
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
-		log.Error("handle DDL failed", zap.String("changefeed", s.id), zap.String("DDL", job.Query),
+		log.Error("handle DDL failed", zap.String("changefeed", s.id),
+			zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
 			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("changefeed", s.id), zap.String("DDL", job.Query), zap.Stringer("job", job),
+	log.Info("handle DDL", zap.String("changefeed", s.id),
+		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
