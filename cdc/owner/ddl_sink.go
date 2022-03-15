@@ -142,7 +142,6 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
-
 			select {
 			case <-ctx.Done():
 				return
@@ -171,6 +170,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					return
 				}
 			case ddl := <-s.ddlCh:
+				log.Info("emit ddl event", zap.Any("DDL", ddl),
+					zap.String("changefeed", ctx.ChangefeedVars().ID))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
