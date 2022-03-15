@@ -214,9 +214,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
-		log.Info("ddl is not finished yet",
-			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl),
-			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}

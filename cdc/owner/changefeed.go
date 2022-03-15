@@ -198,6 +198,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if c.currentTableNames == nil {
 		c.currentTableNames = c.schema.AllTableNames()
 	}
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -208,7 +209,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// So we return here.
 		return nil
 	}
-	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
