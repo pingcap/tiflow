@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -37,7 +38,6 @@ import (
 
 var (
 	etcdErrCompacted = v3rpc.ErrCompacted
-	tt               *testing.T
 )
 
 const (
@@ -1003,6 +1003,7 @@ func (t *testPessimistSuite) putDoneForSource(
 		opCh          = make(chan pessimism.Operation, 10)
 		errCh         = make(chan error, 10)
 		ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
+		doneErr       error
 	)
 
 	wg.Add(2)
@@ -1019,7 +1020,7 @@ func (t *testPessimistSuite) putDoneForSource(
 		}()
 		select {
 		case <-ctx2.Done():
-			t.T().Fatal("wait for the operation of the source timeout")
+			doneErr = errors.New("wait for the operation of the source timeout")
 		case op := <-opCh:
 			// put `done` after received non-`done`.
 			require.Equal(t.T(), exec, op.Exec)
@@ -1029,10 +1030,11 @@ func (t *testPessimistSuite) putDoneForSource(
 			require.NoError(t.T(), err)
 			require.True(t.T(), done)
 		case err := <-errCh:
-			t.T().Fatal(err)
+			doneErr = err
 		}
 	}()
 	wg.Wait()
+	require.NoError(t.T(), doneErr)
 }
 
 func (t *testPessimistSuite) noLockExist(p *Pessimist) {
