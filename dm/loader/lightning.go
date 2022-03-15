@@ -43,6 +43,7 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
+	TmpTLSConfigPath            = "lightning_tls"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -234,15 +235,16 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		cfg.Routes = l.cfg.RouteRules
 
-		// TODO lightning checkpoint will support s3 in other pr
-		if storage.IsS3Path(l.cfg.LoaderConfig.Dir) {
-			cfg.Checkpoint.Enable = false
-		} else {
-			cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-			cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
-			cfg.Checkpoint.DSN = cpPath
-			cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+		var cpPath string
+		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+		if err != nil {
+			return err
 		}
+		cfg.Checkpoint.DSN = cpPath
+		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
 		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
 		cfg.TiDB.Vars = make(map[string]string)
 		cfg.Routes = l.cfg.RouteRules
