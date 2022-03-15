@@ -27,6 +27,102 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type GenerateDataRequest struct {
+	FileNum   int32 `protobuf:"varint,1,opt,name=file_num,json=fileNum,proto3" json:"file_num,omitempty"`
+	RecordNum int32 `protobuf:"varint,2,opt,name=record_num,json=recordNum,proto3" json:"record_num,omitempty"`
+}
+
+func (m *GenerateDataRequest) Reset()         { *m = GenerateDataRequest{} }
+func (m *GenerateDataRequest) String() string { return proto.CompactTextString(m) }
+func (*GenerateDataRequest) ProtoMessage()    {}
+func (*GenerateDataRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_03dd23a8ba2c07e2, []int{0}
+}
+func (m *GenerateDataRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GenerateDataRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GenerateDataRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GenerateDataRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GenerateDataRequest.Merge(m, src)
+}
+func (m *GenerateDataRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GenerateDataRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GenerateDataRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GenerateDataRequest proto.InternalMessageInfo
+
+func (m *GenerateDataRequest) GetFileNum() int32 {
+	if m != nil {
+		return m.FileNum
+	}
+	return 0
+}
+
+func (m *GenerateDataRequest) GetRecordNum() int32 {
+	if m != nil {
+		return m.RecordNum
+	}
+	return 0
+}
+
+type GenerateDataResponse struct {
+	ErrMsg string `protobuf:"bytes,1,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
+}
+
+func (m *GenerateDataResponse) Reset()         { *m = GenerateDataResponse{} }
+func (m *GenerateDataResponse) String() string { return proto.CompactTextString(m) }
+func (*GenerateDataResponse) ProtoMessage()    {}
+func (*GenerateDataResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_03dd23a8ba2c07e2, []int{1}
+}
+func (m *GenerateDataResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GenerateDataResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GenerateDataResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GenerateDataResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GenerateDataResponse.Merge(m, src)
+}
+func (m *GenerateDataResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GenerateDataResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GenerateDataResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GenerateDataResponse proto.InternalMessageInfo
+
+func (m *GenerateDataResponse) GetErrMsg() string {
+	if m != nil {
+		return m.ErrMsg
+	}
+	return ""
+}
+
 type CheckDirRequest struct {
 	Dir string `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
 }
@@ -35,7 +131,7 @@ func (m *CheckDirRequest) Reset()         { *m = CheckDirRequest{} }
 func (m *CheckDirRequest) String() string { return proto.CompactTextString(m) }
 func (*CheckDirRequest) ProtoMessage()    {}
 func (*CheckDirRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{0}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{2}
 }
 func (m *CheckDirRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -72,15 +168,15 @@ func (m *CheckDirRequest) GetDir() string {
 }
 
 type CheckDirResponse struct {
-	ErrMsg      string `protobuf:"bytes,1,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
-	ErrFileName string `protobuf:"bytes,2,opt,name=err_file_name,json=errFileName,proto3" json:"err_file_name,omitempty"`
+	ErrMsg     string `protobuf:"bytes,1,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
+	ErrFileIdx int32  `protobuf:"varint,2,opt,name=err_file_idx,json=errFileIdx,proto3" json:"err_file_idx,omitempty"`
 }
 
 func (m *CheckDirResponse) Reset()         { *m = CheckDirResponse{} }
 func (m *CheckDirResponse) String() string { return proto.CompactTextString(m) }
 func (*CheckDirResponse) ProtoMessage()    {}
 func (*CheckDirResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{1}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{3}
 }
 func (m *CheckDirResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -116,11 +212,11 @@ func (m *CheckDirResponse) GetErrMsg() string {
 	return ""
 }
 
-func (m *CheckDirResponse) GetErrFileName() string {
+func (m *CheckDirResponse) GetErrFileIdx() int32 {
 	if m != nil {
-		return m.ErrFileName
+		return m.ErrFileIdx
 	}
-	return ""
+	return 0
 }
 
 type IsReadyRequest struct {
@@ -130,7 +226,7 @@ func (m *IsReadyRequest) Reset()         { *m = IsReadyRequest{} }
 func (m *IsReadyRequest) String() string { return proto.CompactTextString(m) }
 func (*IsReadyRequest) ProtoMessage()    {}
 func (*IsReadyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{2}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{4}
 }
 func (m *IsReadyRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -167,7 +263,7 @@ func (m *IsReadyResponse) Reset()         { *m = IsReadyResponse{} }
 func (m *IsReadyResponse) String() string { return proto.CompactTextString(m) }
 func (*IsReadyResponse) ProtoMessage()    {}
 func (*IsReadyResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{3}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{5}
 }
 func (m *IsReadyResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -204,14 +300,13 @@ func (m *IsReadyResponse) GetReady() bool {
 }
 
 type ListFilesReq struct {
-	FolderName string `protobuf:"bytes,1,opt,name=folderName,proto3" json:"folderName,omitempty"`
 }
 
 func (m *ListFilesReq) Reset()         { *m = ListFilesReq{} }
 func (m *ListFilesReq) String() string { return proto.CompactTextString(m) }
 func (*ListFilesReq) ProtoMessage()    {}
 func (*ListFilesReq) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{4}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{6}
 }
 func (m *ListFilesReq) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -240,22 +335,15 @@ func (m *ListFilesReq) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ListFilesReq proto.InternalMessageInfo
 
-func (m *ListFilesReq) GetFolderName() string {
-	if m != nil {
-		return m.FolderName
-	}
-	return ""
-}
-
 type ListFilesResponse struct {
-	FileNames []string `protobuf:"bytes,1,rep,name=fileNames,proto3" json:"fileNames,omitempty"`
+	FileNum int32 `protobuf:"varint,1,opt,name=fileNum,proto3" json:"fileNum,omitempty"`
 }
 
 func (m *ListFilesResponse) Reset()         { *m = ListFilesResponse{} }
 func (m *ListFilesResponse) String() string { return proto.CompactTextString(m) }
 func (*ListFilesResponse) ProtoMessage()    {}
 func (*ListFilesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{5}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{7}
 }
 func (m *ListFilesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -284,23 +372,23 @@ func (m *ListFilesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ListFilesResponse proto.InternalMessageInfo
 
-func (m *ListFilesResponse) GetFileNames() []string {
+func (m *ListFilesResponse) GetFileNum() int32 {
 	if m != nil {
-		return m.FileNames
+		return m.FileNum
 	}
-	return nil
+	return 0
 }
 
 type ReadLinesRequest struct {
-	FileName string `protobuf:"bytes,1,opt,name=fileName,proto3" json:"fileName,omitempty"`
-	LineNo   int64  `protobuf:"varint,2,opt,name=lineNo,proto3" json:"lineNo,omitempty"`
+	FileIdx int32  `protobuf:"varint,1,opt,name=fileIdx,proto3" json:"fileIdx,omitempty"`
+	LineNo  []byte `protobuf:"bytes,2,opt,name=lineNo,proto3" json:"lineNo,omitempty"`
 }
 
 func (m *ReadLinesRequest) Reset()         { *m = ReadLinesRequest{} }
 func (m *ReadLinesRequest) String() string { return proto.CompactTextString(m) }
 func (*ReadLinesRequest) ProtoMessage()    {}
 func (*ReadLinesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{6}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{8}
 }
 func (m *ReadLinesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -329,30 +417,32 @@ func (m *ReadLinesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReadLinesRequest proto.InternalMessageInfo
 
-func (m *ReadLinesRequest) GetFileName() string {
+func (m *ReadLinesRequest) GetFileIdx() int32 {
 	if m != nil {
-		return m.FileName
-	}
-	return ""
-}
-
-func (m *ReadLinesRequest) GetLineNo() int64 {
-	if m != nil {
-		return m.LineNo
+		return m.FileIdx
 	}
 	return 0
 }
 
+func (m *ReadLinesRequest) GetLineNo() []byte {
+	if m != nil {
+		return m.LineNo
+	}
+	return nil
+}
+
 type ReadLinesResponse struct {
-	Linestr string `protobuf:"bytes,1,opt,name=linestr,proto3" json:"linestr,omitempty"`
-	IsEof   bool   `protobuf:"varint,2,opt,name=isEof,proto3" json:"isEof,omitempty"`
+	Key    []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Val    []byte `protobuf:"bytes,2,opt,name=val,proto3" json:"val,omitempty"`
+	IsEof  bool   `protobuf:"varint,3,opt,name=isEof,proto3" json:"isEof,omitempty"`
+	ErrMsg string `protobuf:"bytes,4,opt,name=errMsg,proto3" json:"errMsg,omitempty"`
 }
 
 func (m *ReadLinesResponse) Reset()         { *m = ReadLinesResponse{} }
 func (m *ReadLinesResponse) String() string { return proto.CompactTextString(m) }
 func (*ReadLinesResponse) ProtoMessage()    {}
 func (*ReadLinesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{7}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{9}
 }
 func (m *ReadLinesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -381,11 +471,18 @@ func (m *ReadLinesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReadLinesResponse proto.InternalMessageInfo
 
-func (m *ReadLinesResponse) GetLinestr() string {
+func (m *ReadLinesResponse) GetKey() []byte {
 	if m != nil {
-		return m.Linestr
+		return m.Key
 	}
-	return ""
+	return nil
+}
+
+func (m *ReadLinesResponse) GetVal() []byte {
+	if m != nil {
+		return m.Val
+	}
+	return nil
 }
 
 func (m *ReadLinesResponse) GetIsEof() bool {
@@ -395,17 +492,25 @@ func (m *ReadLinesResponse) GetIsEof() bool {
 	return false
 }
 
+func (m *ReadLinesResponse) GetErrMsg() string {
+	if m != nil {
+		return m.ErrMsg
+	}
+	return ""
+}
+
 type WriteLinesRequest struct {
-	FileName string `protobuf:"bytes,1,opt,name=fileName,proto3" json:"fileName,omitempty"`
-	Key      string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value    string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Dir     string `protobuf:"bytes,1,opt,name=dir,proto3" json:"dir,omitempty"`
+	FileIdx int32  `protobuf:"varint,2,opt,name=file_idx,json=fileIdx,proto3" json:"file_idx,omitempty"`
+	Key     []byte `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Value   []byte `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
 }
 
 func (m *WriteLinesRequest) Reset()         { *m = WriteLinesRequest{} }
 func (m *WriteLinesRequest) String() string { return proto.CompactTextString(m) }
 func (*WriteLinesRequest) ProtoMessage()    {}
 func (*WriteLinesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{8}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{10}
 }
 func (m *WriteLinesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -434,36 +539,43 @@ func (m *WriteLinesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WriteLinesRequest proto.InternalMessageInfo
 
-func (m *WriteLinesRequest) GetFileName() string {
+func (m *WriteLinesRequest) GetDir() string {
 	if m != nil {
-		return m.FileName
+		return m.Dir
 	}
 	return ""
 }
 
-func (m *WriteLinesRequest) GetKey() string {
+func (m *WriteLinesRequest) GetFileIdx() int32 {
+	if m != nil {
+		return m.FileIdx
+	}
+	return 0
+}
+
+func (m *WriteLinesRequest) GetKey() []byte {
 	if m != nil {
 		return m.Key
 	}
-	return ""
+	return nil
 }
 
-func (m *WriteLinesRequest) GetValue() string {
+func (m *WriteLinesRequest) GetValue() []byte {
 	if m != nil {
 		return m.Value
 	}
-	return ""
+	return nil
 }
 
 type WriteLinesResponse struct {
-	Err *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
+	ErrMsg string `protobuf:"bytes,1,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
 }
 
 func (m *WriteLinesResponse) Reset()         { *m = WriteLinesResponse{} }
 func (m *WriteLinesResponse) String() string { return proto.CompactTextString(m) }
 func (*WriteLinesResponse) ProtoMessage()    {}
 func (*WriteLinesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_03dd23a8ba2c07e2, []int{9}
+	return fileDescriptor_03dd23a8ba2c07e2, []int{11}
 }
 func (m *WriteLinesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -492,14 +604,16 @@ func (m *WriteLinesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WriteLinesResponse proto.InternalMessageInfo
 
-func (m *WriteLinesResponse) GetErr() *Error {
+func (m *WriteLinesResponse) GetErrMsg() string {
 	if m != nil {
-		return m.Err
+		return m.ErrMsg
 	}
-	return nil
+	return ""
 }
 
 func init() {
+	proto.RegisterType((*GenerateDataRequest)(nil), "pb.GenerateDataRequest")
+	proto.RegisterType((*GenerateDataResponse)(nil), "pb.GenerateDataResponse")
 	proto.RegisterType((*CheckDirRequest)(nil), "pb.CheckDirRequest")
 	proto.RegisterType((*CheckDirResponse)(nil), "pb.CheckDirResponse")
 	proto.RegisterType((*IsReadyRequest)(nil), "pb.IsReadyRequest")
@@ -515,38 +629,41 @@ func init() {
 func init() { proto.RegisterFile("datarw.proto", fileDescriptor_03dd23a8ba2c07e2) }
 
 var fileDescriptor_03dd23a8ba2c07e2 = []byte{
-	// 484 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0x4d, 0x6f, 0xd3, 0x40,
-	0x10, 0x8d, 0x63, 0x91, 0xc4, 0xd3, 0x96, 0x3a, 0x4b, 0x28, 0x96, 0x41, 0x56, 0xb5, 0x1c, 0xc8,
-	0x29, 0xa2, 0x01, 0x6e, 0x48, 0x48, 0xf4, 0x43, 0x42, 0x2a, 0x45, 0x5a, 0x0e, 0x39, 0x56, 0x4e,
-	0x33, 0x29, 0xab, 0x3a, 0x71, 0xba, 0xeb, 0x16, 0xf5, 0x5f, 0xf0, 0x4f, 0xf8, 0x1b, 0x1c, 0x7b,
-	0xe4, 0x88, 0x92, 0x3f, 0x82, 0x66, 0x77, 0x9d, 0x38, 0xe9, 0xa5, 0x37, 0xcf, 0xdb, 0xe7, 0xf7,
-	0xde, 0xcc, 0xce, 0xc2, 0xf6, 0x28, 0x2d, 0x52, 0xf5, 0xb3, 0x37, 0x53, 0x79, 0x91, 0xb3, 0xfa,
-	0x6c, 0x18, 0x6f, 0xa1, 0x52, 0xb9, 0xb2, 0x00, 0x7f, 0x0d, 0xbb, 0x87, 0x3f, 0xf0, 0xe2, 0xea,
-	0x48, 0x2a, 0x81, 0xd7, 0x37, 0xa8, 0x0b, 0x16, 0x82, 0x3f, 0x92, 0x2a, 0xf2, 0xf6, 0xbd, 0x6e,
-	0x20, 0xe8, 0x93, 0x7f, 0x83, 0x70, 0x45, 0xd2, 0xb3, 0x7c, 0xaa, 0x91, 0xbd, 0x80, 0x26, 0x2a,
-	0x75, 0x3e, 0xd1, 0x97, 0x8e, 0xd9, 0x40, 0xa5, 0xbe, 0xea, 0x4b, 0xc6, 0x61, 0x87, 0x0e, 0xc6,
-	0x32, 0xc3, 0xf3, 0x69, 0x3a, 0xc1, 0xa8, 0x6e, 0x8e, 0xc9, 0xf5, 0x44, 0x66, 0x78, 0x96, 0x4e,
-	0x90, 0x87, 0xf0, 0xf4, 0x8b, 0x16, 0x98, 0x8e, 0xee, 0x9c, 0x29, 0x7f, 0x03, 0xbb, 0x4b, 0xc4,
-	0x39, 0x74, 0xe0, 0x89, 0x22, 0xc0, 0xe8, 0xb7, 0x84, 0x2d, 0x78, 0x0f, 0xb6, 0x4f, 0xa5, 0x2e,
-	0x48, 0x4a, 0x0b, 0xbc, 0x66, 0x09, 0xc0, 0x38, 0xcf, 0x46, 0xa8, 0x48, 0xd8, 0x45, 0xa9, 0x20,
-	0xfc, 0x00, 0xda, 0x15, 0xbe, 0x93, 0x7e, 0x05, 0xc1, 0xd8, 0x65, 0xd1, 0x91, 0xb7, 0xef, 0x77,
-	0x03, 0xb1, 0x02, 0xf8, 0x09, 0x84, 0x94, 0xe4, 0x54, 0x4e, 0x8d, 0x85, 0x19, 0x4a, 0x0c, 0xad,
-	0x92, 0xe0, 0x4c, 0x96, 0x35, 0xdb, 0x83, 0x46, 0x26, 0xa7, 0x78, 0x96, 0x9b, 0x56, 0x7d, 0xe1,
-	0x2a, 0x7e, 0x08, 0xed, 0x8a, 0x8e, 0xb3, 0x8e, 0xa0, 0x49, 0xc7, 0xba, 0x28, 0x27, 0x5c, 0x96,
-	0xd4, 0xaf, 0xd4, 0xc7, 0xf9, 0xd8, 0xa8, 0xb4, 0x84, 0x2d, 0xf8, 0x00, 0xda, 0x03, 0x25, 0x0b,
-	0x7c, 0x74, 0x9a, 0x10, 0xfc, 0x2b, 0xbc, 0x73, 0x53, 0xa7, 0x4f, 0x12, 0xbe, 0x4d, 0xb3, 0x1b,
-	0x8c, 0x7c, 0x83, 0xd9, 0x82, 0x1f, 0x00, 0xab, 0x0a, 0xbb, 0x78, 0x2f, 0xc1, 0x47, 0x65, 0xa3,
-	0x6d, 0xf5, 0x83, 0xde, 0x6c, 0xd8, 0x3b, 0xa6, 0x6d, 0x11, 0x84, 0xf6, 0x7f, 0xd7, 0x61, 0xe7,
-	0x28, 0x2d, 0x52, 0x31, 0xf8, 0x8e, 0xea, 0x56, 0x5e, 0x20, 0xfb, 0x08, 0xc1, 0xb2, 0x45, 0xd6,
-	0x21, 0xfa, 0xe6, 0xe4, 0xe2, 0xe7, 0x1b, 0xa8, 0x35, 0xe2, 0xb5, 0xb7, 0x1e, 0xfb, 0x04, 0xb0,
-	0x8a, 0xc0, 0x0c, 0xf1, 0x41, 0xaf, 0xf1, 0xde, 0x26, 0x5c, 0x0a, 0x74, 0x3d, 0xf6, 0x1e, 0x82,
-	0xe5, 0xe5, 0xb2, 0x90, 0x88, 0xd5, 0xdd, 0xb0, 0xd6, 0x0f, 0x6f, 0xbf, 0x0f, 0x4d, 0xb7, 0x6b,
-	0x8c, 0x11, 0x63, 0x7d, 0x15, 0xe3, 0x67, 0x6b, 0x98, 0xfb, 0xe7, 0x03, 0xb4, 0xca, 0x27, 0xc0,
-	0x0c, 0x61, 0xe3, 0xd5, 0xc4, 0x9d, 0x75, 0xd0, 0xfe, 0xf6, 0x39, 0xfa, 0x33, 0x4f, 0xbc, 0xfb,
-	0x79, 0xe2, 0xfd, 0x9b, 0x27, 0xde, 0xaf, 0x45, 0x52, 0xbb, 0x5f, 0x24, 0xb5, 0xbf, 0x8b, 0xa4,
-	0x36, 0x6c, 0x98, 0xf7, 0xf7, 0xee, 0x7f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0c, 0x94, 0x90, 0x96,
-	0xa0, 0x03, 0x00, 0x00,
+	// 532 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0x8e, 0x13, 0xf2, 0x37, 0x32, 0xad, 0xb3, 0x35, 0xad, 0xb1, 0x84, 0x55, 0x2d, 0x07, 0x7a,
+	0x69, 0x40, 0x05, 0x6e, 0x48, 0x08, 0x08, 0xa0, 0x48, 0x6d, 0x90, 0xcc, 0xa1, 0xc7, 0xca, 0x89,
+	0xa7, 0xed, 0xaa, 0x8e, 0x9d, 0xae, 0xed, 0x10, 0xde, 0x82, 0xc7, 0xe2, 0xd8, 0x23, 0x47, 0x94,
+	0xbc, 0x01, 0x4f, 0x80, 0x76, 0xbd, 0x71, 0x6c, 0xa7, 0x52, 0x6f, 0x9e, 0xd9, 0x6f, 0xe6, 0x9b,
+	0x6f, 0xf6, 0x5b, 0x83, 0xee, 0x7b, 0x89, 0xc7, 0x7f, 0xf4, 0x67, 0x3c, 0x4a, 0x22, 0x52, 0x9f,
+	0x8d, 0xe9, 0x37, 0xd8, 0xfb, 0x8a, 0x21, 0x72, 0x2f, 0xc1, 0x81, 0x97, 0x78, 0x2e, 0xde, 0xa6,
+	0x18, 0x27, 0xe4, 0x29, 0x74, 0x2e, 0x59, 0x80, 0x17, 0x61, 0x3a, 0xb5, 0xb4, 0x43, 0xed, 0xa8,
+	0xe9, 0xb6, 0x45, 0x3c, 0x4a, 0xa7, 0xe4, 0x19, 0x00, 0xc7, 0x49, 0xc4, 0x7d, 0x79, 0x58, 0x97,
+	0x87, 0xdd, 0x2c, 0x33, 0x4a, 0xa7, 0xf4, 0x25, 0x98, 0xe5, 0x86, 0xf1, 0x2c, 0x0a, 0x63, 0x24,
+	0x07, 0xd0, 0x46, 0xce, 0x2f, 0xa6, 0xf1, 0x95, 0x6c, 0xd8, 0x75, 0x5b, 0xc8, 0xf9, 0x59, 0x7c,
+	0x45, 0x9f, 0xc3, 0xee, 0xa7, 0x6b, 0x9c, 0xdc, 0x0c, 0x18, 0x5f, 0xb3, 0x1b, 0xd0, 0xf0, 0x19,
+	0x57, 0x38, 0xf1, 0x49, 0xcf, 0xc0, 0xd8, 0x80, 0x1e, 0xe8, 0x48, 0x0e, 0x41, 0x17, 0x07, 0x52,
+	0x00, 0xf3, 0x17, 0x6a, 0x46, 0x40, 0xce, 0xbf, 0xb0, 0x00, 0x87, 0xfe, 0x82, 0x1a, 0xb0, 0x33,
+	0x8c, 0x5d, 0xf4, 0xfc, 0x9f, 0x8a, 0x92, 0xbe, 0x80, 0xdd, 0x3c, 0xa3, 0xfa, 0x9b, 0xd0, 0xe4,
+	0x22, 0x21, 0xbb, 0x77, 0xdc, 0x2c, 0xa0, 0x3b, 0xa0, 0x9f, 0xb2, 0x38, 0x11, 0x9d, 0x62, 0x17,
+	0x6f, 0xe9, 0x31, 0xf4, 0x0a, 0xb1, 0x2a, 0xb5, 0x60, 0xbd, 0xae, 0xca, 0xf6, 0xe8, 0x00, 0x0c,
+	0xc1, 0x72, 0xca, 0x42, 0x59, 0x2e, 0xe5, 0x2a, 0xf4, 0xd0, 0x5f, 0x14, 0xd1, 0x43, 0x7f, 0x41,
+	0xf6, 0xa1, 0x15, 0xb0, 0x10, 0x47, 0x91, 0xd4, 0xa0, 0xbb, 0x2a, 0xa2, 0x08, 0xbd, 0x42, 0x17,
+	0x45, 0x6a, 0x40, 0xe3, 0x06, 0xb3, 0x69, 0x75, 0x57, 0x7c, 0x8a, 0xcc, 0xdc, 0x0b, 0x54, 0xad,
+	0xf8, 0x14, 0x9a, 0x58, 0xfc, 0x39, 0xba, 0xb4, 0x1a, 0x99, 0x26, 0x19, 0x08, 0x9a, 0x6c, 0x75,
+	0xd6, 0xa3, 0xd2, 0xd5, 0x5c, 0x43, 0xef, 0x9c, 0xb3, 0x04, 0x4b, 0xd3, 0x6e, 0x5d, 0x4e, 0x6e,
+	0x96, 0xcd, 0xae, 0x73, 0x01, 0x6a, 0xa6, 0xc6, 0x66, 0x26, 0x13, 0x9a, 0x73, 0x2f, 0x48, 0x51,
+	0x52, 0xe9, 0x6e, 0x16, 0xd0, 0x63, 0x20, 0x45, 0xa6, 0x07, 0x6e, 0xf8, 0xe4, 0x5f, 0x1d, 0x1e,
+	0x4b, 0x77, 0x9d, 0x7f, 0x47, 0x3e, 0x67, 0x13, 0x24, 0xef, 0xa0, 0x9b, 0x6f, 0x84, 0x98, 0xfd,
+	0xd9, 0xb8, 0x5f, 0x5d, 0xb3, 0xfd, 0xa4, 0x92, 0xcd, 0x48, 0x68, 0xed, 0x95, 0x46, 0xde, 0x03,
+	0x6c, 0xe8, 0x89, 0x04, 0x6e, 0x09, 0xb7, 0xf7, 0xab, 0xe9, 0x75, 0x83, 0x23, 0x8d, 0x7c, 0x00,
+	0xbd, 0xe8, 0x7a, 0x72, 0x20, 0xb0, 0xf7, 0x3c, 0x2c, 0xdb, 0xda, 0x3e, 0x50, 0x62, 0xdf, 0x40,
+	0x37, 0x37, 0x12, 0x31, 0x04, 0xac, 0xe8, 0xb3, 0x6c, 0xfa, 0x6d, 0xa7, 0x9d, 0x40, 0x5b, 0xf9,
+	0x96, 0x10, 0x81, 0x28, 0xdb, 0xda, 0xde, 0x2b, 0xe5, 0x54, 0xcd, 0x5b, 0xe8, 0xac, 0x1f, 0x13,
+	0x91, 0x80, 0xca, 0xfb, 0xb3, 0xcd, 0x72, 0x32, 0x2b, 0xfb, 0x68, 0xfd, 0x5e, 0x3a, 0xda, 0xdd,
+	0xd2, 0xd1, 0xfe, 0x2e, 0x1d, 0xed, 0xd7, 0xca, 0xa9, 0xdd, 0xad, 0x9c, 0xda, 0x9f, 0x95, 0x53,
+	0x1b, 0xb7, 0xe4, 0xff, 0xe4, 0xf5, 0xff, 0x00, 0x00, 0x00, 0xff, 0xff, 0x42, 0x11, 0xc6, 0x92,
+	0x5f, 0x04, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -563,6 +680,7 @@ const _ = grpc.SupportPackageIsVersion4
 type DataRWServiceClient interface {
 	ReadLines(ctx context.Context, in *ReadLinesRequest, opts ...grpc.CallOption) (DataRWService_ReadLinesClient, error)
 	WriteLines(ctx context.Context, opts ...grpc.CallOption) (DataRWService_WriteLinesClient, error)
+	GenerateData(ctx context.Context, in *GenerateDataRequest, opts ...grpc.CallOption) (*GenerateDataResponse, error)
 	ListFiles(ctx context.Context, in *ListFilesReq, opts ...grpc.CallOption) (*ListFilesResponse, error)
 	IsReady(ctx context.Context, in *IsReadyRequest, opts ...grpc.CallOption) (*IsReadyResponse, error)
 	CheckDir(ctx context.Context, in *CheckDirRequest, opts ...grpc.CallOption) (*CheckDirResponse, error)
@@ -642,6 +760,15 @@ func (x *dataRWServiceWriteLinesClient) CloseAndRecv() (*WriteLinesResponse, err
 	return m, nil
 }
 
+func (c *dataRWServiceClient) GenerateData(ctx context.Context, in *GenerateDataRequest, opts ...grpc.CallOption) (*GenerateDataResponse, error) {
+	out := new(GenerateDataResponse)
+	err := c.cc.Invoke(ctx, "/pb.DataRWService/GenerateData", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *dataRWServiceClient) ListFiles(ctx context.Context, in *ListFilesReq, opts ...grpc.CallOption) (*ListFilesResponse, error) {
 	out := new(ListFilesResponse)
 	err := c.cc.Invoke(ctx, "/pb.DataRWService/ListFiles", in, out, opts...)
@@ -673,6 +800,7 @@ func (c *dataRWServiceClient) CheckDir(ctx context.Context, in *CheckDirRequest,
 type DataRWServiceServer interface {
 	ReadLines(*ReadLinesRequest, DataRWService_ReadLinesServer) error
 	WriteLines(DataRWService_WriteLinesServer) error
+	GenerateData(context.Context, *GenerateDataRequest) (*GenerateDataResponse, error)
 	ListFiles(context.Context, *ListFilesReq) (*ListFilesResponse, error)
 	IsReady(context.Context, *IsReadyRequest) (*IsReadyResponse, error)
 	CheckDir(context.Context, *CheckDirRequest) (*CheckDirResponse, error)
@@ -687,6 +815,9 @@ func (*UnimplementedDataRWServiceServer) ReadLines(req *ReadLinesRequest, srv Da
 }
 func (*UnimplementedDataRWServiceServer) WriteLines(srv DataRWService_WriteLinesServer) error {
 	return status.Errorf(codes.Unimplemented, "method WriteLines not implemented")
+}
+func (*UnimplementedDataRWServiceServer) GenerateData(ctx context.Context, req *GenerateDataRequest) (*GenerateDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateData not implemented")
 }
 func (*UnimplementedDataRWServiceServer) ListFiles(ctx context.Context, req *ListFilesReq) (*ListFilesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
@@ -749,6 +880,24 @@ func (x *dataRWServiceWriteLinesServer) Recv() (*WriteLinesRequest, error) {
 	return m, nil
 }
 
+func _DataRWService_GenerateData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DataRWServiceServer).GenerateData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.DataRWService/GenerateData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DataRWServiceServer).GenerateData(ctx, req.(*GenerateDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DataRWService_ListFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListFilesReq)
 	if err := dec(in); err != nil {
@@ -808,6 +957,10 @@ var _DataRWService_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*DataRWServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GenerateData",
+			Handler:    _DataRWService_GenerateData_Handler,
+		},
+		{
 			MethodName: "ListFiles",
 			Handler:    _DataRWService_ListFiles_Handler,
 		},
@@ -833,6 +986,69 @@ var _DataRWService_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Metadata: "datarw.proto",
+}
+
+func (m *GenerateDataRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GenerateDataRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GenerateDataRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.RecordNum != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.RecordNum))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.FileNum != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.FileNum))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GenerateDataResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GenerateDataResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GenerateDataResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.ErrMsg) > 0 {
+		i -= len(m.ErrMsg)
+		copy(dAtA[i:], m.ErrMsg)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.ErrMsg)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *CheckDirRequest) Marshal() (dAtA []byte, err error) {
@@ -885,12 +1101,10 @@ func (m *CheckDirResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.ErrFileName) > 0 {
-		i -= len(m.ErrFileName)
-		copy(dAtA[i:], m.ErrFileName)
-		i = encodeVarintDatarw(dAtA, i, uint64(len(m.ErrFileName)))
+	if m.ErrFileIdx != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.ErrFileIdx))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x10
 	}
 	if len(m.ErrMsg) > 0 {
 		i -= len(m.ErrMsg)
@@ -978,13 +1192,6 @@ func (m *ListFilesReq) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.FolderName) > 0 {
-		i -= len(m.FolderName)
-		copy(dAtA[i:], m.FolderName)
-		i = encodeVarintDatarw(dAtA, i, uint64(len(m.FolderName)))
-		i--
-		dAtA[i] = 0xa
-	}
 	return len(dAtA) - i, nil
 }
 
@@ -1008,14 +1215,10 @@ func (m *ListFilesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.FileNames) > 0 {
-		for iNdEx := len(m.FileNames) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.FileNames[iNdEx])
-			copy(dAtA[i:], m.FileNames[iNdEx])
-			i = encodeVarintDatarw(dAtA, i, uint64(len(m.FileNames[iNdEx])))
-			i--
-			dAtA[i] = 0xa
-		}
+	if m.FileNum != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.FileNum))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -1040,17 +1243,17 @@ func (m *ReadLinesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.LineNo != 0 {
-		i = encodeVarintDatarw(dAtA, i, uint64(m.LineNo))
+	if len(m.LineNo) > 0 {
+		i -= len(m.LineNo)
+		copy(dAtA[i:], m.LineNo)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.LineNo)))
 		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x12
 	}
-	if len(m.FileName) > 0 {
-		i -= len(m.FileName)
-		copy(dAtA[i:], m.FileName)
-		i = encodeVarintDatarw(dAtA, i, uint64(len(m.FileName)))
+	if m.FileIdx != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.FileIdx))
 		i--
-		dAtA[i] = 0xa
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -1075,6 +1278,13 @@ func (m *ReadLinesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.ErrMsg) > 0 {
+		i -= len(m.ErrMsg)
+		copy(dAtA[i:], m.ErrMsg)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.ErrMsg)))
+		i--
+		dAtA[i] = 0x22
+	}
 	if m.IsEof {
 		i--
 		if m.IsEof {
@@ -1083,12 +1293,19 @@ func (m *ReadLinesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x18
 	}
-	if len(m.Linestr) > 0 {
-		i -= len(m.Linestr)
-		copy(dAtA[i:], m.Linestr)
-		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Linestr)))
+	if len(m.Val) > 0 {
+		i -= len(m.Val)
+		copy(dAtA[i:], m.Val)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Val)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Key) > 0 {
+		i -= len(m.Key)
+		copy(dAtA[i:], m.Key)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Key)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1120,19 +1337,24 @@ func (m *WriteLinesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.Value)
 		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Value)))
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x22
 	}
 	if len(m.Key) > 0 {
 		i -= len(m.Key)
 		copy(dAtA[i:], m.Key)
 		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Key)))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x1a
 	}
-	if len(m.FileName) > 0 {
-		i -= len(m.FileName)
-		copy(dAtA[i:], m.FileName)
-		i = encodeVarintDatarw(dAtA, i, uint64(len(m.FileName)))
+	if m.FileIdx != 0 {
+		i = encodeVarintDatarw(dAtA, i, uint64(m.FileIdx))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Dir) > 0 {
+		i -= len(m.Dir)
+		copy(dAtA[i:], m.Dir)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.Dir)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1159,15 +1381,10 @@ func (m *WriteLinesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Err != nil {
-		{
-			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintDatarw(dAtA, i, uint64(size))
-		}
+	if len(m.ErrMsg) > 0 {
+		i -= len(m.ErrMsg)
+		copy(dAtA[i:], m.ErrMsg)
+		i = encodeVarintDatarw(dAtA, i, uint64(len(m.ErrMsg)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1185,6 +1402,34 @@ func encodeVarintDatarw(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *GenerateDataRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.FileNum != 0 {
+		n += 1 + sovDatarw(uint64(m.FileNum))
+	}
+	if m.RecordNum != 0 {
+		n += 1 + sovDatarw(uint64(m.RecordNum))
+	}
+	return n
+}
+
+func (m *GenerateDataResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ErrMsg)
+	if l > 0 {
+		n += 1 + l + sovDatarw(uint64(l))
+	}
+	return n
+}
+
 func (m *CheckDirRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1208,9 +1453,8 @@ func (m *CheckDirResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovDatarw(uint64(l))
 	}
-	l = len(m.ErrFileName)
-	if l > 0 {
-		n += 1 + l + sovDatarw(uint64(l))
+	if m.ErrFileIdx != 0 {
+		n += 1 + sovDatarw(uint64(m.ErrFileIdx))
 	}
 	return n
 }
@@ -1242,10 +1486,6 @@ func (m *ListFilesReq) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.FolderName)
-	if l > 0 {
-		n += 1 + l + sovDatarw(uint64(l))
-	}
 	return n
 }
 
@@ -1255,11 +1495,8 @@ func (m *ListFilesResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if len(m.FileNames) > 0 {
-		for _, s := range m.FileNames {
-			l = len(s)
-			n += 1 + l + sovDatarw(uint64(l))
-		}
+	if m.FileNum != 0 {
+		n += 1 + sovDatarw(uint64(m.FileNum))
 	}
 	return n
 }
@@ -1270,12 +1507,12 @@ func (m *ReadLinesRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.FileName)
+	if m.FileIdx != 0 {
+		n += 1 + sovDatarw(uint64(m.FileIdx))
+	}
+	l = len(m.LineNo)
 	if l > 0 {
 		n += 1 + l + sovDatarw(uint64(l))
-	}
-	if m.LineNo != 0 {
-		n += 1 + sovDatarw(uint64(m.LineNo))
 	}
 	return n
 }
@@ -1286,12 +1523,20 @@ func (m *ReadLinesResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Linestr)
+	l = len(m.Key)
+	if l > 0 {
+		n += 1 + l + sovDatarw(uint64(l))
+	}
+	l = len(m.Val)
 	if l > 0 {
 		n += 1 + l + sovDatarw(uint64(l))
 	}
 	if m.IsEof {
 		n += 2
+	}
+	l = len(m.ErrMsg)
+	if l > 0 {
+		n += 1 + l + sovDatarw(uint64(l))
 	}
 	return n
 }
@@ -1302,9 +1547,12 @@ func (m *WriteLinesRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.FileName)
+	l = len(m.Dir)
 	if l > 0 {
 		n += 1 + l + sovDatarw(uint64(l))
+	}
+	if m.FileIdx != 0 {
+		n += 1 + sovDatarw(uint64(m.FileIdx))
 	}
 	l = len(m.Key)
 	if l > 0 {
@@ -1323,8 +1571,8 @@ func (m *WriteLinesResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Err != nil {
-		l = m.Err.Size()
+	l = len(m.ErrMsg)
+	if l > 0 {
 		n += 1 + l + sovDatarw(uint64(l))
 	}
 	return n
@@ -1335,6 +1583,176 @@ func sovDatarw(x uint64) (n int) {
 }
 func sozDatarw(x uint64) (n int) {
 	return sovDatarw(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *GenerateDataRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDatarw
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GenerateDataRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GenerateDataRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FileNum", wireType)
+			}
+			m.FileNum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FileNum |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RecordNum", wireType)
+			}
+			m.RecordNum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RecordNum |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDatarw(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GenerateDataResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDatarw
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GenerateDataResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GenerateDataResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrMsg", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ErrMsg = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDatarw(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *CheckDirRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1480,10 +1898,10 @@ func (m *CheckDirResponse) Unmarshal(dAtA []byte) error {
 			m.ErrMsg = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ErrFileName", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrFileIdx", wireType)
 			}
-			var stringLen uint64
+			m.ErrFileIdx = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -1493,24 +1911,11 @@ func (m *CheckDirResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.ErrFileIdx |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ErrFileName = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDatarw(dAtA[iNdEx:])
@@ -1681,38 +2086,6 @@ func (m *ListFilesReq) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: ListFilesReq: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FolderName", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDatarw
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.FolderName = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDatarw(dAtA[iNdEx:])
@@ -1764,10 +2137,10 @@ func (m *ListFilesResponse) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FileNames", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FileNum", wireType)
 			}
-			var stringLen uint64
+			m.FileNum = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -1777,24 +2150,11 @@ func (m *ListFilesResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.FileNum |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthDatarw
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.FileNames = append(m.FileNames, string(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDatarw(dAtA[iNdEx:])
@@ -1846,10 +2206,10 @@ func (m *ReadLinesRequest) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FileName", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FileIdx", wireType)
 			}
-			var stringLen uint64
+			m.FileIdx = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -1859,43 +2219,45 @@ func (m *ReadLinesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.FileIdx |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LineNo", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
 				return ErrInvalidLengthDatarw
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthDatarw
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileName = string(dAtA[iNdEx:postIndex])
+			m.LineNo = append(m.LineNo[:0], dAtA[iNdEx:postIndex]...)
+			if m.LineNo == nil {
+				m.LineNo = []byte{}
+			}
 			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LineNo", wireType)
-			}
-			m.LineNo = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDatarw
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.LineNo |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDatarw(dAtA[iNdEx:])
@@ -1948,7 +2310,95 @@ func (m *ReadLinesResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Linestr", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Val", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthDatarw
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Val = append(m.Val[:0], dAtA[iNdEx:postIndex]...)
+			if m.Val == nil {
+				m.Val = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsEof", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsEof = bool(v != 0)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrMsg", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1976,28 +2426,8 @@ func (m *ReadLinesResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Linestr = string(dAtA[iNdEx:postIndex])
+			m.ErrMsg = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field IsEof", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowDatarw
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				v |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.IsEof = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipDatarw(dAtA[iNdEx:])
@@ -2050,7 +2480,7 @@ func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FileName", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Dir", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2078,13 +2508,32 @@ func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileName = string(dAtA[iNdEx:postIndex])
+			m.Dir = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FileIdx", wireType)
+			}
+			m.FileIdx = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDatarw
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FileIdx |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
-			var stringLen uint64
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -2094,29 +2543,31 @@ func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthDatarw
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthDatarw
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Key = string(dAtA[iNdEx:postIndex])
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
 			iNdEx = postIndex
-		case 3:
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
 			}
-			var stringLen uint64
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -2126,23 +2577,25 @@ func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthDatarw
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthDatarw
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Value = string(dAtA[iNdEx:postIndex])
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
+			if m.Value == nil {
+				m.Value = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2196,9 +2649,9 @@ func (m *WriteLinesResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ErrMsg", wireType)
 			}
-			var msglen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowDatarw
@@ -2208,27 +2661,23 @@ func (m *WriteLinesResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthDatarw
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthDatarw
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Err == nil {
-				m.Err = &Error{}
-			}
-			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.ErrMsg = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

@@ -18,7 +18,6 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -30,7 +29,7 @@ type Config struct {
 }
 
 type workerInfo struct {
-	file   string
+	idx    int
 	curLoc int64
 	handle lib.WorkerHandle
 }
@@ -72,32 +71,29 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.
 	return jm
 }
 
-func (jm *JobMaster) InitImpl(ctx context.Context) error {
+func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	if jm.syncInfo.DstHost == jm.syncInfo.SrcHost && jm.syncInfo.SrcDir == jm.syncInfo.DstDir {
 		return &errorInfo{info: "bad configure file ,make sure the source address is not the same as the destination"}
 	}
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.status = lib.WorkerStatusInit
-	fileNames, err := jm.listSrcFiles(ctx)
+	jm.filesNum, err = jm.listSrcFiles(ctx)
 	if err != nil {
 		return err
 	}
-	jm.filesNum = len(fileNames)
 	if jm.filesNum == 0 {
 		log.L().Info("no file found under the folder ", zap.Any("message", jm.syncInfo.DstDir))
 	}
 	log.L().Info(" cvs jobmaster list file success", zap.Any("id :", jm.workerID), zap.Any(" file number :", jm.filesNum))
 	// todo: store the jobmaster information into the metastore
-	for _, file := range fileNames {
-		dstDir := jm.syncInfo.DstDir + "/" + file
-		srcDir := jm.syncInfo.SrcDir + "/" + file
-		conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: 0}
+	for idx := 0; idx < jm.filesNum; idx++ {
+		conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, Idx: idx, DstHost: jm.syncInfo.DstHost, DstDir: jm.syncInfo.DstDir, StartLoc: "0"}
 		workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10 /* TODO add cost */)
 		if err != nil {
-			// todo : handle the error case
+			// todo : handle the error case, should recover for failing to create worker
 			return err
 		}
-		jm.syncFilesInfo[workerID] = &workerInfo{file: file, curLoc: 0, handle: nil}
+		jm.syncFilesInfo[workerID] = &workerInfo{idx: idx, curLoc: 0, handle: nil}
 	}
 	return nil
 }
@@ -131,7 +127,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 				filesNum++
 			}
 		} else if status.Code == lib.WorkerStatusError {
-			log.L().Error("sync file failed ", zap.Any("message", worker.file))
+			log.L().Error("sync file failed ", zap.Any("idx", worker.idx))
 		} else {
 			log.L().Info("worker status abnormal", zap.Any("status", status))
 		}
@@ -159,9 +155,9 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	// todo : add the worker information to the sync files map
 	syncInfo, exist := jm.syncFilesInfo[worker.ID()]
 	if !exist {
-		log.L().Panic("bad worker found", zap.Any("message", worker.ID()))
+		log.L().Panic("phantom worker found", zap.Any("id", worker.ID()))
 	} else {
-		log.L().Info("worker online ", zap.Any("fileName", syncInfo.file))
+		log.L().Info("worker online ", zap.Any("id", worker.ID()))
 	}
 	syncInfo.handle = worker
 	return nil
@@ -176,22 +172,20 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	// Force to set worker handle, in case of worker finishes before OnWorkerOnline
 	// is fired and worker handle is missing
 	syncInfo.handle = worker
-	if derrors.ErrWorkerFinish.Equal(reason) {
-		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()))
-		return nil
-	}
-	var err error
-	dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
-	srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
-	conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: syncInfo.curLoc}
-	workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10)
-	if err != nil {
-		log.L().Info("create worker failed ", zap.String(" information :", err.Error()))
-	}
-	delete(jm.syncFilesInfo, worker.ID())
-	// todo : if the worker id is empty ,the sync file will be lost.
-	jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
-	return err
+	log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
+	// TODO failover
+	return nil
+	//var err error
+	//dstDir := jm.syncInfo.DstDir + "/" + syncInfo.file
+	//srcDir := jm.syncInfo.SrcDir + "/" + syncInfo.file
+	//conf := cvsTask.Config{SrcHost: jm.syncInfo.SrcHost, SrcDir: srcDir, DstHost: jm.syncInfo.DstHost, DstDir: dstDir, StartLoc: syncInfo.curLoc}
+	//workerID, err := jm.CreateWorker(lib.CvsTask, conf, 10)
+	//if err != nil {
+	//	log.L().Info("create worker failed ", zap.String(" information :", err.Error()))
+	//}
+	//delete(jm.syncFilesInfo, worker.ID())
+	//// todo : if the worker id is empty ,the sync file will be lost.
+	//jm.syncFilesInfo[workerID] = &workerInfo{file: syncInfo.file, curLoc: syncInfo.curLoc, handle: nil}
 }
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
@@ -231,18 +225,18 @@ func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
-func (jm *JobMaster) listSrcFiles(ctx context.Context) ([]string, error) {
+func (jm *JobMaster) listSrcFiles(ctx context.Context) (int, error) {
 	conn, err := grpc.Dial(jm.syncInfo.SrcHost, grpc.WithInsecure())
 	if err != nil {
 		log.L().Info("cann't connect with the host  ", zap.Any("message", jm.syncInfo.SrcHost))
-		return []string{}, err
+		return -1, err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	defer conn.Close()
-	reply, err := client.ListFiles(ctx, &pb.ListFilesReq{FolderName: jm.syncInfo.SrcDir})
+	reply, err := client.ListFiles(ctx, &pb.ListFilesReq{})
 	if err != nil {
-		log.L().Info(" list the directory failed ", zap.String("dir", jm.syncInfo.SrcDir), zap.Error(err))
-		return []string{}, err
+		log.L().Info(" list the directory failed ", zap.String("id", jm.ID()), zap.Error(err))
+		return -1, err
 	}
-	return reply.GetFileNames(), nil
+	return int(reply.FileNum), nil
 }

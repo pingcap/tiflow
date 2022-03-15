@@ -19,7 +19,6 @@ require (
 	github.com/pingcap/tidb-tools v5.4.1-0.20220302060346-b6d9cbe5dff1+incompatible
 	github.com/pingcap/tiflow v0.0.0-20220308162507-e342c02e789c
 	github.com/prometheus/client_golang v1.12.1
-	github.com/sergi/go-diff v1.2.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0

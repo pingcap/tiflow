@@ -1,14 +1,23 @@
 syntax = "proto3";
 
 package pb;
-import "error.proto";
 
 service DataRWService {
     rpc ReadLines(ReadLinesRequest ) returns (stream ReadLinesResponse) {}
     rpc WriteLines(stream WriteLinesRequest) returns (WriteLinesResponse) {}
+    rpc GenerateData(GenerateDataRequest) returns (GenerateDataResponse);
     rpc ListFiles (ListFilesReq ) returns (ListFilesResponse);
     rpc IsReady (IsReadyRequest) returns (IsReadyResponse);
     rpc CheckDir (CheckDirRequest) returns (CheckDirResponse);
+}
+
+message GenerateDataRequest {
+    int32 file_num = 1;
+    int32 record_num = 2;
+}
+
+message GenerateDataResponse {
+    string err_msg = 1;
 }
 
 message CheckDirRequest {
@@ -17,7 +26,7 @@ message CheckDirRequest {
 
 message CheckDirResponse {
     string err_msg = 1;
-    string err_file_name = 2;
+    int32 err_file_idx = 2;
 }
 
 message IsReadyRequest {
@@ -28,31 +37,33 @@ message IsReadyResponse {
 }
 
 message ListFilesReq {
-    string  folderName = 1;
 }
 
 message ListFilesResponse{
-    repeated string fileNames =1;
+    int32 fileNum =1;
 }
 
 message ReadLinesRequest {
-    string  fileName = 1;
-    int64   lineNo = 2;
+    int32   fileIdx = 1;
+    bytes   lineNo = 2;
 }
 
 message ReadLinesResponse {
-    string  linestr = 1 ;
-     bool   isEof = 2;
+    bytes  key = 1 ;
+    bytes  val = 2 ;
+    bool    isEof = 3;
+    string  errMsg = 4;
 }
 
 message WriteLinesRequest {
-    string fileName = 1;
-    string key = 2;
-    string value = 3;
+    string dir = 1;
+    int32  file_idx = 2;
+    bytes key = 3;
+    bytes value = 4;
 }
 
 message WriteLinesResponse {
-    Error err = 1;
+    string err_msg = 1;
 }
 
 

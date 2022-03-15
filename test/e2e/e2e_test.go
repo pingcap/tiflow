@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/client"
-	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
+	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/stretchr/testify/require"
@@ -25,6 +25,7 @@ type Config struct {
 	RecordNum   int64    `json:"demo_record_num"`
 	JobNum      int      `json:"job_num"`
 	DemoDataDir string   `json:"demo_data_dir"`
+	FileNum     int      `json:"file_num"`
 }
 
 type DemoClient struct {
@@ -63,13 +64,25 @@ func TestSubmitTest(t *testing.T) {
 	err = json.Unmarshal(configBytes, config)
 	require.Nil(t, err)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	democlient, err := NewDemoClient(ctx, config.DemoAddr)
+	require.Nil(t, err)
+	fmt.Printf("connect demo\n")
+
+	resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
+		FileNum:   int32(config.FileNum),
+		RecordNum: int32(config.RecordNum),
+	})
+	require.Nil(t, err)
+	require.Empty(t, resp.ErrMsg)
+
 	var wg sync.WaitGroup
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			cfg := &cvsTask.Config{
-				SrcDir:  config.DemoDataDir + "/datax",
+			cfg := &cvs.Config{
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
 				SrcHost: config.DemoHost,
 				DstHost: config.DemoHost,
@@ -81,7 +94,7 @@ func TestSubmitTest(t *testing.T) {
 }
 
 // run this test after docker-compose has been up
-func testSubmitTest(t *testing.T, cfg *cvsTask.Config, config *Config) {
+func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, config.DemoAddr)
@@ -135,5 +148,5 @@ func testSubmitTest(t *testing.T, cfg *cvsTask.Config, config *Config) {
 		Dir: cfg.DstDir,
 	})
 	require.Nil(t, err)
-	require.Empty(t, demoResp.ErrFileName, demoResp.ErrMsg)
+	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }
