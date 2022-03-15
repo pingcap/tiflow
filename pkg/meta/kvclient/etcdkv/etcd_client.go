@@ -7,7 +7,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // We will make follow abstracts and implement for KVClient

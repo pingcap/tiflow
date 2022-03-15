@@ -1,9 +1,9 @@
 package kvclient
 
 import (
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	"github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/etcdkv"
-	"github.com/hanfei1991/microcosm/pkg/metaclient/namespace"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/etcdkv"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/namespace"
 )
 
 // etcdKVClient is the implement of kv interface based on etcd

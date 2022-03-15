@@ -7,8 +7,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
-	mock "github.com/hanfei1991/microcosm/pkg/metaclient/kvclient/mock"
+	mock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // Backend KV store data:

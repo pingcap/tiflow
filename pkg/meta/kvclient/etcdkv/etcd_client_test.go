@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

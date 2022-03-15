@@ -3,7 +3,7 @@ package internal
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // Extend the KV interface with Do method to implement the intermediate layer easier
