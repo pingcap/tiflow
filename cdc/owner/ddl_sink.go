@@ -142,14 +142,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
-
 			select {
 			case <-ctx.Done():
 				return
 			case err := <-s.errCh:
 				ctx.Throw(err)
 				return
-			default:
+			case <-ticker.C:
 			}
 
 			select {
@@ -184,7 +183,6 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			default:
 			}
 
-			<-ticker.C
 			s.mu.Lock()
 			checkpointTs := s.mu.checkpointTs
 			// checkpoint should be sent after all DDL events
