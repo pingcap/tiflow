@@ -226,6 +226,14 @@ func TestRunLeaderService(t *testing.T) {
 	err = s.runLeaderService(ctx1)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 
+	// runLeaderService exits, try to campaign to be leader and run leader servcie again
+	err = s.campaign(ctx, time.Second)
+	require.Nil(t, err)
+	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
+	defer cancel2()
+	err = s.runLeaderService(ctx2)
+	require.EqualError(t, err, context.DeadlineExceeded.Error())
+
 	cancel()
 	wg.Wait()
 }

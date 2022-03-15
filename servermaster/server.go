@@ -611,6 +611,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leader.Store(&Member{})
 		s.resign()
+		err := s.jobManager.Close(ctx)
+		if err != nil {
+			log.L().Warn("job manager close with error", zap.Error(err))
+		}
 	}()
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
