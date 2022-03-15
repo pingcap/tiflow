@@ -319,6 +319,8 @@ func TestClientSendAnomalies(t *testing.T) {
 	})
 
 	grpcStream.On("Recv").Return(nil, nil)
+	sender.On("Flush").Return(nil)
+	sender.On("Append", mock.Anything).Return(nil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

@@ -138,6 +138,9 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (*changefeed, *
 	}, func() DDLSink {
 		return &mockDDLSink{}
 	})
+	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
+		return newSchedulerV1(), nil
+	}
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

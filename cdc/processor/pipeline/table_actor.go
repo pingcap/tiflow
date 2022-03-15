@@ -159,6 +159,11 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	return table, nil
 }
 
+// Close implements Actor interface.
+// TODO: implements table actor stop here.
+func (t *tableActor) OnClose() {
+}
+
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	for i := range msgs {
 		if atomic.LoadUint32(&t.stopped) == stopped {
@@ -181,6 +186,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 				zap.Int64("tableID", t.tableID),
 				zap.Any("message", msgs[i]),
 				zap.Error(err))
+			t.handleError(err)
 			break
 		}
 
@@ -259,56 +265,35 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicConfig,
 	)
+	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := sorterNode.start(sortActorNodeContext, true, t.wg, t.actorID, t.router); err != nil {
+	if err := startSorter(t, sortActorNodeContext); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
 		return err
 	}
-	t.sortNode = sorterNode
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	if err := pullerNode.start(pullerActorNodeContext, t.wg, true, sorterNode); err != nil {
+	t.pullerNode = pullerNode
+	if err := startPuller(t, pullerActorNodeContext); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),
 			zap.Error(err))
 		return err
 	}
-	t.pullerNode = pullerNode
 
-	var messageFetchFunc asyncMessageHolderFunc
-	var messageProcessFunc asyncMessageProcessorFunc
-
-	var cyclicActorNodeContext *cyclicNodeContext
-	if t.cyclicEnabled {
-		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cyclicActorNodeContext = newCyclicNodeContext(
-			newContext(sdtTableContext, t.tableName,
-				t.globalVars.TableActorSystem.Router(),
-				t.actorID, t.changefeedVars,
-				t.globalVars, t.reportErr))
-		if err := cyclicNode.Init(cyclicActorNodeContext); err != nil {
-			log.Error("sink fails to start",
-				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
-				zap.Error(err))
-			return err
-		}
-		// construct cyclic actor node if it's enabled, it gets message from sortNode
-		messageFetchFunc = func() *pipeline.Message { return sortActorNodeContext.tryGetProcessedMessage() }
-		messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
-			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
-		}
-		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
+	messageFetchFunc, err := t.getSinkAsyncMessageHolder(sdtTableContext, sortActorNodeContext)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
@@ -318,12 +303,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
-	if t.cyclicEnabled {
-		messageFetchFunc = func() *pipeline.Message { return cyclicActorNodeContext.tryGetProcessedMessage() }
-	} else {
-		messageFetchFunc = func() *pipeline.Message { return sortActorNodeContext.tryGetProcessedMessage() }
-	}
-	messageProcessFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var messageProcessFunc asyncMessageProcessorFunc = func(
+		ctx context.Context,
+		msg pipeline.Message) (bool, error) {
 		return actorSinkNode.HandleMessage(sdtTableContext, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
@@ -333,6 +315,43 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Int64("tableID", t.tableID))
 	return nil
+}
+
+func (t *tableActor) getSinkAsyncMessageHolder(
+	sdtTableContext context.Context,
+	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error) {
+
+	var messageFetchFunc asyncMessageHolderFunc = func() *pipeline.Message {
+		return sortActorNodeContext.tryGetProcessedMessage()
+	}
+	// check if cyclic feature is enabled
+	if t.cyclicEnabled {
+		cyclicNode := newCyclicMarkNode(t.markTableID)
+		cyclicActorNodeContext := newCyclicNodeContext(
+			newContext(sdtTableContext, t.tableName,
+				t.globalVars.TableActorSystem.Router(),
+				t.actorID, t.changefeedVars,
+				t.globalVars, t.reportErr))
+		if err := cyclicNode.Init(cyclicActorNodeContext); err != nil {
+			log.Error("failed to start cyclic node",
+				zap.String("tableName", t.tableName),
+				zap.Int64("tableID", t.tableID),
+				zap.Error(err))
+			return nil, err
+		}
+
+		// construct cyclic actor node if it's enabled, it gets message from sortNode
+		var messageProcessFunc asyncMessageProcessorFunc = func(
+			ctx context.Context,
+			msg pipeline.Message) (bool, error) {
+			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
+		}
+		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
+		messageFetchFunc = func() *pipeline.Message {
+			return cyclicActorNodeContext.tryGetProcessedMessage()
+		}
+	}
+	return messageFetchFunc, nil
 }
 
 // stop will set this table actor state to stopped and releases all goroutines spawned
@@ -373,7 +392,9 @@ func (t *tableActor) stop(err error) {
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
 	t.stop(err)
-	t.reportErr(err)
+	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+		t.reportErr(err)
+	}
 }
 
 // ============ Implement TablePipline, must be threadsafe ============
@@ -468,4 +489,13 @@ func (t *tableActor) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
+}
+
+// for ut
+var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
+	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
+}
+
+var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
+	return t.sortNode.start(ctx, true, t.wg, t.actorID, t.router)
 }

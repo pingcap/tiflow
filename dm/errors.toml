@@ -2908,6 +2908,12 @@ description = ""
 workaround = "please check the route rules in the task config"
 tags = ["internal", "high"]
 
+[error.DM-dm-worker-40081]
+message = "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
@@ -3227,7 +3233,7 @@ workaround = "Please try again later"
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46025]
-message = "source can only update relay-log related parts for now"
+message = "source can only update when not enable relay and no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]
@@ -3276,6 +3282,18 @@ tags = ["internal", "low"]
 
 [error.DM-scheduler-46033]
 message = "dm-worker with name %s not free"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+[error.DM-scheduler-46034]
+message = "subtasks with name %s for sources %v not exist"
+description = ""
+workaround = "Please create this subtask first."
+tags = ["internal", "medium"]
+
+[error.DM-scheduler-46035]
+message = "subtask with name %s source name %s can only update when no running tasks for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]

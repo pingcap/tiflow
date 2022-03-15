@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -50,10 +51,11 @@ type common struct {
 	dbActorID actor.ID
 	dbRouter  *actor.Router
 
-	uid     uint32
-	tableID uint64
-	serde   *encoding.MsgPackGenSerde
-	errCh   chan error
+	uid      uint32
+	tableID  uint64
+	serde    *encoding.MsgPackGenSerde
+	errCh    chan error
+	closedWg *sync.WaitGroup
 }
 
 // reportError notifies Sorter to return an error and close.
@@ -77,7 +79,7 @@ type Sorter struct {
 	writerActorID actor.ID
 
 	readerRouter  *actor.Router
-	readerActorID actor.ID
+	ReaderActorID actor.ID
 
 	outputCh chan *model.PolymorphicEvent
 
@@ -108,6 +110,7 @@ func NewSorter(
 		tableID:   uint64(tableID),
 		serde:     &encoding.MsgPackGenSerde{},
 		errCh:     make(chan error, 1),
+		closedWg:  &sync.WaitGroup{},
 	}
 
 	w := &writer{
@@ -123,6 +126,7 @@ func NewSorter(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	outputCh := make(chan *model.PolymorphicEvent, sorterOutputCap)
 
@@ -163,13 +167,14 @@ func NewSorter(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	return &Sorter{
 		common:        c,
 		writerRouter:  writerRouter,
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
-		readerActorID: actorID,
+		ReaderActorID: actorID,
 		outputCh:      outputCh,
 	}, nil
 }
@@ -182,15 +187,18 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		err = ctx.Err()
 	case err = <-ls.errCh:
 	}
-	// TODO caller should pass context.
-	deadline := time.Now().Add(1 * time.Second)
-	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
-	defer cancel()
 	atomic.StoreInt32(&ls.closed, 1)
+	// We should never lost message, make sure StopMessage is sent.
+	ctx1 := context.TODO()
+	// As the context can't be cancelled. SendB can only return an error
+	// ActorStopped or ActorNotFound, and they mean actors have closed.
 	_ = ls.writerRouter.SendB(
-		ctx, ls.writerActorID, actormsg.StopMessage())
+		ctx1, ls.writerActorID, actormsg.StopMessage())
 	_ = ls.readerRouter.SendB(
-		ctx, ls.readerActorID, actormsg.StopMessage())
+		ctx1, ls.ReaderActorID, actormsg.StopMessage())
+	ls.closedWg.Wait()
+
+	_ = ls.cleanup(ctx1)
 	return errors.Trace(err)
 }
 
@@ -243,22 +251,20 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	//
 	// TODO: Consider if we are sending too many msgs here.
 	//       It may waste CPU and be a bottleneck.
-	_ = ls.readerRouter.Send(ls.readerActorID, msg)
+	_ = ls.readerRouter.Send(ls.ReaderActorID, msg)
 	return ls.outputCh
 }
 
-// CleanupFunc returns a function that cleans up sorter's data.
-func (ls *Sorter) CleanupFunc() func(context.Context) error {
-	return func(ctx context.Context) error {
-		task := message.Task{UID: ls.uid, TableID: ls.tableID}
-		task.DeleteReq = &message.DeleteRequest{
-			// We do not set task.Delete.Count, because we don't know
-			// how many key-value pairs in the range.
-			Range: [2][]byte{
-				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
-			},
-		}
-		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+// cleanup cleans up sorter's data.
+func (ls *Sorter) cleanup(ctx context.Context) error {
+	task := message.Task{UID: ls.uid, TableID: ls.tableID}
+	task.DeleteReq = &message.DeleteRequest{
+		// We do not set task.Delete.Count, because we don't know
+		// how many key-value pairs in the range.
+		Range: [2][]byte{
+			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+			encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+		},
 	}
+	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
 }

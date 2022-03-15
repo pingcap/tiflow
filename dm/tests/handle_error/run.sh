@@ -557,59 +557,60 @@ function DM_SKIP_INCOMPATIBLE_DDL() {
 	run_case SKIP_INCOMPATIBLE_DDL "single-source-no-sharding" "init_table 11" "clean_table" ""
 }
 
-function DM_REPLACE_DEFAULT_VALUE_CASE() {
-	run_sql_source1 "insert into ${db}.${tb1} values(1);"
-	run_sql_source2 "insert into ${db}.${tb1} values(2);"
-	run_sql_source2 "insert into ${db}.${tb2} values(3);"
-
-	run_sql_source1 "alter table ${db}.${tb1} add new_col1 int default 1;"
-	run_sql_source1 "insert into ${db}.${tb1} values(4,4);"
-	run_sql_source2 "insert into ${db}.${tb1} values(5);"
-	run_sql_source2 "insert into ${db}.${tb2} values(6);"
-
-	# make sure order is source1.table1, source2.table1, source2.table2
-	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 6"
-
-	run_sql_source2 "alter table ${db}.${tb1} add new_col1 int default 2;"
-	run_sql_source1 "insert into ${db}.${tb1} values(7,7);"
-	run_sql_source2 "insert into ${db}.${tb1} values(8,8);"
-	run_sql_source2 "insert into ${db}.${tb2} values(9);"
-	run_sql_source2 "alter table ${db}.${tb2} add new_col1 int default 3;"
-	run_sql_source1 "insert into ${db}.${tb1} values(10,10);"
-	run_sql_source2 "insert into ${db}.${tb1} values(11,11);"
-	run_sql_source2 "insert into ${db}.${tb2} values(12,12);"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"because schema conflict detected" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb1} add new_col1 int default 1;" \
-		"\"result\": true" 2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"because schema conflict detected" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add new_col1 int default 1;" \
-		"\"result\": true" 2
-
-	run_sql_source1 "alter table ${db}.${tb1} add new_col2 int;"
-	run_sql_source2 "alter table ${db}.${tb1} add new_col2 int;"
-	run_sql_source2 "alter table ${db}.${tb2} add new_col2 int;"
-	run_sql_source1 "insert into ${db}.${tb1} values(13,13,13);"
-	run_sql_source2 "insert into ${db}.${tb1} values(14,14,14);"
-	run_sql_source2 "insert into ${db}.${tb2} values(15,15,15);"
-
-	# WARN: some data different
-	# all the value before alter table in TiDB will be 1, while upstream table is 1, 2 or 3
-	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 15"
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"result\": true" 3
-}
+# FIXME: uncomment this after support replace sql for ddl locks
+#function DM_REPLACE_DEFAULT_VALUE_CASE() {
+#	run_sql_source1 "insert into ${db}.${tb1} values(1);"
+#	run_sql_source2 "insert into ${db}.${tb1} values(2);"
+#	run_sql_source2 "insert into ${db}.${tb2} values(3);"
+#
+#	run_sql_source1 "alter table ${db}.${tb1} add new_col1 int default 1;"
+#	run_sql_source1 "insert into ${db}.${tb1} values(4,4);"
+#	run_sql_source2 "insert into ${db}.${tb1} values(5);"
+#	run_sql_source2 "insert into ${db}.${tb2} values(6);"
+#
+#	# make sure order is source1.table1, source2.table1, source2.table2
+#	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 6"
+#
+#	run_sql_source2 "alter table ${db}.${tb1} add new_col1 int default 2;"
+#	run_sql_source1 "insert into ${db}.${tb1} values(7,7);"
+#	run_sql_source2 "insert into ${db}.${tb1} values(8,8);"
+#	run_sql_source2 "insert into ${db}.${tb2} values(9);"
+#	run_sql_source2 "alter table ${db}.${tb2} add new_col1 int default 3;"
+#	run_sql_source1 "insert into ${db}.${tb1} values(10,10);"
+#	run_sql_source2 "insert into ${db}.${tb1} values(11,11);"
+#	run_sql_source2 "insert into ${db}.${tb2} values(12,12);"
+#
+#	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+#		"query-status test" \
+#		"because schema conflict detected" 1
+#
+#	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+#		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb1} add new_col1 int default 1;" \
+#		"\"result\": true" 2
+#
+#	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+#		"query-status test" \
+#		"because schema conflict detected" 1
+#
+#	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+#		"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add new_col1 int default 1;" \
+#		"\"result\": true" 2
+#
+#	run_sql_source1 "alter table ${db}.${tb1} add new_col2 int;"
+#	run_sql_source2 "alter table ${db}.${tb1} add new_col2 int;"
+#	run_sql_source2 "alter table ${db}.${tb2} add new_col2 int;"
+#	run_sql_source1 "insert into ${db}.${tb1} values(13,13,13);"
+#	run_sql_source2 "insert into ${db}.${tb1} values(14,14,14);"
+#	run_sql_source2 "insert into ${db}.${tb2} values(15,15,15);"
+#
+#	# WARN: some data different
+#	# all the value before alter table in TiDB will be 1, while upstream table is 1, 2 or 3
+#	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 15"
+#
+#	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+#		"query-status test" \
+#		"\"result\": true" 3
+#}
 
 function DM_REPLACE_DEFAULT_VALUE() {
 	run_case REPLACE_DEFAULT_VALUE "double-source-optimistic" "init_table 11 21 22" "clean_table" ""
@@ -883,7 +884,8 @@ function run() {
 	DM_REPLACE_ERROR_MULTIPLE
 	DM_EXEC_ERROR_SKIP
 	DM_SKIP_INCOMPATIBLE_DDL
-	DM_REPLACE_DEFAULT_VALUE
+	# FIXME: uncomment this after support replace sql for ddl locks
+	#	DM_REPLACE_DEFAULT_VALUE
 
 	implement=(4202 4204 4206 4207 4209 4211 4213)
 	for i in ${implement[@]}; do

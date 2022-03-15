@@ -336,7 +336,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -349,7 +349,9 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -434,7 +436,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -445,7 +447,9 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -530,7 +534,7 @@ func TestHandleError(t *testing.T) {
 	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -541,7 +545,9 @@ func TestHandleError(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -685,7 +691,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -697,7 +703,9 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
 
@@ -748,7 +756,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
@@ -762,7 +770,9 @@ func TestClusterIDMismatch(t *testing.T) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
 
@@ -814,7 +824,7 @@ func testHandleFeedEvent(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -825,7 +835,9 @@ func testHandleFeedEvent(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1266,7 +1278,7 @@ func TestStreamSendWithError(t *testing.T) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	lockerResolver := txnutil.NewLockerResolver(kvStorage)
+	lockerResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1277,7 +1289,9 @@ func TestStreamSendWithError(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockerResolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockerResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1375,7 +1389,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1386,7 +1400,9 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1502,7 +1518,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1514,7 +1530,9 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		defer close(eventCh)
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1706,7 +1724,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1718,7 +1736,9 @@ func TestIncompatibleTiKV(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1780,7 +1800,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1792,7 +1812,9 @@ func TestNoPendingRegionError(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1855,7 +1877,7 @@ func TestDropStaleRequest(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1866,7 +1888,9 @@ func TestDropStaleRequest(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1962,7 +1986,7 @@ func TestResolveLock(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1973,7 +1997,9 @@ func TestResolveLock(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2061,7 +2087,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientErrUnreachable")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2073,7 +2099,9 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	clientWg.Add(1)
 	go func() {
 		defer clientWg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
 
@@ -2210,7 +2238,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientSingleFeedProcessDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2221,7 +2249,9 @@ func testEventAfterFeedStop(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2387,7 +2417,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2398,7 +2428,9 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2599,7 +2631,7 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2610,7 +2642,9 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2691,7 +2725,7 @@ func TestFailRegionReentrant(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2702,7 +2736,9 @@ func TestFailRegionReentrant(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2769,7 +2805,7 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2780,7 +2816,9 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2832,7 +2870,7 @@ func testClientErrNoPendingRegion(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamCloseDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2843,7 +2881,9 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2906,7 +2946,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2917,7 +2957,9 @@ func testKVClientForceReconnect(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3051,7 +3093,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientMockRangeLock")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3062,7 +3104,9 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3164,7 +3208,7 @@ func TestEvTimeUpdate(t *testing.T) {
 	}()
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3175,7 +3219,9 @@ func TestEvTimeUpdate(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3282,7 +3328,7 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3293,7 +3339,9 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3371,7 +3419,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
 	isPullInit := &mockPullerInit{}
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
@@ -3383,7 +3431,9 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
+		err = cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, false, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
