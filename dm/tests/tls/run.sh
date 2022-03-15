@@ -198,12 +198,14 @@ function test_worker_download_certs_from_master() {
 	export GO_FAILPOINTS=''
 	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
 	check_port_offline $WORKER1_PORT 20
+
+	rm -rf "$WORK_DIR/tidb_lightning_tls_config*"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
-	# dm-worker will dump task-ca.pem from dm-master and save it to dm-worker-dir/ca.pem
+	# dm-worker will dump task-ca.pem from dm-master and save it to dm-worker-dir/tidb_lightning_taskname/ca.pem
 	# let's try use this file to connect dm-master
-	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" /tmp/dm_test/tls/worker1/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" "$WORK_DIR/worker1/lightning_tls_test/ca.pem" $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
 		"\"result\": true" 2 \
 		"\"unit\": \"Sync\"" 1
