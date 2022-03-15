@@ -36,9 +36,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-var (
-	etcdErrCompacted = v3rpc.ErrCompacted
-)
+var etcdErrCompacted = v3rpc.ErrCompacted
 
 const (
 	noRestart          = iota // do nothing in rebuildPessimist, just keep testing
