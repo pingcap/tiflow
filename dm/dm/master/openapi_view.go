@@ -288,7 +288,7 @@ func (s *Server) DMAPIDisableSource(c *gin.Context, sourceName string) {
 	c.Status(http.StatusOK)
 }
 
-// DMAPITransferSource transfer source  another free worker url is: (POST /api/v1/sources/{source-name}/transfer).
+// DMAPITransferSource transfer source to another free worker url is: (POST /api/v1/sources/{source-name}/transfer).
 func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 	var req openapi.WorkerNameRequest
 	if err := c.Bind(&req); err != nil {
@@ -708,8 +708,8 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 	}
 }
 
-// DMAPIConverterTask turns task into the format of a configuration file or vice versa url is: (POST /api/v1/tasks/,).
-func (s *Server) DMAPIConverterTask(c *gin.Context) {
+// DMAPIConvertTask turns task into the format of a configuration file or vice versa url is: (POST /api/v1/tasks/,).
+func (s *Server) DMAPIConvertTask(c *gin.Context) {
 	var req openapi.ConverterTaskRequest
 	if err := c.Bind(&req); err != nil {
 		_ = c.Error(err)

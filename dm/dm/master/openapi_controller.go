@@ -321,7 +321,7 @@ func (s *Server) checkTask(ctx context.Context, subtaskCfgList []*config.SubTask
 	return checker.CheckSyncConfigFunc(ctx, subtaskCfgList, errCnt, warnCnt)
 }
 
-func (s *Server) checkOpenAPITaskbeforeOperate(ctx context.Context, task *openapi.Task) ([]*config.SubTaskConfig, error) {
+func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openapi.Task) ([]*config.SubTaskConfig, error) {
 	// prepare target db config
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if err := adjustTargetDB(ctx, toDBCfg); err != nil {
@@ -358,7 +358,7 @@ func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) 
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
-	subTaskConfigList, err := s.checkOpenAPITaskbeforeOperate(ctx, task)
+	subTaskConfigList, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
-	subTaskConfigList, err := s.checkOpenAPITaskbeforeOperate(ctx, task)
+	subTaskConfigList, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err
 	}

@@ -673,8 +673,8 @@ type DMAPIGetTaskListParams struct {
 // DMAPICreateTaskJSONBody defines parameters for DMAPICreateTask.
 type DMAPICreateTaskJSONBody CreateTaskRequest
 
-// DMAPIConverterTaskJSONBody defines parameters for DMAPIConverterTask.
-type DMAPIConverterTaskJSONBody ConverterTaskRequest
+// DMAPIConvertTaskJSONBody defines parameters for DMAPIConvertTask.
+type DMAPIConvertTaskJSONBody ConverterTaskRequest
 
 // DMAPICreateTaskTemplateJSONBody defines parameters for DMAPICreateTaskTemplate.
 type DMAPICreateTaskTemplateJSONBody Task
@@ -739,8 +739,8 @@ type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 // DMAPICreateTaskJSONRequestBody defines body for DMAPICreateTask for application/json ContentType.
 type DMAPICreateTaskJSONRequestBody DMAPICreateTaskJSONBody
 
-// DMAPIConverterTaskJSONRequestBody defines body for DMAPIConverterTask for application/json ContentType.
-type DMAPIConverterTaskJSONRequestBody DMAPIConverterTaskJSONBody
+// DMAPIConvertTaskJSONRequestBody defines body for DMAPIConvertTask for application/json ContentType.
+type DMAPIConvertTaskJSONRequestBody DMAPIConvertTaskJSONBody
 
 // DMAPICreateTaskTemplateJSONRequestBody defines body for DMAPICreateTaskTemplate for application/json ContentType.
 type DMAPICreateTaskTemplateJSONRequestBody DMAPICreateTaskTemplateJSONBody

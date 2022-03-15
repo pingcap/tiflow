@@ -686,7 +686,7 @@ paths:
     get:
       tags:
         - task
-      summary: "get task source targets"
+      summary: "get task source table and target table route relation"
       operationId: "DMAPIGetTaskMigrateTargets"
       parameters:
         - name: task-name
@@ -949,7 +949,7 @@ paths:
       tags:
         - task
       summary: "Turn task into the format of a configuration file or vice versa."
-      operationId: "DMAPIConverterTask"
+      operationId: "DMAPIConvertTask"
       requestBody:
         description: "if task is input this task will be converted to task_config file or vice versa"
         content:

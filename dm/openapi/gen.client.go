@@ -173,10 +173,10 @@ type ClientInterface interface {
 
 	DMAPICreateTask(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIConverterTask request with any body
-	DMAPIConverterTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIConvertTask request with any body
+	DMAPIConvertTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	DMAPIConverterTask(ctx context.Context, body DMAPIConverterTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DMAPIConvertTask(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIGetTaskTemplateList request
 	DMAPIGetTaskTemplateList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -605,8 +605,8 @@ func (c *Client) DMAPICreateTask(ctx context.Context, body DMAPICreateTaskJSONRe
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIConverterTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIConverterTaskRequestWithBody(c.Server, contentType, body)
+func (c *Client) DMAPIConvertTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIConvertTaskRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -617,8 +617,8 @@ func (c *Client) DMAPIConverterTaskWithBody(ctx context.Context, contentType str
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIConverterTask(ctx context.Context, body DMAPIConverterTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIConverterTaskRequest(c.Server, body)
+func (c *Client) DMAPIConvertTask(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIConvertTaskRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1848,19 +1848,19 @@ func NewDMAPICreateTaskRequestWithBody(server string, contentType string, body i
 	return req, nil
 }
 
-// NewDMAPIConverterTaskRequest calls the generic DMAPIConverterTask builder with application/json body
-func NewDMAPIConverterTaskRequest(server string, body DMAPIConverterTaskJSONRequestBody) (*http.Request, error) {
+// NewDMAPIConvertTaskRequest calls the generic DMAPIConvertTask builder with application/json body
+func NewDMAPIConvertTaskRequest(server string, body DMAPIConvertTaskJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIConverterTaskRequestWithBody(server, "application/json", bodyReader)
+	return NewDMAPIConvertTaskRequestWithBody(server, "application/json", bodyReader)
 }
 
-// NewDMAPIConverterTaskRequestWithBody generates requests for DMAPIConverterTask with any type of body
-func NewDMAPIConverterTaskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewDMAPIConvertTaskRequestWithBody generates requests for DMAPIConvertTask with any type of body
+func NewDMAPIConvertTaskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2860,10 +2860,10 @@ type ClientWithResponsesInterface interface {
 
 	DMAPICreateTaskWithResponse(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskResponse, error)
 
-	// DMAPIConverterTask request with any body
-	DMAPIConverterTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConverterTaskResponse, error)
+	// DMAPIConvertTask request with any body
+	DMAPIConvertTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error)
 
-	DMAPIConverterTaskWithResponse(ctx context.Context, body DMAPIConverterTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConverterTaskResponse, error)
+	DMAPIConvertTaskWithResponse(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error)
 
 	// DMAPIGetTaskTemplateList request
 	DMAPIGetTaskTemplateListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskTemplateListResponse, error)
@@ -3445,7 +3445,7 @@ func (r DMAPICreateTaskResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIConverterTaskResponse struct {
+type DMAPIConvertTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *ConverterTaskResponse
@@ -3453,7 +3453,7 @@ type DMAPIConverterTaskResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIConverterTaskResponse) Status() string {
+func (r DMAPIConvertTaskResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3461,7 +3461,7 @@ func (r DMAPIConverterTaskResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIConverterTaskResponse) StatusCode() int {
+func (r DMAPIConvertTaskResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4138,21 +4138,21 @@ func (c *ClientWithResponses) DMAPICreateTaskWithResponse(ctx context.Context, b
 	return ParseDMAPICreateTaskResponse(rsp)
 }
 
-// DMAPIConverterTaskWithBodyWithResponse request with arbitrary body returning *DMAPIConverterTaskResponse
-func (c *ClientWithResponses) DMAPIConverterTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConverterTaskResponse, error) {
-	rsp, err := c.DMAPIConverterTaskWithBody(ctx, contentType, body, reqEditors...)
+// DMAPIConvertTaskWithBodyWithResponse request with arbitrary body returning *DMAPIConvertTaskResponse
+func (c *ClientWithResponses) DMAPIConvertTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error) {
+	rsp, err := c.DMAPIConvertTaskWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIConverterTaskResponse(rsp)
+	return ParseDMAPIConvertTaskResponse(rsp)
 }
 
-func (c *ClientWithResponses) DMAPIConverterTaskWithResponse(ctx context.Context, body DMAPIConverterTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConverterTaskResponse, error) {
-	rsp, err := c.DMAPIConverterTask(ctx, body, reqEditors...)
+func (c *ClientWithResponses) DMAPIConvertTaskWithResponse(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error) {
+	rsp, err := c.DMAPIConvertTask(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIConverterTaskResponse(rsp)
+	return ParseDMAPIConvertTaskResponse(rsp)
 }
 
 // DMAPIGetTaskTemplateListWithResponse request returning *DMAPIGetTaskTemplateListResponse
@@ -4994,15 +4994,15 @@ func ParseDMAPICreateTaskResponse(rsp *http.Response) (*DMAPICreateTaskResponse,
 	return response, nil
 }
 
-// ParseDMAPIConverterTaskResponse parses an HTTP response from a DMAPIConverterTaskWithResponse call
-func ParseDMAPIConverterTaskResponse(rsp *http.Response) (*DMAPIConverterTaskResponse, error) {
+// ParseDMAPIConvertTaskResponse parses an HTTP response from a DMAPIConvertTaskWithResponse call
+func ParseDMAPIConvertTaskResponse(rsp *http.Response) (*DMAPIConvertTaskResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIConverterTaskResponse{
+	response := &DMAPIConvertTaskResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
