@@ -70,6 +70,7 @@ func (t *testOptimistSuite) clearOptimistTestSourceInfoOperation() {
 }
 
 func createTableInfo(t *testing.T, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+	t.Helper()
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	if err != nil {
 		t.Fatalf("fail to parse stmt, %v", err)
@@ -134,6 +135,7 @@ func checkLocks(t *testing.T, o *Optimist, expectedLocks []*pb.DDLLock, task str
 }
 
 func checkLocksByMap(t *testing.T, o *Optimist, expectedLocks map[string]*pb.DDLLock, sources []string, lockIDs ...string) {
+	t.Helper()
 	lock, err := o.ShowLocks("", sources)
 	require.NoError(t, err)
 	require.Len(t, lock, len(lockIDs))
@@ -684,7 +686,10 @@ func (t *testOptimistSuite) TestOptimistLockConflict() {
 	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
 	require.Len(t.T(), o.Locks(), 0)
@@ -796,7 +801,10 @@ func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
 	require.Len(t.T(), o.Locks(), 0)
@@ -979,7 +987,10 @@ func (t *testOptimistSuite) TestOptimistInitSchema() {
 	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
 	require.Len(t.T(), o.Locks(), 0)
@@ -1135,7 +1146,10 @@ func (t *testOptimistSuite) TestBuildLockJoinedAndTable() {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
@@ -1182,7 +1196,10 @@ func (t *testOptimistSuite) TestBuildLockWithInitSchema() {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
