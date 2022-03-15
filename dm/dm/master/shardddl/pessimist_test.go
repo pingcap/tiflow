@@ -832,7 +832,6 @@ func (t *testPessimistSuite) TestUnlockSourceOwnerRemoved() {
 }
 
 func (t *testPessimistSuite) TestMeetEtcdCompactError() {
-
 	var (
 		watchTimeout  = 3 * time.Second
 		task1         = "task-pessimist-1"
