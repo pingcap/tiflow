@@ -1,15 +1,15 @@
 import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { pick } from 'lodash'
+import { pick } from 'lodash-es'
 
 import { Form, Button, Card, Input, Select } from '~/uikit'
 import { FileAddOutlined, CloseOutlined } from '~/uikit/icons'
-import { StepCompnent } from '~/components/CreateTaskConfig/shared'
+import { StepCompnent } from '~/components/CreateOrUpdateTask/shared'
 import { supportedIgnorableEvents, TaskFormData } from '~/models/task'
 
 const itemLayout = {
-  labelCol: { span: 4 },
-  wrapperCol: { span: 20 },
+  labelCol: { span: 5 },
+  wrapperCol: { span: 19 },
 }
 
 const EventFilters: StepCompnent = ({ prev, initialValues }) => {
@@ -67,7 +67,7 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                     {...itemLayout}
                     label={t('event filter name')}
                     name={[field.name, 'name']}
-                    fieldKey={[field.fieldKey, 'name']}
+                    tooltip={t('create task event filter name tooltip')}
                     rules={[
                       {
                         required: true,
@@ -100,7 +100,7 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                     {...itemLayout}
                     label={t('event filter ignore event')}
                     name={[field.name, 'ignore_event']}
-                    fieldKey={[field.fieldKey, 'ignore_event']}
+                    tooltip={t('create task event filter ignore_event tooltip')}
                   >
                     <Select
                       mode="multiple"
@@ -118,8 +118,8 @@ const EventFilters: StepCompnent = ({ prev, initialValues }) => {
                   <Form.Item
                     {...itemLayout}
                     label={t('event filter ignore sql')}
+                    tooltip={t('create task event filter ignore_sql tooltip')}
                     name={[field.name, 'ignore_sql']}
-                    fieldKey={[field.fieldKey, 'ignore_sql']}
                   >
                     <Select mode="tags" />
                   </Form.Item>

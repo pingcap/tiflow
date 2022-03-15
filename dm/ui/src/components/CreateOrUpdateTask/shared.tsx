@@ -7,4 +7,5 @@ export type StepCompnent = React.FC<{
   next?: () => void
   submit?: (values: TaskFormData) => void
   initialValues?: TaskFormData
+  isEditing?: boolean
 }>
