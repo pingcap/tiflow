@@ -95,9 +95,9 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	testFunc := func(errStr string) {
 		validator.Start(pb.Stage_Stopped)
 		defer validator.Stop()
-		require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SkipExecuteSQL", `return("`+errStr+`")`))
+		require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL", `return("`+errStr+`")`))
 		defer func() {
-			require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/SkipExecuteSQL"))
+			require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL"))
 		}()
 		validator.startValidateWorkers()
 		validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{

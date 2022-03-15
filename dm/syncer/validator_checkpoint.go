@@ -304,7 +304,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	var err error
-	failpoint.Inject("SkipExecuteSQL", func(val failpoint.Value) {
+	failpoint.Inject("ValidatorCheckPointSkipExecuteSQL", func(val failpoint.Value) {
 		str := val.(string)
 		if str != "" {
 			err = errors.New(str)
