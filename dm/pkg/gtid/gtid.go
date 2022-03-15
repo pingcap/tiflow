@@ -42,7 +42,6 @@ type Set interface {
 	// like truncating `00c04543-f584-11e9-a765-0242ac120002:1-100` with `00c04543-f584-11e9-a765-0242ac120002:40-60`
 	// should become `00c04543-f584-11e9-a765-0242ac120002:1-60`.
 	Truncate(end Set) error
-
 	String() string
 }
 
