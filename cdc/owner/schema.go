@@ -107,7 +107,7 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
-		log.Warn("job finishTs is less than schema handleTs, discard invalid job", zap.String("changefeed", s.id), zap.Any("job", *job),
+		log.Warn("job finishTs is less than schema handleTs, discard invalid job", zap.String("changefeed", s.id), zap.Stringer("job", job),
 			zap.Any("ddlHandledTs", s.ddlHandledTs))
 		return nil
 	}
