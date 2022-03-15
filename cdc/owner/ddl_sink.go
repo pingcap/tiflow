@@ -154,12 +154,17 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			select {
 			case ddl := <-s.ddlCh:
 				if ddl.CommitTs <= lastCheckpointTs {
-					log.Panic("DDL regression, please report a bug",
+					log.Warn("DDL should have been flushed before, ignore redundant",
 						zap.Uint64("checkpointTs", lastCheckpointTs),
 						zap.Any("DDL", ddl))
+					// todo: this may cause failure
+					// s.ddlFinishedTs = lastCheckpointTs
+					continue
 				}
 
-				log.Info("emit ddl event", zap.Any("DDL", ddl))
+				log.Info("emit ddl event",
+					zap.Any("DDL", ddl),
+					zap.String("changefeed", ctx.ChangefeedVars().ID))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
@@ -185,8 +190,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 			s.mu.Lock()
 			checkpointTs := s.mu.checkpointTs
-			// checkpoint should be sent after all DDL events
-			// whoes `CommitTs` not greater than it have flushed.
+			// checkpoint should be sent after all DDL events have bee flushed.
 			if checkpointTs == 0 || checkpointTs <= lastCheckpointTs || s.hasDDLInflight() {
 				s.mu.Unlock()
 				continue
