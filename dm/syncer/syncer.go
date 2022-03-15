@@ -1662,10 +1662,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	failpoint.Inject("S3GetDumpFilesCheck", func() {
-		cleanDumpFile = false
-	})
-
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
 		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
@@ -3279,9 +3275,6 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
-		failpoint.Inject("S3GetDumpFilesCheck", func() {
-			panic(errors.Annotate(err, "fail to get dump files"))
-		})
 		return err
 	}
 	var dbs, tables []string
