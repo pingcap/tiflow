@@ -403,6 +403,7 @@ ErrMasterInconsistentOptimisticDDLsAndInfo,[code=38054:class=dm-master:scope=int
 ErrMasterOptimisticTableInfoBeforeNotExist,[code=38055:class=dm-master:scope=internal:level=high], "Message: table-info-before not exist in optimistic ddls: %v"
 ErrMasterOptimisticDownstreamMetaNotFound,[code=38056:class=dm-master:scope=internal:level=high], "Message: downstream database config and meta for task %s not found"
 ErrMasterInvalidClusterID,[code=38057:class=dm-master:scope=internal:level=high], "Message: invalid cluster id: %v"
+ErrMasterStartTask,[code=38058:class=dm-master:scope=internal:level=high], "Message: can not start task: %s reason: %s"
 ErrWorkerParseFlagSet,[code=40001:class=dm-worker:scope=internal:level=medium], "Message: parse dm-worker config flag set"
 ErrWorkerInvalidFlag,[code=40002:class=dm-worker:scope=internal:level=medium], "Message: '%s' is an invalid flag"
 ErrWorkerDecodeConfigFromFile,[code=40003:class=dm-worker:scope=internal:level=medium], "Message: toml decode file, Workaround: Please check the configuration file has correct TOML format."
