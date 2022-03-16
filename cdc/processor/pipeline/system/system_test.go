@@ -26,7 +26,7 @@ func TestStartAndStopSystem(t *testing.T) {
 
 	s := NewSystem()
 	require.Nil(t, s.Start(context.TODO()))
-	require.Nil(t, s.Stop())
+	s.Stop()
 }
 
 func TestActorID(t *testing.T) {
