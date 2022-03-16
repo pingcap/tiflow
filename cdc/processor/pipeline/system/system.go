@@ -44,8 +44,8 @@ func (s *System) Start(ctx context.Context) error {
 }
 
 // Stop stops a system.
-func (s *System) Stop() error {
-	return s.tableActorSystem.Stop()
+func (s *System) Stop() {
+	s.tableActorSystem.Stop()
 }
 
 // Router returns the table actor router.
