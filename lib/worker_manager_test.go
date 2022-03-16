@@ -350,10 +350,9 @@ func TestWorkerManagerInitialization(t *testing.T) {
 		return manager.fsmState.Load() == workerManagerWaitingHeartbeats
 	}, 1*time.Second, 10*time.Millisecond)
 
-	clockDelta :=
-		manager.timeoutConfig.workerTimeoutDuration +
-			manager.timeoutConfig.workerTimeoutGracefulDuration +
-			10*time.Second
+	clockDelta := manager.timeoutConfig.workerTimeoutDuration +
+		manager.timeoutConfig.workerTimeoutGracefulDuration +
+		10*time.Second
 	manager.clock.(*clock.Mock).Set(time.Now().Add(clockDelta))
 
 	require.Eventually(t, func() bool {

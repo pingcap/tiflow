@@ -22,7 +22,6 @@ type WorkerFactory interface {
 		masterID lib.MasterID, // the masterID that this worker will report to.
 		config WorkerConfig, // the config used to initialize the worker.
 	) (lib.WorkerImpl, error)
-
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
 }
 

@@ -18,15 +18,10 @@ type BaseJobMaster interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	OnError(err error)
-
 	MetaKVClient() metadata.MetaKV
-
 	GetWorkers() map[WorkerID]WorkerHandle
-
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
-
 	Workload() model.RescUnit
-
 	JobMasterID() MasterID
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
@@ -62,13 +57,11 @@ type JobMasterImpl interface {
 	// will be stopped.
 	Tick(ctx context.Context) error
 	CloseImpl(ctx context.Context) error
-
 	OnMasterRecovered(ctx context.Context) error
 	OnWorkerDispatched(worker WorkerHandle, result error) error
 	OnWorkerOnline(worker WorkerHandle) error
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
-
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
 

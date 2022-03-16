@@ -35,6 +35,6 @@ import (
 	_ "github.com/pingcap/failpoint/failpoint-ctl"
 	_ "github.com/rakyll/statik"
 	_ "github.com/zhouqiang-cl/gocovmerge"
-	_ "mvdan.cc/gofumpt/gofumports"
+	_ "mvdan.cc/gofumpt"
 	_ "mvdan.cc/sh/v3/cmd/shfmt"
 )

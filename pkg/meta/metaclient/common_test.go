@@ -66,7 +66,7 @@ func TestNestedTxnResponse(t *testing.T) {
 					ClusterID: "1111",
 				},
 				Responses: []ResponseOp{
-					ResponseOp{
+					{
 						Response: &ResponseOpResponseGet{
 							ResponseGet: &GetResponse{
 								Header: &ResponseHeader{
@@ -75,7 +75,7 @@ func TestNestedTxnResponse(t *testing.T) {
 							},
 						},
 					},
-					ResponseOp{
+					{
 						Response: &ResponseOpResponsePut{
 							ResponsePut: &PutResponse{
 								Header: &ResponseHeader{
@@ -84,7 +84,7 @@ func TestNestedTxnResponse(t *testing.T) {
 							},
 						},
 					},
-					ResponseOp{
+					{
 						Response: &ResponseOpResponseTxn{
 							ResponseTxn: &TxnResponse{
 								Header: &ResponseHeader{
