@@ -507,6 +507,7 @@ const (
 	codeMasterOptimisticTableInfobeforeNotExist
 	codeMasterOptimisticDownstreamMetaNotFound
 	codeMasterInvalidClusterID
+	codeMasterStartTask
 )
 
 // DM-worker error code.
@@ -1169,6 +1170,7 @@ var (
 	ErrMasterOptimisticTableInfoBeforeNotExist = New(codeMasterOptimisticTableInfobeforeNotExist, ClassDMMaster, ScopeInternal, LevelHigh, "table-info-before not exist in optimistic ddls: %v", "")
 	ErrMasterOptimisticDownstreamMetaNotFound  = New(codeMasterOptimisticDownstreamMetaNotFound, ClassDMMaster, ScopeInternal, LevelHigh, "downstream database config and meta for task %s not found", "")
 	ErrMasterInvalidClusterID                  = New(codeMasterInvalidClusterID, ClassDMMaster, ScopeInternal, LevelHigh, "invalid cluster id: %v", "")
+	ErrMasterStartTask                         = New(codeMasterStartTask, ClassDMMaster, ScopeInternal, LevelHigh, "can not start task: %s reason: %s", "")
 
 	// DM-worker error.
 	ErrWorkerParseFlagSet            = New(codeWorkerParseFlagSet, ClassDMWorker, ScopeInternal, LevelMedium, "parse dm-worker config flag set", "")
