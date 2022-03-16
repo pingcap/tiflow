@@ -809,7 +809,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "",
+			Res: []byte{},
 		},
 		// mysql.TypeVarchar + notnull + default
 		{

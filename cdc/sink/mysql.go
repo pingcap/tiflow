@@ -772,17 +772,18 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
-// if the column charset is not empty or not binary, we get its string
+// if the column value type is []byte and charset is not binary, we get its string
 // representation. Because if we use the byte array respresentation, the go-sql-driver
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/master/connection.go#L267
 func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 	var colValStr string
-	if val, ok := col.Value.([]byte); ok {
-		colValStr = string(val)
+	colValBytes, ok := col.Value.([]byte)
+	if ok {
+		colValStr = string(colValBytes)
 	}
 
-	if col.Charset != "" && col.Charset != charset.CharsetBin {
+	if col.Charset != "" && col.Charset != charset.CharsetBin && ok {
 		args = append(args, colValStr)
 	} else {
 		args = append(args, col.Value)
