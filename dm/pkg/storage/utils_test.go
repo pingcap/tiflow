@@ -57,7 +57,7 @@ func TestIsS3(t *testing.T) {
 	}
 }
 
-func TestIsS3AndAdjustS3Path(t *testing.T) {
+func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 	testPaths := []struct {
 		isURLFormat bool
 		rawPath     string
@@ -125,6 +125,10 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 				res, err = AdjustPath(expectPath, testSeparator+testUniqueID.test)
 				require.NoError(t, err)
 				require.Equal(t, expectPath, res)
+				// trim
+				res, err = TrimPath(expectPath, testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, strings.ReplaceAll(testPath.expectPath, "_placeholder", ""), res)
 			}
 		}
 	}

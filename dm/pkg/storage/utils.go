@@ -58,6 +58,26 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	return rawURL, nil
 }
 
+// TrimPath trims rawURL suffix which is uniqueID, supports local and s3.
+func TrimPath(rawURL string, uniqueID string) (string, error) {
+	if rawURL == "" || uniqueID == "" {
+		return rawURL, nil
+	}
+	u, err := bstorage.ParseRawURL(rawURL)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	// not url format, we don't use url library to avoid being escaped or unescaped
+	if u.Scheme == "" {
+		// avoid duplicate add uniqueID, and trim suffix '/' like './dump_data/'
+		return strings.TrimSuffix(rawURL, uniqueID), nil
+	}
+	// u.Path is an unescaped string and can be used as normal
+	u.Path = strings.TrimSuffix(u.Path, uniqueID)
+	// u.String will return escaped url and can be used safely in other steps
+	return u.String(), err
+}
+
 // isS3Path judges if rawURL is s3 path.
 func IsS3Path(rawURL string) bool {
 	if rawURL == "" {
