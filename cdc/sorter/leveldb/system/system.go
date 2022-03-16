@@ -196,31 +196,19 @@ func (s *System) Stop() error {
 	s.state = sysStateStopped
 
 	// Stop all actors and system to release resource.
-	err := s.WriterSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.ReaderSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	s.WriterSystem.Stop()
+	s.ReaderSystem.Stop()
 	// TODO: compact is not context-aware, it may block.
-	err = s.compactSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.dbSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	s.compactSystem.Stop()
+	s.dbSystem.Stop()
 	// Close metrics goroutine.
 	close(s.closedCh)
 
 	// Close dbs.
-	for _, db := range s.dbs {
-		err = db.Close()
+	for i, db := range s.dbs {
+		err := db.Close()
 		if err != nil {
-			log.Warn("db close error", zap.Error(err))
+			log.Warn("db close error", zap.Int("ID", i), zap.Error(err))
 		}
 	}
 	// Wait actors and metrics goroutine.

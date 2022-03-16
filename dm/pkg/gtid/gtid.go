@@ -208,27 +208,25 @@ func (g *MySQLGTIDSet) Equal(other Set) bool {
 	return g.set.Equal(other.Origin())
 }
 
-func (g *MySQLGTIDSet) isOtherSetNil(other Set) bool {
+// Contain implements Set.Contain.
+func (g *MySQLGTIDSet) Contain(other Set) bool {
 	if other == nil {
-		return true
+		return true // any set (including nil) contains nil
 	}
 
-	otherGs, ok := other.(*MySQLGTIDSet)
+	otherGS, ok := other.(*MySQLGTIDSet)
 	if !ok {
 		return false
 	}
 
-	return otherGs == nil
-}
-
-// Contain implements Set.Contain.
-func (g *MySQLGTIDSet) Contain(other Set) bool {
-	if g.isOtherSetNil(other) {
+	if otherGS == nil {
 		return true // any set (including nil) contains nil
 	}
+
 	if g == nil {
 		return false // nil only contains nil
 	}
+
 	return g.set.Contain(other.Origin())
 }
 
@@ -384,28 +382,25 @@ func (m *MariadbGTIDSet) Equal(other Set) bool {
 	return m.set.Equal(other.Origin())
 }
 
-func (m *MariadbGTIDSet) isOtherSetNil(other Set) bool {
+// Contain implements Set.Contain.
+func (m *MariadbGTIDSet) Contain(other Set) bool {
 	if other == nil {
-		return true
+		return true // any set (including nil) contains nil
 	}
 
-	otherGs, ok := other.(*MariadbGTIDSet)
+	otherGS, ok := other.(*MariadbGTIDSet)
 	if !ok {
 		return false
 	}
 
-	return otherGs == nil
-}
-
-// Contain implements Set.Contain.
-func (m *MariadbGTIDSet) Contain(other Set) bool {
-	otherIsNil := m.isOtherSetNil(other)
-	if otherIsNil {
+	if otherGS == nil {
 		return true // any set (including nil) contains nil
 	}
+
 	if m == nil {
 		return false // nil only contains nil
 	}
+
 	return m.set.Contain(other.Origin())
 }
 
