@@ -15,8 +15,6 @@ package openapi
 
 import (
 	"encoding/json"
-
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var defaultMetaSchema = "dm_meta"
@@ -25,10 +23,6 @@ var defaultMetaSchema = "dm_meta"
 func (t *Task) Adjust() error {
 	if t.MetaSchema == nil {
 		t.MetaSchema = &defaultMetaSchema
-	}
-	// check some not implemented features
-	if t.OnDuplicate != TaskOnDuplicateError {
-		return terror.ErrOpenAPICommonError.Generate("`on_duplicate` only supports `error` for now.")
 	}
 	return nil
 }
