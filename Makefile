@@ -261,7 +261,7 @@ dm-master:
 
 dm-master-with-webui:
 	@echo "build webui first"
-	cd dm/ui && yarn && yarn build
+	cd dm/ui && yarn --ignore-scripts && yarn build
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
 
 dm-worker:
