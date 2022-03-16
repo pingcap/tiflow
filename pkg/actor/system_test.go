@@ -145,8 +145,7 @@ func TestSystemStartStop(t *testing.T) {
 	ctx := context.Background()
 	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
-	err := sys.Stop()
-	require.Nil(t, err)
+	sys.Stop()
 }
 
 func TestSystemSpawnDuplicateActor(t *testing.T) {
@@ -161,10 +160,7 @@ func TestSystemSpawnDuplicateActor(t *testing.T) {
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type forwardActor struct {
@@ -222,10 +218,7 @@ func TestActorSendReceive(t *testing.T) {
 		t.Fatal("Timed out")
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func testBroadcast(t *testing.T, actorNum, workerNum int) {
@@ -259,10 +252,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestBroadcast(t *testing.T) {
@@ -306,10 +296,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 	// Do not receive ch.
 	_ = ch
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestActorManyMessageOneSchedule(t *testing.T) {
@@ -358,10 +345,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type flipflopActor struct {
@@ -424,10 +408,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		case acc := <-ch:
 			require.Equal(t, total, acc)
 		case <-timer:
-			wait(t, func() {
-				err := sys.Stop()
-				require.Nil(t, err)
-			})
+			wait(t, sys.Stop)
 			return
 		}
 	}
@@ -471,10 +452,7 @@ func TestPollStoppedActor(t *testing.T) {
 	case <-ch:
 		t.Fatal("must timeout")
 	}
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
@@ -509,10 +487,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type slowActor struct {
@@ -575,10 +550,7 @@ func TestSendBeforeClose(t *testing.T) {
 	// Let send and close race
 	// sys.rd.Lock()
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 // Test router send after close and before enqueue.
@@ -648,10 +620,7 @@ func TestSendAfterClose(t *testing.T) {
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type stopActor struct {
@@ -679,10 +648,7 @@ func TestStopSystem(t *testing.T) {
 		require.Nil(t, sys.Spawn(mb, &stopActor{w}))
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 	require.EqualValues(t, 20_000, atomic.LoadInt64(w))
 }
 
@@ -748,9 +714,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }
 
 // Run the benchmark
@@ -796,7 +760,5 @@ func BenchmarkPollActor(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }
