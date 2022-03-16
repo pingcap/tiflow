@@ -2723,7 +2723,70 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	}
 	// TODO: get validation status from worker
 	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
-	return resp, err
+	workerReq := &workerrpc.Request{
+		GetValidationStatus: req,
+		Type:                workerrpc.CmdGetValidationStatus,
+	}
+	var (
+		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	appendResp := func(resp *pb.GetValidationStatusResponse) {
+		workerRespMu.Lock()
+		workerResps = append(workerResps, resp)
+		workerRespMu.Unlock()
+	}
+	handleError := func(err error, source, worker string) {
+		log.L().Error("query validation status error", zap.Error(err), zap.String("source", source), zap.String("worker", worker))
+		resp := &pb.GetValidationStatusResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+		appendResp(resp)
+	}
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			worker := s.scheduler.GetWorkerBySource(sourceID)
+			if worker == nil {
+				err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
+				handleError(err, sourceID, "")
+				continue
+			}
+			wg.Add(1)
+			go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+				// send request in parallel
+				defer wg.Done()
+				newReq := workerReq
+				newReq.GetValidationStatus.TaskName = taskName
+				w, _ := args[1].(*scheduler.Worker)
+				resp, err := w.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
+				if err != nil {
+					handleError(err, sourceID, worker.BaseInfo().Name)
+				} else {
+					appendResp(resp.GetValidationStatus)
+				}
+			}, func(args ...interface{}) {
+				defer wg.Done()
+				sourceID, _ := args[0].(string)
+				w, _ := args[1].(*scheduler.Worker)
+				workerName := w.BaseInfo().Name
+				handleError(terror.ErrMasterNoEmitToken.Generate(sourceID), sourceID, workerName)
+			}, sourceID, worker)
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+			continue
+		}
+		resp.Status = append(resp.Status, wresp.Status...)
+	}
+	// nolint:nilerr
+	return resp, nil
 }
 
 func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {

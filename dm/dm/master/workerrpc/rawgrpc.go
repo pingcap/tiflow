@@ -119,6 +119,8 @@ func callRPC(ctx context.Context, client pb.WorkerClient, req *Request) (*Respon
 		resp.GetWorkerCfg, err = client.GetWorkerCfg(ctx, req.GetWorkerCfg)
 	case CmdCheckSubtasksCanUpdate:
 		resp.CheckSubtasksCanUpdate, err = client.CheckSubtasksCanUpdate(ctx, req.CheckSubtasksCanUpdate)
+	case CmdGetValidationStatus:
+		resp.GetValidationStatus, err = client.GetWorkerValidateStatus(ctx, req.GetValidationStatus)
 	default:
 		return nil, terror.ErrMasterGRPCInvalidReqType.Generate(req.Type)
 	}

@@ -16,6 +16,7 @@ package worker
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"go.uber.org/zap"
@@ -122,4 +123,26 @@ func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *b
 		return ""
 	}
 	return s
+}
+
+func (w *SourceWorker) GetValidateStatus(stName string, filterStatus string) []*pb.ValidationStatus {
+	sts := w.subTaskHolder.getAllSubTasks()
+	res := make([]*pb.ValidationStatus, 0)
+	if len(sts) == 0 {
+		return res
+	}
+	sourceIp := w.cfg.DecryptPassword().From.Host
+	for _, st := range sts {
+		if st.validator == nil || !st.validator.Started() {
+			continue
+		}
+		tblStats := st.validator.GetValidationStatus()
+		for _, stat := range tblStats {
+			if filterStatus == "" || strings.EqualFold(stat.ValidationStatus, filterStatus) {
+				stat.Source = sourceIp
+				res = append(res, stat)
+			}
+		}
+	}
+	return res
 }

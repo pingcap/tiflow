@@ -22,6 +22,8 @@ service Worker {
 
     // only some fields of the configuration of the subtask in the sync phase can be updated
     rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
+
+    rpc GetWorkerValidateStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
 }
 
 enum TaskOp {
@@ -403,4 +405,23 @@ message CheckSubtasksCanUpdateRequest { string subtaskCfgTomlString = 1; }
 message CheckSubtasksCanUpdateResponse {
   bool success = 1;
   string msg = 2; // message when error occurred
+}
+
+message GetValidationStatusRequest {
+    string taskName = 1;
+    string FilterStatus = 2;
+}
+
+message ValidationStatus {
+    string source = 1;
+    string srcTable = 2;
+    string dstTable = 3;
+    string validationStatus = 4;
+    string message = 5;
+}
+
+message GetValidationStatusResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationStatus status = 3;
 }

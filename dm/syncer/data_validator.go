@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/atomic"
@@ -776,4 +777,21 @@ func genColData(v interface{}) string {
 	}
 	s := fmt.Sprintf("%v", v)
 	return s
+}
+
+func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
+	ret, err := v.persistHelper.loadTableStatus(v.tctx)
+	if err != nil {
+		return []*pb.ValidationStatus{}
+	}
+	result := make([]*pb.ValidationStatus, 0)
+	for _, tblStat := range ret {
+		result = append(result, &pb.ValidationStatus{
+			SrcTable:         dbutil.TableName(tblStat.source.Schema, tblStat.source.Name),
+			DstTable:         dbutil.TableName(tblStat.target.Schema, tblStat.target.Name),
+			ValidationStatus: tblStat.stage.String(),
+			Message:          tblStat.message,
+		})
+	}
+	return result
 }

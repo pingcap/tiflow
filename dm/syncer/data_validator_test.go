@@ -34,7 +34,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -479,4 +481,47 @@ func TestValidatorGenColData(t *testing.T) {
 	require.Equal(t, "\x01\x02\x03", res)
 	res = genColData(decimal.NewFromInt(222123123))
 	require.Equal(t, "222123123", res)
+}
+
+func TestGetValidationStatus(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	db, dbMock, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	require.Equal(t, log.InitLogger(&log.Config{}), nil)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	syncerObj.schemaLoaded.Store(true)
+	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
+		dbMock.NewRows([]string{"src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "stage", "message"}).
+			AddRow("db", "tbl1", "dstdb", "tbl2", 2, "").
+			AddRow("db", "errtbl", "dstdb", "tbl2", 4, "some error"),
+	)
+	expected := []*pb.ValidationStatus{
+		{
+			SrcTable:         "`db`.`tbl1`",
+			DstTable:         "`dstdb`.`tbl2`",
+			ValidationStatus: pb.Stage_Running.String(),
+			Message:          "",
+		},
+		{
+			SrcTable:         "`db`.`errtbl`",
+			DstTable:         "`dstdb`.`tbl2`",
+			ValidationStatus: pb.Stage_Stopped.String(),
+			Message:          "some error",
+		},
+	}
+	ret := validator.GetValidationStatus()
+	require.Equal(t, len(expected), len(ret))
+	for idx, want := range expected {
+		require.Equal(t, want.SrcTable, ret[idx].SrcTable)
+		require.Equal(t, want.DstTable, ret[idx].DstTable)
+		require.Equal(t, want.ValidationStatus, ret[idx].ValidationStatus)
+		require.Equal(t, want.Message, ret[idx].Message)
+	}
 }
