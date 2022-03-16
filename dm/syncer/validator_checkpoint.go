@@ -16,6 +16,7 @@ package syncer
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
@@ -45,7 +46,11 @@ const (
 	ignoredValidateErrorRow
 	//nolint
 	resolvedValidateErrorRow
+
+	maxRowKeyLength = 64
 )
+
+var maxRowKeyLengthStr = strconv.Itoa(maxRowKeyLength)
 
 type validatorPersistHelper struct {
 	tctx              *tcontext.Context
@@ -121,8 +126,6 @@ func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 }
 
 func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
-	// TODO: length of row_pk is set to 128 for now, need to make sure it can store the longest pk in mysql
-	// TODO: maybe use hash digest
 	sqls := []string{
 		`CREATE TABLE IF NOT EXISTS ` + c.checkpointTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -139,7 +142,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			schema_name VARCHAR(128) NOT NULL,
 			table_name VARCHAR(128) NOT NULL,
-			row_pk VARCHAR(128) NOT NULL,
+			row_pk VARCHAR(` + maxRowKeyLengthStr + `) NOT NULL,
 			data JSON NOT NULL,
 			revision bigint NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -152,7 +155,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			src_schema_name VARCHAR(128) NOT NULL,
 			src_table_name VARCHAR(128) NOT NULL,
-			row_pk VARCHAR(128) NOT NULL,
+			row_pk VARCHAR(` + maxRowKeyLengthStr + `) NOT NULL,
 			dst_schema_name VARCHAR(128) NOT NULL,
 			dst_table_name VARCHAR(128) NOT NULL,
 			data JSON NOT NULL,

@@ -15,6 +15,8 @@ package syncer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -764,7 +766,17 @@ func getRowChangeType(t replication.EventType) rowChangeType {
 }
 
 func genRowKey(pkValues []string) string {
-	return strings.Join(pkValues, "-")
+	// TODO: in scenario below, the generated key may not unique, but it's rare
+	// suppose a table with multiple column primary key: (v1, v2)
+	// for below case, the generated key is the same:
+	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"
+	join := strings.Join(pkValues, "\t")
+	// if the key is too long, need to make sure it can be stored into database
+	if len(join) > maxRowKeyLength {
+		sum := sha256.Sum256([]byte(join))
+		return hex.EncodeToString(sum[:])
+	}
+	return join
 }
 
 func genColData(v interface{}) string {

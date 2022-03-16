@@ -15,7 +15,9 @@ package syncer
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -486,6 +488,26 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv0))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv1))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv2))
+}
+
+func TestValidatorGenRowKey(t *testing.T) {
+	require.Equal(t, "a", genRowKey([]string{"a"}))
+	require.Equal(t, "a\tb", genRowKey([]string{"a", "b"}))
+	require.Equal(t, "a\tb\tc", genRowKey([]string{"a", "b", "c"}))
+	var bytes []byte
+	for i := 0; i < 100; i++ {
+		bytes = append(bytes, 'a')
+	}
+	{
+		longStr := string(bytes[:maxRowKeyLength])
+		require.Equal(t, longStr, genRowKey([]string{longStr}))
+	}
+	{
+		longStr := string(bytes[:maxRowKeyLength+1])
+		sum := sha256.Sum256([]byte(longStr))
+		sha := hex.EncodeToString(sum[:])
+		require.Equal(t, sha, genRowKey([]string{longStr}))
+	}
 }
 
 func TestValidatorGenColData(t *testing.T) {
