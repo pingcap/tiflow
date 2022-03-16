@@ -86,7 +86,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	defaultMaxPauseOrStopWaitTime = 10 * time.Second
 
@@ -1661,10 +1660,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
-
-	failpoint.Inject("S3GetDumpFilesCheck", func() {
-		cleanDumpFile = false
-	})
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
@@ -3272,9 +3267,6 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
-		failpoint.Inject("S3GetDumpFilesCheck", func() {
-			panic(errors.Annotate(err, "fail to get dump files"))
-		})
 		return err
 	}
 	var dbs, tables []string
