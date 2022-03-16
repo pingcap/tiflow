@@ -461,10 +461,8 @@ func genEmbedEtcdConfigWithLogger(logLevel string) *embed.Config {
 		log.L().Info("Set log level of etcd to `warn`, if you want to log more message about etcd, change log-level to `debug` in master configuration file")
 		logger.Logger = logger.WithOptions(zap.IncreaseLevel(zap.WarnLevel))
 	}
-
 	cfg.ZapLoggerBuilder = embed.NewZapCoreLoggerBuilder(logger.Logger, logger.Core(), log.Props().Syncer) // use global app props.
 	cfg.Logger = "zap"
-
 	// TODO: we run ZapLoggerBuilder to set SetLoggerV2 before we do some etcd operations
 	//       otherwise we will meet data race while running `grpclog.SetLoggerV2`
 	//       It's vert tricky here, we should use a better way to avoid this in the future.

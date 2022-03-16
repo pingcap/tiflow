@@ -95,10 +95,10 @@ function test_relay() {
 		"\"worker\": \"worker1\"" 1
 
 	# start relay failed
-	openapi_source_check "start_relay_failed" "mysql-01" "no-worker"
+	openapi_source_check "enable_relay_failed" "mysql-01" "no-worker"
 
-	# start relay success
-	openapi_source_check "start_relay_success" "mysql-01" "worker1"
+	# enable relay success
+	openapi_source_check "enable_relay_success" "mysql-01" "worker1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
 		"\"worker\": \"worker1\"" 1 \
@@ -111,26 +111,14 @@ function test_relay() {
 	openapi_source_check "get_source_status_success" "mysql-01"
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01"
 
-	# pause relay success
-	openapi_source_check "pause_relay_success" "mysql-01"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s mysql-01" \
-		"\"worker\": \"worker1\"" 1 \
-		"\"stage\": \"Paused\"" 1
+	# disable relay failed: not pass worker name
+	openapi_source_check "disable_relay_failed" "mysql-01" "no-worker"
 
-	# resume relay success
-	openapi_source_check "resume_relay_success" "mysql-01"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s mysql-01" \
-		"\"worker\": \"worker1\"" 1 \
-		"\"stage\": \"Running\"" 1 \
-		"\"relayCatchUpMaster\": true" 1
+	# purge relay success
+	openapi_source_check "purge_relay_success" "mysql-01" "mysql-bin.000001"
 
-	# stop relay failed: not pass worker name
-	openapi_source_check "stop_relay_failed" "mysql-01" "no-worker"
-
-	# stop relay success
-	openapi_source_check "stop_relay_success" "mysql-01" "worker1"
+	# disable relay success
+	openapi_source_check "disable_relay_success" "mysql-01" "worker1"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s mysql-01" \
@@ -139,7 +127,7 @@ function test_relay() {
 
 	openapi_source_check "get_source_status_success_no_relay" "mysql-01"
 
-	openapi_source_check "start_relay_success_with_two_worker" "mysql-01" "worker1" "worker2"
+	openapi_source_check "enable_relay_success_with_two_worker" "mysql-01" "worker1" "worker2"
 	openapi_source_check "list_source_with_status_success" 1 2               # source 1 status_list will have two items
 	openapi_source_check "get_source_status_success" "mysql-01" 2            # have two source status
 	openapi_source_check "get_source_status_success_with_relay" "mysql-01" 0 # check worker1 relay status
@@ -151,8 +139,8 @@ function test_relay() {
 		"\"worker\": \"worker2\"" 1
 
 	# stop relay on two worker success
-	openapi_source_check "stop_relay_success" "mysql-01" "worker1"
-	openapi_source_check "stop_relay_success" "mysql-01" "worker2"
+	openapi_source_check "disable_relay_success" "mysql-01" "worker1"
+	openapi_source_check "disable_relay_success" "mysql-01" "worker2"
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
@@ -180,12 +168,17 @@ function test_shard_task() {
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
 
-	# start task success: not valid task create request
-	openapi_task_check "start_task_failed"
+	# create task success: not valid task create request
+	openapi_task_check "create_task_failed"
 
-	# start shard task success
-	openapi_task_check "start_shard_task_success"
+	# create success
+	openapi_task_check "create_shard_task_success"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
 
+	# start success
+	openapi_task_check "start_task_success" $task_name ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Running\"" 2
@@ -216,10 +209,12 @@ function test_shard_task() {
 	openapi_task_check "get_task_list" 1
 
 	# stop task success
-	openapi_task_check "stop_task_success" "$task_name"
+	openapi_task_check "stop_task_success" "$task_name" ""
 
-	# stop task failed
-	openapi_task_check "stop_task_failed" "$task_name"
+	openapi_task_check "get_task_list" 1
+
+	# delete task success
+	openapi_task_check "delete_task_success" "$task_name"
 
 	# get task list
 	openapi_task_check "get_task_list" 0
@@ -252,16 +247,16 @@ function test_noshard_task() {
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
 
-	# start task success: not valid task create request
-	openapi_task_check "start_task_failed"
+	# create no shard task success
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
 
-	# start no shard task success
-	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
-
+	openapi_task_check "start_task_success" $task_name ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Running\"" 2
-
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
@@ -280,24 +275,68 @@ function test_noshard_task() {
 	# get task list
 	openapi_task_check "get_task_list" 1
 
-	# pause task first for operate schema
-	openapi_task_check "pause_task_success" "$task_name" "mysql-02"
+	# stop task first for operate schema
+	openapi_task_check "stop_task_success" "$task_name" "mysql-02"
 
 	# operate schema
 	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
 
-	# resume task
-	openapi_task_check "resume_task_success" "$task_name" "mysql-02"
+	# start task again
+	openapi_task_check "start_task_success" "$task_name" "mysql-02"
 
-	# stop task success
-	openapi_task_check "stop_task_success" "$task_name"
+	# delete task failed because there is a running task
+	openapi_task_check "delete_task_failed" "$task_name"
+
+	# delete task success with force
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+
+	openapi_task_check "get_task_list" 0
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	run_sql_tidb "DROP DATABASE if exists openapi;"
-	openapi_task_check "get_task_list" 0
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK SUCCESS"
+}
+
+function test_complex_operations_of_source_and_task() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: COMPLEX OPERATION"
+	prepare_database
+
+	task_name="test-complex"
+	target_table_name="" # empty means no route
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+
+	# create and check task
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "get_task_list" 1
+
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
+	init_noshard_data
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+	openapi_task_check "get_task_status_success" "$task_name" 2
+
+	# do some complex operations
+	openapi_task_check "do_complex_operations" "$task_name"
+
+	# incr more data
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (3,4);"
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (5,6);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: COMPLEX OPERATION SUCCESS"
 }
 
 function test_multi_tasks() {
@@ -308,7 +347,7 @@ function test_multi_tasks() {
 	task1_target_table_name="task1_target_table"
 
 	task2="test-2"
-	task2_target_db_name="task2_target_table"
+	task2_target_table_name="task2_target_table"
 
 	# create and check source
 	openapi_source_check "create_source1_success"
@@ -317,7 +356,12 @@ function test_multi_tasks() {
 
 	init_noshard_data
 
-	openapi_task_check "start_noshard_task_success" $task1 $task1_target_table_name
+	openapi_task_check "create_noshard_task_success" $task1 $task1_target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task1" \
+		"\"stage\": \"Stopped\"" 2
+
+	openapi_task_check "start_task_success" $task1 ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task1" \
 		"\"stage\": \"Running\"" 2
@@ -325,7 +369,12 @@ function test_multi_tasks() {
 	# test get task list with status, now we have 1 task with two status
 	openapi_task_check "get_task_list_with_status" 1 $task1 2
 
-	openapi_task_check "start_noshard_task_success" $task2 $task2_target_db_name
+	openapi_task_check "create_noshard_task_success" $task2 $task2_target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task2" \
+		"\"stage\": \"Stopped\"" 2
+
+	openapi_task_check "start_task_success" $task2 ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task2" \
 		"\"stage\": \"Running\"" 2
@@ -343,7 +392,7 @@ function test_task_templates() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK TEMPLATES"
 	prepare_database
 
-	taskname="test-1"
+	task_name="test-1"
 
 	# create and check source
 	openapi_source_check "create_source1_success"
@@ -352,28 +401,34 @@ function test_task_templates() {
 
 	# crud task template
 	openapi_task_check "create_task_template_failed"
-	openapi_task_check "create_task_template_success" $taskname
+	openapi_task_check "create_task_template_success" $task_name
 	openapi_task_check "list_task_template" 1
-	openapi_task_check "get_task_template" $taskname
-	openapi_task_check "update_task_template_success" $taskname "full"
-	openapi_task_check "delete_task_template" $taskname
+	openapi_task_check "get_task_template" $task_name
+	openapi_task_check "update_task_template_success" $task_name "full"
+	openapi_task_check "delete_task_template" $task_name
 	openapi_task_check "list_task_template" 0
 
 	# import from tasks and get from dmctl
 	init_noshard_data
-	openapi_task_check "start_noshard_task_success" $taskname
+
+	openapi_task_check "create_noshard_task_success" $task_name
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $taskname" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
 		"\"stage\": \"Running\"" 2
+
 	openapi_task_check "import_task_template" 1 0
 	openapi_task_check "list_task_template" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"config task $taskname --path $WORK_DIR/get_task_from_task.yaml" \
+		"config task $task_name --path $WORK_DIR/get_task_from_task.yaml" \
 		"\"result\": true" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"config task-template $taskname --path $WORK_DIR/get_task_from_task_template.yaml" \
+		"config task-template $task_name --path $WORK_DIR/get_task_from_task_template.yaml" \
 		"\"result\": true" 1
 
 	diff $WORK_DIR/get_task_from_task.yaml $WORK_DIR/get_task_from_task_template.yaml || exit 1
@@ -409,12 +464,16 @@ function test_noshard_task_dump_status() {
 	openapi_source_check "create_source2_success"
 	openapi_source_check "list_source_success" 2
 	openapi_source_check "get_source_status_success" "mysql-02"
-	openapi_task_check "start_task_failed"
 
-	openapi_task_check "start_noshard_task_success" $task_name $target_table_name
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
-		"\"unit\": \"Dump\"" 2
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"unit\": \"Dump\"" 2 \
+		"\"stage\": \"Running\"" 2
 
 	# check noshard task dump status success
 	openapi_task_check "check_noshard_task_dump_status_success" "$task_name" 0
@@ -483,6 +542,7 @@ function run() {
 	test_noshard_task
 	test_task_templates
 	test_noshard_task_dump_status
+	test_complex_operations_of_source_and_task
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
