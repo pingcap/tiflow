@@ -43,7 +43,7 @@ function run() {
 
 	run_sql "show create table t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
 		check_contains "CREATE TABLE t2 (a int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;" &&
-		check_contains "POLICY=p2"
+		check_contains "POLICY=placement1"
 }
 
 trap stop_tidb_cluster EXIT
