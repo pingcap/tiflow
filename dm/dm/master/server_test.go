@@ -196,8 +196,7 @@ func TestMaster(t *testing.T) {
 }
 
 func (t *testMaster) SetUpSuite(c *check.C) {
-	err := log.InitLogger(&log.Config{})
-	c.Assert(err, check.IsNil)
+	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	maxRetryNum = 2
