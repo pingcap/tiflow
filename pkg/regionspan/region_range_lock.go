@@ -222,7 +222,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		log.Info("range locked",
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("version", version),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
 			zap.Uint64("checkpointTs", checkpointTs))
 
 		return LockRangeResult{
@@ -252,7 +254,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		log.Info("tryLockRange stale",
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("allOverlapping", overlapStr)) // DEBUG
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Strings("allOverlapping", overlapStr)) // DEBUG
 
 		for _, r := range overlappingEntries {
 			// Ignore the totally-disjointed range which may be added to the list because of
@@ -289,7 +293,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 	log.Info("lock range blocked",
 		zap.String("changefeed", l.changefeed),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) // DEBUG
+		zap.String("startKey", hex.EncodeToString(startKey)),
+		zap.String("endKey", hex.EncodeToString(endKey)),
+		zap.Strings("blockedBy", overlapStr)) // DEBUG
 
 	return LockRangeResult{
 		Status: LockRangeStatusWait,
@@ -383,7 +389,8 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	log.Info("unlocked range",
 		zap.String("changefeed", l.changefeed),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
-		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)),
+		zap.String("startKey", hex.EncodeToString(startKey)),
+		zap.String("endKey", hex.EncodeToString(endKey)),
 		zap.Uint64("checkpointTs", checkpointTs))
 }
 
