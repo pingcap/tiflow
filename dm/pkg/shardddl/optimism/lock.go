@@ -536,7 +536,7 @@ func (l *Lock) tryRevertDone(source, schema, table string) {
 	l.done[source][schema][table] = false
 }
 
-// AddTable create a table in lock
+// AddTable create a table in lock.
 func (l *Lock) AddTable(source, schema, table string, needLock bool) {
 	if needLock {
 		l.mu.Lock()
