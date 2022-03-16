@@ -197,12 +197,16 @@ func (c *compactor) compactJob(j *job) {
 			// DELETE + INSERT + UPDATE => INSERT with safemode
 			j.safeMode = prevJob.safeMode
 		}
+		j.dml.Reduce(prevJob.dml)
 	case sqlmodel.RowChangeInsert:
 		if prevJob.dml.Type() == sqlmodel.RowChangeDelete {
 			// DELETE + INSERT => INSERT with safemode
 			j.safeMode = true
+		} else {
 			j.dml.Reduce(prevJob.dml)
 		}
+	default:
+		j.dml.Reduce(prevJob.dml)
 	}
 
 	// mark previous job as compacted(nil), add new job
