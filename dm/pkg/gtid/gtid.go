@@ -399,8 +399,7 @@ func (m *MariadbGTIDSet) isOtherSetNil(other Set) bool {
 
 // Contain implements Set.Contain.
 func (m *MariadbGTIDSet) Contain(other Set) bool {
-	otherIsNil := m.isOtherSetNil(other)
-	if otherIsNil {
+	if m.isOtherSetNil(other) {
 		return true // any set (including nil) contains nil
 	}
 	if m == nil {
