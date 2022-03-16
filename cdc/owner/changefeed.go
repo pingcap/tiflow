@@ -199,6 +199,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
 		log.Info("barrierTs < checkpointTs, premature to schedule tables or update status",
+			zap.String("changefeed", c.id),
 			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
 	}
@@ -513,16 +514,21 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 
 func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (done bool, err error) {
 	if job.BinlogInfo == nil {
-		log.Warn("ignore the invalid DDL job", zap.Reflect("job", job))
+		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id),
+			zap.Reflect("job", job))
 		return true, nil
 	}
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
+		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvent, err := c.schema.BuildDDLEvent(job)
 		if err != nil {
+			log.Error("build DDL event fail", zap.String("changefeed", c.id),
+				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 		err = c.schema.HandleDDL(job)
@@ -531,6 +537,8 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
 		if err != nil {
+			log.Error("add special comment fail", zap.String("changefeed", c.id),
+				zap.String("Query", ddlEvent.Query), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 
@@ -543,7 +551,8 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
+		log.Warn("ignore the DDL job of ineligible table",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
