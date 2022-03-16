@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -168,9 +169,55 @@ func TestPrepareUpdate(t *testing.T) {
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
 			expectedArgs: []interface{}{2, "test2", 1, "test"},
 		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("世界")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("世界")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "你好"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "世界"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedArgs: []interface{}{2, "世界", 1, "你好"},
+		},
 	}
 	for _, tc := range testCases {
 		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		fmt.Println(query)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -207,6 +254,36 @@ func TestPrepareDelete(t *testing.T) {
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1, "test"},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1, []byte("你好")},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1, []byte("你好")},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "你好"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1, "你好"},
 		},
 	}
 	for _, tc := range testCases {
@@ -292,6 +369,26 @@ func TestWhereSlice(t *testing.T) {
 			expectedColNames: []string{"a", "b", "c"},
 			expectedArgs:     []interface{}{1, "test", 100},
 		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   false,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, []byte("你好")},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag, Charset: charset.CharsetGBK, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b", "c"},
+			expectedArgs:     []interface{}{1, "你好", 100},
+		},
 	}
 	for _, tc := range testCases {
 		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
@@ -328,6 +425,18 @@ func TestMapReplace(t *testing.T) {
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`) VALUES ",
 			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Charset: charset.CharsetGBK, Value: []byte("你好")},
+				{Name: "c", Type: mysql.TypeTinyBlob, Charset: charset.CharsetUTF8MB4, Value: []byte("世界")},
+				{Name: "d", Type: mysql.TypeMediumBlob, Charset: charset.CharsetBin, Value: []byte("你好,世界")},
+				{Name: "e", Type: mysql.TypeBlob, Value: []byte("你好,世界")},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`,`e`) VALUES ",
+			expectedArgs:  []interface{}{1, "你好", "世界", []byte("你好,世界"), []byte("你好,世界")},
 		},
 	}
 	for _, tc := range testCases {
