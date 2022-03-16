@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -40,15 +41,17 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
-		// avoid duplicate add uniqueID
-		if !strings.HasSuffix(rawURL, uniqueID) {
-			return rawURL + uniqueID, nil
+		// avoid duplicate add uniqueID, and trim suffix '/' like './dump_data/'
+		trimPath := strings.TrimRight(rawURL, string(filepath.Separator))
+		if !strings.HasSuffix(trimPath, uniqueID) {
+			return trimPath + uniqueID, nil
 		}
 		return rawURL, nil
 	}
 	// u.Path is an unescaped string and can be used as normal
-	if !strings.HasSuffix(u.Path, uniqueID) {
-		u.Path += uniqueID
+	trimPath := strings.TrimRight(u.Path, string(filepath.Separator))
+	if !strings.HasSuffix(trimPath, uniqueID) {
+		u.Path = trimPath + uniqueID
 		// u.String will return escaped url and can be used safely in other steps
 		return u.String(), err
 	}

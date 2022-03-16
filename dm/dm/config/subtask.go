@@ -411,11 +411,11 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		// add suffix
 		var dirSuffix string
 		if isS3 {
-			dirSuffix = c.Name + "." + c.SourceID
+			dirSuffix = "/" + c.Name + "." + c.SourceID
 		} else {
-			dirSuffix = c.Name
+			dirSuffix = "." + c.Name
 		}
-		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, "."+dirSuffix)
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
