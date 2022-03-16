@@ -50,7 +50,6 @@ func returnIndex() gin.HandlerFunc {
 		// If it is not a request to assets return the default index.html
 		if c.Request.URL.Path != basePath && !strings.Contains(c.Request.URL.Path, assetsPath) {
 			c.FileFromFS("/", webFS)
-			c.AbortWithStatus(http.StatusPermanentRedirect)
 		} else {
 			c.Next()
 		}
