@@ -130,11 +130,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
 			log.Warn("ddl sink initialize failed",
+				zap.String("changefeed", ctx.ChangefeedVars().ID),
 				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
 		log.Info("ddl sink initialized, start processing...",
+			zap.String("changefeed", ctx.ChangefeedVars().ID),
 			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
@@ -174,8 +176,9 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					return
 				}
 			case ddl := <-s.ddlCh:
-				log.Info("emit ddl event", zap.Any("DDL", ddl),
-					zap.String("changefeed", ctx.ChangefeedVars().ID))
+				log.Info("begin emit ddl event",
+					zap.String("changefeed", ctx.ChangefeedVars().ID),
+					zap.Any("DDL", ddl))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
@@ -213,11 +216,14 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
-			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl),
-			zap.String("changefeed", ctx.ChangefeedVars().ID))
+			zap.String("changefeed", ctx.ChangefeedVars().ID),
+			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
+		log.Debug("ddl is not finished yet",
+			zap.String("changefeed", ctx.ChangefeedVars().ID),
+			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -226,12 +232,14 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
 		s.ddlSentTs = ddl.CommitTs
-		log.Info("ddl is sent", zap.Uint64("ddlSentTs", s.ddlSentTs))
+		log.Info("ddl is sent",
+			zap.String("changefeed", ctx.ChangefeedVars().ID),
+			zap.Uint64("ddlSentTs", s.ddlSentTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
+			zap.String("changefeed", ctx.ChangefeedVars().ID),
 			zap.Uint64("ddlSentTs", s.ddlSentTs),
-			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl),
-			zap.String("changefeed", ctx.ChangefeedVars().ID))
+			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl))
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}
