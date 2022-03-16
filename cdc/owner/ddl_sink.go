@@ -148,6 +148,17 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			case err := <-s.errCh:
 				ctx.Throw(err)
 				return
+			default:
+			}
+			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
+			// does not matter which one emit first, since TiCDC allow DDL with
+			// CommitTs equal to the last CheckpointTs be emitted later.
+			select {
+			case <-ctx.Done():
+				return
+			case err := <-s.errCh:
+				ctx.Throw(err)
+				return
 			case <-ticker.C:
 				s.mu.Lock()
 				checkpointTs := s.mu.checkpointTs
@@ -163,7 +174,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					return
 				}
 			case ddl := <-s.ddlCh:
-				log.Info("emit ddl event", zap.Any("DDL", ddl))
+				log.Info("emit ddl event", zap.Any("DDL", ddl),
+					zap.String("changefeed", ctx.ChangefeedVars().ID))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
@@ -172,7 +184,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					log.Info("Execute DDL succeeded",
 						zap.String("changefeed", ctx.ChangefeedVars().ID),
 						zap.Bool("ignored", err != nil),
-						zap.Reflect("ddl", ddl))
+						zap.Any("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
@@ -181,7 +193,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				log.Error("Execute DDL failed",
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),
-					zap.Reflect("ddl", ddl))
+					zap.Any("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
 				return
 			}
@@ -206,9 +218,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return true, nil
 	}
 	if ddl.CommitTs <= s.ddlSentTs {
-		log.Info("ddl is not finished yet",
-			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl),
-			zap.String("changefeed", ctx.ChangefeedVars().ID))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
