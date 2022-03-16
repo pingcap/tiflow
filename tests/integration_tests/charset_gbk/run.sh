@@ -20,8 +20,16 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+	TOPIC_NAME="ticdc-charset-gbk-$RANDOM"
+	case $SINK_TYPE in
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
+	esac
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+		if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+	fi
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 
@@ -36,11 +44,6 @@ function run() {
 	cleanup_process $CDC_BINARY
 }
 
-# TODO: kafka is not supported yet.
-if [ "$SINK_TYPE" = "kafka" ]; then
-	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
-	exit 0
-fi
 trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR

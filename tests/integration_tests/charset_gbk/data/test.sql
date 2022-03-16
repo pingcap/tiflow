@@ -5,6 +5,7 @@ CREATE DATABASE `charset_gbk_test0` CHARACTER SET utf8mb4;
 USE `charset_gbk_test0`;
 
 /* this is a test for columns which charset is gbk*/
+/* this is a test for columns which charset is gbk*/
 CREATE TABLE t0 (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -23,6 +24,14 @@ INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
+UPDATE t0
+SET name = '开发'
+WHERE name = '测试';
+
+DELETE FROM t0
+WHERE name = '部署';
+
+/* this is a test for table which charset is gbk*/
 /* this is a test for table which charset is gbk*/
 CREATE TABLE t1 (
 	id INT,
@@ -41,6 +50,13 @@ VALUES (1, '测试', "中国", "上海", "你好,世界"
 INSERT INTO t1
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
+
+UPDATE t1
+SET name = '开发'
+WHERE name = '测试';
+
+DELETE FROM t1
+WHERE name = '部署';
 
 /* this is a test for db which charset is gbk*/
 DROP DATABASE IF EXISTS `charset_gbk_test1`;
@@ -67,6 +83,18 @@ INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
+UPDATE t0
+SET name = '开发'
+WHERE name = '测试'
+	AND country = '中国'
+	AND description = '你好,世界';
+
+DELETE FROM t0
+WHERE name = '部署'
+	AND country = '美国'
+	AND description = '世界,你好';
+
+/* this is a DLL test for column */
 /* this is a DLL test for column */
 CREATE TABLE t1 (
 	id INT,
@@ -74,12 +102,16 @@ CREATE TABLE t1 (
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
-ALTER TABLE t1 ADD COLUMN 城市 char(32);
+ALTER TABLE t1
+	ADD COLUMN 城市 char(32);
 
-ALTER TABLE t1 MODIFY COLUMN 城市 varchar(32);
+ALTER TABLE t1
+	MODIFY COLUMN 城市 varchar(32);
 
-ALTER TABLE t1 DROP COLUMN 城市;
+ALTER TABLE t1
+	DROP COLUMN 城市;
 
+/* this is a DDL test for table */
 /* this is a DDL test for table */
 CREATE TABLE 表2 (
 	id INT,
@@ -100,7 +132,6 @@ DROP DATABASE `测试库`;
 
 USE `test`;
 
-CREATE TABLE finish_mark
-(
-    id int PRIMARY KEY
+CREATE TABLE finish_mark (
+	id int PRIMARY KEY
 );

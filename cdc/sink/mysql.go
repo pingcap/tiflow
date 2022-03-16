@@ -772,6 +772,21 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
+func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
+	colValStr, ok := col.Value.(string)
+	// if the column charset is not empty or not binary, we get its string
+	// representation. Because if we use the byte array respresentation, the go-sql-driver
+	// will automatically set `_binary` charset for that column, which is not expected.
+	// See https://github.com/go-sql-driver/mysql/blob/master/connection.go#L267
+	if col.Charset != "" && col.Charset != charset.CharsetBin && ok {
+		args = append(args, colValStr)
+	} else {
+		args = append(args, col.Value)
+	}
+
+	return args
+}
+
 func prepareReplace(
 	quoteTable string,
 	cols []*model.Column,
@@ -786,7 +801,7 @@ func prepareReplace(
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -854,7 +869,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -920,7 +935,7 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 			continue
 		}
 		colNames = append(colNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	// if no explicit row id but force replicate, use all key-values in where condition
 	if len(colNames) == 0 && forceReplicate {
@@ -928,7 +943,7 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
 			colNames = append(colNames, col.Name)
-			args = append(args, col.Value)
+			args = appendQueryArgs(args, col)
 		}
 	}
 	return

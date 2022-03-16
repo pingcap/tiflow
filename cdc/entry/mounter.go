@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/table"
@@ -336,10 +335,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:  colName,
-			Type:  colInfo.Tp,
-			Value: colValue,
-			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+			Name:    colName,
+			Type:    colInfo.Tp,
+			Charset: colInfo.Charset,
+			Value:   colValue,
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
@@ -481,21 +481,13 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		v, err := datum.GetBinaryLiteral().ToInt(nil)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
-	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		v := datum.GetString()
-		return v, sizeOfString(v), "", nil
-	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		// TEXT and BLOB are differentiated by charset.
-		// If charset is binary, then the real type is BLOB, else the real type is TEXT.
-		if col.Charset == "" || col.Charset == charset.CharsetBin {
-			b := datum.GetBytes()
-			if b == nil {
-				b = emptyBytes
-			}
-			return b, sizeOfBytes(b), "", nil
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,
+		mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		b := datum.GetBytes()
+		if b == nil {
+			b = emptyBytes
 		}
-		v := datum.GetString()
-		return v, sizeOfString(v), "", nil
+		return b, sizeOfBytes(b), "", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
