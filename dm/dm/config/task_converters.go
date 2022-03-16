@@ -370,7 +370,9 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 		// if ends with the task name, we remove to get user input dir.
 		loaderCfg.Dir, err = storage.TrimPath(loaderCfg.Dir, dirSuffix)
 		// because dir comes form subtask, there should not have error.
-		log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+		if err != nil {
+			log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+		}
 
 		c.Loaders[loadName] = &loaderCfg
 
@@ -471,7 +473,9 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	// if ends with the task name, we remove to get user input dir.
 	oneSubtaskConfig.LoaderConfig.Dir, err = storage.TrimPath(oneSubtaskConfig.LoaderConfig.Dir, dirSuffix)
 	// because dir comes form subtask, there should not have error.
-	log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+	if err != nil {
+		log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+	}
 
 	taskSourceConfig.FullMigrateConf = &openapi.TaskFullMigrateConf{
 		ExportThreads: &oneSubtaskConfig.MydumperConfig.Threads,
