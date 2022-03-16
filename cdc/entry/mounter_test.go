@@ -877,7 +877,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "",
+			Res: []byte{},
 		},
 		// mysql.TypeString
 		{
@@ -888,7 +888,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "",
+			Res: []byte{},
 		},
 		// mysql.TypeBit
 		{
