@@ -34,6 +34,12 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
+	config.GetGlobalServerConfig().Debug.EnableDBSorter = false
+	defer func() {
+		// Restore default server config.
+		config.GetGlobalServerConfig().Debug.EnableDBSorter = true
+	}()
+
 	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0)
 	require.Nil(t, err)
 
