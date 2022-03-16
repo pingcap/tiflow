@@ -191,7 +191,7 @@ func (c *compactor) compactJob(j *job) {
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
 
 	// adjust safemode
-	skipReduce := false
+	var skipReduce bool
 	switch j.dml.Type() {
 	case sqlmodel.RowChangeUpdate:
 		if prevJob.dml.Type() == sqlmodel.RowChangeInsert {
