@@ -25,7 +25,6 @@ type DebugConfig struct {
 	// EnableDBSorter enables db sorter.
 	//
 	// The default value is false.
-	// TODO: turn on after GA.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
