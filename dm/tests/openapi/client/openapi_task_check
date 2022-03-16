@@ -164,7 +164,7 @@ def start_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/start"
     req = {}
     if source_name != "":
-        req = {"source_name_list": [source_name]}
+        req = {"source_name_list": [source_name], "remove_meta": True}
     resp = requests.post(url=url, json=req)
     if resp.status_code != 200:
         print("start_task_failed resp=", resp.json())

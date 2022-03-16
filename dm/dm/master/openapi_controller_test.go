@@ -177,7 +177,7 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.NoError(server.transferSource(ctx, s.testSource.SourceName, worker1Name))
 		s.Equal(worker1.Stage(), scheduler.WorkerBound)
 
-		// disable no task now,so no errorg
+		// disable no task now, so no error
 		s.NoError(server.disableSource(ctx, s.testSource.SourceName))
 
 		// add worker 2 and transfer
@@ -364,7 +364,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		req.TaskConfigFile = &taskCfgStr
 		task2, taskCfg2, err := server.convertTaskConfig(ctx, req)
 		s.NoError(err)
-		s.NotNil(task)
+		s.NotNil(task2)
 		s.NotNil(taskCfg2)
 		s.EqualValues(task2, task)
 		s.Equal(taskCfg2.String(), taskCfg.String())
