@@ -8,7 +8,7 @@ require (
 	github.com/Shopify/sarama v1.27.2
 	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.35.3
-	github.com/benbjohnson/clock v1.1.0
+	github.com/benbjohnson/clock v1.3.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
@@ -53,11 +53,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66
-	github.com/pingcap/kvproto v0.0.0-20220303025110-d5eb908517b2
+	github.com/pingcap/kvproto v0.0.0-20220314103629-10e688307221
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220309003348-b9bd5a7d7e4d
+	github.com/pingcap/tidb v1.1.0-beta.0.20220316031552-d981c0e06a13
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220309081549-563c2a342f9c+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220309003348-b9bd5a7d7e4d
+	github.com/pingcap/tidb/parser v0.0.0-20220316034952-ef8c85834751
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -73,9 +73,9 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.1-0.20220302130440-46d649305eee
+	github.com/tikv/client-go/v2 v2.0.1-0.20220311043619-5042c6f2aaa6
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
-	github.com/tikv/pd/client v0.0.0-20220216080339-1b8f82378ee7
+	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -89,11 +89,11 @@ require (
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
-	go.uber.org/multierr v1.7.0
-	go.uber.org/zap v1.20.0
+	go.uber.org/multierr v1.8.0
+	go.uber.org/zap v1.21.0
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
+	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/genproto v0.0.0-20210825212027-de86158e7fda
