@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/util/memory"
 	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/pkg/actor"
-	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -115,19 +114,6 @@ func (s *System) CompactScheduler() *lsorter.CompactScheduler {
 	return s.compactSched
 }
 
-// broadcase messages to actors in the router.
-// Caveats it may lose messages quietly.
-func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
-	dbCount := s.cfg.Count
-	for id := 0; id < dbCount; id++ {
-		err := router.SendB(ctx, actor.ID(id), msg)
-		if err != nil {
-			log.Warn("broadcast message failed",
-				zap.Int("ID", id), zap.Any("message", msg))
-		}
-	}
-}
-
 // Start starts a system.
 func (s *System) Start(ctx context.Context) error {
 	s.stateMu.Lock()
@@ -211,45 +197,24 @@ func (s *System) Stop() error {
 	}
 	s.state = sysStateStopped
 
-	// TODO caller should pass context.
-	deadline := time.Now().Add(1 * time.Second)
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	defer cancel()
-	// Close actors
-	s.broadcast(ctx, s.DBRouter, message.StopMessage())
-	s.broadcast(ctx, s.WriterRouter, message.StopMessage())
-	s.broadcast(ctx, s.ReaderRouter, message.StopMessage())
-	s.broadcast(ctx, s.compactRouter, message.StopMessage())
+	// Stop all actors and system to release resource.
+	s.WriterSystem.Stop()
+	s.ReaderSystem.Stop()
+	// TODO: compact is not context-aware, it may block.
+	s.compactSystem.Stop()
+	s.dbSystem.Stop()
 	// Close metrics goroutine.
 	close(s.closedCh)
-	// Wait actors and metrics goroutine.
-	s.closedWg.Wait()
-
-	// Stop systems.
-	err := s.dbSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.WriterSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.ReaderSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.compactSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	// Close dbs.
-	for _, db := range s.dbs {
-		err = db.Close()
+	for i, db := range s.dbs {
+		err := db.Close()
 		if err != nil {
-			log.Warn("db close error", zap.Error(err))
+			log.Warn("db close error", zap.Int("ID", i), zap.Error(err))
 		}
 	}
+	// Wait actors and metrics goroutine.
+	s.closedWg.Wait()
 	return nil
 }
 
