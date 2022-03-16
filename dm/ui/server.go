@@ -29,11 +29,13 @@ import (
 const (
 	buildPath  = "dist"
 	assetsPath = "assets"
-	indexPath  = "/dashboard/"
+	basePath   = "/dashboard/"
 )
 
-// WebUIAssetsHandler returns a http handler for serving static files.
-func WebUIAssetsHandler() http.FileSystem {
+var webFS = NewWebUIAssetsFS()
+
+// WebUIAssetsHandler returns a http handler for serving static files and strip the dist prefix.
+func NewWebUIAssetsFS() http.FileSystem {
 	stripped, err := fs.Sub(WebUIAssets, buildPath)
 	if err != nil {
 		panic(err) // this should never happen
@@ -42,13 +44,12 @@ func WebUIAssetsHandler() http.FileSystem {
 }
 
 // we need this to handle this case: user want to access /dashboard/source.html/ but webui is a single page app,
-// and it only can handle requests in index page, so we need to redirect to index page.
-func alwaysRedirect(path string) gin.HandlerFunc {
+// and it only can handle requests in index page, so we need to return to index.html and let js handler request.
+func returnIndex() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// note that static file like css and js under the assets folder should not be redirected.
-		if c.Request.URL.Path != path && !strings.Contains(c.Request.URL.Path, assetsPath) {
-			c.Redirect(http.StatusPermanentRedirect, path)
-			c.AbortWithStatus(http.StatusPermanentRedirect)
+		// If it is not a request to assets return the default index.html
+		if c.Request.URL.Path != basePath && !strings.Contains(c.Request.URL.Path, assetsPath) {
+			c.FileFromFS("/", webFS)
 		} else {
 			c.Next()
 		}
@@ -59,8 +60,8 @@ func alwaysRedirect(path string) gin.HandlerFunc {
 func InitWebUIRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(alwaysRedirect(indexPath))
 	router.Use(openapi.ZapLogger(log.L().WithFields(zap.String("component", "webui")).Logger))
-	router.StaticFS(indexPath, WebUIAssetsHandler())
+	router.Use(returnIndex())
+	router.StaticFS(basePath, webFS)
 	return router
 }

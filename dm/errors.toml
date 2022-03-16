@@ -2428,6 +2428,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-master-38058]
+message = "can not start task: %s reason: %s"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-worker-40001]
 message = "parse dm-worker config flag set"
 description = ""
