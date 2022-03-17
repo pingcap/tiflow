@@ -297,3 +297,59 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	}, 2)
 	require.Equal(t, int32(1), p)
 }
+
+func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
+	t.Parallel()
+
+	d, err := NewEventRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+			},
+		},
+	}, "test")
+	require.Nil(t, err)
+
+	tests := []struct {
+		protocol     config.Protocol
+		expectedRule DDLDispatchRule
+	}{
+		{
+			protocol:     config.ProtocolDefault,
+			expectedRule: Broadcast,
+		},
+		{
+			protocol:     config.ProtocolCanal,
+			expectedRule: PartitionZero,
+		},
+		{
+			protocol:     config.ProtocolAvro,
+			expectedRule: Broadcast,
+		},
+		{
+			protocol:     config.ProtocolMaxwell,
+			expectedRule: Broadcast,
+		},
+		{
+			protocol:     config.ProtocolCanalJSON,
+			expectedRule: PartitionZero,
+		},
+		{
+			protocol:     config.ProtocolCraft,
+			expectedRule: Broadcast,
+		},
+		{
+			protocol:     config.ProtocolOpen,
+			expectedRule: Broadcast,
+		},
+	}
+
+	for _, test := range tests {
+		rule := d.GetDLLDispatchRuleByProtocol(test.protocol)
+		require.Equal(t, test.expectedRule, rule)
+	}
+}
