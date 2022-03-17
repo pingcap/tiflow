@@ -125,6 +125,8 @@ func (s *EventRouter) GetTopicForRowChange(row *model.RowChangedEvent) string {
 }
 
 // GetTopicForDDL returns the target topic for DDL.
+// FIXME: Now we can't handle rename tables because
+// we are missing the old and new tables information.
 func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 	var schema, table string
 	if ddl.PreTableInfo != nil {

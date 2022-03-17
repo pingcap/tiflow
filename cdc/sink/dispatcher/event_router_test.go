@@ -16,6 +16,8 @@ package dispatcher
 import (
 	"testing"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/topic"
@@ -351,5 +353,109 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	for _, test := range tests {
 		rule := d.GetDLLDispatchRuleByProtocol(test.protocol)
 		require.Equal(t, test.expectedRule, rule)
+	}
+}
+
+func TestGetTopicForDDL(t *testing.T) {
+	t.Parallel()
+
+	d, err := NewEventRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
+			},
+		},
+	}, "test")
+	require.Nil(t, err)
+
+	tests := []struct {
+		ddl           *model.DDLEvent
+		expectedTopic string
+	}{
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test",
+				},
+				Type: timodel.ActionCreateSchema,
+			},
+			expectedTopic: "test",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test",
+				},
+				Type: timodel.ActionDropSchema,
+			},
+			expectedTopic: "test",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test",
+					Table:  "tb1",
+				},
+				Type: timodel.ActionCreateTable,
+			},
+			expectedTopic: "hello_test",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test",
+					Table:  "tb1",
+				},
+				Type: timodel.ActionDropTable,
+			},
+			expectedTopic: "hello_test",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test1",
+					Table:  "tb1",
+				},
+				Type: timodel.ActionAddColumn,
+			},
+			expectedTopic: "test1_tb1",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test1",
+					Table:  "tb1",
+				},
+				Type: timodel.ActionDropColumn,
+			},
+			expectedTopic: "test1_tb1",
+		},
+		{
+			ddl: &model.DDLEvent{
+				PreTableInfo: &model.SimpleTableInfo{
+					Schema: "test1",
+					Table:  "tb1",
+				},
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test1",
+					Table:  "tb2",
+				},
+				Type: timodel.ActionRenameTable,
+			},
+			expectedTopic: "test1_tb1",
+		},
+	}
+
+	for _, test := range tests {
+		require.Equal(t, test.expectedTopic, d.GetTopicForDDL(test.ddl))
 	}
 }
