@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
@@ -376,4 +377,80 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	task2, err := TaskConfigToOpenAPITask(taskCfg1, sourceCfgMap)
 	require.NoError(t, err)
 	require.Equal(t, batch, *task2.SourceConfig.IncrMigrateConf.ReplBatch)
+
+	// test more complex case
+	{
+		require.Len(t, task.TableMigrateRule, 1)
+		// only route schema
+		targetSchema := "db1"
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Schema: &targetSchema,
+		}
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 1)
+		var routeKey string
+		for k := range taskCfg.Routes {
+			routeKey = k
+		}
+		require.Equal(t, targetSchema, taskCfg.Routes[routeKey].TargetSchema)
+
+		// only route table will meet error
+		targetTable := "tb1"
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Table: &targetTable,
+		}
+		_, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.True(t, terror.ErrConfigGenTableRouter.Equal(err))
+
+		// remove route target (meanus only use block-allow-list to sync)
+		task.TableMigrateRule[0].Target = nil
+		taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 0)
+
+		taskAfterConvert, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// add filter
+		require.Nil(t, task.BinlogFilterRule)
+		ignoreEvent := []string{"drop database"}
+		ignoreSQL := []string{"^Drop"}
+		ruleName := genFilterRuleName(source1Name, 0)
+		ruleNameList := []string{ruleName}
+		rule := openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent, IgnoreSql: &ignoreSQL}
+		ruleM := &openapi.Task_BinlogFilterRule{}
+		ruleM.Set(ruleName, rule)
+		task.BinlogFilterRule = ruleM
+		task.TableMigrateRule[0].BinlogFilterRule = &ruleNameList
+
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// only filter events
+		rule = openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent}
+		ruleM.Set(ruleName, rule)
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		ruleMAfterConvert := taskAfterConvert.BinlogFilterRule
+		ruleAfterConvert, ok := ruleMAfterConvert.Get(ruleName)
+		require.True(t, ok)
+		require.Nil(t, ruleAfterConvert.IgnoreSql)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+	}
 }

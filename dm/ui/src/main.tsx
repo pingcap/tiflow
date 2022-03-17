@@ -1,4 +1,3 @@
-import 'reset-css'
 import 'virtual:windi.css'
 import './theme.less'
 import './i18n'
