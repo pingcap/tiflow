@@ -52,6 +52,95 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
 }
 
+func TestJobManagerPauseJob(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "pause-job-test")
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mgr := &JobManagerImplV2{
+		BaseMaster: mockMaster.DefaultBaseMaster,
+		JobFsm:     NewJobFsm(),
+		uuidGen:    uuid.NewGenerator(),
+	}
+
+	pauseWorkerID := "pause-worker-id"
+	meta := &lib.MasterMetaKVData{ID: pauseWorkerID}
+	mgr.JobFsm.JobDispatched(meta)
+
+	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: pauseWorkerID}
+	mockWorkerHandler.On("SendMessage",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	err := mgr.JobFsm.JobOnline(mockWorkerHandler)
+	require.Nil(t, err)
+
+	req := &pb.PauseJobRequest{
+		JobIdStr: pauseWorkerID,
+	}
+	resp := mgr.PauseJob(ctx, req)
+	require.Nil(t, resp.Err)
+
+	req.JobIdStr = pauseWorkerID + "-unknown"
+	resp = mgr.PauseJob(ctx, req)
+	require.NotNil(t, resp.Err)
+	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
+}
+
+func TestJobManagerQueryJob(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testCases := []struct {
+		meta             *lib.MasterMetaKVData
+		expectedPBStatus pb.QueryJobResponse_JobStatus
+	}{
+		{
+			&lib.MasterMetaKVData{
+				ID:         "master-1",
+				Tp:         lib.FakeJobMaster,
+				StatusCode: lib.MasterStatusFinished,
+			},
+			pb.QueryJobResponse_finished,
+		},
+		{
+			&lib.MasterMetaKVData{
+				ID:         "master-2",
+				Tp:         lib.FakeJobMaster,
+				StatusCode: lib.MasterStatusStopped,
+			},
+			pb.QueryJobResponse_stopped,
+		},
+	}
+	metaKVClient := metadata.NewMetaMock()
+	for _, tc := range testCases {
+		cli := lib.NewMasterMetadataClient(tc.meta.ID, metaKVClient)
+		err := cli.Store(ctx, tc.meta)
+		require.Nil(t, err)
+	}
+
+	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
+	mockMaster.OverrideMetaKVClient(metaKVClient)
+	mgr := &JobManagerImplV2{
+		BaseMaster:       mockMaster.DefaultBaseMaster,
+		JobFsm:           NewJobFsm(),
+		uuidGen:          uuid.NewGenerator(),
+		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
+	}
+
+	for _, tc := range testCases {
+		req := &pb.QueryJobRequest{
+			JobId: tc.meta.ID,
+		}
+		resp := mgr.QueryJob(ctx, req)
+		require.Nil(t, resp.Err)
+		require.Equal(t, tc.expectedPBStatus, resp.GetStatus())
+	}
+}
+
 func TestJobManagerOnlineJob(t *testing.T) {
 	t.Parallel()
 

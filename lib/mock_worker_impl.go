@@ -83,6 +83,14 @@ func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
 	return args.Error(0)
 }
 
+func (w *mockWorkerImpl) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	args := w.Called(topic, message)
+	return args.Error(0)
+}
+
 func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

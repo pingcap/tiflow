@@ -174,11 +174,21 @@ func (s *SubTaskMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) er
 	return nil
 }
 
+func (s *SubTaskMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("on job manager message", zap.Any("message", message))
+	return nil
+}
+
 func (s *SubTaskMaster) IsJobMasterImpl() {
 	log.L().Info("is job master impl")
 }
 
 func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("on master failover")
+	return nil
+}
+
+func (s *SubTaskMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("on master message", zap.Any("message", message))
 	return nil
 }

@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -565,7 +564,7 @@ func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool 
 }
 
 type WorkerHandle interface {
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	Status() *WorkerStatus
 	ID() WorkerID
 	IsTombStone() bool
@@ -607,21 +606,21 @@ func (w *workerHandleImpl) ToPB() (*pb.WorkerInfo, error) {
 	return ret, nil
 }
 
-func (w *workerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+func (w *workerHandleImpl) SendMessage(
+	ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool,
+) (err error) {
 	info, ok := w.manager.GetWorkerInfo(w.id)
 	if !ok {
 		return derror.ErrWorkerNotFound.GenWithStackByArgs(w.id)
 	}
 
 	executorNodeID := info.NodeID
-	// TODO the worker should have a way to register a handle for this topic.
-	// TODO maybe we need a TopicEncoder
-	prefixedTopic := fmt.Sprintf("worker-message/%s/%s", w.id, topic)
-	_, err := w.manager.MessageSender().SendToNode(ctx, executorNodeID, prefixedTopic, message)
-	if err != nil {
-		return errors.Trace(err)
+	if nonblocking {
+		_, err = w.manager.MessageSender().SendToNode(ctx, executorNodeID, topic, message)
+	} else {
+		err = w.manager.MessageSender().SendToNodeB(ctx, executorNodeID, topic, message)
 	}
-	return nil
+	return
 }
 
 func (w *workerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
@@ -663,7 +662,7 @@ func NewTombstoneWorkerHandle(id WorkerID, status WorkerStatus, manager workerMa
 	}
 }
 
-func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+func (h *tombstoneWorkerHandleImpl) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	return derror.ErrWorkerOffline.GenWithStackByArgs(h.id)
 }
 

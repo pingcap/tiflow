@@ -7,9 +7,11 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 var _ lib.Worker = &loadWorker{}
@@ -49,6 +51,11 @@ func (l *loadWorker) Workload() model.RescUnit {
 
 func (l *loadWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("loadWorker.OnMasterFailover")
+	return nil
+}
+
+func (l *loadWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("loadWorker.OnMasterMessage", zap.Any("message", message))
 	return nil
 }
 

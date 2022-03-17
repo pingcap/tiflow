@@ -33,6 +33,7 @@ const (
 	WorkerStatusInit
 	WorkerStatusError
 	WorkerStatusFinished
+	WorkerStatusStopped
 )
 
 // Job master statuses
@@ -40,6 +41,7 @@ const (
 	MasterStatusUninit = MasterStatusCode(iota + 1)
 	MasterStatusInit
 	MasterStatusFinished
+	MasterStatusStopped
 )
 
 const (
@@ -109,6 +111,10 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)
 }
 
+func WorkerStatusChangeRequestTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
+	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
+}
+
 func WorkerStatusUpdatedTopic(masterID MasterID) string {
 	return fmt.Sprintf("worker-status-updated-%s", masterID)
 }
@@ -129,6 +135,13 @@ type HeartbeatPongMessage struct {
 	ReplyTime  time.Time           `json:"reply-time"`
 	ToWorkerID WorkerID            `json:"to-worker-id"`
 	Epoch      Epoch               `json:"epoch"`
+}
+
+type StatusChangeRequest struct {
+	SendTime     clock.MonotonicTime `json:"send-time"`
+	FromMasterID MasterID            `json:"from-master-id"`
+	Epoch        Epoch               `json:"epoch"`
+	ExpectState  WorkerStatusCode    `json:"expect-state"`
 }
 
 type (

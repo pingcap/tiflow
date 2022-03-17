@@ -14,6 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -41,10 +42,53 @@ type Master struct {
 	status            map[lib.WorkerID]int64
 	finishedSet       map[lib.WorkerID]int
 	config            *Config
+	statusCode        struct {
+		sync.RWMutex
+		code lib.WorkerStatusCode
+	}
+	ctx     context.Context
+	clocker clock.Clock
 }
 
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("FakeMaster: OnJobManagerFailover", zap.Any("reason", reason))
+	return nil
+}
+
+func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
+	switch msg := message.(type) {
+	case *lib.StatusChangeRequest:
+		switch msg.ExpectState {
+		case lib.WorkerStatusStopped:
+			m.setStatusCode(lib.WorkerStatusStopped)
+			m.workerListMu.Lock()
+			for _, worker := range m.workerList {
+				if worker == nil {
+					continue
+				}
+				wTopic := lib.WorkerStatusChangeRequestTopic(m.BaseJobMaster.ID(), worker.ID())
+				wMessage := &lib.StatusChangeRequest{
+					SendTime:     m.clocker.Mono(),
+					FromMasterID: m.BaseJobMaster.ID(),
+					Epoch:        m.BaseJobMaster.CurrentEpoch(),
+					ExpectState:  lib.WorkerStatusStopped,
+				}
+				ctx, cancel := context.WithTimeout(m.ctx, time.Second*2)
+				if err := worker.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+					cancel()
+					m.workerListMu.Unlock()
+					return err
+				}
+				cancel()
+			}
+			m.workerListMu.Unlock()
+		default:
+			log.L().Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+		}
+	default:
+		log.L().Info("unsupported message", zap.Any("message", message))
+	}
 	return nil
 }
 
@@ -125,6 +169,10 @@ func (m *Master) Tick(ctx context.Context) error {
 		return err
 	}
 
+	if m.getStatusCode() == lib.WorkerStatusStopped {
+		log.L().Info("FakeMaster: received pause command, stop now")
+		return m.Exit(ctx, m.Status(), nil)
+	}
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.L().Info("FakeMaster: all worker finished, job master exits now")
 		return m.Exit(ctx, m.Status(), nil)
@@ -209,15 +257,32 @@ func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	return nil
 }
 
+func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("FakeMaster: OnMasterMessage", zap.Any("message", message))
+	return nil
+}
+
 func (m *Master) Status() lib.WorkerStatus {
 	bytes, err := json.Marshal(m.status)
 	if err != nil {
 		log.L().Panic("unexpected marshal error", zap.Error(err))
 	}
 	return lib.WorkerStatus{
-		Code:     lib.WorkerStatusNormal,
+		Code:     m.getStatusCode(),
 		ExtBytes: bytes,
 	}
+}
+
+func (m *Master) setStatusCode(code lib.WorkerStatusCode) {
+	m.statusCode.Lock()
+	defer m.statusCode.Unlock()
+	m.statusCode.code = code
+}
+
+func (m *Master) getStatusCode() lib.WorkerStatusCode {
+	m.statusCode.RLock()
+	defer m.statusCode.RUnlock()
+	return m.statusCode.code
 }
 
 func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
@@ -228,6 +293,9 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
 		status:            make(map[lib.WorkerID]int64),
 		finishedSet:       make(map[lib.WorkerID]int),
+		ctx:               ctx.Context,
+		clocker:           clock.New(),
 	}
+	ret.setStatusCode(lib.WorkerStatusNormal)
 	return ret
 }

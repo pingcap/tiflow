@@ -108,6 +108,14 @@ func (m *testJobMasterImpl) OnJobManagerFailover(reason MasterFailoverReason) er
 	return args.Error(0)
 }
 
+func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(topic, message)
+	return args.Error(0)
+}
+
 func (m *testJobMasterImpl) IsJobMasterImpl() {
 	panic("unreachable")
 }

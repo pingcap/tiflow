@@ -85,6 +85,12 @@ func NewJobFsm() *JobFsm {
 	}
 }
 
+func (fsm *JobFsm) QueryOnlineJob(jobID lib.MasterID) *jobHolder {
+	fsm.jobsMu.RLock()
+	defer fsm.jobsMu.RUnlock()
+	return fsm.onlineJobs[jobID]
+}
+
 func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()

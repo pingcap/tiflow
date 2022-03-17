@@ -134,3 +134,36 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 	log.L().Info("resp", zap.Any("resp", resp))
 	return nil
 }
+
+func NewPauseJob() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "pause-job",
+		Short: "pause job",
+		RunE:  runPauseJob,
+	}
+	cmd.Flags().String("job-id", "", "the targeted job id")
+	return cmd
+}
+
+func runPauseJob(cmd *cobra.Command, _ []string) error {
+	id, err := cmd.Flags().GetString("job-id")
+	if err != nil {
+		log.L().Error("error in parse `--job-id`")
+		return err
+	}
+	if id == "" {
+		log.L().Error("job-id should not be empty")
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	defer cancel()
+	resp, err := cltManager.MasterClient().PauseJob(ctx, &pb.PauseJobRequest{
+		JobIdStr: id,
+	})
+	if err != nil {
+		log.L().Error("failed to query job", zap.Error(err))
+		os.Exit(1)
+	}
+	log.L().Info("pause result", zap.String("err", resp.Err.String()))
+	return nil
+}

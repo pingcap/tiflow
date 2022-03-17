@@ -25,6 +25,7 @@ type BaseJobMaster interface {
 	JobMasterID() MasterID
 	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status WorkerStatus) error
+	CurrentEpoch() Epoch
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -64,6 +65,7 @@ type JobMasterImpl interface {
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
+	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
 
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
@@ -185,6 +187,10 @@ func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status Worke
 	return d.worker.UpdateStatus(ctx, status)
 }
 
+func (d *DefaultBaseJobMaster) CurrentEpoch() Epoch {
+	return d.master.currentEpoch.Load()
+}
+
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
@@ -198,13 +204,17 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status WorkerStatus, err error) error {
-	// err == nil means job master finished and exited normally
-	if err == nil {
-		err1 := d.master.markStatusCodeInMetadata(ctx, MasterStatusFinished)
-		if err1 != nil {
-			return err1
-		}
+	var err1 error
+	switch status.Code {
+	case WorkerStatusFinished:
+		err1 = d.master.markStatusCodeInMetadata(ctx, MasterStatusFinished)
+	case WorkerStatusStopped:
+		err1 = d.master.markStatusCodeInMetadata(ctx, MasterStatusStopped)
 	}
+	if err1 != nil {
+		return err1
+	}
+
 	return d.worker.Exit(ctx, status, err)
 }
 
@@ -228,6 +238,10 @@ func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
 	return j.inner.OnJobManagerFailover(reason)
+}
+
+func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {
+	return j.inner.OnJobManagerMessage(topic, message)
 }
 
 func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {

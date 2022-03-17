@@ -47,6 +47,9 @@ type WorkerImpl interface {
 	// OnMasterFailover is called when the master is failed over.
 	OnMasterFailover(reason MasterFailoverReason) error
 
+	// OnMasterMessage is called when worker receives master message
+	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
+
 	// CloseImpl tells the WorkerImpl to quit running StatusWorker and release resources.
 	CloseImpl(ctx context.Context) error
 }
@@ -62,9 +65,7 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	Resource() resource.Proxy
 	// Exit should be called when worker (in user logic) wants to exit
-	// - If err is nil, it means worker exits normally
-	// - If err is not nil, it means worker meets error, and after worker exits
-	//   it will be failover.
+	// Worker should update its worker status code to correct value before calling Exit
 	Exit(ctx context.Context, status WorkerStatus, err error) error
 }
 
@@ -81,6 +82,7 @@ type DefaultBaseWorker struct {
 
 	workerMetaClient *WorkerMetadataClient
 	statusSender     *StatusSender
+	messageRouter    *MessageRouter
 
 	id            WorkerID
 	timeoutConfig TimeoutConfig
@@ -188,6 +190,11 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
+	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
+		func(topic p2p.Topic, msg p2p.MessageValue) error {
+			return w.Impl.OnMasterMessage(topic, msg)
+		},
+	)
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -225,6 +232,10 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	}
 
 	if err := w.statusSender.Tick(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := w.messageRouter.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -315,13 +326,8 @@ func (w *DefaultBaseWorker) Resource() resource.Proxy {
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {
 	if err != nil {
 		status.Code = WorkerStatusError
-		if err1 := w.safeUpdateStatus(ctx, status); err1 != nil {
-			return err1
-		}
-		return err
 	}
 
-	status.Code = WorkerStatusFinished
 	if err1 := w.safeUpdateStatus(ctx, status); err1 != nil {
 		return err1
 	}
@@ -406,6 +412,27 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
 		log.L().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
+
+	topic = WorkerStatusChangeRequestTopic(w.masterID, w.id)
+	ok, err = w.messageHandlerManager.RegisterHandler(
+		ctx,
+		topic,
+		&StatusChangeRequest{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			msg, ok := value.(*StatusChangeRequest)
+			if !ok {
+				return derror.ErrInvalidMasterMessage.GenWithStackByArgs(value)
+			}
+			w.messageRouter.AppendMessage(topic, msg)
+			return nil
+		})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ok {
+		log.L().Panic("duplicate handler", zap.String("topic", topic))
+	}
+
 	return nil
 }
 

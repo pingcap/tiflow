@@ -45,7 +45,21 @@ type JobManagerImplV2 struct {
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	panic("not implemented")
+	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	if job == nil {
+		return &pb.PauseJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+	topic := lib.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
+	msg := &lib.StatusChangeRequest{
+		SendTime:     jm.clocker.Mono(),
+		FromMasterID: jm.BaseMaster.MasterID(),
+		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
+		ExpectState:  lib.WorkerStatusStopped,
+	}
+	err := job.WorkerHandle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
+	return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
 }
 
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
@@ -61,16 +75,22 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
-		if masterMeta != nil && masterMeta.StatusCode == lib.MasterStatusFinished {
+		if masterMeta != nil {
 			resp := &pb.QueryJobResponse{
 				Tp:     int64(masterMeta.Tp),
 				Config: masterMeta.Config,
-				Status: pb.QueryJobResponse_finished,
 			}
-			return resp
-		}
-		if masterMeta != nil {
-			log.L().Warn("load master kv meta from meta store, but status is not expected", zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode))
+			switch masterMeta.StatusCode {
+			case lib.MasterStatusFinished:
+				resp.Status = pb.QueryJobResponse_finished
+				return resp
+			case lib.MasterStatusStopped:
+				resp.Status = pb.QueryJobResponse_stopped
+				return resp
+			default:
+				log.L().Warn("load master kv meta from meta store, but status is not expected",
+					zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode), zap.Any("meta", masterMeta))
+			}
 		}
 	}
 	return &pb.QueryJobResponse{
@@ -213,8 +233,8 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
-		if job.StatusCode == lib.MasterStatusFinished {
-			log.L().Info("skip finished job", zap.Any("job", job))
+		if job.StatusCode == lib.MasterStatusFinished || job.StatusCode == lib.MasterStatusStopped {
+			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}
 		jm.JobFsm.JobDispatched(job)
@@ -243,6 +263,9 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason erro
 	needFailover := true
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("job master finished", zap.String("id", worker.ID()))
+		needFailover = false
+	} else if derrors.ErrWorkerStop.Equal(reason) {
+		log.L().Info("job master stopped", zap.String("id", worker.ID()))
 		needFailover = false
 	} else {
 		log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))

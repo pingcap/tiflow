@@ -31,6 +31,7 @@ func NewRootCmd() *cobra.Command {
 	}
 	cmd.AddCommand(NewSubmitJob())
 	cmd.AddCommand(NewQueryJob())
+	cmd.AddCommand(NewPauseJob())
 	helpCmd := &cobra.Command{
 		Use:   "help [command]",
 		Short: "Gets help about any commands",

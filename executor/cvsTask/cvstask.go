@@ -18,6 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 const (
@@ -123,7 +124,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		return err
 	}
 	switch task.getStatusCode() {
-	case lib.WorkerStatusFinished, lib.WorkerStatusError:
+	case lib.WorkerStatusFinished, lib.WorkerStatusError, lib.WorkerStatusStopped:
 		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
 	default:
 	}
@@ -145,6 +146,22 @@ func (task *cvsTask) Workload() model.RescUnit {
 
 // OnMasterFailover is called when the master is failed over.
 func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
+	return nil
+}
+
+func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	switch msg := message.(type) {
+	case *lib.StatusChangeRequest:
+		switch msg.ExpectState {
+		case lib.WorkerStatusStopped:
+			task.setStatusCode(lib.WorkerStatusStopped)
+		default:
+			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+		}
+	default:
+		log.L().Info("unsupported message", zap.Any("message", message))
+	}
+
 	return nil
 }
 

@@ -24,7 +24,21 @@ type msgBoxIndex struct {
 	target NodeID
 }
 
-func (m *MockMessageSender) SendToNode(_ context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error) {
+func (m *MockMessageSender) SendToNodeB(
+	_ context.Context,
+	targetNodeID NodeID,
+	topic Topic,
+	message interface{},
+) error {
+	panic("not implemented")
+}
+
+func (m *MockMessageSender) SendToNode(
+	_ context.Context,
+	targetNodeID NodeID,
+	topic Topic,
+	message interface{},
+) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

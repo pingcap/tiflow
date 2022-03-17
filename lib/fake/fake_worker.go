@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 var _ lib.Worker = (*dummyWorker)(nil)
@@ -35,6 +37,11 @@ type (
 		config *WorkerConfig
 
 		statusRateLimiter *rate.Limiter
+
+		statusCode struct {
+			sync.RWMutex
+			code lib.WorkerStatusCode
+		}
 	}
 )
 
@@ -57,6 +64,7 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
 		d.init = true
+		d.setStatusCode(lib.WorkerStatusNormal)
 		return nil
 	}
 	return errors.New("repeated init")
@@ -83,6 +91,10 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return nil
 	}
 
+	if d.getStatusCode() == lib.WorkerStatusStopped {
+		return d.Exit(ctx, d.Status(), nil)
+	}
+
 	if d.status.Tick >= d.config.TargetTick {
 		return d.Exit(ctx, d.Status(), nil)
 	}
@@ -97,7 +109,7 @@ func (d *dummyWorker) Status() lib.WorkerStatus {
 			log.L().Panic("unexpected error", zap.Error(err))
 		}
 		return lib.WorkerStatus{
-			Code:     lib.WorkerStatusNormal,
+			Code:     d.getStatusCode(),
 			ExtBytes: extBytes,
 		}
 	}
@@ -112,9 +124,38 @@ func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 	return nil
 }
 
+func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
+	switch msg := message.(type) {
+	case *lib.StatusChangeRequest:
+		switch msg.ExpectState {
+		case lib.WorkerStatusStopped:
+			d.setStatusCode(lib.WorkerStatusStopped)
+		default:
+			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+		}
+	default:
+		log.L().Info("unsupported message", zap.Any("message", message))
+	}
+
+	return nil
+}
+
 func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	atomic.StoreInt32(&d.closed, 1)
 	return nil
+}
+
+func (d *dummyWorker) setStatusCode(code lib.WorkerStatusCode) {
+	d.statusCode.Lock()
+	defer d.statusCode.Unlock()
+	d.statusCode.code = code
+}
+
+func (d *dummyWorker) getStatusCode() lib.WorkerStatusCode {
+	d.statusCode.RLock()
+	defer d.statusCode.RUnlock()
+	return d.statusCode.code
 }
 
 func NewDummyWorker(

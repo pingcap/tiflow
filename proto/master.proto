@@ -107,6 +107,7 @@ message QueryJobResponse {
         online = 2;
         dispatched = 3;
         finished = 4;
+        stopped = 5;
     }
     int64   tp = 1;
     bytes config = 2;
