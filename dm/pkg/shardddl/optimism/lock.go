@@ -596,9 +596,11 @@ func (l *Lock) AddDroppedColumns(source, schema, table string, cols []string) er
 	}
 	log.L().Info("add partially dropped columns", zap.Strings("columns", newCols), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
 
-	_, _, err := PutDroppedColumns(l.cli, l.ID, source, schema, table, newCols, DropNotDone)
-	if err != nil {
-		return err
+	if len(newCols) > 0 {
+		_, _, err := PutDroppedColumns(l.cli, l.ID, source, schema, table, newCols, DropNotDone)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, col := range newCols {
@@ -702,7 +704,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 		oldCol, ok1 := oldJoinedCols[col]
 		newCol, ok2 := newJoinedCols[col]
 		if ok1 && ok2 && newCol.Flen != oldCol.Flen {
-			return col, terror.ErrShardDDLOptimismTrySyncFail.Generate(
+			return col, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 				lockID, fmt.Sprintf("add columns with different field lengths. "+
 					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.Flen, newCol.Flen))
 		}
@@ -713,7 +715,7 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 // GetColumnName checks whether dm adds/drops a column, and return this column's name.
 func GetColumnName(lockID, ddl string, tp ast.AlterTableType) (string, error) {
 	if stmt, err := parser.New().ParseOneStmt(ddl, "", ""); err != nil {
-		return "", terror.ErrShardDDLOptimismTrySyncFail.Delegate(
+		return "", terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Delegate(
 			err, lockID, fmt.Sprintf("fail to parse ddl %s", ddl))
 	} else if v, ok := stmt.(*ast.AlterTableStmt); ok && len(v.Specs) > 0 {
 		spec := v.Specs[0]
@@ -779,7 +781,7 @@ func (l *Lock) checkAddDropColumn(source, schema, table string, ddl string, prev
 			// check for add column with a smaller field len
 			return "", err2
 		} else if len(col) > 0 && (l.IsDroppedColumn(source, schema, table, col) || contains(newDropColumns, col)) {
-			return "", terror.ErrShardDDLOptimismTrySyncFail.Generate(l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl))
+			return "", terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(l.ID, fmt.Sprintf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl))
 		}
 	}
 
