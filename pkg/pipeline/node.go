@@ -17,7 +17,6 @@ package pipeline
 // The following functions in this interface will be called in one goroutine.
 // It's NO NEED to consider concurrency issues
 type Node interface {
-
 	// Init initializes the node
 	// when the pipeline is started, this function will be called in order
 	// you can call `ctx.SendToNextNode(msg)` to send the message to the next node

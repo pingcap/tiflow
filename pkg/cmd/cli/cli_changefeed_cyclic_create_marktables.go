@@ -119,20 +119,19 @@ func (o *cyclicCreateMarktablesOptions) run(cmd *cobra.Command) error {
 func newCmdCyclicCreateMarktables(f factory.Factory) *cobra.Command {
 	o := newCyclicCreateMarktablesOptions()
 
-	command :=
-		&cobra.Command{
-			Use:   "create-marktables",
-			Short: "Create cyclic replication mark tables",
-			Args:  cobra.NoArgs,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				err := o.complete(f)
-				if err != nil {
-					return err
-				}
+	command := &cobra.Command{
+		Use:   "create-marktables",
+		Short: "Create cyclic replication mark tables",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := o.complete(f)
+			if err != nil {
+				return err
+			}
 
-				return o.run(cmd)
-			},
-		}
+			return o.run(cmd)
+		},
+	}
 
 	o.addFlags(command)
 
