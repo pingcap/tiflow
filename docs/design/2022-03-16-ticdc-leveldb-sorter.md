@@ -74,9 +74,6 @@ _Quantitative relationship between above structs_
 | Read Write Sequence                                                                                       | Table Sorter Structs                                                                                |
 | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | <img src="../media/leveldb-sorter-sequence.svg?sanitize=true" alt="leveldb-sorter-sequence" width="600"/> | <img src="../media/leveldb-sorter-class.svg?sanitize=true" alt="leveldb-sorter-class" width="600"/> |
-
----
-
 ### Encoding
 
 #### Key
