@@ -438,8 +438,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	}
 
 	// 1. check whether the config exists.
-	_, ok := s.sourceCfgs[source]
-	if !ok {
+	if _, ok := s.sourceCfgs[source]; !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 
@@ -703,20 +702,8 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 
 	// 4. check if old worker has running tasks
-	var runningTasks []string
-	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
-		task := k.(string)
-		subtaskM := v.(map[string]ha.Stage)
-		subtaskStage, ok2 := subtaskM[source]
-		if !ok2 {
-			return true
-		}
-		if subtaskStage.Expect == pb.Stage_Running {
-			runningTasks = append(runningTasks, task)
-		}
-		return true
-	})
-	if len(runningTasks) > 0 {
+	runningStage := pb.Stage_Running
+	if runningTasks := s.GetTaskNameListBySourceName(source, &runningStage); len(runningTasks) > 0 {
 		// we only allow automatically transfer-source if all subtasks are in the sync phase.
 		resp, err := oldWorker.queryStatus(ctx)
 		if err != nil {
@@ -772,6 +759,9 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 // BatchOperateTaskOnWorker batch operate tasks in one worker and use query-status to make sure all tasks are in expected stage if needWait=true.
 func (s *Scheduler) BatchOperateTaskOnWorker(
 	ctx context.Context, worker *Worker, tasks []string, source string, stage pb.Stage, needWait bool) error {
+	if len(tasks) == 0 {
+		return nil
+	}
 	for _, taskName := range tasks {
 		if err := s.UpdateExpectSubTaskStage(stage, taskName, source); err != nil {
 			return err
@@ -1194,7 +1184,29 @@ func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig 
 		clone[task] = clone2
 		return true
 	})
+	return clone
+}
 
+// GetSubTaskCfgs gets all subTask config pointer, return nil when error happens.
+func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	// taskName -> sourceName -> SubTaskConfig
+	clone := make(map[string]map[string]*config.SubTaskConfig)
+	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+		task := k.(string)
+		m := v.(map[string]config.SubTaskConfig)
+		clone2 := make(map[string]*config.SubTaskConfig, len(m))
+		for source, cfg := range m {
+			cfg2, err := cfg.Clone()
+			if err != nil {
+				return true
+			}
+			clone2[source] = cfg2
+		}
+		clone[task] = clone2
+		return true
+	})
 	return clone
 }
 
@@ -1463,7 +1475,6 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	if !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
-
 	// quick path for `stop-relay` without worker name
 	if len(workers) == 0 {
 		startedWorker := s.relayWorkers[source]

@@ -95,9 +95,8 @@ func (o *Optimist) Start(pCtx context.Context, etcdCli *clientv3.Client) error {
 // Close closes the Optimist instance.
 func (o *Optimist) Close() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	if o.closed {
+		o.mu.Unlock()
 		return
 	}
 
@@ -106,8 +105,11 @@ func (o *Optimist) Close() {
 		o.cancel = nil
 	}
 
-	o.wg.Wait()
 	o.closed = true // closed now.
+	o.mu.Unlock()
+	// unlock before wg.Wait() to avoid deadlock because other goroutines acquire the lock.
+	// such as https://github.com/pingcap/tiflow/blob/92fc4c4/dm/dm/master/shardddl/optimist.go#L686
+	o.wg.Wait()
 	o.logger.Info("the shard DDL optimist has closed")
 }
 
@@ -739,13 +741,20 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
 			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	case err != nil:
-		if terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+		switch {
+		case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
 			cfStage = optimism.ConflictSkipWaitRedirect
-			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
-		} else {
-			cfStage = optimism.ConflictDetected // we treat any errors returned from `TrySync` as conflict detected now.
 			cfMsg = err.Error()
-			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
+			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
+		case terror.ErrShardDDLOptimismTrySyncFail.Equal(err):
+			cfStage = optimism.ConflictDetected
+			cfMsg = err.Error()
+			o.logger.Warn("conflict occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
+				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
+		default:
+			cfStage = optimism.ConflictError // we treat any errors returned from `TrySync` as conflict detected now.
+			cfMsg = err.Error()
+			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL error happened",
 				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 		}
 	default:

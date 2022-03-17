@@ -329,6 +329,7 @@ enum SchemaOp {
     RemoveSchema = 3;
     ListSchema = 4;
     ListTable = 5;
+    ListMigrateTargets = 6;
 }
 
 message OperateWorkerSchemaRequest {

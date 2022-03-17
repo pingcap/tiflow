@@ -112,7 +112,7 @@ const (
     "table-actor": {
       "event-batch-size": 32
     },
-    "enable-db-sorter": false,
+    "enable-db-sorter": true,
     "db": {
       "count": 8,
       "concurrency": 128,
