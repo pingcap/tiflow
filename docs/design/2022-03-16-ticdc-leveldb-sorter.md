@@ -68,14 +68,14 @@ The leveldb sorter is composed of five structs,
 _Quantitative relationship between above structs_
 
 | Table | DBActor | TableSorter | Writer | Reader | Compactor |
-| - | - | - | - | - | - |
-| N | 1 | N | N | N | 1 |
+| ----- | ------- | ----------- | ------ | ------ | --------- |
+| N     | 1       | N           | N      | N      | 1         |
 
-| Read Write Sequence | Table Sorter Structs |
-| -- | -- |
+| Read Write Sequence                                                                                       | Table Sorter Structs                                                                                |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | <img src="../media/leveldb-sorter-sequence.svg?sanitize=true" alt="leveldb-sorter-sequence" width="600"/> | <img src="../media/leveldb-sorter-class.svg?sanitize=true" alt="leveldb-sorter-class" width="600"/> |
 
-----------
+---
 
 ### Encoding
 
@@ -97,6 +97,7 @@ LevelDB sorts keys in ascending order, so as table sorter reads events.
 Let’s say “A has higher priority than B” means A is sorted before B.
 Unique ID has the highest priority. It is assigned when the table pipeline
 starts, and it serves two purposes:
+
 1. Prevent data conflicting after table rescheduling, e.g., move out/in.
 2. Table data can be deleted by the unique ID prefix after tables are
    scheduled out.
@@ -174,10 +175,10 @@ Coverage should be more than 75% in newly added code.
 
 ### Scenario Tests
 
-* Regular unit tests and integration tests.
-* 100K tables and 270K regions
-  * No OOM.
-  * Changefeed lag should be less than 1 minute.
+- Regular unit tests and integration tests.
+- 100K tables and 270K regions
+  - No OOM.
+  - Changefeed lag should be less than 1 minute.
 
 We will test the scenario of replicating 100,000 tables in one TiCDC node.
 
