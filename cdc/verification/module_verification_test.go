@@ -47,6 +47,9 @@ func TestNewModuleVerification(t *testing.T) {
 	defer m4.Close()
 	require.Nil(t, err)
 	require.NotSame(t, m4, m3)
+
+	err = m4.GC(context.Background(), "")
+	require.Nil(t, err)
 }
 
 func TestModuleVerification_SentTrackData(t *testing.T) {

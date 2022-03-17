@@ -248,6 +248,10 @@ func (m *ModuleVerification) GC(ctx context.Context, endTs string) error {
 	default:
 	}
 
+	if endTs == "" {
+		return nil
+	}
+
 	err := m.deleteTrackData(endTs)
 	if err != nil {
 		return err

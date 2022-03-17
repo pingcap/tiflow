@@ -96,7 +96,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL, so
 func generateDSNStr(ctx context.Context, id string, uri *url.URL, dsnType string) (string, error) {
 	scheme := strings.ToLower(uri.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
-		return "", errors.New("can create mysql sink with unsupported scheme")
+		return "", errors.New("can not create mysql sink with unsupported scheme")
 	}
 
 	params := defaultParams.Clone()
