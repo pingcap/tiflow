@@ -304,8 +304,7 @@ func generateDSNByParams(
 		return "", err
 	}
 	if tidbPlacementMode != "" {
-		dsnCfg.Params["tidb_placement_mode"] =
-			fmt.Sprintf(`"%s"`, tidbPlacementMode)
+		dsnCfg.Params["tidb_placement_mode"] = fmt.Sprintf(`"%s"`, tidbPlacementMode)
 	}
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
