@@ -66,8 +66,6 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tidwall/gjson v1.9.1
-	github.com/tidwall/sjson v1.2.2
 	github.com/tikv/client-go/v2 v2.0.1-0.20220302130440-46d649305eee
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20220216080339-1b8f82378ee7
