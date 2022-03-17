@@ -438,8 +438,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 	}
 
 	// 1. check whether the config exists.
-	_, ok := s.sourceCfgs[source]
-	if !ok {
+	if _, ok := s.sourceCfgs[source]; !ok {
 		return terror.ErrSchedulerSourceCfgNotExist.Generate(source)
 	}
 
