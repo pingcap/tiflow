@@ -183,8 +183,9 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 
 	// TODO: support redirect for DM worker
 	// return error to pass IT now
-	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
-		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, "Currently, we don't support conflict shard DDL like 'modify column', 'rename column', or 'add column not null non default'")
+	switch op.ConflictStage {
+	case optimism.ConflictError, optimism.ConflictSkipWaitRedirect:
+		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	}
 
 	// updated needHandleDDLs to DDLs received from DM-master.
