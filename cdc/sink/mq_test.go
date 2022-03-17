@@ -72,8 +72,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder, err := sink.encoderBuilder.Build(ctx)
-	c.Assert(err, check.IsNil)
+	encoder := sink.encoderBuilder.Build()
 
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
@@ -104,7 +103,8 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
-	err = sink.EmitCheckpointTs(ctx, uint64(120))
+	// TODO(hi-rustin): fix it after topic manager is ready.
+	err = sink.EmitCheckpointTs(ctx, uint64(120), nil)
 	c.Assert(err, check.IsNil)
 
 	// mock kafka broker processes 1 ddl event
@@ -130,7 +130,7 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
-	err = sink.EmitCheckpointTs(ctx, uint64(140))
+	err = sink.EmitCheckpointTs(ctx, uint64(140), nil)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
@@ -227,11 +227,11 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
+
 	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	c.Assert(err, check.IsNil)
 
-	encoder, err := sink.encoderBuilder.Build(ctx)
-	c.Assert(err, check.IsNil)
+	encoder := sink.encoderBuilder.Build()
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)

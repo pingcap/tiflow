@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -42,6 +43,7 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
+	TmpTLSConfigPath            = "lightning_tls"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -162,6 +164,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		}
 		l.sqlMode = sqlModes
 	}
+
 	return nil
 }
 
@@ -231,10 +234,17 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
+
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+		var cpPath string
+		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+		if err != nil {
+			return err
+		}
 		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
 		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
 		cfg.TiDB.Vars = make(map[string]string)
 		cfg.Routes = l.cfg.RouteRules
@@ -266,7 +276,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 	if l.finish.Load() {
 		if l.cfg.CleanDumpFile {
-			cleanDumpFiles(l.cfg)
+			cleanDumpFiles(ctx, l.cfg)
 		}
 	}
 	return err
@@ -283,7 +293,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		}
 		failpoint.Return()
 	})
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{

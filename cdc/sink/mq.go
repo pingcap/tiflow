@@ -18,31 +18,27 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/manager"
+	kafkamanager "github.com/pingcap/tiflow/cdc/sink/manager/kafka"
+	pulsarmanager "github.com/pingcap/tiflow/cdc/sink/manager/pulsar"
 	"github.com/pingcap/tiflow/cdc/sink/producer"
 	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/producer/pulsar"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
-
-type mqEvent struct {
-	row        *model.RowChangedEvent
-	resolvedTs model.Ts
-}
 
 type resolvedTsEvent struct {
 	tableID    model.TableID
@@ -50,9 +46,6 @@ type resolvedTsEvent struct {
 }
 
 const (
-	// Depend on this size, every `partitionInputCh` will take
-	// approximately 16.3 KiB memory.
-	defaultPartitionInputChSize = 1024
 	// Depend on this size, `resolvedBuffer` will take
 	// approximately 2 KiB memory.
 	defaultResolvedTsEventBufferSize = 128
@@ -62,18 +55,15 @@ const (
 
 type mqSink struct {
 	mqProducer     producer.Producer
-	dispatcher     dispatcher.Dispatcher
+	eventRouter    *dispatcher.EventRouter
 	encoderBuilder codec.EncoderBuilder
 	filter         *filter.Filter
 	protocol       config.Protocol
 
-	partitionNum         int32
-	partitionInput       []chan mqEvent
-	partitionResolvedTs  []uint64
+	topicManager         manager.TopicManager
+	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
 	resolvedBuffer       chan resolvedTsEvent
-	resolvedNotifier     *notify.Notifier
-	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
 
@@ -82,37 +72,21 @@ type mqSink struct {
 }
 
 func newMqSink(
-	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string,
+	ctx context.Context,
+	credential *security.Credential,
+	topicManager manager.TopicManager,
+	mqProducer producer.Producer,
+	filter *filter.Filter,
+	defaultTopic string,
+	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	var protocol config.Protocol
-	err := protocol.FromString(replicaConfig.Sink.Protocol)
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, credential)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(protocol, credential, opts)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	// pre-flight verification of encoder parameters
-	if _, err := encoderBuilder.Build(ctx); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
 
-	partitionNum := mqProducer.GetPartitionNum()
-	d, err := dispatcher.NewDispatcher(replicaConfig, partitionNum)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	partitionInput := make([]chan mqEvent, partitionNum)
-	for i := 0; i < int(partitionNum); i++ {
-		partitionInput[i] = make(chan mqEvent, defaultPartitionInputChSize)
-	}
-
-	notifier := new(notify.Notifier)
-	resolvedReceiver, err := notifier.NewReceiver(50 * time.Millisecond)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -120,25 +94,25 @@ func newMqSink(
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 
+	encoder := encoderBuilder.Build()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	statistics := NewStatistics(ctx, "MQ")
+	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
+
 	s := &mqSink{
 		mqProducer:     mqProducer,
-		dispatcher:     d,
+		eventRouter:    eventRouter,
 		encoderBuilder: encoderBuilder,
 		filter:         filter,
-		protocol:       protocol,
-
-		partitionNum:        partitionNum,
-		partitionInput:      partitionInput,
-		partitionResolvedTs: make([]uint64, partitionNum),
-
-		resolvedBuffer:   make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
-		resolvedNotifier: notifier,
-		resolvedReceiver: resolvedReceiver,
-
-		statistics: NewStatistics(ctx, "MQ"),
-
-		role: role,
-		id:   changefeedID,
+		protocol:       encoderConfig.Protocol(),
+		topicManager:   topicManager,
+		flushWorker:    flushWorker,
+		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		statistics:     statistics,
+		role:           role,
+		id:             changefeedID,
 	}
 
 	go func() {
@@ -177,14 +151,16 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 				zap.Any("role", k.role))
 			continue
 		}
-		partition := k.dispatcher.Dispatch(row)
+		topic := k.eventRouter.GetTopic(row)
+		partitionNum, err := k.topicManager.Partitions(topic)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		partition := k.eventRouter.GetPartition(row, partitionNum)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.partitionInput[partition] <- struct {
-			row        *model.RowChangedEvent
-			resolvedTs uint64
-		}{row: row}:
+		case k.flushWorker.msgChan <- mqEvent{row: row, partition: partition}:
 		}
 		rowsCount++
 	}
@@ -226,10 +202,6 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			err = k.mqProducer.Flush(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
@@ -239,37 +211,18 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	// flush resolvedTs to all partition workers
-	for i := 0; i < int(k.partitionNum); i++ {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case k.partitionInput[i] <- mqEvent{resolvedTs: resolvedTs}:
-		}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case k.flushWorker.msgChan <- mqEvent{resolvedTs: resolvedTs}:
 	}
 
-	// waiting for all row events are sent to mq producer
-flushLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-k.resolvedReceiver.C:
-			for i := 0; i < int(k.partitionNum); i++ {
-				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
-					continue flushLoop
-				}
-			}
-			return nil
-		}
-	}
+	return nil
 }
 
-func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, _ []model.TableName) error {
+	// TODO(hi-rustin): Broadcast it to multiple tables after topic manager is ready.
+	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
@@ -277,7 +230,8 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if msg == nil {
 		return nil
 	}
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, -1)
+	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
+	err = k.writeToProducer(ctx, msg, -1)
 	return errors.Trace(err)
 }
 
@@ -293,10 +247,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+
+	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
@@ -316,10 +268,10 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	k.statistics.AddDDLCount()
-	log.Debug("emit ddl event", zap.String("query", ddl.Query),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Int32("partition", partition),
+	log.Debug("emit ddl event",
+		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	err = k.writeToProducer(ctx, msg, codec.EncoderNeedSyncWrite, partition)
+	err = k.writeToProducer(ctx, msg, partition)
 	return errors.Trace(err)
 }
 
@@ -335,141 +287,31 @@ func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
 }
 
 func (k *mqSink) run(ctx context.Context) error {
-	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
 		return k.bgFlushTs(ctx)
 	})
-	for i := int32(0); i < k.partitionNum; i++ {
-		partition := i
-		wg.Go(func() error {
-			return k.runWorker(ctx, partition)
-		})
-	}
+	wg.Go(func() error {
+		return k.flushWorker.run(ctx)
+	})
 	return wg.Wait()
 }
 
-const batchSizeLimit = 4 * 1024 * 1024 // 4MB
-
-func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
-	input := k.partitionInput[partition]
-	encoder, err := k.encoderBuilder.Build(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tick := time.NewTicker(500 * time.Millisecond)
-	defer tick.Stop()
-
-	flushToProducer := func(op codec.EncoderResult) error {
-		return k.statistics.RecordBatchExecution(func() (int, error) {
-			messages := encoder.Build()
-			thisBatchSize := 0
-			if len(messages) == 0 {
-				return 0, nil
-			}
-
-			for _, msg := range messages {
-				err := k.writeToProducer(ctx, msg, codec.EncoderNeedAsyncWrite, partition)
-				if err != nil {
-					return 0, err
-				}
-				thisBatchSize += msg.GetRowsCount()
-			}
-
-			if op == codec.EncoderNeedSyncWrite {
-				err := k.mqProducer.Flush(ctx)
-				if err != nil {
-					return 0, err
-				}
-			}
-			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize),
-				zap.String("changefeed", k.id), zap.Any("role", k.role))
-			return thisBatchSize, nil
-		})
-	}
-	for {
-		var e mqEvent
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
-				return errors.Trace(err)
-			}
-			continue
-		case e = <-input:
-		}
-		if e.row == nil {
-			// When receiving resolved ts events, we need to write all events to the producer.
-			// We don't need to flush it immediately, we wait until all partitions have received
-			// this event before we flush it uniformly.
-			if e.resolvedTs != 0 {
-				if err := flushToProducer(codec.EncoderNoOperation); err != nil {
-					return errors.Trace(err)
-				}
-
-				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				k.resolvedNotifier.Notify()
-			}
-			continue
-		}
-		op, err := encoder.AppendRowChangedEvent(e.row)
+func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, partition int32) error {
+	if partition >= 0 {
+		err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
-
-		if encoder.Size() >= batchSizeLimit {
-			op = codec.EncoderNeedAsyncWrite
-		}
-
-		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
-			if err := flushToProducer(op); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-}
-
-func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, op codec.EncoderResult, partition int32) error {
-	switch op {
-	case codec.EncoderNeedAsyncWrite:
-		if partition >= 0 {
-			return k.mqProducer.AsyncSendMessage(ctx, message, partition)
-		}
-		return cerror.ErrAsyncBroadcastNotSupport.GenWithStackByArgs()
-	case codec.EncoderNeedSyncWrite:
-		if partition >= 0 {
-			err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
-			if err != nil {
-				return err
-			}
-			return k.mqProducer.Flush(ctx)
-		}
-		return k.mqProducer.SyncBroadcastMessage(ctx, message)
+		return k.mqProducer.Flush(ctx)
 	}
 
-	log.Warn("writeToProducer called with no-op",
-		zap.ByteString("key", message.Key),
-		zap.ByteString("value", message.Value),
-		zap.Int32("partition", partition),
-		zap.String("changefeed", k.id),
-		zap.Any("role", k.role))
-	return nil
+	return k.mqProducer.SyncBroadcastMessage(ctx, message)
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
 	opts map[string]string, errCh chan error) (*mqSink, error) {
-	producerConfig := kafka.NewConfig()
-	if err := kafka.CompleteConfigsAndOpts(sinkURI, producerConfig, replicaConfig, opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	// NOTICE: Please check after the completion, as we may get the configuration from the sinkURI.
-	err := replicaConfig.Validate()
-	if err != nil {
-		return nil, err
-	}
-
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -477,11 +319,84 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(ctx, topic, producerConfig, opts, errCh)
+	baseConfig := kafka.NewConfig()
+	if err := baseConfig.Apply(sinkURI); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	if err := replicaConfig.ApplyProtocol(sinkURI).Validate(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producerConfig.Credential, sProducer, filter, replicaConfig, opts, errCh)
+
+	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	var protocol config.Protocol
+	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
+	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
+	// to prevent that the encoder generate batched message too large then cause producer meet `message too large`
+	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+
+	if err := encoderConfig.Validate(); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	topicManager := kafkamanager.NewTopicManager(
+		client,
+		adminClient,
+		baseConfig.DeriveTopicConfig(),
+	)
+	if err := topicManager.CreateTopic(topic); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
+	}
+
+	sProducer, err := kafka.NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		topic,
+		baseConfig,
+		saramaConfig,
+		errCh,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	sink, err := newMqSink(
+		ctx,
+		baseConfig.Credential,
+		topicManager,
+		sProducer,
+		filter,
+		topic,
+		replicaConfig,
+		encoderConfig,
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -490,32 +405,51 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	producer, err := pulsar.NewProducer(sinkURI, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
-	// These two options are not used by Pulsar producer itself, but the encoders
-	s = sinkURI.Query().Get("max-message-bytes")
-	if s != "" {
-		opts["max-message-bytes"] = s
-	}
-
-	s = sinkURI.Query().Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
-	}
-	err = replicaConfig.Validate()
+	err := replicaConfig.Validate()
 	if err != nil {
 		return nil, err
+	}
+
+	var protocol config.Protocol
+	if err := protocol.FromString(replicaConfig.Sink.Protocol); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
+	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+		return nil, errors.Trace(err)
+	}
+	// todo: set by pulsar producer's `max.message.bytes`
+	// encoderConfig = encoderConfig.WithMaxMessageBytes()
+	if err := encoderConfig.Validate(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
+	fakeTopicManager := pulsarmanager.NewTopicManager(
+		producer.GetPartitionNum(),
+	)
+	sink, err := newMqSink(
+		ctx,
+		credential,
+		fakeTopicManager,
+		producer,
+		filter,
+		"",
+		replicaConfig,
+		encoderConfig,
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

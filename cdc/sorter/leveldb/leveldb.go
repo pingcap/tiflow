@@ -86,6 +86,7 @@ type DBActor struct {
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
@@ -97,7 +98,7 @@ var _ actor.Actor = (*DBActor)(nil)
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
-	wg *sync.WaitGroup, captureAddr string,
+	wg *sync.WaitGroup,
 ) (*DBActor, actor.Mailbox, error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
@@ -128,14 +129,17 @@ func NewDBActor(
 
 		closedWg: wg,
 
-		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
-		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
+		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(idTag),
+		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(idTag),
 	}, mb, nil
 }
 
-func (ldb *DBActor) close(err error) {
-	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
-	ldb.closedWg.Done()
+func (ldb *DBActor) tryScheduleCompact() {
+	// Schedule a compact task when there are too many deletion.
+	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		ldb.deleteCount = 0
+	}
 }
 
 func (ldb *DBActor) maybeWrite(force bool) error {
@@ -155,12 +159,6 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
 		}
-
-		// Schedule a compact task when there are too many deletion.
-		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
-			// Reset delete key count if schedule compaction successfully.
-			ldb.deleteCount = 0
-		}
 	}
 	return nil
 }
@@ -178,15 +176,13 @@ func (ldb *DBActor) acquireIterators() {
 			break
 		}
 
-		iterCh := req.IterCh
 		iterRange := req.Range
 		iter := ldb.db.Iterator(iterRange[0], iterRange[1])
-		iterCh <- &message.LimitedIterator{
+		req.IterCallback(&message.LimitedIterator{
 			Iterator:   iter,
 			Sema:       ldb.iterSem,
 			ResolvedTs: req.ResolvedTs,
-		}
-		close(iterCh)
+		})
 	}
 }
 
@@ -195,7 +191,6 @@ func (ldb *DBActor) acquireIterators() {
 func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
-		ldb.close(ctx.Err())
 		return false
 	default:
 	}
@@ -209,13 +204,12 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		case actormsg.TypeSorterTask:
 			task = msg.SorterTask
 		case actormsg.TypeStop:
-			ldb.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
 
-		for k, v := range task.Events {
+		for k, v := range task.WriteReq {
 			if len(v) != 0 {
 				ldb.wb.Put([]byte(k), v)
 			} else {
@@ -229,10 +223,29 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 				log.Panic("db error", zap.Error(err))
 			}
 		}
+		if task.DeleteReq != nil {
+			ldb.deleteCount += task.DeleteReq.Count
+			if len(task.DeleteReq.Range[0]) != 0 && len(task.DeleteReq.Range[1]) != 0 {
+				// Force write pending write batch before delete range.
+				if err := ldb.maybeWrite(true); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				start, end := task.DeleteReq.Range[0], task.DeleteReq.Range[1]
+				if err := ldb.db.DeleteRange(start, end); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				ldb.tryScheduleCompact()
+			}
+		}
 		if task.IterReq != nil {
 			// Append to slice for later batch acquiring iterators.
 			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
 			requireIter = true
+		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
 		}
 	}
 
@@ -243,4 +256,14 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	ldb.acquireIterators()
 
 	return true
+}
+
+// OnClose releases DBActor resource.
+func (ldb *DBActor) OnClose() {
+	if ldb.stopped {
+		return
+	}
+	ldb.stopped = true
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)))
+	ldb.closedWg.Done()
 }

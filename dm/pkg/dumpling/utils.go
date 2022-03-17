@@ -15,10 +15,10 @@ package dumpling
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -39,13 +40,19 @@ var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
-func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	invalidErr := fmt.Errorf("file %s invalid format", filename)
-	fd, err := os.Open(filename)
+func ParseMetaData(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
+	fd, err := storage.OpenFile(ctx, dir, filename, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer fd.Close()
+
+	return parseMetaDataByReader(filename, flavor, fd)
+}
+
+// ParseMetaData parses mydumper's output meta file by created reader and returns binlog location.
+func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
+	invalidErr := fmt.Errorf("file %s invalid format", filename)
 
 	var (
 		pos          mysql.Position
@@ -58,7 +65,7 @@ func ParseMetaData(filename, flavor string) (*binlog.Location, *binlog.Location,
 		locPtr2 *binlog.Location
 	)
 
-	br := bufio.NewReader(fd)
+	br := bufio.NewReader(rd)
 
 	parsePosAndGTID := func(pos *mysql.Position, gtid *string) error {
 		for {

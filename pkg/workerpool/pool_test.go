@@ -259,6 +259,36 @@ func TestCancelTimer(t *testing.T) {
 	require.Regexp(t, "context canceled", err)
 }
 
+func TestErrorAndCancelRace(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		return pool.Run(ctx)
+	})
+
+	var racedVar int
+	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		return errors.New("fake")
+	}).OnExit(func(err error) {
+		time.Sleep(100 * time.Millisecond)
+		racedVar++
+	})
+
+	err := handle.AddEvent(ctx, 0)
+	require.NoError(t, err)
+
+	time.Sleep(50 * time.Millisecond)
+	handle.Unregister()
+	racedVar++
+
+	cancel()
+	err = errg.Wait()
+	require.Regexp(t, "context canceled", err)
+}
+
 func TestTimer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()

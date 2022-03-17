@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -35,9 +36,12 @@ type schemaWrap4Owner struct {
 
 	allPhysicalTablesCache []model.TableID
 	ddlHandledTs           model.Ts
+
+	id model.ChangeFeedID
 }
 
-func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *config.ReplicaConfig) (*schemaWrap4Owner, error) {
+func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts,
+	config *config.ReplicaConfig, id model.ChangeFeedID) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
@@ -59,6 +63,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		id:             id,
 	}, nil
 }
 
@@ -85,15 +90,41 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
+// AllTableNames returns the table names of all tables that are being replicated.
+func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
+	tables := s.schemaSnapshot.Tables()
+	names := make([]model.TableName, 0, len(tables))
+	for _, tblInfo := range tables {
+		if s.shouldIgnoreTable(tblInfo) {
+			continue
+		}
+
+		names = append(names, tblInfo.TableName)
+	}
+
+	return names
+}
+
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
+			zap.String("changefeed", s.id), zap.Stringer("job", job),
+			zap.Any("ddlHandledTs", s.ddlHandledTs))
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
+		log.Error("handle DDL failed", zap.String("changefeed", s.id),
+			zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("changefeed", s.id),
+		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.Any("role", util.RoleOwner))
+
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
 	return nil
 }
@@ -106,6 +137,7 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 	ddlEvent := new(model.DDLEvent)
 	preTableInfo, err := s.schemaSnapshot.PreTableInfo(job)
 	if err != nil {
+		log.Error("build DDL event fail", zap.Reflect("job", job), zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	err = s.schemaSnapshot.FillSchemaName(job)
@@ -116,39 +148,9 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 	return ddlEvent, nil
 }
 
-func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
-	var sinkTableInfos []*model.SimpleTableInfo
-	for tableID := range s.schemaSnapshot.CloneTables() {
-		tblInfo, ok := s.schemaSnapshot.TableByID(tableID)
-		if !ok {
-			log.Panic("table not found for table ID", zap.Int64("tid", tableID))
-		}
-		if s.shouldIgnoreTable(tblInfo) {
-			continue
-		}
-		dbInfo, ok := s.schemaSnapshot.SchemaByTableID(tableID)
-		if !ok {
-			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
-		}
-
-		// TODO separate function for initializing SimpleTableInfo
-		sinkTableInfo := new(model.SimpleTableInfo)
-		sinkTableInfo.Schema = dbInfo.Name.O
-		sinkTableInfo.TableID = tableID
-		sinkTableInfo.Table = tblInfo.TableName.Table
-		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
-		for i, colInfo := range tblInfo.Cols() {
-			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
-			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
-		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
-	}
-	return sinkTableInfos
-}
-
-func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
+func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
+	schemaName := t.TableName.Schema
+	tableName := t.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
 		return true
 	}
@@ -156,8 +158,14 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 		// skip the mark table if cyclic is enabled
 		return true
 	}
-	if !tableInfo.IsEligible(s.config.ForceReplicate) {
-		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
+	if !t.IsEligible(s.config.ForceReplicate) {
+		// Sequence is not supported yet, and always ineligible.
+		// Skip Warn to avoid confusion.
+		// See https://github.com/pingcap/tiflow/issues/4559
+		if !t.IsSequence() {
+			log.Warn("skip ineligible table", zap.Int64("tableID", t.ID),
+				zap.Stringer("tableName", t.TableName), zap.String("changefeed", s.id))
+		}
 		return true
 	}
 	return false

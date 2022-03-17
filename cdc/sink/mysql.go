@@ -170,12 +170,12 @@ func newMySQLSink(
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
-	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
-		params.captureAddr, params.changefeedID)
+	metricConflictDetectDurationHis := conflictDetectDurationHis.
+		WithLabelValues(params.changefeedID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
-			params.captureAddr, params.changefeedID, strconv.Itoa(i))
+		metricBucketSizeCounters[i] = bucketSizeCounter.
+			WithLabelValues(params.changefeedID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -281,8 +281,9 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 	}
 }
 
-func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.TableName) error {
 	// do nothing
+	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
 	return nil
 }
 
@@ -312,7 +313,10 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -326,6 +330,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
+	log.Info("start exec DDL", zap.Any("DDL", ddl))
 	err := s.statistics.RecordDDLExecution(func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -404,6 +409,15 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	// notifyAndWaitExec may return because of context cancellation,
+	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
+	// avoid data race
+	select {
+	case <-ctx.Done():
+		log.Warn("context is done", zap.Error(ctx.Err()))
+		return
+	default:
+	}
 	s.broadcastFinishTxn()
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})

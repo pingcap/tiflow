@@ -596,7 +596,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil, false)
+	storage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -775,7 +775,7 @@ func TestSnapshotClone(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* explicitTables */)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* forceReplicate */)
 	require.Nil(t, err)
 
 	clone := snap.Clone()
@@ -784,7 +784,7 @@ func TestSnapshotClone(t *testing.T) {
 	require.Equal(t, clone.truncateTableID, snap.truncateTableID)
 	require.Equal(t, clone.ineligibleTableID, snap.ineligibleTableID)
 	require.Equal(t, clone.currentTs, snap.currentTs)
-	require.Equal(t, clone.explicitTables, snap.explicitTables)
+	require.Equal(t, clone.forceReplicate, snap.forceReplicate)
 	require.Equal(t, len(clone.tables), len(snap.tables))
 	require.Equal(t, len(clone.schemas), len(snap.schemas))
 	require.Equal(t, len(clone.partitionTable), len(snap.partitionTable))
@@ -818,13 +818,13 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
-	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* explicitTables */)
+	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
-	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* explicitTables */)
+	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
 	require.Nil(t, err)
-	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* explicitTables */)
+	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 
 	require.Equal(t, len(snap2.tables)-len(snap1.tables), 5)
@@ -953,10 +953,10 @@ func TestSchemaStorage(t *testing.T) {
 
 		jobs, err := getAllHistoryDDLJob(store)
 		require.Nil(t, err)
-		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+		schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 		require.Nil(t, err)
 		for _, job := range jobs {
-			err := scheamStorage.HandleDDLJob(job)
+			err := schemaStorage.HandleDDLJob(job)
 			require.Nil(t, err)
 		}
 
@@ -966,7 +966,7 @@ func TestSchemaStorage(t *testing.T) {
 			require.Nil(t, err)
 			snapFromMeta, err := newSchemaSnapshotFromMeta(meta, ts, false)
 			require.Nil(t, err)
-			snapFromSchemaStore, err := scheamStorage.GetSnapshot(ctx, ts)
+			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)
 
 			tidySchemaSnapshot(snapFromMeta)

@@ -6,7 +6,7 @@
 PROJECT=tiflow
 P=3
 
-FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
+FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -32,7 +32,7 @@ LINUX := "Linux"
 MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock'
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
 PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
@@ -199,6 +199,16 @@ check-leaktest-added: tools/bin/gofumports
 	# TODO: enable leaktest for DM tests.
 	./scripts/add-leaktest.sh $(TEST_FILES_WITHOUT_DM)
 
+check-ticdc-dashboard:
+	@echo "check-ticdc-dashboard"
+	@./scripts/check-ticdc-dashboard.sh
+
+check-diff-line-width:
+ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
+	@echo "check-file-width"
+	@./scripts/check-diff-line-width.sh
+endif
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -212,7 +222,8 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
@@ -250,7 +261,7 @@ dm-master:
 
 dm-master-with-webui:
 	@echo "build webui first"
-	cd dm/ui && yarn && yarn build
+	cd dm/ui && yarn --ignore-scripts && yarn build
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
 
 dm-worker:
@@ -355,6 +366,7 @@ check_third_party_binary_for_dm:
 	@which bin/tidb-server
 	@which bin/sync_diff_inspector
 	@which mysql
+	@which bin/minio
 
 dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	@which bin/dm-master.test
@@ -404,7 +416,7 @@ tools/bin/statik: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/shfmt: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt

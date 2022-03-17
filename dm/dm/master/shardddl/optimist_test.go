@@ -16,9 +16,9 @@ package shardddl
 import (
 	"context"
 	"fmt"
+	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
@@ -26,8 +26,10 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -36,27 +38,50 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-type testOptimist struct{}
-
-var _ = SerialSuites(&testOptimist{})
-
-// clear keys in etcd test cluster.
-func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
+func TestOptimistSuite(t *testing.T) {
+	suite.Run(t, new(testOptimistSuite))
 }
 
-func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+type testOptimistSuite struct {
+	suite.Suite
+	mockCluster *integration.ClusterV3
+	etcdTestCli *clientv3.Client
+}
+
+func (t *testOptimistSuite) SetupSuite() {
+	require.NoError(t.T(), log.InitLogger(&log.Config{}))
+
+	integration.BeforeTestExternal(t.T())
+	t.mockCluster = integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 1})
+	t.etcdTestCli = t.mockCluster.RandClient()
+}
+
+func (t *testOptimistSuite) TearDownSuite() {
+	t.mockCluster.Terminate(t.T())
+}
+
+func (t *testOptimistSuite) TearDownTest() {
+	t.clearOptimistTestSourceInfoOperation()
+}
+
+// clear keys in etcd test cluster.
+func (t *testOptimistSuite) clearOptimistTestSourceInfoOperation() {
+	require.NoError(t.T(), optimism.ClearTestInfoOperationColumn(t.etcdTestCli))
+}
+
+func createTableInfo(t *testing.T, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+	t.Helper()
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	if err != nil {
-		c.Fatalf("fail to parse stmt, %v", err)
+		t.Fatalf("fail to parse stmt, %v", err)
 	}
 	createStmtNode, ok := node.(*ast.CreateTableStmt)
 	if !ok {
-		c.Fatalf("%s is not a CREATE TABLE statement", sql)
+		t.Fatalf("%s is not a CREATE TABLE statement", sql)
 	}
 	info, err := tiddl.MockTableInfo(se, createStmtNode, tableID)
 	if err != nil {
-		c.Fatalf("fail to create table info, %v", err)
+		t.Fatalf("fail to create table info, %v", err)
 	}
 	return info
 }
@@ -98,9 +123,35 @@ func watchExactOneOperation(
 	return op, nil
 }
 
-func (t *testOptimist) TestOptimistSourceTables(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
+func checkLocks(t *testing.T, o *Optimist, expectedLocks []*pb.DDLLock, task string, sources []string) {
+	t.Helper()
+	lock, err := o.ShowLocks(task, sources)
+	require.NoError(t, err)
+	if expectedLocks == nil {
+		require.Len(t, lock, 0)
+	} else {
+		require.Equal(t, expectedLocks, lock)
+	}
+}
 
+func checkLocksByMap(t *testing.T, o *Optimist, expectedLocks map[string]*pb.DDLLock, sources []string, lockIDs ...string) {
+	t.Helper()
+	lock, err := o.ShowLocks("", sources)
+	require.NoError(t, err)
+	require.Len(t, lock, len(lockIDs))
+	lockIDMap := make(map[string]struct{})
+	for _, lockID := range lockIDs {
+		lockIDMap[lockID] = struct{}{}
+	}
+	for i := range lockIDs {
+		_, ok := lockIDMap[lock[i].ID]
+		require.True(t, ok)
+		delete(lockIDMap, lock[i].ID)
+		require.Equal(t, expectedLocks[lock[i].ID], lock[i])
+	}
+}
+
+func (t *testOptimistSuite) TestOptimistSourceTables() {
 	var (
 		logger     = log.L()
 		o          = NewOptimist(&logger, getDownstreamMeta)
@@ -122,81 +173,77 @@ func (t *testOptimist) TestOptimistSourceTables(c *C) {
 	defer cancel()
 
 	// CASE 1: start without any previous kv and no etcd operation.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	c.Assert(o.tk.FindTables(task, downSchema, downTable), IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	require.Nil(t.T(), o.tk.FindTables(task, downSchema, downTable))
 	o.Close()
 	o.Close() // close multiple times.
 
 	// CASE 2: start again without any previous kv.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	c.Assert(o.tk.FindTables(task, downSchema, downTable), IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	require.Nil(t.T(), o.tk.FindTables(task, downSchema, downTable))
 
 	// PUT st1, should find tables.
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts := o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 1
-	}), IsTrue)
+	}))
 	tts := o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 1)
-	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
+	require.Len(t.T(), tts, 1)
+	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
 	o.Close()
 
 	// CASE 3: start again with previous source tables.
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
 	tts = o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 1)
-	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
+	require.Len(t.T(), tts, 1)
+	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
 
 	// PUT st2, should find more tables.
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 2
-	}), IsTrue)
+	}))
 	tts = o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 2)
-	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
-	c.Assert(tts[1], DeepEquals, st2.TargetTable(downSchema, downTable))
+	require.Len(t.T(), tts, 2)
+	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
+	require.Equal(t.T(), st2.TargetTable(downSchema, downTable), tts[1])
 	o.Close()
 
 	// CASE 4: create (not re-start) a new optimist with previous source tables.
 	o = NewOptimist(&logger, getDownstreamMeta)
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
 	tts = o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 2)
-	c.Assert(tts[0], DeepEquals, st1.TargetTable(downSchema, downTable))
-	c.Assert(tts[1], DeepEquals, st2.TargetTable(downSchema, downTable))
+	require.Len(t.T(), tts, 2)
+	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
+	require.Equal(t.T(), st2.TargetTable(downSchema, downTable), tts[1])
 
 	// DELETE st1, should find less tables.
-	_, err = optimism.DeleteSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	_, err = optimism.DeleteSourceTables(t.etcdTestCli, st1)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 1
-	}), IsTrue)
+	}))
 	tts = o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 1)
-	c.Assert(tts[0], DeepEquals, st2.TargetTable(downSchema, downTable))
+	require.Len(t.T(), tts, 1)
+	require.Equal(t.T(), st2.TargetTable(downSchema, downTable), tts[0])
 	o.Close()
 }
 
-func (t *testOptimist) TestOptimist(c *C) {
-	cluster := integration.NewClusterV3(tt, &integration.ClusterConfig{Size: 1})
-	defer cluster.Terminate(tt)
-
-	cli := cluster.RandClient()
-	t.testOptimist(c, cli, noRestart)
-	t.testOptimist(c, cli, restartOnly)
-	t.testOptimist(c, cli, restartNewInstance)
-	t.testSortInfos(c, cli)
+func (t *testOptimistSuite) TestOptimist() {
+	t.testOptimist(t.etcdTestCli, noRestart)
+	t.testOptimist(t.etcdTestCli, restartOnly)
+	t.testOptimist(t.etcdTestCli, restartNewInstance)
+	t.testSortInfos(t.etcdTestCli)
 }
 
-func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
+func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
+		require.NoError(t.T(), optimism.ClearTestInfoOperationColumn(cli))
 	}()
 
 	var (
@@ -209,11 +256,11 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			switch restart {
 			case restartOnly:
 				o.Close()
-				c.Assert(o.Start(ctx, cli), IsNil)
+				require.NoError(t.T(), o.Start(ctx, cli))
 			case restartNewInstance:
 				o.Close()
 				o = NewOptimist(&logger, getDownstreamMeta)
-				c.Assert(o.Start(ctx, cli), IsNil)
+				require.NoError(t.T(), o.Start(ctx, cli))
 			}
 		}
 
@@ -232,9 +279,9 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 		DDLs1            = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
 		DDLs2            = []string{"ALTER TABLE bar ADD COLUMN c2 INT"}
 		DDLs3            = []string{"ALTER TABLE bar DROP COLUMN c2"}
-		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
-		ti2              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`)
+		ti0              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		ti2              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`)
 		ti3              = ti1
 		i11              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i12              = optimism.NewInfo(task, source1, "foo", "bar-2", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
@@ -252,31 +299,31 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 
 	// put source tables first.
 	_, err := optimism.PutSourceTables(cli, st1)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// CASE 1: start without any previous shard DDL info.
-	c.Assert(o.Start(ctx, cli), IsNil)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.NoError(t.T(), o.Start(ctx, cli))
+	require.Len(t.T(), o.Locks(), 0)
 	o.Close()
 	o.Close() // close multiple times.
 
 	// CASE 2: start again without any previous shard DDL info.
-	c.Assert(o.Start(ctx, cli), IsNil)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.NoError(t.T(), o.Start(ctx, cli))
+	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i11, will create a lock but not synced.
 	rev1, err := optimism.PutInfo(cli, i11)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
-	}), IsTrue)
-	c.Assert(o.Locks(), HasKey, lockID)
+	}))
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain := o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 
 	// check ShowLocks.
 	expectedLock := []*pb.DDLLock{
@@ -294,38 +341,38 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// wait operation for i11 become available.
 	op11, err := watchExactOneOperation(ctx, cli, i11.Task, i11.Source, i11.UpSchema, i11.UpTable, rev1)
-	c.Assert(err, IsNil)
-	c.Assert(op11.DDLs, DeepEquals, DDLs1)
-	c.Assert(op11.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), DDLs1, op11.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op11.ConflictStage)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// mark op11 as done.
 	op11c := op11
 	op11c.Done = true
 	_, putted, err := optimism.PutOperation(cli, false, op11c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		lock := o.Locks()[lockID]
 		if lock == nil {
 			return false
 		}
 		return lock.IsDone(op11.Source, op11.UpSchema, op11.UpTable)
-	}), IsTrue)
-	c.Assert(o.Locks()[lockID].IsDone(i12.Source, i12.UpSchema, i12.UpTable), IsFalse)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	}))
+	require.False(t.T(), o.Locks()[lockID].IsDone(i12.Source, i12.UpSchema, i12.UpTable))
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// PUT i12, the lock will be synced.
 	rev2, err := optimism.PutInfo(cli, i12)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}), IsTrue)
+	}))
 
 	expectedLock = []*pb.DDLLock{
 		{
@@ -341,76 +388,76 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			Unsynced: []string{},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// wait operation for i12 become available.
 	op12, err := watchExactOneOperation(ctx, cli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev2)
-	c.Assert(err, IsNil)
-	c.Assert(op12.DDLs, DeepEquals, DDLs1)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), DDLs1, op12.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op12.ConflictStage)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// mark op12 as done, the lock should be resolved.
 	op12c := op12
 	op12c.Done = true
 	_, putted, err = optimism.PutOperation(cli, false, op12c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}), IsTrue)
-	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	}))
+	require.Len(t.T(), o.Locks(), 0)
+	checkLocks(t.T(), o, nil, "", nil)
 
 	// no shard DDL info or lock operation exists.
 	ifm, _, err := optimism.GetAllInfo(cli)
-	c.Assert(err, IsNil)
-	c.Assert(ifm, HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), ifm, 0)
 	opm, _, err := optimism.GetAllOperations(cli)
-	c.Assert(err, IsNil)
-	c.Assert(opm, HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), opm, 0)
 
 	// put another table info.
 	rev1, err = optimism.PutInfo(cli, i21)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
-	}), IsTrue)
-	c.Assert(o.Locks(), HasKey, lockID)
+	}))
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 
 	// wait operation for i21 become available.
 	op21, err := watchExactOneOperation(ctx, cli, i21.Task, i21.Source, i21.UpSchema, i21.UpTable, rev1)
-	c.Assert(err, IsNil)
-	c.Assert(op21.DDLs, DeepEquals, i21.DDLs)
-	c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), i21.DDLs, op21.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op12.ConflictStage)
 
 	// CASE 3: start again with some previous shard DDL info and the lock is un-synced.
 	rebuildOptimist(ctx)
-	c.Assert(o.Locks(), HasLen, 1)
-	c.Assert(o.Locks(), HasKey, lockID)
+	require.Len(t.T(), o.Locks(), 1)
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 
 	// put table info for a new table (to simulate `CREATE TABLE`).
 	rev3, err := optimism.PutSourceTablesInfo(cli, st32, i23)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		ready := o.Locks()[lockID].Ready()
 		return ready[source2][i23.UpSchema][i23.UpTable]
-	}), IsTrue)
+	}))
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 	tts := o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 2)
-	c.Assert(tts[1].Source, Equals, source2)
-	c.Assert(tts[1].UpTables, HasKey, i23.UpSchema)
-	c.Assert(tts[1].UpTables[i23.UpSchema], HasKey, i23.UpTable)
+	require.Len(t.T(), tts, 2)
+	require.Equal(t.T(), source2, tts[1].Source)
+	require.Contains(t.T(), tts[1].UpTables, i23.UpSchema)
+	require.Contains(t.T(), tts[1].UpTables[i23.UpSchema], i23.UpTable)
 
 	// check ShowLocks.
 	expectedLock = []*pb.DDLLock{
@@ -429,99 +476,98 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks(task, []string{}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source1}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("", []string{source1, source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks(task, []string{source1, source2}), DeepEquals, expectedLock)
-	c.Assert(o.ShowLocks("not-exist", []string{}), HasLen, 0)
-	c.Assert(o.ShowLocks("", []string{"not-exist"}), HasLen, 0)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
+	checkLocks(t.T(), o, expectedLock, task, []string{})
+	checkLocks(t.T(), o, expectedLock, "", []string{source1})
+	checkLocks(t.T(), o, expectedLock, "", []string{source2})
+	checkLocks(t.T(), o, expectedLock, "", []string{source1, source2})
+	checkLocks(t.T(), o, expectedLock, task, []string{source1, source2})
+	checkLocks(t.T(), o, nil, "not-exist", []string{})
+	checkLocks(t.T(), o, nil, "", []string{"not-exist"})
 
 	// wait operation for i23 become available.
 	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
-	c.Assert(err, IsNil)
-	c.Assert(op23.DDLs, DeepEquals, i23.DDLs)
-	c.Assert(op23.ConflictStage, Equals, optimism.ConflictNone)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), i23.DDLs, op23.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op23.ConflictStage)
 
 	// delete i12 for a table (to simulate `DROP TABLE`), the lock should become synced again.
 	rev2, err = optimism.PutInfo(cli, i12) // put i12 first to trigger DELETE for i12.
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	// wait until operation for i12 ready.
 	_, err = watchExactOneOperation(ctx, cli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev2)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 
 	_, err = optimism.PutSourceTablesDeleteInfo(cli, st31, i12)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}), IsTrue)
+	}))
 	tts = o.tk.FindTables(task, downSchema, downTable)
-	c.Assert(tts, HasLen, 2)
-	c.Assert(tts[0].Source, Equals, source1)
-	c.Assert(tts[0].UpTables, HasLen, 1)
-	c.Assert(tts[0].UpTables[i21.UpSchema], HasKey, i21.UpTable)
-	c.Assert(tts[1].Source, Equals, source2)
-	c.Assert(tts[1].UpTables, HasLen, 1)
-	c.Assert(tts[1].UpTables[i23.UpSchema], HasKey, i23.UpTable)
-	c.Assert(o.Locks()[lockID].IsResolved(), IsFalse)
-	c.Assert(o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable), IsFalse)
-	c.Assert(o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable), IsFalse)
+	require.Len(t.T(), tts, 2)
+	require.Equal(t.T(), source1, tts[0].Source)
+	require.Len(t.T(), tts[0].UpTables, 1)
+	require.Contains(t.T(), tts[0].UpTables[i21.UpSchema], i21.UpTable)
+	require.Equal(t.T(), source2, tts[1].Source)
+	require.Len(t.T(), tts[1].UpTables, 1)
+	require.Contains(t.T(), tts[1].UpTables[i23.UpSchema], i23.UpTable)
+	require.False(t.T(), o.Locks()[lockID].IsResolved())
+	require.False(t.T(), o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable))
+	require.False(t.T(), o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable))
 
 	// CASE 4: start again with some previous shard DDL info and non-`done` operation.
 	rebuildOptimist(ctx)
-	c.Assert(o.Locks(), HasLen, 1)
-	c.Assert(o.Locks(), HasKey, lockID)
+	require.Len(t.T(), o.Locks(), 1)
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
-	c.Assert(o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable), IsFalse)
-	c.Assert(o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable), IsFalse)
+	require.True(t.T(), synced)
+	require.Equal(t.T(), 0, remain)
+	require.False(t.T(), o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable))
+	require.False(t.T(), o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable))
 
 	// mark op21 as done.
 	op21c := op21
 	op21c.Done = true
 	_, putted, err = optimism.PutOperation(cli, false, op21c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable)
-	}), IsTrue)
+	}))
 
 	// CASE 5: start again with some previous shard DDL info and `done` operation.
 	rebuildOptimist(ctx)
-	c.Assert(o.Locks(), HasLen, 1)
-	c.Assert(o.Locks(), HasKey, lockID)
+	require.Len(t.T(), o.Locks(), 1)
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsTrue)
-	c.Assert(remain, Equals, 0)
-	c.Assert(o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable), IsTrue)
-	c.Assert(o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable), IsFalse)
+	require.True(t.T(), synced)
+	require.Equal(t.T(), 0, remain)
+	require.True(t.T(), o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable))
+	require.False(t.T(), o.Locks()[lockID].IsDone(i23.Source, i23.UpSchema, i23.UpTable))
 
 	// mark op23 as done.
 	op23c := op23
 	op23c.Done = true
 	_, putted, err = optimism.PutOperation(cli, false, op23c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}), IsTrue)
-	c.Assert(o.Locks(), HasLen, 0)
+	}))
+	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i31, will create a lock but not synced (to test `DROP COLUMN`)
 	rev1, err = optimism.PutInfo(cli, i31)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
-	}), IsTrue)
-	c.Assert(o.Locks(), HasKey, lockID)
+	}))
+	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
-	c.Assert(synced, IsFalse)
-	c.Assert(remain, Equals, 1)
-
+	require.False(t.T(), synced)
+	require.Equal(t.T(), 1, remain)
 	// check ShowLocks.
 	expectedLock = []*pb.DDLLock{
 		{
@@ -538,33 +584,33 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// wait operation for i31 become available.
 	op31, err := watchExactOneOperation(ctx, cli, i31.Task, i31.Source, i31.UpSchema, i31.UpTable, rev1)
-	c.Assert(err, IsNil)
-	c.Assert(op31.DDLs, DeepEquals, []string{})
-	c.Assert(op31.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{}, op31.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op31.ConflictStage)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// mark op31 as done.
 	op31c := op31
 	op31c.Done = true
 	_, putted, err = optimism.PutOperation(cli, false, op31c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return o.Locks()[lockID].IsDone(op31c.Source, op31c.UpSchema, op31c.UpTable)
-	}), IsTrue)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	}))
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// PUT i33, the lock will be synced.
 	rev3, err = optimism.PutInfo(cli, i33)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}), IsTrue)
+	}))
 
 	expectedLock = []*pb.DDLLock{
 		{
@@ -580,37 +626,35 @@ func (t *testOptimist) testOptimist(c *C, cli *clientv3.Client, restart int) {
 			Unsynced: []string{},
 		},
 	}
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// wait operation for i33 become available.
 	op33, err := watchExactOneOperation(ctx, cli, i33.Task, i33.Source, i33.UpSchema, i33.UpTable, rev3)
-	c.Assert(err, IsNil)
-	c.Assert(op33.DDLs, DeepEquals, DDLs3)
-	c.Assert(op33.ConflictStage, Equals, optimism.ConflictNone)
-	c.Assert(o.ShowLocks("", []string{}), DeepEquals, expectedLock)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), DDLs3, op33.DDLs)
+	require.Equal(t.T(), optimism.ConflictNone, op33.ConflictStage)
+	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// mark op33 as done, the lock should be resolved.
 	op33c := op33
 	op33c.Done = true
 	_, putted, err = optimism.PutOperation(cli, false, op33c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}), IsTrue)
-	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	}))
+	require.Len(t.T(), o.Locks(), 0)
+	checkLocks(t.T(), o, nil, "", nil)
 
 	// CASE 6: start again after all shard DDL locks have been resolved.
 	rebuildOptimist(ctx)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.Len(t.T(), o.Locks(), 0)
 	o.Close()
 }
 
-func (t *testOptimist) TestOptimistLockConflict(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
+func (t *testOptimistSuite) TestOptimistLockConflict() {
 	var (
 		watchTimeout       = 5 * time.Second
 		logger             = log.L()
@@ -625,9 +669,9 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 		tblID        int64 = 222
 		DDLs1              = []string{"ALTER TABLE bar ADD COLUMN c1 TEXT"}
 		DDLs2              = []string{"ALTER TABLE bar ADD COLUMN c1 DATETIME"}
-		ti0                = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1                = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
-		ti2                = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 DATETIME)`)
+		ti0                = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1                = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
+		ti2                = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 DATETIME)`)
 		ti3                = ti0
 		i1                 = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i2                 = optimism.NewInfo(task, source1, "foo", "bar-2", downSchema, downTable, DDLs2, ti0, []*model.TableInfo{ti2})
@@ -638,86 +682,87 @@ func (t *testOptimist) TestOptimistLockConflict(c *C) {
 	st1.AddTable("foo", "bar-2", downSchema, downTable)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
+	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i1, will create a lock but not synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i1)
-	c.Assert(err, IsNil)
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i1)
+	require.NoError(t.T(), err)
 	// wait operation for i1 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i1.Task, i1.Source, i1.UpSchema, i1.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op1 := <-opCh:
-		c.Assert(op1.DDLs, DeepEquals, DDLs1)
-		c.Assert(op1.ConflictStage, Equals, optimism.ConflictNone)
+		require.Equal(t.T(), DDLs1, op1.DDLs)
+		require.Equal(t.T(), optimism.ConflictNone, op1.ConflictStage)
 	}
 
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 
 	// PUT i2, conflict will be detected.
-	rev2, err := optimism.PutInfo(etcdTestCli, i2)
-	c.Assert(err, IsNil)
+	rev2, err := optimism.PutInfo(t.etcdTestCli, i2)
+	require.NoError(t.T(), err)
 	// wait operation for i2 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
 
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i2.Task, i2.Source, i2.UpSchema, i2.UpTable, rev2, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op2 := <-opCh:
-		c.Assert(op2.DDLs, DeepEquals, []string{})
-		c.Assert(op2.ConflictStage, Equals, optimism.ConflictDetected)
+		require.Equal(t.T(), []string{}, op2.DDLs)
+		require.Equal(t.T(), optimism.ConflictDetected, op2.ConflictStage)
 	}
 
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 
 	// PUT i3, no conflict now.
 	// case for handle-error replace
-	rev3, err := optimism.PutInfo(etcdTestCli, i3)
-	c.Assert(err, IsNil)
+	rev3, err := optimism.PutInfo(t.etcdTestCli, i3)
+	require.NoError(t.T(), err)
 	// wait operation for i3 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i3.Task, i3.Source, i3.UpSchema, i3.UpTable, rev3, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op3 := <-opCh:
-		c.Assert(op3.DDLs, DeepEquals, []string{})
-		c.Assert(op3.ConflictStage, Equals, optimism.ConflictNone)
+		require.Equal(t.T(), []string{}, op3.DDLs)
+		require.Equal(t.T(), optimism.ConflictNone, op3.ConflictStage)
 	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 }
 
-func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
+func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	var (
 		backOff            = 30
 		waitTime           = 100 * time.Millisecond
@@ -738,8 +783,8 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 		se                 = mock.NewContext()
 		tblID        int64 = 111
 		DDLs               = []string{"ALTER TABLE bar ADD COLUMN c1 TEXT"}
-		ti0                = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1                = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
+		ti0                = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1                = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
 		i11                = optimism.NewInfo(task, source, upSchema, upTables[0], downSchema, downTable1, DDLs, ti0, []*model.TableInfo{ti1})
 		i12                = optimism.NewInfo(task, source, upSchema, upTables[1], downSchema, downTable1, DDLs, ti0, []*model.TableInfo{ti1})
 		i21                = optimism.NewInfo(task, source, upSchema, upTables[2], downSchema, downTable2, DDLs, ti0, []*model.TableInfo{ti1})
@@ -752,25 +797,28 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 	sts.AddTable(upSchema, upTables[3], downSchema, downTable2)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, sts)
-	c.Assert(err, IsNil)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, sts)
+	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i11 and i21, will create two locks but no synced.
-	_, err = optimism.PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
+	require.NoError(t.T(), err)
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 2
-	}), IsTrue)
-	c.Assert(o.Locks(), HasKey, lockID1)
-	c.Assert(o.Locks(), HasKey, lockID2)
+	}))
+	require.Contains(t.T(), o.Locks(), lockID1)
+	require.Contains(t.T(), o.Locks(), lockID2)
 
 	// check ShowLocks
 	expectedLock := map[string]*pb.DDLLock{
@@ -801,21 +849,18 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 			},
 		},
 	}
-	locks := o.ShowLocks("", []string{})
-	c.Assert(locks, HasLen, 2)
-	c.Assert(locks[0], DeepEquals, expectedLock[locks[0].ID])
-	c.Assert(locks[1], DeepEquals, expectedLock[locks[1].ID])
+	checkLocksByMap(t.T(), o, expectedLock, []string{}, lockID1, lockID2)
 
 	// put i12 and i22, both of locks will be synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i12)
-	c.Assert(err, IsNil)
-	rev2, err := optimism.PutInfo(etcdTestCli, i22)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
+	require.NoError(t.T(), err)
+	rev2, err := optimism.PutInfo(t.etcdTestCli, i22)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		synced1, _ := o.Locks()[lockID1].IsSynced()
 		synced2, _ := o.Locks()[lockID2].IsSynced()
 		return synced1 && synced2
-	}), IsTrue)
+	}))
 
 	expectedLock[lockID1].Synced = []string{
 		fmt.Sprintf("%s-%s", i11.Source, dbutil.TableName(i11.UpSchema, i11.UpTable)),
@@ -827,92 +872,86 @@ func (t *testOptimist) TestOptimistLockMultipleTarget(c *C) {
 		fmt.Sprintf("%s-%s", i22.Source, dbutil.TableName(i22.UpSchema, i22.UpTable)),
 	}
 	expectedLock[lockID2].Unsynced = []string{}
-	locks = o.ShowLocks("", []string{})
-	c.Assert(locks, HasLen, 2)
-	c.Assert(locks[0], DeepEquals, expectedLock[locks[0].ID])
-	c.Assert(locks[1], DeepEquals, expectedLock[locks[1].ID])
+	checkLocksByMap(t.T(), o, expectedLock, []string{}, lockID1, lockID2)
 
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
 	var op12 optimism.Operation
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op12 = <-opCh:
-		c.Assert(op12.DDLs, DeepEquals, DDLs)
-		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+		require.Equal(t.T(), DDLs, op12.DDLs)
+		require.Equal(t.T(), optimism.ConflictNone, op12.ConflictStage)
 	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 
 	// mark op11 and op12 as done, the lock should be resolved.
 	op11c := op12
 	op11c.Done = true
 	op11c.UpTable = i11.UpTable // overwrite `UpTable`.
-	_, putted, err := optimism.PutOperation(etcdTestCli, false, op11c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
+	_, putted, err := optimism.PutOperation(t.etcdTestCli, false, op11c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
 	op12c := op12
 	op12c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op12c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		_, ok := o.Locks()[lockID1]
 		return !ok
-	}), IsTrue)
-	c.Assert(o.Locks(), HasLen, 1)
-	c.Assert(o.ShowLocks("", nil), HasLen, 1)
-	c.Assert(o.ShowLocks("", nil)[0], DeepEquals, expectedLock[lockID2])
+	}))
+	require.Len(t.T(), o.Locks(), 1)
+	checkLocksByMap(t.T(), o, expectedLock, nil, lockID2)
 
 	// wait operation for i22 become available.
 	opCh = make(chan optimism.Operation, 10)
 	errCh = make(chan error, 10)
 	var op22 optimism.Operation
 	ctx2, cancel2 = context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i22.Task, i22.Source, i22.UpSchema, i22.UpTable, rev2, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op22 = <-opCh:
-		c.Assert(op22.DDLs, DeepEquals, DDLs)
-		c.Assert(op22.ConflictStage, Equals, optimism.ConflictNone)
+		require.Equal(t.T(), DDLs, op22.DDLs)
+		require.Equal(t.T(), optimism.ConflictNone, op22.ConflictStage)
 	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 
 	// mark op21 and op22 as done, the lock should be resolved.
 	op21c := op22
 	op21c.Done = true
 	op21c.UpTable = i21.UpTable // overwrite `UpTable`.
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op21c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op21c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
 	op22c := op22
 	op22c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op22c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op22c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		_, ok := o.Locks()[lockID2]
 		return !ok
-	}), IsTrue)
-	c.Assert(o.Locks(), HasLen, 0)
-	c.Assert(o.ShowLocks("", nil), HasLen, 0)
+	}))
+	require.Len(t.T(), o.Locks(), 0)
+	checkLocksByMap(t.T(), o, expectedLock, nil)
 }
 
-func (t *testOptimist) TestOptimistInitSchema(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
+func (t *testOptimistSuite) TestOptimistInitSchema() {
 	var (
 		backOff      = 30
 		waitTime     = 100 * time.Millisecond
@@ -932,9 +971,9 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 		tblID int64 = 111
 		DDLs1       = []string{"ALTER TABLE bar ADD COLUMN c1 TEXT"}
 		DDLs2       = []string{"ALTER TABLE bar ADD COLUMN c2 INT"}
-		ti0         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
-		ti2         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT, c2 INT)`)
+		ti0         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
+		ti2         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT, c2 INT)`)
 		i11         = optimism.NewInfo(task, source, upSchema, upTables[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i12         = optimism.NewInfo(task, source, upSchema, upTables[1], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i21         = optimism.NewInfo(task, source, upSchema, upTables[0], downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
@@ -944,74 +983,77 @@ func (t *testOptimist) TestOptimistInitSchema(c *C) {
 	st.AddTable(upSchema, upTables[1], downSchema, downTable)
 
 	// put source tables first.
-	_, err := optimism.PutSourceTables(etcdTestCli, st)
-	c.Assert(err, IsNil)
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st)
+	require.NoError(t.T(), err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	c.Assert(o.Locks(), HasLen, 0)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i11, will creat a lock.
-	_, err = optimism.PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
-	}), IsTrue)
+	}))
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
 
 	// PUT i12, the lock will be synced.
-	rev1, err := optimism.PutInfo(etcdTestCli, i12)
-	c.Assert(err, IsNil)
+	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
+	require.NoError(t.T(), err)
 
 	// wait operation for i12 become available.
 	opCh := make(chan optimism.Operation, 10)
 	errCh := make(chan error, 10)
 	var op12 optimism.Operation
 	ctx2, cancel2 := context.WithCancel(ctx)
-	go optimism.WatchOperationPut(ctx2, etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
+	go optimism.WatchOperationPut(ctx2, t.etcdTestCli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev1, opCh, errCh)
 	select {
 	case <-time.After(watchTimeout):
-		c.Fatal("timeout")
+		t.T().Fatal("timeout")
 	case op12 = <-opCh:
-		c.Assert(op12.DDLs, DeepEquals, DDLs1)
-		c.Assert(op12.ConflictStage, Equals, optimism.ConflictNone)
+		require.Equal(t.T(), DDLs1, op12.DDLs)
+		require.Equal(t.T(), optimism.ConflictNone, op12.ConflictStage)
 	}
 	cancel2()
 	close(opCh)
 	close(errCh)
-	c.Assert(len(opCh), Equals, 0)
-	c.Assert(len(errCh), Equals, 0)
+	require.Equal(t.T(), 0, len(opCh))
+	require.Equal(t.T(), 0, len(errCh))
 
 	// mark op11 and op12 as done, the lock should be resolved.
 	op11c := op12
 	op11c.Done = true
 	op11c.UpTable = i11.UpTable // overwrite `UpTable`.
-	_, putted, err := optimism.PutOperation(etcdTestCli, false, op11c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
+	_, putted, err := optimism.PutOperation(t.etcdTestCli, false, op11c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
 	op12c := op12
 	op12c.Done = true
-	_, putted, err = optimism.PutOperation(etcdTestCli, false, op12c, 0)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
+	require.NoError(t.T(), err)
+	require.True(t.T(), putted)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 0
-	}), IsTrue)
+	}))
 
 	// PUT i21 to create the lock again.
-	_, err = optimism.PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
-	c.Assert(utils.WaitSomething(backOff, waitTime, func() bool {
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
+	require.NoError(t.T(), err)
+	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
 		return len(o.Locks()) == 1
-	}), IsTrue)
+	}))
 	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
 }
 
-func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
+func (t *testOptimistSuite) testSortInfos(cli *clientv3.Client) {
 	defer func() {
-		c.Assert(optimism.ClearTestInfoOperationColumn(cli), IsNil)
+		require.NoError(t.T(), optimism.ClearTestInfoOperationColumn(cli))
 	}()
 
 	var (
@@ -1027,45 +1069,45 @@ func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 		tblID int64 = 111
 		DDLs1       = []string{"ALTER TABLE bar ADD COLUMN c1 TEXT"}
 		DDLs2       = []string{"ALTER TABLE bar ADD COLUMN c2 INT"}
-		ti0         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
-		ti2         = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT, c2 INT)`)
+		ti0         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
+		ti2         = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT, c2 INT)`)
 		i11         = optimism.NewInfo(task, sources[0], upSchema, upTables[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i12         = optimism.NewInfo(task, sources[0], upSchema, upTables[1], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i21         = optimism.NewInfo(task, sources[1], upSchema, upTables[1], downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
 	)
 
 	rev1, err := optimism.PutInfo(cli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	ifm, _, err := optimism.GetAllInfo(cli)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	infos := sortInfos(ifm)
-	c.Assert(len(infos), Equals, 1)
+	require.Equal(t.T(), 1, len(infos))
 	i11.Version = 1
 	i11.Revision = rev1
-	c.Assert(infos[0], DeepEquals, i11)
+	require.Equal(t.T(), i11, infos[0])
 
 	rev2, err := optimism.PutInfo(cli, i12)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	ifm, _, err = optimism.GetAllInfo(cli)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	infos = sortInfos(ifm)
-	c.Assert(len(infos), Equals, 2)
+	require.Equal(t.T(), 2, len(infos))
 	i11.Version = 1
 	i11.Revision = rev1
 	i12.Version = 1
 	i12.Revision = rev2
-	c.Assert(infos[0], DeepEquals, i11)
-	c.Assert(infos[1], DeepEquals, i12)
+	require.Equal(t.T(), i11, infos[0])
+	require.Equal(t.T(), i12, infos[1])
 
 	rev3, err := optimism.PutInfo(cli, i21)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	rev4, err := optimism.PutInfo(cli, i11)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	ifm, _, err = optimism.GetAllInfo(cli)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), err)
 	infos = sortInfos(ifm)
-	c.Assert(len(infos), Equals, 3)
+	require.Equal(t.T(), 3, len(infos))
 
 	i11.Version = 2
 	i11.Revision = rev4
@@ -1073,18 +1115,16 @@ func (t *testOptimist) testSortInfos(c *C, cli *clientv3.Client) {
 	i12.Revision = rev2
 	i21.Version = 1
 	i21.Revision = rev3
-	c.Assert(infos[0], DeepEquals, i12)
-	c.Assert(infos[1], DeepEquals, i21)
-	c.Assert(infos[2], DeepEquals, i11)
+	require.Equal(t.T(), i12, infos[0])
+	require.Equal(t.T(), i21, infos[1])
+	require.Equal(t.T(), i11, infos[2])
 }
 
-func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
+func (t *testOptimistSuite) TestBuildLockJoinedAndTable() {
 	var (
 		logger           = log.L()
 		o                = NewOptimist(&logger, getDownstreamMeta)
-		task             = "task"
+		task             = "task-build-lock-joined-and-table"
 		source1          = "mysql-replica-1"
 		source2          = "mysql-replica-2"
 		downSchema       = "db"
@@ -1096,44 +1136,45 @@ func (t *testOptimist) TestBuildLockJoinedAndTable(c *C) {
 		p                = parser.New()
 		se               = mock.NewContext()
 		tblID      int64 = 111
-		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
-		ti2              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`)
-		ti3              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c2 INT)`)
+		ti0              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti1              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		ti2              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`)
+		ti3              = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c2 INT)`)
 
 		i11 = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i21 = optimism.NewInfo(task, source2, "foo", "bar-1", downSchema, downTable, DDLs2, ti2, []*model.TableInfo{ti3})
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
+	require.NoError(t.T(), err)
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
+	require.NoError(t.T(), err)
 
-	_, err = optimism.PutInfo(etcdTestCli, i21)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, i11)
-	c.Assert(err, IsNil)
+	_, err = optimism.PutInfo(t.etcdTestCli, i21)
+	require.NoError(t.T(), err)
+	_, err = optimism.PutInfo(t.etcdTestCli, i11)
+	require.NoError(t.T(), err)
 
-	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
+	stm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
+	require.NoError(t.T(), err)
 	o.tk.Init(stm)
 }
 
-func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
+func (t *testOptimistSuite) TestBuildLockWithInitSchema() {
 	var (
 		logger     = log.L()
 		o          = NewOptimist(&logger, getDownstreamMeta)
-		task       = "task"
+		task       = "task-lock-with-init-schema"
 		source1    = "mysql-replica-1"
 		source2    = "mysql-replica-2"
 		downSchema = "db"
@@ -1144,9 +1185,9 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 		se         = mock.NewContext()
 		tblID      = int64(111)
 
-		ti0 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, b INT, c INT)`)
-		ti1 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, b INT)`)
-		ti2 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		ti0 = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, b INT, c INT)`)
+		ti1 = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, b INT)`)
+		ti2 = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
 		ddlDropB  = "ALTER TABLE bar DROP COLUMN b"
 		ddlDropC  = "ALTER TABLE bar DROP COLUMN c"
@@ -1155,24 +1196,27 @@ func (t *testOptimist) TestBuildLockWithInitSchema(c *C) {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		cancel()
+		o.Close()
+	}()
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
 	st2.AddTable("foo", "bar-1", downSchema, downTable)
 
-	c.Assert(o.Start(ctx, etcdTestCli), IsNil)
-	_, err := optimism.PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, IsNil)
+	require.NoError(t.T(), o.Start(ctx, t.etcdTestCli))
+	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
+	require.NoError(t.T(), err)
+	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
+	require.NoError(t.T(), err)
 
-	_, err = optimism.PutInfo(etcdTestCli, infoDropB)
-	c.Assert(err, IsNil)
-	_, err = optimism.PutInfo(etcdTestCli, infoDropC)
-	c.Assert(err, IsNil)
+	_, err = optimism.PutInfo(t.etcdTestCli, infoDropB)
+	require.NoError(t.T(), err)
+	_, err = optimism.PutInfo(t.etcdTestCli, infoDropC)
+	require.NoError(t.T(), err)
 
-	stm, _, err := optimism.GetAllSourceTables(etcdTestCli)
-	c.Assert(err, IsNil)
+	stm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
+	require.NoError(t.T(), err)
 	o.tk.Init(stm)
 }
 

@@ -60,6 +60,8 @@ const (
 	ValidationNone = "none"
 	ValidationFast = "fast"
 	ValidationFull = "full"
+
+	DefaultValidatorWorkerCount = 4
 )
 
 // default config item values.
@@ -250,8 +252,9 @@ type LoaderConfig struct {
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      defaultDir,
+		PoolSize:   defaultPoolSize,
+		Dir:        defaultDir,
+		ImportMode: LoadModeSQL,
 	}
 }
 
@@ -337,7 +340,8 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode string `yaml:"mode" toml:"mode" json:"mode"`
+	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
 }
 
 func (v *ValidatorConfig) adjust() error {
@@ -346,6 +350,9 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.Mode != ValidationNone && v.Mode != ValidationFast && v.Mode != ValidationFull {
 		return terror.ErrConfigValidationMode
+	}
+	if v.WorkerCount <= 0 {
+		v.WorkerCount = DefaultValidatorWorkerCount
 	}
 	return nil
 }
@@ -445,6 +452,7 @@ func NewTaskConfig() *TaskConfig {
 		Syncers:                 make(map[string]*SyncerConfig),
 		Validators:              make(map[string]*ValidatorConfig),
 		CleanDumpFile:           true,
+		OnlineDDL:               true,
 		CollationCompatible:     defaultCollationCompatible,
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
@@ -1107,6 +1115,7 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
 	}
+	c.OnlineDDL = false
 }
 
 // Yaml returns YAML format representation of config.

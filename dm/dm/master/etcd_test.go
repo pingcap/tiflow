@@ -24,8 +24,8 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -69,7 +69,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgCluster.Name = "dm-master-1"
 	cfgCluster.DataDir = c.MkDir()
 	cfgCluster.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfgCluster.AdvertiseAddr = tempurl.Alloc()[len("http://"):]
+	cfgCluster.AdvertiseAddr = cfgCluster.MasterAddr
 	cfgCluster.PeerUrls = tempurl.Alloc()
 	c.Assert(cfgCluster.adjust(), check.IsNil)
 	cfgClusterEtcd := genEmbedEtcdConfigWithLogger("info")
@@ -79,6 +79,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgBefore := t.cloneConfig(cfgCluster) // before `prepareJoinEtcd` applied
 	cfgBefore.DataDir = c.MkDir()          // overwrite some config items
 	cfgBefore.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfgBefore.AdvertiseAddr = cfgBefore.MasterAddr
 	cfgBefore.PeerUrls = tempurl.Alloc()
 	cfgBefore.AdvertisePeerUrls = cfgBefore.PeerUrls
 	c.Assert(cfgBefore.adjust(), check.IsNil)
@@ -172,11 +173,12 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgAfter2.Name = "dm-master-3" // overwrite some items
 	cfgAfter2.DataDir = c.MkDir()
 	cfgAfter2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfgAfter2.AdvertiseAddr = cfgAfter2.MasterAddr
 	cfgAfter2.PeerUrls = tempurl.Alloc()
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
 	err = prepareJoinEtcd(cfgAfter2)
 	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: there is a member that has not joined successfully, continue the join or remove it.*")
+	c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
 
 	// start the joining etcd
 	cfgAfterEtcd := genEmbedEtcdConfigWithLogger("info")
@@ -225,10 +227,11 @@ func (t *testEtcdSuite) TestIsDirExist(c *check.C) {
 
 func (t *testEtcdSuite) TestEtcdAutoCompaction(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg.AdvertiseAddr = cfg.MasterAddr
 	cfg.AutoCompactionRetention = "1s"
 
 	ctx, cancel := context.WithCancel(context.Background())

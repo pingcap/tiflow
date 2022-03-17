@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
 
+// RowChangeType is the type of row change.
 type RowChangeType int
 
 // these constants represent types of row change.
@@ -54,6 +55,8 @@ func (t RowChangeType) String() string {
 }
 
 // RowChange represents a row change, it can be further converted into DML SQL.
+// It also provides some utility functions about calculating causality of two
+// row changes, merging successive row changes into one row change, etc.
 type RowChange struct {
 	sourceTable *cdcmodel.TableName
 	targetTable *cdcmodel.TableName
@@ -91,6 +94,13 @@ func NewRowChange(
 	downstreamTableInfo *timodel.TableInfo,
 	tiCtx sessionctx.Context,
 ) *RowChange {
+	if sourceTable == nil {
+		log.L().DPanic("sourceTable is nil")
+	}
+	if sourceTableInfo == nil {
+		log.L().DPanic("sourceTableInfo is nil")
+	}
+
 	ret := &RowChange{
 		sourceTable:     sourceTable,
 		preValues:       preValues,
@@ -176,22 +186,8 @@ func (r *RowChange) lazyInitIdentityInfo() {
 		return
 	}
 
+	// TODO: move below function into this package
 	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
-}
-
-func getColsAndValuesOfIdx(
-	columns []*timodel.ColumnInfo,
-	indexColumns *timodel.IndexInfo,
-	data []interface{},
-) ([]*timodel.ColumnInfo, []interface{}) {
-	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	values := make([]interface{}, 0, len(indexColumns.Columns))
-	for _, col := range indexColumns.Columns {
-		cols = append(cols, columns[col.Offset])
-		values = append(values, data[col.Offset])
-	}
-
-	return cols, values
 }
 
 // whereColumnsAndValues returns columns and values to identify the row, to form
@@ -246,21 +242,6 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	return whereValues
 }
 
-// valuesHolder gens values holder like (?,?,?).
-func valuesHolder(n int) string {
-	var builder strings.Builder
-	builder.Grow((n-1)*2 + 3)
-	builder.WriteByte('(')
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("?")
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
@@ -278,15 +259,6 @@ func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	buf.WriteString(" LIMIT 1")
 
 	return buf.String(), whereArgs
-}
-
-func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
-	for _, col := range columns {
-		if col.Name.L == name.L {
-			return col.IsGenerated()
-		}
-	}
-	return false
 }
 
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {
@@ -330,6 +302,7 @@ func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
 	return GenInsertSQL(tp, r)
 }
 
+// DMLType indicates the type of DML.
 type DMLType int
 
 // these constants represent types of row change.

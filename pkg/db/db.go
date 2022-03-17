@@ -17,9 +17,10 @@ package db
 type DB interface {
 	Iterator(lowerBound, upperBound []byte) Iterator
 	Batch(cap int) Batch
+	DeleteRange(start, end []byte) error
 	Compact(start, end []byte) error
 	Close() error
-	CollectMetrics(captureAddr string, id int)
+	CollectMetrics(id int)
 }
 
 // A Batch is a sequence of Puts and Deletes that Commit to DB.
@@ -35,7 +36,6 @@ type Batch interface {
 // Iterator is an interface of an iterator of a DB.
 type Iterator interface {
 	Valid() bool
-	First() bool
 	Seek([]byte) bool
 	Next() bool
 	Key() []byte

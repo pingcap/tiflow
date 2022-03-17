@@ -28,6 +28,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -41,15 +51,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
-	"github.com/prometheus/client_golang/prometheus"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/logutil"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -246,7 +247,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	defer httpCli.CloseIdleConnections()
 	metrics := make(map[string]prometheus.Observer)
 	for _, pdEndpoint := range s.pdEndpoints {
-		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(conf.AdvertiseAddr, pdEndpoint)
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
 	}
 
 	for {
@@ -258,7 +259,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
 				if err != nil {
 					log.Warn("etcd health check failed", zap.Error(err))
 					cancel()

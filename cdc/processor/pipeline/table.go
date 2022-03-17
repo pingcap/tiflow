@@ -135,7 +135,7 @@ func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
 	return workload
 }
 
-// Status returns the status of this table pipeline
+// Status returns the status of this table pipeline, sinkNode maintains the table status
 func (t *tablePipelineImpl) Status() TableStatus {
 	return t.sinkNode.Status()
 }
@@ -203,8 +203,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	sorterNode :=
-		newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig)
+	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
+		flowController, mounter, replConfig)
 	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
