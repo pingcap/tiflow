@@ -45,6 +45,9 @@ const (
 	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
 	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
 	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
+	// ConflictError indicates an error happened when we try to sync the DDLs
+	// in this stage, DM-worker should retry and can skip ddls for this error.
+	ConflictError ConflictStage = "error"
 )
 
 // Operation represents a shard DDL coordinate operation.
