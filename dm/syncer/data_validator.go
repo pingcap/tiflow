@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
@@ -226,6 +227,10 @@ func (v *DataValidator) initialize() error {
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
+	failpoint.Inject("MockValidationQuery", func() {
+		v.stage = pb.Stage_Running
+		return
+	})
 
 	v.L.Info("starting")
 	if v.stage == pb.Stage_Running {
@@ -780,6 +785,21 @@ func genColData(v interface{}) string {
 }
 
 func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return([]*pb.ValidationStatus{
+			{
+				SrcTable:         "`testdb1`.`testtable1`",
+				DstTable:         "`dstdb`.`dsttable`",
+				ValidationStatus: pb.Stage_Running.String(),
+			},
+			{
+				SrcTable:         "`testdb2`.`testtable2`",
+				DstTable:         "`dstdb`.`dsttable`",
+				ValidationStatus: pb.Stage_Stopped.String(),
+				Message:          tableWithoutPrimaryKeyMsg,
+			},
+		})
+	})
 	ret, err := v.persistHelper.loadTableStatus(v.tctx)
 	if err != nil {
 		return []*pb.ValidationStatus{}

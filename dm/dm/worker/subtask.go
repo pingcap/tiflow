@@ -273,6 +273,9 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 	var syncerObj *syncer.Syncer
 	var ok bool
+	failpoint.Inject("WorkerMockValidationQuery", func(_ failpoint.Value) {
+		failpoint.Goto("StartValidatorWithoutCheck")
+	})
 	for _, u := range st.units {
 		if syncerObj, ok = u.(*syncer.Syncer); ok {
 			break
@@ -282,7 +285,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 		st.l.Warn("cannot start validator without syncer")
 		return
 	}
-
+	failpoint.Label("StartValidatorWithoutCheck")
 	if st.validator == nil {
 		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
 	}

@@ -367,6 +367,96 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 		return s.getSourceWorker(true) == nil
 	}), IsTrue)
 }
+func (t *testServer) TestServerQueryValidator(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:            GetJoinURLs(s.cfg.Join),
+		DialTimeout:          dialTimeout,
+		DialKeepAliveTime:    keepaliveTime,
+		DialKeepAliveTimeout: keepaliveTimeout,
+	})
+	s.etcdClient = etcdCli
+	s.closed.Store(false)
+	c.Assert(err, IsNil)
+	sourceCfg := loadSourceConfigWithoutPassword(c)
+	sourceCfg.EnableRelay = false
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err = ha.PutSourceCfg(etcdCli, sourceCfg)
+	c.Assert(err, IsNil)
+	sourceBound := ha.NewSourceBound(sourceCfg.SourceID, cfg.Name)
+	_, err = ha.PutSourceBound(etcdCli, sourceBound)
+	c.Assert(err, IsNil)
+	w, err := s.getOrStartWorker(sourceCfg, true)
+	c.Assert(err, IsNil)
+	expected := []*pb.ValidationStatus{
+		{
+			Source:           "127.0.0.1",
+			SrcTable:         "`testdb1`.`testtable1`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Running.String(),
+		},
+		{
+			Source:           "127.0.0.1",
+			SrcTable:         "`testdb2`.`testtable2`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Stopped.String(),
+			Message:          "no primary key",
+		},
+	}
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/WorkerMockValidationQuery", `return(true)`), IsNil)
+	c.Assert(w.StartSubTask(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, pb.Stage_Running, true), IsNil)
+	// get running task
+	resp, err := s.GetWorkerValidateStatus(ctx, &pb.GetValidationStatusRequest{
+		TaskName:     "testQueryValidator",
+		FilterStatus: "running", // case insensitive
+	})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsTrue)
+	c.Assert(len(resp.Msg), Equals, 0)
+	c.Assert(resp.Status, DeepEquals, expected[:1])
+	// get stopped task
+	resp, err = s.GetWorkerValidateStatus(ctx, &pb.GetValidationStatusRequest{
+		TaskName:     "testQueryValidator",
+		FilterStatus: "stopped", // case insensitive
+	})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsTrue)
+	c.Assert(len(resp.Msg), Equals, 0)
+	c.Assert(resp.Status, DeepEquals, expected[1:])
+	// get all
+	resp, err = s.GetWorkerValidateStatus(ctx, &pb.GetValidationStatusRequest{
+		TaskName: "testQueryValidator",
+	})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsTrue)
+	c.Assert(len(resp.Msg), Equals, 0)
+	c.Assert(resp.Status, DeepEquals, expected)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/WorkerMockValidationQuery"), IsNil)
+}
 
 func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	var (
