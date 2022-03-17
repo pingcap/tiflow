@@ -54,7 +54,6 @@ func init() {
 
 	cmd := execCommand("dbus-launch")
 	b, err := cmd.CombinedOutput()
-
 	if err != nil {
 		return
 	}
@@ -73,6 +72,10 @@ func init() {
 	// set DBUS_SESSION_BUS_ADDRESS env to avoid godbus create a new daemon-dubs process
 	os.Setenv(env, addr)
 	firstIndex = bytes.Index(b, []byte(DBUS_SESSION_BUS_PID))
+	if firstIndex == -1 {
+		log.Warn("can not parse daemon-dbus process id", zap.String("output", string(b)))
+		return
+	}
 	pid, _ = strconv.Atoi(strings.TrimSpace(string(b[firstIndex+len(DBUS_SESSION_BUS_PID)+1:])))
 	log.Info("daemon-dbus is started", zap.Int("pid", pid))
 }

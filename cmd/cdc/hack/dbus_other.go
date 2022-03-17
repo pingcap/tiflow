@@ -18,5 +18,4 @@ package hack
 
 // TryClearDbusDaemon do nothing for non-linux system
 func TryClearDbusDaemon() {
-
 }
