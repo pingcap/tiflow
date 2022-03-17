@@ -107,7 +107,7 @@ var defaultServerConfig = &ServerConfig{
 		},
 		EnableNewScheduler: true,
 		// Default leveldb sorter config
-		EnableDBSorter: false,
+		EnableDBSorter: true,
 		DB: &DBConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.

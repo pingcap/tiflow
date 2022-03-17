@@ -7,10 +7,10 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function check_dashboard_datasource() {
-	echo "check dashboard datasource"
-	check_grafana_dashboard_datasource "dm/dm-ansible/scripts/DM-Monitor-Standard.json"
-	check_grafana_dashboard_datasource "dm/dm-ansible/scripts/DM-Monitor-Professional.json"
-	echo "check dashboard datasource success"
+	echo "check dashboard data source"
+	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Standard.json"
+	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Professional.json"
+	echo "check dashboard data source success"
 }
 
 function run() {

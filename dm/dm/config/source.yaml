@@ -18,6 +18,9 @@ enable-relay: false
 #enable gtid in relay log unit
 enable-gtid: false
 
+# when this field is true, all tasks on the current source will be started, and vice versa
+enable: true
+
 #charset of DSN of source mysql/mariadb instance
 # charset: ''
 

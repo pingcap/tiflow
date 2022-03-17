@@ -62,8 +62,8 @@ function check_dump_s3_exist() {
 	schema_create="${1}-schema-create.sql"
 	table_schema="${1}.${2}-schema.sql"
 
-	file_should_exist "${s3_DBPATH}/${dumpPath}.${3}.${4}/${schema_create}"
-	file_should_exist "${s3_DBPATH}/${dumpPath}.${3}.${4}/${table_schema}"
+	file_should_exist "${s3_DBPATH}/${dumpPath}/${3}.${4}/${schema_create}"
+	file_should_exist "${s3_DBPATH}/${dumpPath}/${3}.${4}/${table_schema}"
 }
 
 function file_should_exist() {
@@ -134,7 +134,7 @@ function run_test() {
 	if $1; then
 		check_dump_s3_exist $db1 $tb1 $2 $SOURCE_ID1
 	else
-		dir_should_not_exist "${s3_DBPATH}/${dumpPath}.${2}.${SOURCE_ID1}"
+		dir_should_not_exist "${s3_DBPATH}/${dumpPath}/${2}.${SOURCE_ID1}"
 	fi
 
 	cleanup_s3

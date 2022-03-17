@@ -29,8 +29,6 @@ func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
 	// we need set ServerID and MaxAllowedPacket manually, because user don't need to config those field in openapi
 	sourceCfg2.ServerID = sourceCfg1.ServerID
 	sourceCfg2.From.MaxAllowedPacket = sourceCfg1.From.MaxAllowedPacket
-	// TODO: OpenAPI source config will add flavor
-	sourceCfg1.Flavor = ""
 
 	// we only need to make sure the source config that user can see is the same as the source config that user create
 	c.Assert(sourceCfg1.String(), check.Equals, sourceCfg2.String())

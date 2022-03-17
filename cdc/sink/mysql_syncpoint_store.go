@@ -227,6 +227,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	_, err = tx.Exec("insert ignore into "+syncpointDatabaseName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts, result) VALUES (?,?,?,?)", id, checkpointTs, secondaryTs, 0)
+
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
