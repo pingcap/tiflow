@@ -6,6 +6,17 @@ import { reactRouterPlugin } from 'vite-plugin-next-react-router'
 import reactPlugin from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 
+import { dependencies } from './package.json'
+
+function renderChunks(deps) {
+  let chunks = {}
+  Object.keys(deps).forEach(key => {
+    if (['react', 'react-router-dom', 'react-dom'].includes(key)) return
+    chunks[key] = [key]
+  })
+  return chunks
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/dashboard/',
@@ -36,14 +47,9 @@ export default defineConfig({
     rollupOptions: {
       plugins: [visualizer({ template: 'treemap' })],
       output: {
-        manualChunks(id) {
-          if (id.includes('rc-') || id.includes('antd')) {
-            return 'uikit'
-          }
-
-          if (id.includes('@ant-design/icons')) {
-            return 'icons'
-          }
+        manualChunks: {
+          vendor: ['react', 'react-router-dom', 'react-dom'],
+          ...renderChunks(dependencies),
         },
       },
     },
