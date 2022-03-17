@@ -172,19 +172,12 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(o.PendingOperation(), IsNil)
 
 	// handle `CREATE TABLE`.
-	rev3, err := o.PutInfoAddTable(infoCreate)
+	rev3, err := o.AddTable(infoCreate)
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Greater, rev2)
-	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	infoCreateWithVer := infoCreate
-	infoCreateWithVer.Version = 1
-	infoCreateWithVer.Revision = rev3
-	c.Assert(ifm[task][source][infoCreate.UpSchema][infoCreate.UpTable], DeepEquals, infoCreateWithVer)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], HasKey, infoCreate.UpTable)
 
 	// handle `DROP TABLE`.
-	rev4, err := o.DeleteInfoRemoveTable(infoDrop)
+	rev4, err := o.RemoveTable(infoDrop)
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Greater, rev3)
 	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
