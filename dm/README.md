@@ -1,24 +1,22 @@
-some useful integration test scripts
+## e2e test
+
+### a dump-load-sync demo
+
+start a 1-master-1-executor cluster, since now we can't require DMLoadWorker to 
+be started on the executor of DMDumpWorker.
 
 ```shell
-mysql -P4000 -h127.0.0.1 -uroot -e "drop database dmmeta"
-mysql -P4000 -h127.0.0.1 -uroot -e "drop database test"  
+cd sample && ./prepare.sh
+rm -rf /tmp/df || true && rm -rf /tmp/dataflow || true
+docker-compose -f ./1m1e.yaml up --force-recreate | tee /tmp/df.log
 ```
 
+start MySQL listening on 0.0.0.0:3306 with user root and password "123456"
+start TiDB listening on 0.0.0.0:4000 with user root and no password
+
+in another shell
 ```shell
-bin/master --config=./sample/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr 127.0.0.1:10240 > /tmp/master.log &
-bin/executor --config=./sample/config/executor.toml --join 127.0.0.1:10240 --worker-addr 0.0.0.0:10241 --advertise-addr 127.0.0.1:10241 > /tmp/executor.log &
+cd ./test/e2e && go test -count=1 -v -run=TestDMSubtask
 ```
 
-```shell
-bin/master-client --master-addr 127.0.0.1:10240 submit-job --job-type DM --job-config sample/config/dm-subtask.toml
-```
-
-```shell
-mysql -P4000 -h127.0.0.1 -uroot -e "show databases"
-```
-
-```shell
-killall master
-killall executor
-```
+the test should be passed.

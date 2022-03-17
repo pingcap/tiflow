@@ -111,7 +111,12 @@ func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
 }
 
 func (s *SubTaskMaster) Tick(ctx context.Context) error {
-	status := s.GetWorkers()[s.currWorkerID].Status()
+	worker := s.GetWorkers()[s.currWorkerID]
+	if worker == nil {
+		// not ready? will this happen?
+		return nil
+	}
+	status := worker.Status()
 	switch status.Code {
 	case lib.WorkerStatusFinished:
 		log.L().Info("worker finished", zap.String("currWorkerID", s.currWorkerID))

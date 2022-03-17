@@ -37,6 +37,8 @@ services:
                 depends_on:
                         - "server-master"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
                 volumes:
@@ -55,6 +57,8 @@ services:
                 depends_on:
                         - "server-master"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
                 volumes:
@@ -73,3 +77,5 @@ services:
                 depends_on:
                         - "server-master"
                 restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"

@@ -9,10 +9,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hanfei1991/microcosm/servermaster"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/hanfei1991/microcosm/servermaster"
 )
 
 // 1. parse config

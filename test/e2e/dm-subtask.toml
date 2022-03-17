@@ -55,13 +55,13 @@ ansi-quotes = true
 
 
 [from]
-  host = "127.0.0.1"
+  host = "host.docker.internal"
   port = 3306
   user = "root"
   password = "123456"
 
 [to]
-  host = "127.0.0.1"
+  host = "host.docker.internal"
   port = 4000
   user = "root"
   password = ""

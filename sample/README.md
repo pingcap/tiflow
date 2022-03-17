@@ -16,7 +16,7 @@ Use `./stop.sh 1m1e.yaml` to destroy the cluster.
 
 ## Run Demo
 
-docker-compose -f ./3m3e.yaml -f ./demo.yaml up
+docker-compose -f ./3m3e.yaml -f ./demo.yaml up --force-recreate
 
 ## Use Master Client to Run Demo workload
 

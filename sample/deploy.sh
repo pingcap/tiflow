@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker-compose -f $1 up -d
+docker-compose -f $1 up -d --force-recreate

@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+
 	"github.com/hanfei1991/microcosm/client"
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -26,6 +27,19 @@ type Config struct {
 	JobNum      int      `json:"job_num"`
 	DemoDataDir string   `json:"demo_data_dir"`
 	FileNum     int      `json:"file_num"`
+}
+
+func NewConfigFromFile(file string) (*Config, error) {
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	var config Config
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 type DemoClient struct {
@@ -44,25 +58,13 @@ func NewDemoClient(ctx context.Context, addr string) (*DemoClient, error) {
 	}, err
 }
 
-func openFileAndReadString(path string) (content []byte, err error) {
-	fp, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer fp.Close()
-	return ioutil.ReadAll(fp)
-}
-
 func TestSubmitTest(t *testing.T) {
 	configPath := os.Getenv("CONFIG")
 	if configPath == "" {
 		configPath = "./docker.json"
 	}
-	config := &Config{}
-	configBytes, err := openFileAndReadString(configPath)
-	require.Nil(t, err)
-	err = json.Unmarshal(configBytes, config)
-	require.Nil(t, err)
+	config, err := NewConfigFromFile(configPath)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
