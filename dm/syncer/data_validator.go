@@ -70,6 +70,8 @@ const (
 	rowDeleted
 	rowUpdated
 	flushCheckpoint
+
+	rowChangeTypeCount = 3
 )
 
 // change of table
@@ -140,13 +142,15 @@ type DataValidator struct {
 	result           pb.ProcessResult
 	validateInterval time.Duration
 	workers          []*validateWorker
-	changeEventCount []atomic.Int64
 	workerCnt        int
 
 	// whether the validation progress ever reached syncer
 	// if it's false, we don't mark failed row change as error to reduce false-positive
 	reachedSyncer atomic.Bool
 
+	processedRowCounts   []atomic.Int64
+	pendingRowCounts     []atomic.Int64
+	errorRowCounts       []atomic.Int64
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChange
@@ -161,7 +165,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *D
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
-	v.changeEventCount = make([]atomic.Int64, 3)
+	v.processedRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 	v.workers = make([]*validateWorker, v.workerCnt)
 	v.validateInterval = validationInterval
 	v.persistHelper = newValidatorCheckpointHelper(v)
@@ -177,6 +181,8 @@ func (v *DataValidator) initialize() error {
 	v.result.Reset()
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
+	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
+	v.errorRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -263,11 +269,19 @@ func (v *DataValidator) printStatusRoutine() {
 		case <-v.ctx.Done():
 			return
 		case <-time.After(validatorStatusInterval):
-			// todo: status about pending row changes
-			v.L.Info("processed event status",
-				zap.Int64("insert", v.changeEventCount[rowInsert].Load()),
-				zap.Int64("update", v.changeEventCount[rowUpdated].Load()),
-				zap.Int64("delete", v.changeEventCount[rowDeleted].Load()),
+			processed := []int64{v.processedRowCounts[rowInsert].Load(),
+				v.processedRowCounts[rowUpdated].Load(),
+				v.processedRowCounts[rowDeleted].Load()}
+			pending := []int64{v.pendingRowCounts[rowInsert].Load(),
+				v.pendingRowCounts[rowUpdated].Load(),
+				v.pendingRowCounts[rowDeleted].Load()}
+			errorCounts := []int64{v.errorRowCounts[newValidateErrorRow].Load(),
+				v.errorRowCounts[ignoredValidateErrorRow].Load(),
+				v.errorRowCounts[resolvedValidateErrorRow].Load()}
+			v.L.Info("validator status",
+				zap.Int64s("processed(i, u, d)", processed),
+				zap.Int64s("pending(i, u, d)", pending),
+				zap.Int64s("error(new, ignored, resolved)", errorCounts),
 			)
 		}
 	}
@@ -649,7 +663,6 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	changeType := getRowChangeType(header.EventType)
-	v.changeEventCount[changeType].Inc()
 
 	step := 1
 	if changeType == rowUpdated {
@@ -679,6 +692,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 					Data:  row,
 					Tp:    rowDeleted,
 				})
+				v.processedRowCounts[rowDeleted].Inc()
 				afterRowChangeType = rowInsert
 			}
 			v.dispatchRowChange(afterKey, &rowChange{
@@ -687,6 +701,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				Data:  afterRow,
 				Tp:    afterRowChangeType,
 			})
+			v.processedRowCounts[afterRowChangeType].Inc()
 		} else {
 			v.dispatchRowChange(key, &rowChange{
 				table: table,
@@ -694,6 +709,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				Data:  row,
 				Tp:    changeType,
 			})
+			v.processedRowCounts[changeType].Inc()
 		}
 	}
 	return nil
@@ -749,7 +765,27 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	if err != nil {
 		return err
 	}
+
+	countMap, err := v.persistHelper.loadErrorCount()
+	if err != nil {
+		return err
+	}
+	for i := range v.errorRowCounts {
+		v.errorRowCounts[i].Store(countMap[validateErrorStatus(i)])
+	}
 	return nil
+}
+
+func (v *DataValidator) incrErrorRowCount(status validateErrorStatus, cnt int) {
+	v.errorRowCounts[status].Add(int64(cnt))
+}
+
+func (v *DataValidator) hasReachedSyncer() bool {
+	return v.reachedSyncer.Load()
+}
+
+func (v *DataValidator) addPendingRowCount(tp rowChangeType, cnt int64) {
+	v.pendingRowCounts[tp].Add(cnt)
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent.

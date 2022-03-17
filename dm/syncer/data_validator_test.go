@@ -452,9 +452,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	validator.Stop()
-	require.Equal(t, int64(1), validator.changeEventCount[rowInsert].Load())
-	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
-	require.Equal(t, int64(1), validator.changeEventCount[rowDeleted].Load())
+	require.Equal(t, int64(1), validator.processedRowCounts[rowInsert].Load())
+	require.Equal(t, int64(1), validator.processedRowCounts[rowUpdated].Load())
+	require.Equal(t, int64(1), validator.processedRowCounts[rowDeleted].Load())
 
 	require.NotNil(t, validator.location)
 	require.Equal(t, mysql.Position{Name: "mysql-bin.000001", Pos: 100}, validator.location.Position)

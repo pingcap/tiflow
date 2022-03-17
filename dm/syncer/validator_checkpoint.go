@@ -37,11 +37,11 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-type validateErrorState int
+type validateErrorStatus int
 
 const (
 	// todo: maybe move to some common place, dmctl may use it
-	newValidateErrorRow validateErrorState = iota
+	newValidateErrorRow validateErrorStatus = iota
 	//nolint
 	ignoredValidateErrorRow
 	//nolint
@@ -161,10 +161,11 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			data JSON NOT NULL,
 			dst_data JSON NOT NULL,
 			error_type int NOT NULL,
-			status int not null,
+			status int NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, row_pk)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, row_pk),
+            INDEX idx_status(status)
 		)`,
 		`CREATE TABLE IF NOT EXISTS ` + c.tableStatusTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -366,6 +367,7 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	c.tctx.L().Info("checkpoint loaded", zap.Reflect("loc", location))
 	return location, nil
 }
 
@@ -379,6 +381,7 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 	}
 	defer rows.Close()
 
+	var count int
 	for rows.Next() {
 		var (
 			schemaName, tableName, key string
@@ -403,11 +406,13 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 		}
 		tblChange.rows[key] = row
 		rev = revision
+		count++
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
+	c.tctx.L().Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev))
 	return res, rev, nil
 }
 
@@ -444,7 +449,34 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	c.tctx.L().Info("table status loaded", zap.Reflect("count", len(res)))
 	return res, nil
+}
+
+func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64, error) {
+	res := make(map[validateErrorStatus]int64)
+    sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
+    rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        var status int
+        var count int64
+        err = rows.Scan(&status, &count)
+        if err != nil {
+            return nil, err
+        }
+        res[validateErrorStatus(status)] = count
+    }
+
+    if err = rows.Err(); err != nil {
+        return nil, err
+    }
+	c.tctx.L().Info("error count loaded", zap.Reflect("counts", res))
+    return res, nil
 }
 
 func (c *validatorPersistHelper) setRevision(rev int64) {

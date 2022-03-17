@@ -69,7 +69,7 @@ type validateWorker struct {
 	conn              *dbconn.DBConn
 	rowChangeCh       chan *rowChange
 	pendingChangesMap map[string]*tableChange
-	pendingRowCount   atomic.Int64
+	pendingRowCounts  []int64
 	accuRowCount      atomic.Int64 // accumulated row count from channel
 	batchSize         int
 	errorRows         []*validateFailedRow
@@ -89,6 +89,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		conn:               v.toDBConns[id],
 		rowChangeCh:        make(chan *rowChange, workerChannelSize),
 		pendingChangesMap:  make(map[string]*tableChange),
+		pendingRowCounts:   make([]int64, rowChangeTypeCount),
 		batchSize:          maxBatchSize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
 	}
@@ -147,7 +148,7 @@ func (vw *validateWorker) updateRowChange(row *rowChange) {
 		val.FailedCnt = 0 // clear failed count
 	} else {
 		change.rows[row.Key] = row
-		vw.pendingRowCount.Inc()
+		vw.incrPendingRowCount(row.Tp)
 	}
 }
 
@@ -205,7 +206,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	vw.Lock()
 	defer vw.Unlock()
 
-	var newPendingCnt int64
+	newPendingCnt := make([]int64, rowChangeTypeCount)
 	allErrorRows := make([]*validateFailedRow, 0)
 	newPendingChanges := make(map[string]*tableChange)
 	validateTS := time.Now().Unix()
@@ -214,7 +215,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 		newPendingRows := make(map[string]*rowChange)
 		for pk, row := range rows {
 			r := tblChange.rows[pk]
-			if vw.validator.reachedSyncer.Load() {
+			if vw.validator.hasReachedSyncer() {
 				r.FailedCnt++
 				if r.FirstValidateTS == 0 {
 					r.FirstValidateTS = validateTS
@@ -229,20 +230,22 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 			} else {
 				newPendingRows[pk] = r
 			}
+			newPendingCnt[r.Tp]++
 		}
 		if len(newPendingRows) > 0 {
 			newPendingChanges[tblKey] = &tableChange{
 				table: tblChange.table,
 				rows:  newPendingRows,
 			}
-			newPendingCnt += int64(len(newPendingRows))
 		}
 	}
 
-	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", newPendingCnt))
-	vw.pendingRowCount.Store(newPendingCnt)
+	vw.L.Debug("pending row count (insert, update, delete)", zap.Int64s("before", vw.pendingRowCounts),
+		zap.Int64s("after", newPendingCnt))
+	vw.setPendingRowCounts(newPendingCnt)
 	vw.pendingChangesMap = newPendingChanges
 	vw.errorRows = append(vw.errorRows, allErrorRows...)
+	vw.validator.incrErrorRowCount(newValidateErrorRow, len(allErrorRows))
 }
 
 func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
@@ -421,6 +424,19 @@ func (vw *validateWorker) resetErrorRows() {
 	vw.Lock()
 	defer vw.Unlock()
 	vw.errorRows = make([]*validateFailedRow, 0)
+}
+
+func (vw *validateWorker) incrPendingRowCount(tp rowChangeType) {
+	vw.pendingRowCounts[tp]++
+	vw.validator.addPendingRowCount(tp, 1)
+}
+
+func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
+	for tp, val := range newCounts {
+		diff := val - vw.pendingRowCounts[tp]
+		vw.pendingRowCounts[tp] = val
+		vw.validator.addPendingRowCount(rowChangeType(tp), diff)
+	}
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {

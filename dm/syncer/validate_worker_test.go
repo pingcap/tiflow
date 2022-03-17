@@ -92,14 +92,14 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 		if mode == config.ValidationFull {
 			require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 2)
-			require.Equal(t, int64(2), worker.pendingRowCount.Load())
+			require.Equal(t, int64(2), worker.pendingRowCounts.Load())
 			require.Contains(t, worker.pendingChangesMap[tbl1.String()].rows, "2")
 			require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["2"].Tp)
 			require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["2"].FailedCnt)
 		} else {
 			// fast mode
 			require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
-			require.Equal(t, int64(1), worker.pendingRowCount.Load())
+			require.Equal(t, int64(1), worker.pendingRowCounts.Load())
 		}
 
 		// validate again, this time row with pk=2 validate success
@@ -107,7 +107,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "2b"))
 		worker.validateTableChange()
 		require.Zero(t, validator.result.Errors)
-		require.Equal(t, int64(1), worker.pendingRowCount.Load())
+		require.Equal(t, int64(1), worker.pendingRowCounts.Load())
 		require.Len(t, worker.pendingChangesMap, 1)
 		require.Contains(t, worker.pendingChangesMap, tbl1.String())
 		require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
@@ -137,7 +137,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			sqlmock.NewRows([]string{"a", "b"}).AddRow("aa", "b"))
 		worker.validateTableChange()
 		require.Zero(t, validator.result.Errors)
-		require.Equal(t, int64(2), worker.pendingRowCount.Load())
+		require.Equal(t, int64(2), worker.pendingRowCounts.Load())
 		require.Len(t, worker.pendingChangesMap, 2)
 		require.Contains(t, worker.pendingChangesMap, tbl1.String())
 		require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
@@ -158,7 +158,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			sqlmock.NewRows([]string{"a", "b"}))
 		worker.validateTableChange()
 		require.Zero(t, validator.result.Errors)
-		require.Equal(t, int64(0), worker.pendingRowCount.Load())
+		require.Equal(t, int64(0), worker.pendingRowCounts.Load())
 		require.Len(t, worker.pendingChangesMap, 0)
 
 		//
@@ -188,7 +188,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
 		worker.validateTableChange()
 		require.Zero(t, validator.result.Errors)
-		require.Equal(t, int64(1), worker.pendingRowCount.Load())
+		require.Equal(t, int64(1), worker.pendingRowCounts.Load())
 		require.Len(t, worker.pendingChangesMap, 1)
 		require.Contains(t, worker.pendingChangesMap, tbl1.String())
 		require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
@@ -203,7 +203,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Zero(t, validator.result.Errors)
 		if mode == config.ValidationFull {
 			// remain error
-			require.Equal(t, int64(1), worker.pendingRowCount.Load())
+			require.Equal(t, int64(1), worker.pendingRowCounts.Load())
 			require.Len(t, worker.pendingChangesMap, 1)
 			require.Contains(t, worker.pendingChangesMap, tbl1.String())
 			require.Len(t, worker.pendingChangesMap[tbl1.String()].rows, 1)
@@ -212,7 +212,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["3"].FailedCnt) // fail again
 		} else {
 			// correct and clear all errors
-			require.Equal(t, int64(0), worker.pendingRowCount.Load())
+			require.Equal(t, int64(0), worker.pendingRowCounts.Load())
 			require.Len(t, worker.pendingChangesMap, 0)
 		}
 	}
