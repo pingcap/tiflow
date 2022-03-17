@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -150,8 +149,8 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 func (st *SubTask) initUnits(relay relay.Process) error {
 	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
 	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
-		// NOTE: LoaderConfig.Dir is always not empty because we only dump certs when we use lightning.
-		if err := st.cfg.To.Security.DumpTLSContent(filepath.Join(st.cfg.LoaderConfig.Dir, "..")); err != nil {
+		// NOTE: LoaderConfig.Dir may be a s3 path, but Lightning just supports local tls files, we need to use a new local dir.
+		if err := st.cfg.To.Security.DumpTLSContent("./" + loader.TmpTLSConfigPath + "_" + st.cfg.Name); err != nil {
 			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
 		}
 	}
@@ -268,6 +267,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 	st.Lock()
 	defer st.Unlock()
+
 	if st.cfg.ValidatorCfg.Mode != config.ValidationFast && st.cfg.ValidatorCfg.Mode != config.ValidationFull {
 		return
 	}
