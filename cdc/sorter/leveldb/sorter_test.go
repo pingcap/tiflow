@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,11 +38,12 @@ func newTestSorter(name string, capacity int) (Sorter, actor.Mailbox) {
 			dbRouter:  router,
 			dbActorID: mb.ID(),
 			errCh:     make(chan error, 1),
+			closedWg:  &sync.WaitGroup{},
 		},
 		writerRouter:  router,
 		writerActorID: mb.ID(),
 		readerRouter:  router,
-		readerActorID: mb.ID(),
+		ReaderActorID: mb.ID(),
 	}
 	return s, mb
 }
@@ -101,32 +103,12 @@ func TestOutput(t *testing.T) {
 		}, task.SorterTask)
 }
 
-func TestCleanupFunc(t *testing.T) {
-	t.Parallel()
-
-	s, mb := newTestSorter(t.Name(), 1)
-
-	fn := s.CleanupFunc()
-	require.Nil(t, fn(context.Background()))
-	task, ok := mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t,
-		message.Task{
-			UID:     s.uid,
-			TableID: s.tableID,
-			DeleteReq: &message.DeleteRequest{
-				Range: [2][]byte{
-					encoding.EncodeTsKey(s.uid, s.tableID, 0),
-					encoding.EncodeTsKey(s.uid, s.tableID+1, 0),
-				},
-			},
-		}, task.SorterTask)
-}
-
 func TestRunAndReportError(t *testing.T) {
 	t.Parallel()
 
-	s, mb := newTestSorter(t.Name(), 2)
+	// Run exits with three messages
+	cap := 3
+	s, mb := newTestSorter(t.Name(), cap)
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.common.reportError(
@@ -141,6 +123,24 @@ func TestRunAndReportError(t *testing.T) {
 	msg, ok = mb.Receive()
 	require.True(t, ok)
 	require.EqualValues(t, actormsg.StopMessage(), msg)
+	// Cleanup
+	msg, ok = mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t,
+		message.Task{
+			UID:     s.uid,
+			TableID: s.tableID,
+			DeleteReq: &message.DeleteRequest{
+				Range: [2][]byte{
+					encoding.EncodeTsKey(s.uid, s.tableID, 0),
+					encoding.EncodeTsKey(s.uid, s.tableID+1, 0),
+				},
+			},
+		}, msg.SorterTask)
+
+	// No more message.
+	msg, ok = mb.Receive()
+	require.False(t, ok)
 
 	// Must be nonblock.
 	s.common.reportError(

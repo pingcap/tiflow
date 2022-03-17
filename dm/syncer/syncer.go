@@ -86,7 +86,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	defaultMaxPauseOrStopWaitTime = 10 * time.Second
 
@@ -1661,10 +1660,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
-
-	failpoint.Inject("S3GetDumpFilesCheck", func() {
-		cleanDumpFile = false
-	})
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
@@ -3279,9 +3274,6 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
-		failpoint.Inject("S3GetDumpFilesCheck", func() {
-			panic(errors.Annotate(err, "fail to get dump files"))
-		})
 		return err
 	}
 	var dbs, tables []string
@@ -3575,6 +3567,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
 // 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
@@ -3596,8 +3589,19 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
 	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+
+	// support fields that changed in func `copyConfigFromSource`
+	oldCfg.From = newCfg.From
+	oldCfg.Flavor = newCfg.Flavor
+	oldCfg.ServerID = newCfg.ServerID
+	oldCfg.RelayDir = newCfg.RelayDir
+	oldCfg.UseRelay = newCfg.UseRelay
+	oldCfg.EnableGTID = newCfg.EnableGTID
+	oldCfg.AutoFixGTID = newCfg.AutoFixGTID
+	oldCfg.CaseSensitive = newCfg.CaseSensitive
+
 	if oldCfg.String() != newCfg.String() {
-		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
 }
@@ -3701,6 +3705,16 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 	// update syncer config
 	s.cfg.SyncerConfig = cfg.SyncerConfig
+
+	// updated fileds that changed in func `copyConfigFromSource`
+	s.cfg.From = cfg.From
+	s.cfg.Flavor = cfg.Flavor
+	s.cfg.ServerID = cfg.ServerID
+	s.cfg.RelayDir = cfg.RelayDir
+	s.cfg.UseRelay = cfg.UseRelay
+	s.cfg.EnableGTID = cfg.EnableGTID
+	s.cfg.AutoFixGTID = cfg.AutoFixGTID
+	s.cfg.CaseSensitive = cfg.CaseSensitive
 	return nil
 }
 

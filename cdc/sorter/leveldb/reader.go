@@ -32,6 +32,7 @@ import (
 // reader accepts out-of-order raw kv entries and output sorted entries
 type reader struct {
 	common
+	stopped bool
 
 	state pollState
 
@@ -396,6 +397,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		switch msgs[i].Tp {
 		case actormsg.TypeSorterTask:
 		case actormsg.TypeStop:
+			r.reportError("receive stop message", nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
@@ -403,6 +405,11 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		// Update the max commit ts and resolved ts of all received events.
 		ts := msgs[i].SorterTask.ReadTs
 		r.state.advanceMaxTs(ts.MaxCommitTs, ts.MaxResolvedTs)
+
+		// Test only message.
+		if msgs[i].SorterTask.Test != nil {
+			time.Sleep(msgs[i].SorterTask.Test.Sleep)
+		}
 	}
 
 	// Length of buffered resolved events.
@@ -482,4 +489,15 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		return false
 	}
 	return true
+}
+
+// OnClose releases reader resource.
+func (r *reader) OnClose() {
+	if r.stopped {
+		return
+	}
+	r.stopped = true
+	// Must release iterator before stopping, otherwise it leaks iterator.
+	_ = r.state.tryReleaseIterator()
+	r.common.closedWg.Done()
 }

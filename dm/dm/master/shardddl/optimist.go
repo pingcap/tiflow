@@ -95,9 +95,8 @@ func (o *Optimist) Start(pCtx context.Context, etcdCli *clientv3.Client) error {
 // Close closes the Optimist instance.
 func (o *Optimist) Close() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	if o.closed {
+		o.mu.Unlock()
 		return
 	}
 
@@ -106,8 +105,11 @@ func (o *Optimist) Close() {
 		o.cancel = nil
 	}
 
-	o.wg.Wait()
 	o.closed = true // closed now.
+	o.mu.Unlock()
+	// unlock before wg.Wait() to avoid deadlock because other goroutines acquire the lock.
+	// such as https://github.com/pingcap/tiflow/blob/92fc4c4/dm/dm/master/shardddl/optimist.go#L686
+	o.wg.Wait()
 	o.logger.Info("the shard DDL optimist has closed")
 }
 

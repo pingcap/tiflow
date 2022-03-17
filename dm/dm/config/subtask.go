@@ -411,9 +411,11 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		// add suffix
 		var dirSuffix string
 		if isS3 {
-			dirSuffix = c.Name + "." + c.SourceID
+			// we will dump files to s3 dir's subdirectory
+			dirSuffix = "/" + c.Name + "." + c.SourceID
 		} else {
-			dirSuffix = c.Name
+			// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
+			dirSuffix = "." + c.Name
 		}
 		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {

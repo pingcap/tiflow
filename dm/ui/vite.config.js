@@ -5,7 +5,6 @@ import tsConfigPath from 'vite-tsconfig-paths'
 import { reactRouterPlugin } from 'vite-plugin-next-react-router'
 import reactPlugin from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
-import vitePluginImp from 'vite-plugin-imp'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -16,22 +15,12 @@ export default defineConfig({
     tsConfigPath(),
     reactRouterPlugin({ async: false }),
     i18nextScanner({ langs: ['en', 'zh'] }),
-    vitePluginImp({
-      libList: [
-        {
-          libName: 'lodash',
-          libDirectory: '',
-          camel2DashComponentName: false,
-          style: () => false,
-        },
-      ],
-    }),
   ],
   server: {
     port: 8080,
     proxy: {
       '/api/v1': {
-        target: 'http://127.0.0.1:8261',
+        target: 'http://172.16.5.32:8261',
         changeOrigin: true,
       },
     },
@@ -54,10 +43,6 @@ export default defineConfig({
 
           if (id.includes('@ant-design/icons')) {
             return 'icons'
-          }
-
-          if (id.includes('node_modules')) {
-            return 'vendor'
           }
         },
       },

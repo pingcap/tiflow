@@ -98,7 +98,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
-
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	changefeedVars := cdcCtx.ChangefeedVars()
@@ -157,6 +156,11 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
+}
+
+// Close implements Actor interface.
+// TODO: implements table actor stop here.
+func (t *tableActor) OnClose() {
 }
 
 func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
@@ -314,8 +318,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 func (t *tableActor) getSinkAsyncMessageHolder(
 	sdtTableContext context.Context,
-	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error) {
-
+	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error,
+) {
 	var messageFetchFunc asyncMessageHolderFunc = func() *pipeline.Message {
 		return sortActorNodeContext.tryGetProcessedMessage()
 	}
@@ -387,7 +391,9 @@ func (t *tableActor) stop(err error) {
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
 	t.stop(err)
-	t.reportErr(err)
+	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+		t.reportErr(err)
+	}
 }
 
 // ============ Implement TablePipline, must be threadsafe ============
