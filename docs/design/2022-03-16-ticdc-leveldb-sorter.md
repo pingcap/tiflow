@@ -26,13 +26,13 @@
 ## Introduction
 
 This document provides a complete design on implementing leveldb sorter,
-a resource-firendly sorter with predictable and controllable usage of CPU,
-memory, on-disk files, open file descriptors and goroutines.
+a resource-friendly sorter with predictable and controllable usage of CPU,
+memory, on-disk files, open file descriptors, and goroutines.
 
 ## Motivation or Background
 
-We have met issues[1] about resource exhausted issues about TiCDC. One of the
-main source of consumption is TiCDC sorter.
+We have met issues <sup>[1]</sup> about resource exhausted issues about TiCDC.
+One of the main source of consumption is TiCDC sorter.
 
 In the current architecture, the resources consumed sorter is proportional to
 the number of tables, in terms of goroutines and CPU.
@@ -43,26 +43,26 @@ a sorter that only consumes O(1) or O(logN) resources.
 ## Detailed Design
 
 LevelDB is a fast on-disk key-value storage that provides ordered key-value
-iteration. Also it has matured resource management for CPU, memory, on-disk
-files and open file descriptors. It matches for TiCDC sorter requirements.
+iteration. Also, it has matured resource management for CPU, memory, on-disk
+files and open file descriptors. It matches TiCDC sorter requirements.
 
 To further limit consumption, TiCDC creates a fixed set of leveldb instances
 that are shared by multiple tables.
 
-The leveldb sorter is driven by actors that runs on a fixed-size of goroutine
+The leveldb sorter is driven by actors that run on a fixed-size of goroutine
 pool. This addresses goroutine management issues.
 
-The leveldb sorter is composed by five structs,
+The leveldb sorter is composed of five structs,
 
 1. `DBActor` is a struct that reads (by taking iterators) and writes to leveldb
    directly. It is shared by multiple tables. It is driven by an actor.
-2. `TableSorter` is a struct that implments `Sorter` interface and manages
+2. `TableSorter` is a struct that implements `Sorter` interface and manages
    table-level states. It forwards `Sorter.AddEntry` to `Writer` and forwards
    `Sorter.Output` to `Reader`.
-3. `Writer` is a strcut that collects unordered key-value change data and
+3. `Writer` is a struct that collects unordered key-value change data and
    forwards to `DBActor`. It is driven by an actor.
-4. `Reader` is a strcut that reads orderd key-value change data from iterator.
-5. `Compactor` is an agarbage collector for leveldb. It is shared by multiple
+4. `Reader` is a struct that reads ordered key-value change data from iterators.
+5. `Compactor` is a garbage collector for leveldb. It is shared by multiple
    tables. It is driven by an actor.
 
 _Quantitative relationship between above structs_
@@ -103,16 +103,16 @@ starts, and it serves two purposes:
 
 `CRTs` has higher priority than start ts, because TiCDC needs to output events
 in commit order.
-`start ts` has higher priority than key, because TiCDC needs to group events
+`start ts` has a higher priority than key because TiCDC needs to group events
 in the same transaction, and `start ts` is the transaction ID.
 `OpType` has higher priority than key and `Delete` has higher priority
 than `Put`, because REPLACE SQL might change the key by deleting the original
 key and putting a new key. TiCDC must execute `Delete` first,
-otherwise data lost.
+otherwise, data is lost.
 
 #### Value
 
-Value is binary representation of events, encoded by MessagePack[2].
+Value is a binary representation of events, encoded by MessagePack<sup>[2]</sup>.
 
 ```
 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6
@@ -136,7 +136,7 @@ stopped.
 ### Snapshot and Iterator
 
 Leveldb sorter limits the total number and the max alive time of snapshots and
-iterators, because they pin memtable and keeps obsolete sst files on disk.
+iterators, because they pin memtable and keep obsolete sst files on disk.
 Too many concurrent snapshots and iterators can easily cause performance and
 stability issues.
 
@@ -155,12 +155,12 @@ Data can only be read after they were written to leveldb, it adds extra latency
 to changefeed replication lag. It ranges from sub milliseconds to minutes
 (write stall) depending on upstream write QPS.
 
-As an optimization, we can implement a storage that stores data in memory or
-on disk depending on data size as a future work.
+As an optimization, we can implement storage that stores data in memory or
+on-disk depending on data size as future work.
 
 ## Test Design
 
-Leveldb sorter is an internal optimization. For tests, we force on scenario
+Leveldb sorter is an internal optimization. For tests, we force on the scenario
 tests and benchmark.
 
 ### Functional Tests
@@ -170,7 +170,7 @@ Regular unit tests and integration tests, no additional tests required.
 
 #### Unit test
 
-Coverage should be more than 75% in new added code.
+Coverage should be more than 75% in newly added code.
 
 ### Scenario Tests
 
@@ -185,7 +185,7 @@ We will test the scenario of replicating 100,000 tables in one TiCDC node.
 
 #### Compatibility with other features/components
 
-Should be compactiable with other features.
+Should be compatible with other features.
 
 #### Upgrade Downgrade Compatibility
 
@@ -203,3 +203,6 @@ N/A
 ## Unresolved Questions
 
 N/A
+
+[1]: https://github.com/pingcap/tiflow/issues/2698
+[2]: https://msgpack.org
