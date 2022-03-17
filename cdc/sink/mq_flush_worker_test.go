@@ -191,6 +191,10 @@ func TestGroup(t *testing.T) {
 		topic:     "test",
 		partition: 2,
 	}
+	key3 := topicPartitionKey{
+		topic:     "test1",
+		partition: 2,
+	}
 	worker, _ := newTestWorker()
 
 	events := []mqEvent{
@@ -226,10 +230,18 @@ func TestGroup(t *testing.T) {
 			},
 			key: key2,
 		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			key: key3,
+		},
 	}
 
 	paritionedRows := worker.group(events)
-	require.Len(t, paritionedRows, 2)
+	require.Len(t, paritionedRows, 3)
 	require.Len(t, paritionedRows[key1], 3)
 	// We must ensure that the sequence is not broken.
 	require.LessOrEqual(
@@ -238,6 +250,7 @@ func TestGroup(t *testing.T) {
 		paritionedRows[key1][2].CommitTs,
 	)
 	require.Len(t, paritionedRows[key2], 1)
+	require.Len(t, paritionedRows[key3], 1)
 }
 
 func TestAsyncSend(t *testing.T) {
