@@ -87,7 +87,7 @@ func TryClearDbusDaemon() {
 		if err == nil {
 			// Kill the process
 			log.Info("killing daemon-dbus process", zap.Int("pid", pid))
-			proc.Kill()
+			_ = proc.Kill()
 		}
 	}
 }
