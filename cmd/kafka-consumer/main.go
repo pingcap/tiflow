@@ -183,7 +183,8 @@ func init() {
 
 	eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
 	if configFile != "" {
-		if err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig); err != nil {
+		if err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer",
+			eventRouterReplicaConfig); err != nil {
 			log.Panic("invalid config file for kafka consumer",
 				zap.Error(err),
 				zap.String("config", configFile))
@@ -212,7 +213,9 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 	if !exist {
 		return 0, errors.Errorf("can not find topic %s", topic)
 	}
-	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+	log.Info("get partition number of topic",
+		zap.String("topic", topic),
+		zap.Int32("partition_num", topicDetail.NumPartitions))
 	return topicDetail.NumPartitions, nil
 }
 

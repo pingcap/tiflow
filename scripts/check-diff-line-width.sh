@@ -20,7 +20,7 @@ set -e
 # the pattern `\(#[0-9]+\)$`. It's usually a master branch commit.
 BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 
-git --no-pager diff $BASE_HASH -U0 -- cdc pkg |
+git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd |
 	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
 	awk '
