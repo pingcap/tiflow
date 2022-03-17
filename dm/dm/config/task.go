@@ -989,6 +989,25 @@ func NewMySQLInstancesForDowngrade(mysqlInstances []*MySQLInstance) []*MySQLInst
 	return mysqlInstancesForDowngrade
 }
 
+// LoaderConfigForDowngrade is the base configuration for loader in v2.0.
+// This config is used for downgrade(config export) from a higher dmctl version.
+// When we add any new config item into LoaderConfig, we should update it also.
+type LoaderConfigForDowngrade struct {
+	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
+}
+
+func NewLoaderConfigForDowngrade(loaderConfigs map[string]*LoaderConfig) map[string]*LoaderConfigForDowngrade {
+	loaderConfigsForDowngrade := make(map[string]*LoaderConfigForDowngrade, len(loaderConfigs))
+	for k, v := range loaderConfigs {
+		loaderConfigsForDowngrade[k] = &LoaderConfigForDowngrade{
+			PoolSize: v.PoolSize,
+			Dir:      v.Dir,
+		}
+	}
+	return loaderConfigsForDowngrade
+}
+
 // SyncerConfigForDowngrade is the base configuration for syncer in v2.0.
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SyncerConfig, we should update it also.
@@ -1056,7 +1075,7 @@ type TaskConfigForDowngrade struct {
 	BWList                  map[string]*filter.Rules             `yaml:"black-white-list"`
 	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
 	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
-	Loaders                 map[string]*LoaderConfig             `yaml:"loaders"`
+	Loaders                 map[string]*LoaderConfigForDowngrade `yaml:"loaders"`
 	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
 	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
 	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
@@ -1091,7 +1110,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 		BWList:                  taskConfig.BWList,
 		BAList:                  taskConfig.BAList,
 		Mydumpers:               taskConfig.Mydumpers,
-		Loaders:                 taskConfig.Loaders,
+		Loaders:                 NewLoaderConfigForDowngrade(taskConfig.Loaders),
 		Syncers:                 NewSyncerConfigsForDowngrade(taskConfig.Syncers),
 		CleanDumpFile:           taskConfig.CleanDumpFile,
 		EnableANSIQuotes:        taskConfig.EnableANSIQuotes,
