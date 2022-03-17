@@ -19,7 +19,6 @@
   - [Functional Tests](#functional-tests)
   - [Scenario Tests](#scenario-tests)
   - [Compatibility Tests](#compatibility-tests)
-  - [Benchmark Tests](#benchmark-tests)
 - [Impacts & Risks](#impacts--risks)
 - [Investigation & Alternatives](#investigation--alternatives)
 - [Unresolved Questions](#unresolved-questions)
@@ -161,19 +160,24 @@ on disk depending on data size as a future work.
 
 ## Test Design
 
-This functionality will be mainly covered by unit and integration tests.
+Leveldb sorter is an internal optimization. For tests, we force on scenario
+tests and benchmark.
 
 ### Functional Tests
+
+Regular unit tests and integration tests, no additional tests required.
+(The proposal does not add or remove any functionality).
 
 #### Unit test
 
 Coverage should be more than 75% in new added code.
 
-#### Integration test
-
-Can pass all existing integration tests.
-
 ### Scenario Tests
+
+* Regular unit tests and integration tests.
+* 100K tables and 270K regions
+  * No OOM.
+  * Changefeed lag should be less than 1 minute.
 
 We will test the scenario of replicating 100,000 tables in one TiCDC node.
 
@@ -181,29 +185,21 @@ We will test the scenario of replicating 100,000 tables in one TiCDC node.
 
 #### Compatibility with other features/components
 
-For TiCDC's original support of only a single topic, we're not going to break it this time. When you pass only the
-default topic in the sinkURI and there is no topic expression configuration, it will work as is.
+Should be compactiable with other features.
 
-#### Upgrade compatibility
+#### Upgrade Downgrade Compatibility
 
-TODO
-
-#### Downgrade compatibility
-
-TODO
-
-### Benchmark Tests
-
-TODO
+Sorter cleans up on-disk files when TiCDC starts, so there should be no upgrade
+or downgrade compatibility issues.
 
 ## Impacts & Risks
 
-TODO
+N/A
 
 ## Investigation & Alternatives
 
-TODO
+N/A
 
 ## Unresolved Questions
 
-TODO
+N/A
