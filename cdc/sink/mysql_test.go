@@ -144,11 +144,26 @@ func TestPrepareUpdate(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1;",
@@ -157,14 +172,41 @@ func TestPrepareUpdate(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{Name: "b",
+					Type:  mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: "test"},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test2"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: "test2",
+				},
+				{
+					Name: "c",
+					Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
 			expectedArgs: []interface{}{2, "test2", 1, "test"},
@@ -172,14 +214,43 @@ func TestPrepareUpdate(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name: "b", Type: mysql.TypeVarchar,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("世界")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: []byte("世界"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
@@ -187,14 +258,46 @@ func TestPrepareUpdate(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetBin,
+					Value:   []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("世界")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetBin,
+					Value:   []byte("世界"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
@@ -202,14 +305,46 @@ func TestPrepareUpdate(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "你好"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetGBK,
+					Value:   "你好",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "世界"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetGBK,
+					Value:   "世界",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
 			expectedArgs: []interface{}{2, "世界", 1, "你好"},
@@ -239,8 +374,18 @@ func TestPrepareDelete(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1},
@@ -248,9 +393,24 @@ func TestPrepareDelete(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: "test",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1, "test"},
@@ -258,9 +418,23 @@ func TestPrepareDelete(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name: "b", Type: mysql.TypeVarchar,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1, []byte("你好")},
@@ -268,9 +442,25 @@ func TestPrepareDelete(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetBin, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetBin,
+					Value:   []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1, []byte("你好")},
@@ -278,9 +468,25 @@ func TestPrepareDelete(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			preCols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Charset: charset.CharsetGBK, Value: "你好"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag | model.HandleKeyFlag,
+					Charset: charset.CharsetGBK,
+					Value:   "你好",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
 			expectedArgs: []interface{}{1, "你好"},
@@ -308,8 +514,18 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a"},
@@ -317,9 +533,23 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name: "b", Type: mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: "test",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a", "b"},
@@ -333,8 +563,18 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a"},
@@ -342,9 +582,24 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: "test",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b"},
@@ -352,8 +607,18 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.UniqueKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.UniqueKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b"},
@@ -361,9 +626,24 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag, Value: "test"},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarString,
+					Flag:  model.MultipleKeyFlag,
+					Value: "test",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b", "c"},
@@ -371,9 +651,24 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeTinyBlob,
+					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a", "b"},
@@ -381,9 +676,25 @@ func TestWhereSlice(t *testing.T) {
 		},
 		{
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeTinyBlob, Flag: model.MultipleKeyFlag, Charset: charset.CharsetGBK, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.MultipleKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeTinyBlob,
+					Flag:    model.MultipleKeyFlag,
+					Charset: charset.CharsetGBK,
+					Value:   []byte("你好"),
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Flag:  model.GeneratedColumnFlag,
+					Value: 100,
+				},
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b", "c"},
@@ -407,10 +718,27 @@ func TestMapReplace(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
-				{Name: "c", Type: mysql.TypeLong, Value: 1, Flag: model.GeneratedColumnFlag},
-				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Value: "varchar",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Value: 1,
+					Flag:  model.GeneratedColumnFlag,
+				},
+				{
+					Name:  "d",
+					Type:  mysql.TypeTiny,
+					Value: uint8(255),
+				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`d`) VALUES ",
 			expectedArgs:  []interface{}{1, "varchar", uint8(255)},
@@ -418,10 +746,26 @@ func TestMapReplace(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
-				{Name: "c", Type: mysql.TypeLong, Value: 1},
-				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Value: "varchar",
+				},
+				{
+					Name:  "c",
+					Type:  mysql.TypeLong,
+					Value: 1,
+				},
+				{
+					Name:  "d",
+					Type:  mysql.TypeTiny,
+					Value: uint8(255),
+				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`) VALUES ",
 			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
@@ -429,14 +773,38 @@ func TestMapReplace(t *testing.T) {
 		{
 			quoteTable: "`test`.`t1`",
 			cols: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Charset: charset.CharsetGBK, Value: []byte("你好")},
-				{Name: "c", Type: mysql.TypeTinyBlob, Charset: charset.CharsetUTF8MB4, Value: []byte("世界")},
-				{Name: "d", Type: mysql.TypeMediumBlob, Charset: charset.CharsetBin, Value: []byte("你好,世界")},
-				{Name: "e", Type: mysql.TypeBlob, Value: []byte("你好,世界")},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Value: 1,
+				},
+				{
+					Name:    "b",
+					Type:    mysql.TypeVarchar,
+					Charset: charset.CharsetGBK,
+					Value:   []byte("你好"),
+				},
+				{
+					Name:    "c",
+					Type:    mysql.TypeTinyBlob,
+					Charset: charset.CharsetUTF8MB4,
+					Value:   []byte("世界"),
+				},
+				{
+					Name:    "d",
+					Type:    mysql.TypeMediumBlob,
+					Charset: charset.CharsetBin,
+					Value:   []byte("你好,世界"),
+				},
+				{
+					Name:  "e",
+					Type:  mysql.TypeBlob,
+					Value: []byte("你好,世界"),
+				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`,`e`) VALUES ",
-			expectedArgs:  []interface{}{1, "你好", "世界", []byte("你好,世界"), []byte("你好,世界")},
+			expectedArgs: []interface{}{1, "你好", "世界", []byte("你好,世界"),
+				[]byte("你好,世界")},
 		},
 	}
 	for _, tc := range testCases {
@@ -761,8 +1129,18 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 		},
 		{
@@ -770,8 +1148,18 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 		},
 		{
@@ -779,8 +1167,18 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 3},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 3,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 		},
 		{
@@ -788,8 +1186,18 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 		},
 		{
@@ -797,8 +1205,18 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
-				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
 			},
 		},
 	}
@@ -840,13 +1258,23 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 			},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
 			},
 		},
 	}
@@ -906,13 +1334,23 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 			},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
 			},
 		},
 	}
@@ -972,13 +1410,23 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 			},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 2},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
 			},
 		},
 	}
@@ -1299,7 +1747,8 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			CommitTs: 5,
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1},
 			},
 		},
 	}
@@ -1314,7 +1763,8 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			CommitTs: 4,
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1},
 			},
 		},
 	}
