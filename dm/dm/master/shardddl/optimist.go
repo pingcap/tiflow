@@ -744,6 +744,7 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 		switch {
 		case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
 			cfStage = optimism.ConflictSkipWaitRedirect
+			cfMsg = err.Error()
 			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
 		case terror.ErrShardDDLOptimismTrySyncFail.Equal(err):
 			cfStage = optimism.ConflictDetected
