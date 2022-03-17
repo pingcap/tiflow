@@ -178,10 +178,12 @@ func TestPrepareUpdate(t *testing.T) {
 					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
 					Value: 1,
 				},
-				{Name: "b",
+				{
+					Name:  "b",
 					Type:  mysql.TypeVarString,
 					Flag:  model.MultipleKeyFlag | model.HandleKeyFlag,
-					Value: "test"},
+					Value: "test",
+				},
 				{
 					Name:  "c",
 					Type:  mysql.TypeLong,
@@ -803,8 +805,10 @@ func TestMapReplace(t *testing.T) {
 				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`,`e`) VALUES ",
-			expectedArgs: []interface{}{1, "你好", "世界", []byte("你好,世界"),
-				[]byte("你好,世界")},
+			expectedArgs: []interface{}{
+				1, "你好", "世界", []byte("你好,世界"),
+				[]byte("你好,世界"),
+			},
 		},
 	}
 	for _, tc := range testCases {
@@ -1747,8 +1751,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			CommitTs: 5,
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 			},
 		},
 	}
@@ -1763,8 +1771,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			CommitTs: 4,
 			Columns: []*model.Column{
-				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 1},
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
 			},
 		},
 	}
