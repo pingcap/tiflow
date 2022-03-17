@@ -142,7 +142,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 		if queryResp.Status == pb.QueryJobResponse_finished {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	fmt.Printf("job id %s checking\n", resp.JobIdStr)
 	// check files
