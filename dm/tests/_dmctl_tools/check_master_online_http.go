@@ -14,6 +14,7 @@
 package main
 
 import (
+	ctls "crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,7 @@ func main() {
 		if err != nil {
 			utils.ExitWithError(err)
 		}
+		tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 		tlsCfg := tls.TLSConfig()
 		tlsCfg.InsecureSkipVerify = true

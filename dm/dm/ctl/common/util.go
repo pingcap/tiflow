@@ -15,6 +15,7 @@ package common
 
 import (
 	"context"
+	ctls "crypto/tls"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -161,6 +162,7 @@ func InitClient(addr string, securityCfg config.Security) error {
 	if err != nil {
 		return terror.ErrCtlInvalidTLSCfg.Delegate(err)
 	}
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	endpoints := strings.Split(addr, ",")
 	etcdClient, err := clientv3.New(clientv3.Config{

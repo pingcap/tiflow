@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	ctls "crypto/tls"
+
 	"github.com/pingcap/failpoint"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"go.uber.org/zap"
@@ -43,6 +45,7 @@ func (s *Server) JoinMaster(endpoints []string) error {
 	if err != nil {
 		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
 	}
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	// join doesn't support to be canceled now, because it can return at most in (3s+3s) * len(endpoints).
 	ctx, cancel := context.WithCancel(context.Background())

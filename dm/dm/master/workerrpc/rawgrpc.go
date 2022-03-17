@@ -15,6 +15,7 @@ package workerrpc
 
 import (
 	"context"
+	ctls "crypto/tls"
 	"time"
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
@@ -48,6 +49,7 @@ func NewGRPCClient(addr string, securityCfg config.Security) (*GRPCClient, error
 	if err != nil {
 		return nil, terror.ErrMasterGRPCCreateConn.Delegate(err)
 	}
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	conn, err := grpc.Dial(addr, tls.ToGRPCDialOption(),
 		grpc.WithConnectParams(grpc.ConnectParams{

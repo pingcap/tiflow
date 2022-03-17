@@ -16,6 +16,7 @@ package master
 import (
 	"bytes"
 	"context"
+	ctls "crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -1625,6 +1626,7 @@ func (t *testMaster) testHTTPInterface(c *check.C, url string, contain []byte) {
 	tls, err := toolutils.NewTLS(pwd+"/tls_for_test/ca.pem", pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key", url, []string{})
 	c.Assert(err, check.IsNil)
 	cli := toolutils.ClientWithTLS(tls.TLSConfig())
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	// nolint:noctx
 	resp, err := cli.Get(url)

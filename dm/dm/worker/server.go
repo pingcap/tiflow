@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	ctls "crypto/tls"
 	"fmt"
 	"net"
 	"sync"
@@ -98,6 +99,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
 	}
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
 	if err != nil {

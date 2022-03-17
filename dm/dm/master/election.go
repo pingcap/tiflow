@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	ctls "crypto/tls"
 	"strings"
 	"time"
 
@@ -120,6 +121,7 @@ func (s *Server) createLeaderClient(leaderAddr string) {
 		log.L().Error("can't create grpc connection with leader, can't forward request to leader", zap.String("leader", leaderAddr), zap.Error(err))
 		return
 	}
+	tls.TLSConfig().MinVersion = ctls.VersionTLS10
 
 	//nolint:staticcheck
 	conn, err := grpc.Dial(leaderAddr, tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second))

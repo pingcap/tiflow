@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	ctls "crypto/tls"
 	"os"
 	"time"
 
@@ -39,6 +40,7 @@ func main() {
 		if err != nil {
 			utils.ExitWithError(err)
 		}
+		tls.TLSConfig().MinVersion = ctls.VersionTLS10
 		secureOpt = tls.ToGRPCDialOption()
 	}
 
