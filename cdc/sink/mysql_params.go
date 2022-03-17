@@ -298,8 +298,7 @@ func generateDSNByParams(
 		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 	}
 
-	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB,
-		"tidb_placement_mode", "ignore")
+	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
 	if err != nil {
 		return "", err
 	}
