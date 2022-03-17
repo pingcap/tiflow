@@ -243,7 +243,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		}
 		log.Debug("emit checkpointTs to default topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
-		err = k.syncWriteToProducer(ctx, topic, partitionNum, msg)
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
 	topics := k.eventRouter.GetActiveTopics(tables)
@@ -254,7 +254,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		}
 		log.Debug("emit checkpointTs to active topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
-		err = k.syncWriteToProducer(ctx, topic, partitionNum, msg)
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
 	return nil
@@ -293,7 +293,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = k.syncWriteToProducer(ctx, topic, partitionNum, msg)
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
 	err = k.asyncWriteToProducer(ctx, topic, dispatcher.PartitionZero, msg)
@@ -331,13 +331,6 @@ func (k *mqSink) asyncWriteToProducer(
 		return err
 	}
 	return k.mqProducer.Flush(ctx)
-}
-
-// syncWriteToProducer writes message to kafka producer synchronously.
-func (k *mqSink) syncWriteToProducer(
-	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
-) error {
-	return k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionsNum, message)
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
