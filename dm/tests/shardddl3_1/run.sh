@@ -298,6 +298,7 @@ function different_field_flag_test() {
 	val2=$4
 	type3=$5
 	val3=$6
+	locked=$7
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column col1 $type1"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values (2,${val1});"
@@ -305,10 +306,17 @@ function different_field_flag_test() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column col1 $type2"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values (4,${val2});"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 1 \
-		"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+	if [[ $locked == true ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+	else
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 2 \
+			"because schema conflict detected" 1
+	fi
 
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(5);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column col1 $type3"
@@ -321,7 +329,7 @@ function DM_108_CASE() {
 	different_field_flag_test \
 		"decimal(5,2)" "2" \
 		"decimal(7,4)" "4" \
-		"decimal(9,6)" "6"
+		"decimal(9,6)" "6" true
 }
 
 function DM_108() {
@@ -332,7 +340,7 @@ function DM_109_CASE() {
 	different_field_flag_test \
 		"varchar(3)" "'222'" \
 		"varchar(4)" "'4444'" \
-		"varchar(5)" "'66666'"
+		"varchar(5)" "'66666'" false
 }
 
 function DM_109() {
@@ -343,7 +351,7 @@ function DM_110_CASE() {
 	different_field_flag_test \
 		"varchar(5)" "'22222'" \
 		"varchar(4)" "'4444'" \
-		"varchar(3)" "'666'"
+		"varchar(3)" "'666'" false
 }
 
 function DM_110() {
@@ -354,7 +362,7 @@ function DM_111_CASE() {
 	different_field_flag_test \
 		"int(11) zerofill" "2" \
 		"int(11)" "4" \
-		"int(11) zerofill" "'66666'"
+		"int(11) zerofill" "'66666'" true
 }
 
 function DM_111() {
@@ -365,7 +373,7 @@ function DM_112_CASE() {
 	different_field_flag_test \
 		"int(11) unsigned" "2" \
 		"int(11)" "4" \
-		"int(11) unsigned" "'66666'"
+		"int(11) unsigned" "'66666'" true
 }
 
 function DM_112() {
@@ -532,16 +540,24 @@ function DM_117_CASE {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1 \
+		"because schema conflict detected" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"shard-ddl-lock" \
-		'ALTER TABLE `shardddl`.`tb` ADD COLUMN `b` INT' 1
 
 	# try to fix data
+	echo 'create table tb1(a int primary key, b int, c int) engine=innodb default charset=latin1 collate=latin1_bin;' >${WORK_DIR}/schema.sql
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog-schema update test ${shardddl1} ${tb1} ${WORK_DIR}/schema.sql -s mysql-replica-01" \
+		"\"result\": true" 2
+
+	# skip this error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		'shard-ddl-lock unlock "test-`shardddl`.`tb`" -s mysql-replica-01 --action exec -d shardddl1 -t tb1' \
-		"\"result\": true" 1
+		"binlog skip test" \
+		"\"result\": true" 2 \
+		"\"source 'mysql-replica-02' has no error\"" 1
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12,12);"
 
 	run_sql_tidb "update ${shardddl}.${tb} set b=null, c=null where a=1;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
