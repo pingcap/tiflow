@@ -521,7 +521,8 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int ) shard_row_id_bits=2 pre_split_regions=2;",
-			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+			"CREATE TABLE `t1` (`id` INT) " +
+				"/*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
 		},
 		{
 			"create table t1 (id int ) shard_row_id_bits=2     pre_split_regions=2;",
@@ -529,15 +530,18 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int ) shard_row_id_bits=2 engine=innodb pre_split_regions=2;",
-			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ ENGINE = innodb /*T! PRE_SPLIT_REGIONS = 2 */",
+			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */" +
+				" ENGINE = innodb /*T! PRE_SPLIT_REGIONS = 2 */",
 		},
 		{
 			"create table t1 (id int ) pre_split_regions=2 shard_row_id_bits=2;",
-			"CREATE TABLE `t1` (`id` INT) /*T! PRE_SPLIT_REGIONS = 2 */ /*T! SHARD_ROW_ID_BITS = 2 */",
+			"CREATE TABLE `t1` (`id` INT) /*T! PRE_SPLIT_REGIONS = 2 */" +
+				" /*T! SHARD_ROW_ID_BITS = 2 */",
 		},
 		{
 			"create table t6 (id int ) shard_row_id_bits=2 shard_row_id_bits=3 pre_split_regions=2;",
-			"CREATE TABLE `t6` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! SHARD_ROW_ID_BITS = 3 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+			"CREATE TABLE `t6` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ " +
+				"/*T! SHARD_ROW_ID_BITS = 3 */ /*T! PRE_SPLIT_REGIONS = 2 */",
 		},
 		{
 			"create table t1 (id int primary key auto_random(2));",
@@ -557,19 +561,23 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int auto_random ( 3 ) primary key) auto_random_base = 100;",
-			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM(3) */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 100 */",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM(3) */" +
+				" PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 100 */",
 		},
 		{
 			"create table t1 (id int auto_random primary key) auto_random_base = 50;",
-			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM */ PRIMARY KEY) /*T![auto_rand_base] AUTO_RANDOM_BASE = 50 */",
+			"CREATE TABLE `t1` (`id` INT /*T![auto_rand] AUTO_RANDOM */ PRIMARY KEY)" +
+				" /*T![auto_rand_base] AUTO_RANDOM_BASE = 50 */",
 		},
 		{
 			"create table t1 (id int auto_increment key) auto_id_cache 100;",
-			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT PRIMARY KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 100 */",
+			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT PRIMARY KEY) " +
+				"/*T![auto_id_cache] AUTO_ID_CACHE = 100 */",
 		},
 		{
 			"create table t1 (id int auto_increment unique) auto_id_cache 10;",
-			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT UNIQUE KEY) /*T![auto_id_cache] AUTO_ID_CACHE = 10 */",
+			"CREATE TABLE `t1` (`id` INT AUTO_INCREMENT UNIQUE KEY) " +
+				"/*T![auto_id_cache] AUTO_ID_CACHE = 10 */",
 		},
 		{
 			"create table t1 (id int) auto_id_cache = 5;",
@@ -585,15 +593,18 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int, a varchar(255), primary key (a, b) clustered);",
-			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] CLUSTERED */)",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`)" +
+				" /*T![clustered_index] CLUSTERED */)",
 		},
 		{
 			"create table t1(id int, v int, primary key(a) clustered);",
-			"CREATE TABLE `t1` (`id` INT,`v` INT,PRIMARY KEY(`a`) /*T![clustered_index] CLUSTERED */)",
+			"CREATE TABLE `t1` (`id` INT,`v` INT,PRIMARY KEY(`a`) " +
+				"/*T![clustered_index] CLUSTERED */)",
 		},
 		{
 			"create table t1(id int primary key clustered, v int);",
-			"CREATE TABLE `t1` (`id` INT PRIMARY KEY /*T![clustered_index] CLUSTERED */,`v` INT)",
+			"CREATE TABLE `t1` (`id` INT PRIMARY KEY " +
+				"/*T![clustered_index] CLUSTERED */,`v` INT)",
 		},
 		{
 			"alter table t add primary key(a) clustered;",
@@ -601,11 +612,14 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int, a varchar(255), primary key (a, b) nonclustered);",
-			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] NONCLUSTERED */)",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`)" +
+				" /*T![clustered_index] NONCLUSTERED */)",
 		},
 		{
-			"create table t1 (id int, a varchar(255), primary key (a, b) /*T![clustered_index] nonclustered */);",
-			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`) /*T![clustered_index] NONCLUSTERED */)",
+			"create table t1 (id int, a varchar(255), primary key (a, b) " +
+				"/*T![clustered_index] nonclustered */);",
+			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255),PRIMARY KEY(`a`, `b`)" +
+				" /*T![clustered_index] NONCLUSTERED */)",
 		},
 		{
 			"create table clustered_test(id int)",
@@ -655,12 +669,16 @@ func TestAddSpecialComment(t *testing.T) {
 				"SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_BIN ",
 		},
 		{
-			"CREATE TABLE t4 (firstname VARCHAR(25) NOT NULL,lastname VARCHAR(25) NOT NULL,username VARCHAR(16) NOT NULL," +
-				"email VARCHAR(35),joined DATE NOT NULL) PARTITION BY RANGE( YEAR(joined) ) (PARTITION p0 VALUES LESS THAN (1960) " +
+			"CREATE TABLE t4 (firstname VARCHAR(25) NOT NULL,lastname VARCHAR(25) " +
+				"NOT NULL,username VARCHAR(16) NOT NULL," +
+				"email VARCHAR(35),joined DATE NOT NULL) PARTITION BY RANGE( YEAR(joined) )" +
+				" (PARTITION p0 VALUES LESS THAN (1960) " +
 				"PLACEMENT POLICY=p1,PARTITION p1 VALUES LESS THAN (1970),PARTITION p2 VALUES LESS THAN (1980)," +
 				"PARTITION p3 VALUES LESS THAN (1990),PARTITION p4 VALUES LESS THAN MAXVALUE);",
-			"CREATE TABLE `t4` (`firstname` VARCHAR(25) NOT NULL,`lastname` VARCHAR(25) NOT NULL,`username` " +
-				"VARCHAR(16) NOT NULL,`email` VARCHAR(35),`joined` DATE NOT NULL) PARTITION BY RANGE (YEAR(`joined`)) " +
+			"CREATE TABLE `t4` (`firstname` VARCHAR(25) NOT NULL,`lastname`" +
+				" VARCHAR(25) NOT NULL,`username` " +
+				"VARCHAR(16) NOT NULL,`email` VARCHAR(35),`joined` DATE NOT NULL) " +
+				"PARTITION BY RANGE (YEAR(`joined`)) " +
 				"(PARTITION `p0` VALUES LESS THAN (1960) ,PARTITION `p1` VALUES LESS THAN (1970)," +
 				"PARTITION `p2` VALUES LESS THAN (1980),PARTITION `p3` VALUES LESS THAN (1990)," +
 				"PARTITION `p4` VALUES LESS THAN (MAXVALUE))",
