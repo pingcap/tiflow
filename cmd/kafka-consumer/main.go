@@ -490,7 +490,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MqMessageTypeDDL:
 				// for some protocol, DDL would be dispatched to all partitions,
 				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
-				// if we receive `a`` from partition-1, which would be seemed as DDL regression,
+				// if we receive `a` from partition-1, which would be seemed as DDL regression,
 				// then cause the consumer panic, but it was a duplicate one.
 				// so we only handle DDL received from partition-0 should be enough.
 				if partition != 0 {
