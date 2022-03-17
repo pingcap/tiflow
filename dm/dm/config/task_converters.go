@@ -495,15 +495,22 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	filterRuleMap := openapi.Task_BinlogFilterRule{}
 	for sourceName, ruleList := range filterMap {
 		for idx, rule := range ruleList {
+			binlogFilterRule := openapi.TaskBinLogFilterRule{}
 			var events []string
-			if len(rule.Events) > 0 {
-				for _, event := range rule.Events {
-					events = append(events, string(event))
-				}
+			for _, event := range rule.Events {
+				events = append(events, string(event))
 			}
-			filterRuleMap.Set(genFilterRuleName(sourceName, idx), openapi.TaskBinLogFilterRule{
-				IgnoreEvent: &events, IgnoreSql: &rule.SQLPattern,
-			})
+			if len(events) > 0 {
+				binlogFilterRule.IgnoreEvent = &events
+			}
+			var ignoreSQL []string
+			for _, sql := range rule.SQLPattern {
+				ignoreSQL = append(ignoreSQL, sql)
+			}
+			if len(ignoreSQL) > 0 {
+				binlogFilterRule.IgnoreSql = &ignoreSQL
+			}
+			filterRuleMap.Set(genFilterRuleName(sourceName, idx), binlogFilterRule)
 		}
 	}
 	// set table migrate rules
