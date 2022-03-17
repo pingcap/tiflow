@@ -215,7 +215,7 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 	}
 	log.Info("get partition number of topic",
 		zap.String("topic", topic),
-		zap.Int32("partition_num", topicDetail.NumPartitions))
+		zap.Int32("partitionNum", topicDetail.NumPartitions))
 	return topicDetail.NumPartitions, nil
 }
 
