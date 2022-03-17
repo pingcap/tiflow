@@ -50,4 +50,18 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_pending))
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
+
+	// Tick, Pending -> WaitAck
+	err = fsm.IterPendingJobs(func(job *lib.MasterMetaKVData) (string, error) {
+		return id, nil
+	})
+	require.Nil(t, err)
+	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
+	// job finished
+	fsm.JobOffline(worker, false /*needFailover*/)
+	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
+
+	// offline invalid job, will do nothing
+	invalidWorker := lib.NewTombstoneWorkerHandle(id+"invalid", lib.WorkerStatus{}, nil)
+	fsm.JobOffline(invalidWorker, true)
 }

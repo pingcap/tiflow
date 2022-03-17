@@ -22,32 +22,45 @@ type jobHolder struct {
 // machine. Note job master managed in JobFsm is in running status, which means
 // the job is not terminated or finished.
 //
-// ,-------.                   ,-------.            ,-------.
-// |WaitAck|                   |Online |            |Pending|
-// `---+---'                   `---+---'            `---+---'
-//     |                           |                    |
-//     | Master                    |                    |
-//     |  .OnWorkerOnline          |                    |
-//     |-------------------------->|                    |
-//     |                           |                    |
-//     |                           |                    |
-//     |                           | Master             |
-//     |                           |   .OnWorkerOffline |
-//     |                           |------------------->|
-//     |                           |                    |
-//     |                           |                    |
-//     |                           | Master             |
-//     |                           |   .CreateWorker    |
-//     |<-----------------------------------------------|
-//     |                           |                    |
-//     |                           |                    |
-//     | Master                    |                    |
-//     |  .OnWorkerDispatched      |                    |
-//     |  (with error)             |                    |
-//     |----------------------------------------------->|
-//     |                           |                    |
-//     |                           |                    |
-//     |                           |                    |
+// ,-------.                   ,-------.            ,-------.       ,--------.
+// |WaitAck|                   |Online |            |Pending|       |Finished|
+// `---+---'                   `---+---'            `---+---'       `---+----'
+//     |                           |                    |               |
+//     | Master                    |                    |               |
+//     |  .OnWorkerOnline          |                    |               |
+//     |-------------------------->|                    |               |
+//     |                           |                    |               |
+//     |                           | Master             |               |
+//     |                           |   .OnWorkerOffline |               |
+//     |                           |   (failover)       |               |
+//     |                           |------------------->|               |
+//     |                           |                    |               |
+//     |                           | Master             |               |
+//     |                           |   .OnWorkerOffline |               |
+//     |                           |   (finish)         |               |
+//     |                           |----------------------------------->|
+//     |                           |                    |               |
+//     | Master                    |                    |               |
+//     |  .OnWorkerOffline         |                    |               |
+//     |  (failover)               |                    |               |
+//     |----------------------------------------------->|               |
+//     |                           |                    |               |
+//     | Master                    |                    |               |
+//     |  .OnWorkerOffline         |                    |               |
+//     |  (finish)                 |                    |               |
+//     |--------------------------------------------------------------->|
+//     |                           |                    |               |
+//     |                           | Master             |               |
+//     |                           |   .CreateWorker    |               |
+//     |<-----------------------------------------------|               |
+//     |                           |                    |               |
+//     | Master                    |                    |               |
+//     |  .OnWorkerDispatched      |                    |               |
+//     |  (with error)             |                    |               |
+//     |----------------------------------------------->|               |
+//     |                           |                    |               |
+//     |                           |                    |               |
+//     |                           |                    |               |
 type JobFsm struct {
 	JobStats
 
@@ -214,14 +227,19 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 	defer fsm.jobsMu.Unlock()
 
 	job, ok := fsm.onlineJobs[worker.ID()]
-	if !ok {
-		log.L().Warn("non-online worker offline, ignore it", zap.String("id", worker.ID()))
-		return
+	if ok {
+		delete(fsm.onlineJobs, worker.ID())
+	} else {
+		job, ok = fsm.waitAckJobs[worker.ID()]
+		if !ok {
+			log.L().Warn("unknown worker, ignore it", zap.String("id", worker.ID()))
+			return
+		}
+		delete(fsm.waitAckJobs, worker.ID())
 	}
 	if needFailover {
 		fsm.pendingJobs[worker.ID()] = job.MasterMetaKVData
 	}
-	delete(fsm.onlineJobs, worker.ID())
 }
 
 func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
