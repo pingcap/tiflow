@@ -192,7 +192,6 @@ func (t *testPositionSuite) TestVerifyUUIDSuffix(c *C) {
 		valid  bool
 	}{
 		{
-
 			suffix: "000666",
 			valid:  true,
 		},
@@ -847,7 +846,6 @@ func (t *testPositionSuite) TestIsFreshPosition(c *C) {
 			false,
 		},
 		{
-
 			InitLocation(MinPosition, mysqlGTIDSet),
 			gmysql.MySQLFlavor,
 			true,
@@ -879,7 +877,6 @@ func (t *testPositionSuite) TestIsFreshPosition(c *C) {
 			false,
 		},
 		{
-
 			InitLocation(MinPosition, mariaGTIDSet),
 			gmysql.MariaDBFlavor,
 			true,

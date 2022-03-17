@@ -21,9 +21,11 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -355,9 +357,23 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 
 		loadName, loadIdx = getGenerateName(stCfg.LoaderConfig, loadIdx, "load", loadMap)
 		loaderCfg := stCfg.LoaderConfig
-		dirSuffix := "." + c.Name
+
+		var dirSuffix string
+		var err error
+		if storage.IsS3Path(loaderCfg.Dir) {
+			// we will dump files to s3 dir's subdirectory
+			dirSuffix = "/" + c.Name + "." + stCfg.SourceID
+		} else {
+			// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
+			dirSuffix = "." + c.Name
+		}
 		// if ends with the task name, we remove to get user input dir.
-		loaderCfg.Dir = strings.TrimSuffix(loaderCfg.Dir, dirSuffix)
+		loaderCfg.Dir, err = storage.TrimPath(loaderCfg.Dir, dirSuffix)
+		// because dir comes form subtask, there should not have error.
+		if err != nil {
+			log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+		}
+
 		c.Loaders[loadName] = &loaderCfg
 
 		syncName, syncIdx = getGenerateName(stCfg.SyncerConfig, syncIdx, "sync", syncMap)
@@ -445,9 +461,22 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	}
 	taskSourceConfig.SourceConf = sourceConfList
 
-	dirSuffix := "." + oneSubtaskConfig.Name
+	var dirSuffix string
+	var err error
+	if storage.IsS3Path(oneSubtaskConfig.LoaderConfig.Dir) {
+		// we will dump files to s3 dir's subdirectory
+		dirSuffix = "/" + oneSubtaskConfig.Name + "." + oneSubtaskConfig.SourceID
+	} else {
+		// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
+		dirSuffix = "." + oneSubtaskConfig.Name
+	}
 	// if ends with the task name, we remove to get user input dir.
-	oneSubtaskConfig.LoaderConfig.Dir = strings.TrimSuffix(oneSubtaskConfig.LoaderConfig.Dir, dirSuffix)
+	oneSubtaskConfig.LoaderConfig.Dir, err = storage.TrimPath(oneSubtaskConfig.LoaderConfig.Dir, dirSuffix)
+	// because dir comes form subtask, there should not have error.
+	if err != nil {
+		log.L().Warn("parse config comes from subtask error.", zap.Error(err))
+	}
+
 	taskSourceConfig.FullMigrateConf = &openapi.TaskFullMigrateConf{
 		ExportThreads: &oneSubtaskConfig.MydumperConfig.Threads,
 		DataDir:       &oneSubtaskConfig.LoaderConfig.Dir,

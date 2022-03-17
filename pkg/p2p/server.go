@@ -528,8 +528,8 @@ func (m *MessageServer) handlePendingMessages(ctx context.Context, topic string)
 func (m *MessageServer) registerPeer(
 	ctx context.Context,
 	sender *streamHandle,
-	clientIP string) error {
-
+	clientIP string,
+) error {
 	streamMeta := sender.GetStreamMeta()
 
 	log.Info("peer connection received",
