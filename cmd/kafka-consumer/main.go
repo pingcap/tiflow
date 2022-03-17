@@ -183,8 +183,8 @@ func init() {
 
 	eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
 	if configFile != "" {
-		if err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer",
-			eventRouterReplicaConfig); err != nil {
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
+		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
 				zap.Error(err),
 				zap.String("config", configFile))
