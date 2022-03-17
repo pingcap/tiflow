@@ -163,7 +163,6 @@ func TestShouldBeDeepCopy(t *testing.T) {
 	t.Parallel()
 
 	info := TaskStatus{
-
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
 			2: {StartTs: 100},
