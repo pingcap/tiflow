@@ -35,7 +35,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -59,6 +62,10 @@ var (
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
+	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
+	// which then can be used to check RowChangedEvent dispatched correctness
+	eventRouterReplicaConfig *config.ReplicaConfig
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -66,10 +73,14 @@ var (
 )
 
 func init() {
-	var upstreamURIStr string
+	var (
+		upstreamURIStr string
+		configFile     string
+	)
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
@@ -168,6 +179,18 @@ func init() {
 		}
 
 		enableTiDBExtension = b
+	}
+
+	eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
+	if configFile != "" {
+		if err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig); err != nil {
+			log.Panic("invalid config file for kafka consumer",
+				zap.Error(err),
+				zap.String("config", configFile))
+		}
+		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+			log.Panic("verify rule failed", zap.Error(err))
+		}
 	}
 }
 
@@ -341,6 +364,8 @@ type Consumer struct {
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+
+	eventRouter dispatcher.EventRouter
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -362,6 +387,12 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
+
+	eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	c.eventRouter = *eventRouter
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
@@ -454,6 +485,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			switch tp {
 			case model.MqMessageTypeDDL:
+				// for some protocol, DDL would be dispatched to all partitions,
+				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
+				// if we receive `a`` from partition-1, which would be seemed as DDL regression,
+				// then cause the consumer panic, but it was a duplicate one.
+				// so we only handle DDL received from partition-0 should be enough.
+				if partition != 0 {
+					continue
+				}
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
@@ -464,6 +503,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
+
+				target := c.eventRouter.GetPartition(row, kafkaPartitionNum)
+				if partition != target {
+					log.Panic("RowChangedEvent dispatched to wrong partition",
+						zap.Int32("obtained", partition),
+						zap.Int32("expected", target),
+					)
+				}
+
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
 					log.Warn("RowChangedEvent fallback row, ignore it",
