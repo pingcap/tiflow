@@ -232,6 +232,9 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	if msg == nil {
 		return nil
 	}
+	// NOTICE: When there is no table sync,
+	// we need to send checkpoint ts to the default topic. T
+	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
 		partitionNum, err := k.topicManager.Partitions(topic)
@@ -319,6 +322,7 @@ func (k *mqSink) run(ctx context.Context) error {
 	return wg.Wait()
 }
 
+// asyncWriteToProducer writes message to kafka producer asynchronously.
 func (k *mqSink) asyncWriteToProducer(
 	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
 ) error {
@@ -329,6 +333,7 @@ func (k *mqSink) asyncWriteToProducer(
 	return k.mqProducer.Flush(ctx)
 }
 
+// syncWriteToProducer writes message to kafka producer synchronously.
 func (k *mqSink) syncWriteToProducer(
 	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
 ) error {
