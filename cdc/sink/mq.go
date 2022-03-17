@@ -296,7 +296,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	err = k.asyncWriteToProducer(ctx, topic, dispatcher.PartitionZero, msg)
+	err = k.asyncFlushToPartitionZero(ctx, topic, msg)
 	return errors.Trace(err)
 }
 
@@ -322,11 +322,12 @@ func (k *mqSink) run(ctx context.Context) error {
 	return wg.Wait()
 }
 
-// asyncWriteToProducer writes message to kafka producer asynchronously.
-func (k *mqSink) asyncWriteToProducer(
-	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+// asyncFlushToPartitionZero writes message to
+// kafka producer asynchronously and flush it Immediately.
+func (k *mqSink) asyncFlushToPartitionZero(
+	ctx context.Context, topic string, message *codec.MQMessage,
 ) error {
-	err := k.mqProducer.AsyncSendMessage(ctx, topic, partition, message)
+	err := k.mqProducer.AsyncSendMessage(ctx, topic, dispatcher.PartitionZero, message)
 	if err != nil {
 		return err
 	}
