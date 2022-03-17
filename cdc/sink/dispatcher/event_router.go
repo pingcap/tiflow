@@ -201,6 +201,11 @@ func (s *EventRouter) GetActiveTopics(activeTables []model.TableName) []string {
 	return topics
 }
 
+// GetDefaultTopic returns the default topic name.
+func (s *EventRouter) GetDefaultTopic() string {
+	return s.defaultTopic
+}
+
 // matchDispatcher returns the target topic dispatcher and partition dispatcher if a
 // row changed event matches a specific table filter.
 func (s *EventRouter) matchDispatcher(schema, table string) (topic.Dispatcher, partition.Dispatcher) {

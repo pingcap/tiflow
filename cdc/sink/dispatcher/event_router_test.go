@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/topic"
@@ -28,8 +27,9 @@ import (
 func TestEventRouter(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "")
+	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test")
 	require.Nil(t, err)
+	require.Equal(t, "test", d.GetDefaultTopic())
 	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)

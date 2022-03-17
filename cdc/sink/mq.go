@@ -232,13 +232,25 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	if msg == nil {
 		return nil
 	}
-	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
+	if len(tables) == 0 {
+		topic := k.eventRouter.GetDefaultTopic()
+		partitionNum, err := k.topicManager.Partitions(topic)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("emit checkpointTs to default topic",
+			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
+		err = k.syncWriteToProducer(ctx, topic, partitionNum, msg)
+		return errors.Trace(err)
+	}
 	topics := k.eventRouter.GetActiveTopics(tables)
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		log.Debug("emit checkpointTs to active topic",
+			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.syncWriteToProducer(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
