@@ -504,9 +504,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 				binlogFilterRule.IgnoreEvent = &events
 			}
 			var ignoreSQL []string
-			for _, sql := range rule.SQLPattern {
-				ignoreSQL = append(ignoreSQL, sql)
-			}
+			ignoreSQL = append(ignoreSQL, rule.SQLPattern...)
 			if len(ignoreSQL) > 0 {
 				binlogFilterRule.IgnoreSql = &ignoreSQL
 			}
