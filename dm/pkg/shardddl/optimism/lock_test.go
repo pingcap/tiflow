@@ -1440,7 +1440,13 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsFalse)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	l.columns = map[string]map[string]map[string]map[string]DropColumnStage{
+		"col": {
+			source: {db: {tbl2: DropNotDone}},
+		},
+	}
+	col := l.TryRemoveTable(source, db, tbl2)
+	c.Assert(col, DeepEquals, []string{"col"})
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
@@ -1466,7 +1472,7 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsTrue)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	c.Assert(l.TryRemoveTable(source, db, tbl2), HasLen, 0)
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
@@ -1476,9 +1482,9 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 
 	// CASE: try to remove for not-exists table.
-	c.Assert(l.TryRemoveTable(source, db, "not-exist"), IsFalse)
-	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), IsFalse)
-	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), IsFalse)
+	c.Assert(l.TryRemoveTable(source, db, "not-exist"), HasLen, 0)
+	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), HasLen, 0)
+	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), HasLen, 0)
 }
 
 func (t *testLock) TestTryRemoveTableWithSources(c *C) {

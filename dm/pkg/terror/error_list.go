@@ -868,7 +868,7 @@ var (
 	ErrBinlogNotLogColumn = New(codeBinlogNotLogColumn, ClassBinlogOp, ScopeUpstream, LevelHigh, "upstream didn't log enough columns in binlog", "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used.")
 
 	// pkg/shardddl/optimism.
-	ErrShardDDLOptimismNeedSkipAndRedirect      = New(codeShardDDLOptimismNeedSkipAndRedirect, ClassFunctional, ScopeInternal, LevelLow, "receive conflict DDL for the optimistic shard ddl lock %s: %s", "")
+	ErrShardDDLOptimismNeedSkipAndRedirect      = New(codeShardDDLOptimismNeedSkipAndRedirect, ClassFunctional, ScopeInternal, LevelHigh, "receive conflict DDL for the optimistic shard ddl lock %s: %s. Now DM does not support conflicting DDLs, such as 'modify column'/'rename column'/'add column not null non default'.", "")
 	ErrShardDDLOptimismAddNotFullyDroppedColumn = New(codeShardDDLOptimismAddNotFullyDroppedColumn, ClassFunctional, ScopeInternal, LevelMedium, "fail to resolve adding not fully dropped columns for optimistic shard ddl lock %s: %s", "Please use `binlog skip` command to skip this error.")
 
 	// Config related error.
