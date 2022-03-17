@@ -323,7 +323,7 @@ func (k *mqSink) run(ctx context.Context) error {
 }
 
 // asyncFlushToPartitionZero writes message to
-// kafka producer asynchronously and flush it Immediately.
+// partition zero asynchronously and flush it immediately.
 func (k *mqSink) asyncFlushToPartitionZero(
 	ctx context.Context, topic string, message *codec.MQMessage,
 ) error {
