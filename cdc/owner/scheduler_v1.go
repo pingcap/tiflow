@@ -73,7 +73,6 @@ func (s *oldScheduler) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (shouldUpdateState bool, err error) {
-
 	s.state = state
 	s.currentTables = currentTables
 	s.captures = captures

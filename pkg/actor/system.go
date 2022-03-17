@@ -388,8 +388,7 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 	router := NewRouter(b.name)
 	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
 	for i := range metricWorkingDurations {
-		metricWorkingDurations[i] =
-			workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
+		metricWorkingDurations[i] = workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
 	}
 	return &System{
 		name:                 b.name,

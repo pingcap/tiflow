@@ -29,8 +29,7 @@ func (t *testPrinterSuite) SetUpTest(c *C) {
 }
 
 func (t *testPrinterSuite) TestPrinter(c *C) {
-	noneInfo :=
-		`Release Version: None
+	noneInfo := `Release Version: None
 Git Commit Hash: None
 Git Branch: None
 UTC Build Time: None

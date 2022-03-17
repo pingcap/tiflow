@@ -50,7 +50,6 @@ type Params struct {
 
 // Strategy define different kind of retry strategy.
 type Strategy interface {
-
 	// Apply define retry strategy
 	// params: (retry parameters for this strategy, a normal operation)
 	// return: (result of operation, number of retry, error of operation)
