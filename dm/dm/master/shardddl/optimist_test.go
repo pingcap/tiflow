@@ -447,10 +447,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	// here will use ti1
 	_, err = optimism.PutSourceTables(cli, st32)
 	require.NoError(t.T(), err)
-	require.False(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		ready := o.Locks()[lockID].Ready()
-		return ready[source2][i23.UpSchema][i23.UpTable]
-	}))
+		return !ready[source2][i23.UpSchema][i23.UpTable]
+	}, time.Duration(backOff)*waitTime, waitTime)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
 	require.Equal(t.T(), remain, 2)
@@ -509,10 +509,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 
 	_, err = optimism.PutSourceTables(cli, st31)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}))
+	}, time.Duration(backOff)*waitTime, waitTime)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), source1, tts[0].Source)

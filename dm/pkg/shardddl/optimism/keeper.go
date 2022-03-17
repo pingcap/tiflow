@@ -215,7 +215,7 @@ func (tk *TableKeeper) Init(stm map[string]map[string]SourceTables) {
 }
 
 // Update adds/updates tables into the keeper or removes tables from the keeper.
-// it returns whether added/updated or removed.
+// it returns the newly added and dropped tables.
 func (tk *TableKeeper) Update(st SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
 	var (
 		oldST SourceTables

@@ -180,24 +180,22 @@ func (st *SourceTables) toRouteTable() map[RouteTable]struct{} {
 	return tables
 }
 
-func DiffSourceTables(lhs, rhs SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
-	lhsTables := lhs.toRouteTable()
-	rhsTables := rhs.toRouteTable()
+func DiffSourceTables(oldST, newST SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
+	oldTables := oldST.toRouteTable()
+	newTables := newST.toRouteTable()
 
 	droppedTables := make(map[RouteTable]struct{})
 	addedTables := make(map[RouteTable]struct{})
-	for table := range lhsTables {
-		if _, ok := rhsTables[table]; !ok {
+	for table := range oldTables {
+		if _, ok := newTables[table]; !ok {
 			droppedTables[table] = struct{}{}
 		} else {
-			delete(rhsTables, table)
+			delete(newTables, table)
 		}
 	}
 
-	for table := range rhsTables {
-		if _, ok := lhsTables[table]; !ok {
-			addedTables[table] = struct{}{}
-		}
+	for table := range newTables {
+		addedTables[table] = struct{}{}
 	}
 	return addedTables, droppedTables
 }
