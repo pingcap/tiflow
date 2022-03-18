@@ -31,10 +31,10 @@ memory, on-disk files, open file descriptors, and goroutines.
 
 ## Motivation or Background
 
-We have met issues <sup>[1]</sup> about resource exhausted issues about TiCDC.
+We have met issues <sup>[1]</sup> about resource exhaustion in TiCDC.
 One of the main source of consumption is TiCDC sorter.
 
-In the current architecture, the resources consumed sorter is proportional to
+In the current architecture, the resources consumed by sorter is proportional to
 the number of tables, in terms of goroutines and CPU.
 
 To support replicating many tables scenario, like 100,000 tables, we need
@@ -52,7 +52,7 @@ that are shared by multiple tables.
 The leveldb sorter is driven by actors that run on a fixed-size of goroutine
 pool. This addresses goroutine management issues.
 
-The leveldb sorter is composed of five structs,
+The leveldb sorter is composed of five structs:
 
 1. `DBActor` is a struct that reads (by taking iterators) and writes to leveldb
    directly. It is shared by multiple tables. It is driven by an actor.
@@ -101,7 +101,7 @@ starts, and it serves two purposes:
 
 `CRTs` has higher priority than start ts, because TiCDC needs to output events
 in commit order.
-`start ts` has a higher priority than key because TiCDC needs to group events
+`start ts` has higher priority than key because TiCDC needs to group events
 in the same transaction, and `start ts` is the transaction ID.
 `OpType` has higher priority than key and `Delete` has higher priority
 than `Put`, because REPLACE SQL might change the key by deleting the original
@@ -124,7 +124,7 @@ Value is a binary representation of events, encoded by MessagePack<sup>[2]</sup>
 Because all events are written to leveldb, TiCDC needs a GC mechanism to
 free disk in time.
 
-Leveldb sorter adopts `DeleteRange` approach, which bulk delete key-values
+Leveldb sorter adopts `DeleteRange` approach, which bulk deletes key-values
 that has been outputted. It minimizes the GC impact to `Writer` and `Reader`
 for both read/write throughput and latency.
 
@@ -158,7 +158,7 @@ on-disk depending on data size as future work.
 
 ## Test Design
 
-Leveldb sorter is an internal optimization. For tests, we force on the scenario
+Leveldb sorter is an internal optimization. For tests, we focus on the scenario
 tests and benchmark.
 
 ### Functional Tests
@@ -173,7 +173,7 @@ Coverage should be more than 75% in newly added code.
 ### Scenario Tests
 
 - Regular unit tests and integration tests.
-- 100K tables and 270K regions
+- 1 TiCDC node and 12 TiKV nodes with 100K tables and 270K regions.
   - No OOM.
   - Changefeed lag should be less than 1 minute.
 
