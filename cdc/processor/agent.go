@@ -113,14 +113,6 @@ func newAgent(
 		ret,
 		&scheduler.BaseAgentConfig{SendCheckpointTsInterval: flushInterval})
 
-	// Note that registerPeerMessageHandlers sets handlerErrChs.
-	if err := ret.registerPeerMessageHandlers(); err != nil {
-		log.Warn("failed to register processor message handlers",
-			zap.String("changefeed", changeFeedID),
-			zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
 		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
@@ -157,6 +149,13 @@ func newAgent(
 		return nil, errors.Trace(err)
 	}
 
+	// Note that registerPeerMessageHandlers sets handlerErrChs.
+	if err := ret.registerPeerMessageHandlers(); err != nil {
+		log.Warn("failed to register processor message handlers",
+			zap.String("changefeed", changeFeedID),
+			zap.Error(err))
+		return nil, errors.Trace(err)
+	}
 	return ret, nil
 }
 
