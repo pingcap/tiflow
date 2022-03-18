@@ -288,7 +288,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Debug("emit ddl event",
 		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	if partitionRule == dispatcher.Broadcast {
+	if partitionRule == dispatcher.PartitionAll {
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
 			return errors.Trace(err)

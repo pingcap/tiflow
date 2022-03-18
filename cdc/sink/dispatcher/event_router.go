@@ -30,8 +30,8 @@ import (
 type DDLDispatchRule int
 
 const (
-	// Broadcast means the DDL event will be broadcast to all the partitions.
-	Broadcast DDLDispatchRule = -1
+	// PartitionAll means the DDL event will be broadcast to all the partitions.
+	PartitionAll DDLDispatchRule = -1
 	// PartitionZero means the DDL event will be dispatched to partition 0.
 	// NOTICE: Only for canal and canal-json protocol.
 	PartitionZero = 0
@@ -169,7 +169,7 @@ func (s *EventRouter) GetDLLDispatchRuleByProtocol(
 	if protocol == config.ProtocolCanal || protocol == config.ProtocolCanalJSON {
 		return PartitionZero
 	}
-	return Broadcast
+	return PartitionAll
 }
 
 // GetActiveTopics returns a list of the corresponding topics

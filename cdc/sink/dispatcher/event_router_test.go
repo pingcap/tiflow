@@ -322,7 +322,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	}{
 		{
 			protocol:     config.ProtocolDefault,
-			expectedRule: Broadcast,
+			expectedRule: PartitionAll,
 		},
 		{
 			protocol:     config.ProtocolCanal,
@@ -330,11 +330,11 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 		},
 		{
 			protocol:     config.ProtocolAvro,
-			expectedRule: Broadcast,
+			expectedRule: PartitionAll,
 		},
 		{
 			protocol:     config.ProtocolMaxwell,
-			expectedRule: Broadcast,
+			expectedRule: PartitionAll,
 		},
 		{
 			protocol:     config.ProtocolCanalJSON,
@@ -342,11 +342,11 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 		},
 		{
 			protocol:     config.ProtocolCraft,
-			expectedRule: Broadcast,
+			expectedRule: PartitionAll,
 		},
 		{
 			protocol:     config.ProtocolOpen,
-			expectedRule: Broadcast,
+			expectedRule: PartitionAll,
 		},
 	}
 
