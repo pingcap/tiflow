@@ -40,7 +40,7 @@ import (
 const (
 	workerChannelSize = 1000
 
-	MaxAccumulatedRowBeforeValidate = 1000
+	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
 
 	maxBatchSize = 100 // todo: choose a proper value, or configurable?
 )
@@ -70,7 +70,7 @@ type validateWorker struct {
 	rowChangeCh       chan *rowChange
 	pendingChangesMap map[string]*tableChange
 	pendingRowCount   atomic.Int64
-	accuRowFromChanel atomic.Int64 // accumulated row count from channel
+	accuRowCount      atomic.Int64 // accumulated row count from channel
 	batchSize         int
 	errorRows         []*validateFailedRow
 	sync.Mutex
@@ -112,9 +112,9 @@ outer:
 			}
 
 			vw.updateRowChange(change)
-			vw.accuRowFromChanel.Add(1)
+			vw.accuRowCount.Add(1)
 			// reduce number of pending rows
-			if vw.accuRowFromChanel.Load() >= MaxAccumulatedRowBeforeValidate {
+			if vw.accuRowCount.Load() >= MaxAccumulatedRowBeforeValidate {
 				vw.validateTableChange()
 				validatedBeforeTimer = true
 			}
@@ -161,7 +161,7 @@ func (vw *validateWorker) validateTableChange() {
 	}()
 
 	// clear accumulated row counter
-	vw.accuRowFromChanel.Store(0)
+	vw.accuRowCount.Store(0)
 
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {

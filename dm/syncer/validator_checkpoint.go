@@ -109,6 +109,7 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	return err
 }
 
+// todo: need to drop them if remove-meta is specified
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
 	args := make([]interface{}, 0)
@@ -298,6 +299,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			})
 		}
 	}
+	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	_, err := c.dbConn.ExecuteSQL(c.tctx, queries, args...)
 	if err != nil {

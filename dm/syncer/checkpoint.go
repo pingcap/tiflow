@@ -287,10 +287,6 @@ type CheckPoint interface {
 	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
 	CheckLastSnapshotCreationTime() bool
 
-	// GetFlushedTableInfo gets flushed table info
-	// use for lazy create table in schemaTracker
-	GetFlushedTableInfo(table *filter.Table) *model.TableInfo
-
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
 	Rollback(schemaTracker *schema.Tracker)
 
@@ -1278,17 +1274,4 @@ func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location
 	}
 
 	return loc, loc2, err
-}
-
-// GetFlushedTableInfo implements CheckPoint.GetFlushedTableInfo.
-func (cp *RemoteCheckPoint) GetFlushedTableInfo(table *filter.Table) *model.TableInfo {
-	cp.Lock()
-	defer cp.Unlock()
-
-	if tables, ok := cp.points[table.Schema]; ok {
-		if point, ok2 := tables[table.Name]; ok2 {
-			return point.flushedPoint.ti
-		}
-	}
-	return nil
 }

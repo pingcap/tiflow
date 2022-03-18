@@ -474,7 +474,7 @@ func (v *DataValidator) doValidate() {
 			if time.Since(lastFlushCheckpointTime) > metaFlushInterval {
 				lastFlushCheckpointTime = time.Now()
 				if err = v.flushCheckpointAndData(locationForFlush); err != nil {
-					v.L.Warn("failed to flush checkpoint: ", zap.Reflect("error", err))
+					v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
 					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
 					return
 				}
@@ -598,11 +598,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		return nil
 	}
 
-	for _, cols := range ev.SkippedColumns {
-		if len(cols) > 0 {
-			err := errors.Errorf("unexpected skipped columns for table %s", sourceTable.String())
-			return err
-		}
+	if err := checkLogColumns(ev.SkippedColumns); err != nil {
+		return errors.Errorf("unexpected skipped columns for table %s", sourceTable.String())
 	}
 
 	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
