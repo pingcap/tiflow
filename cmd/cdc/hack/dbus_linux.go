@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	dbusSessionEnvName   = "DBUS_SESSION_BUS_ADDRESS"
-	DBUS_SESSION_BUS_PID = "DBUS_SESSION_BUS_PID"
+	dbusSessionEnvName    = "DBUS_SESSION_BUS_ADDRESS"
+	dbusSessionBusPidItem = "DBUS_SESSION_BUS_PID"
 )
 
 var (
@@ -71,12 +71,12 @@ func init() {
 	env, addr := string(b[0:firstIndex]), string(b[firstIndex+1:lastIndex])
 	// set DBUS_SESSION_BUS_ADDRESS env to avoid godbus create a new daemon-dubs process
 	os.Setenv(env, addr)
-	firstIndex = bytes.Index(b, []byte(DBUS_SESSION_BUS_PID))
+	firstIndex = bytes.Index(b, []byte(dbusSessionBusPidItem))
 	if firstIndex == -1 {
 		log.Warn("can not parse daemon-dbus process id", zap.String("output", string(b)))
 		return
 	}
-	pid, _ = strconv.Atoi(strings.TrimSpace(string(b[firstIndex+len(DBUS_SESSION_BUS_PID)+1:])))
+	pid, _ = strconv.Atoi(strings.TrimSpace(string(b[firstIndex+len(dbusSessionBusPidItem)+1:])))
 	log.Info("daemon-dbus is started", zap.Int("pid", pid))
 }
 
