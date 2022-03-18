@@ -48,10 +48,10 @@ func (s *testUniqueKeySuite) TestUKClone() {
 
 	s.T().Logf("original UK: %v; cloned UK: %v\n", originalUK, clonedUK)
 
-	s.Assert().Equalf(origUKCol1Value, originalUK.value["col1"], "original.%s value incorrect", "col1")
-	s.Assert().Equalf(origUKCol2Value, originalUK.value["col2"], "original.%s value incorrect", "col2")
-	s.Assert().Equalf(newUKCol1Value, clonedUK.value["col1"], "cloned.%s value incorrect", "col1")
-	s.Assert().Equalf(newUKCol2Value, clonedUK.value["col2"], "cloned.%s value incorrect", "col2")
+	s.Equalf(origUKCol1Value, originalUK.value["col1"], "original.%s value incorrect", "col1")
+	s.Equalf(origUKCol2Value, originalUK.value["col2"], "original.%s value incorrect", "col2")
+	s.Equalf(newUKCol1Value, clonedUK.value["col1"], "cloned.%s value incorrect", "col1")
+	s.Equalf(newUKCol2Value, clonedUK.value["col2"], "cloned.%s value incorrect", "col2")
 }
 
 func (s *testUniqueKeySuite) TestUKChangeBasic() {
@@ -62,21 +62,21 @@ func (s *testUniqueKeySuite) TestUKChangeBasic() {
 		"col2": col2Value,
 	}
 	theUK := NewUniqueKey(-1, theValueMap)
-	s.Assert().Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
-	s.Assert().Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
+	s.Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
 
 	theValueMap["col1"] = 222
 	theValueMap["col2"] = "bbb"
-	s.Assert().Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
-	s.Assert().Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
+	s.Equalf(col1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Equalf(col2Value, theUK.value["col2"], "%s value incorrect", "col2")
 
 	assignedValueMap := theUK.GetValue()
-	s.Assert().Equalf(col1Value, assignedValueMap["col1"], "%s value incorrect", "col1")
-	s.Assert().Equalf(col2Value, assignedValueMap["col2"], "%s value incorrect", "col2")
+	s.Equalf(col1Value, assignedValueMap["col1"], "%s value incorrect", "col1")
+	s.Equalf(col2Value, assignedValueMap["col2"], "%s value incorrect", "col2")
 
 	newRowID := 999
 	theUK.SetRowID(newRowID)
-	s.Assert().Equal(newRowID, theUK.GetRowID(), "row ID value incorrect")
+	s.Equal(newRowID, theUK.GetRowID(), "row ID value incorrect")
 
 	newCol1Value := 333
 	newCol2Value := "ccc"
@@ -85,15 +85,15 @@ func (s *testUniqueKeySuite) TestUKChangeBasic() {
 		"col2": newCol2Value,
 	}
 	theUK.SetValue(newValueMap)
-	s.Assert().Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
-	s.Assert().Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
-	s.Assert().Equalf(col1Value, assignedValueMap["col1"], "assigned map's %s value incorrect", "col1")
-	s.Assert().Equalf(col2Value, assignedValueMap["col2"], "assigned map's %s value incorrect", "col2")
+	s.Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
+	s.Equalf(col1Value, assignedValueMap["col1"], "assigned map's %s value incorrect", "col1")
+	s.Equalf(col2Value, assignedValueMap["col2"], "assigned map's %s value incorrect", "col2")
 
 	newValueMap["col1"] = 444
 	newValueMap["col2"] = "ddd"
-	s.Assert().Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
-	s.Assert().Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
+	s.Equalf(newCol1Value, theUK.value["col1"], "%s value incorrect", "col1")
+	s.Equalf(newCol2Value, theUK.value["col2"], "%s value incorrect", "col2")
 }
 
 func (s *testUniqueKeySuite) TestUKParallelChange() {
@@ -117,10 +117,10 @@ func (s *testUniqueKeySuite) TestUKParallelChange() {
 	}
 	close(pendingCh)
 	wg.Wait()
-	s.Assert().Equal(targetID, theUK.GetRowID(), "row ID value incorrect")
+	s.Equal(targetID, theUK.GetRowID(), "row ID value incorrect")
 	theValue := theUK.GetValue()
-	s.Assert().Equal(targetID, theValue["id"], "ID column value incorrect")
-	s.Assert().Equal(targetID, theUK.value["id"], "ID column value in UK incorrect")
+	s.Equal(targetID, theValue["id"], "ID column value incorrect")
+	s.Equal(targetID, theUK.value["id"], "ID column value in UK incorrect")
 }
 
 func (s *testUniqueKeySuite) TestUKValueEqual() {
@@ -140,8 +140,8 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 			"col2": col2Value,
 		},
 	}
-	s.Assert().Equal(true, uk1.IsValueEqual(uk2), "uk1 should equal uk2 on value")
-	s.Assert().Equal(true, uk2.IsValueEqual(uk1), "uk2 should equal uk1 on value")
+	s.Equal(true, uk1.IsValueEqual(uk2), "uk1 should equal uk2 on value")
+	s.Equal(true, uk2.IsValueEqual(uk1), "uk2 should equal uk1 on value")
 	uk3 := &UniqueKey{
 		rowID: 100,
 		value: map[string]interface{}{
@@ -149,16 +149,16 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 			"col2": "bbb",
 		},
 	}
-	s.Assert().Equal(false, uk1.IsValueEqual(uk3), "uk1 should not equal uk3 on value")
-	s.Assert().Equal(false, uk3.IsValueEqual(uk1), "uk3 should not equal uk1 on value")
+	s.Equal(false, uk1.IsValueEqual(uk3), "uk1 should not equal uk3 on value")
+	s.Equal(false, uk3.IsValueEqual(uk1), "uk3 should not equal uk1 on value")
 	uk4 := &UniqueKey{
 		rowID: 100,
 		value: map[string]interface{}{
 			"col3": 321,
 		},
 	}
-	s.Assert().Equal(false, uk1.IsValueEqual(uk4), "uk1 should not equal uk4 on value")
-	s.Assert().Equal(false, uk4.IsValueEqual(uk1), "uk4 should not equal uk1 on value")
+	s.Equal(false, uk1.IsValueEqual(uk4), "uk1 should not equal uk4 on value")
+	s.Equal(false, uk4.IsValueEqual(uk1), "uk4 should not equal uk1 on value")
 	uk5 := &UniqueKey{
 		rowID: 100,
 		value: map[string]interface{}{
@@ -167,10 +167,10 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 			"col2": col2Value,
 		},
 	}
-	s.Assert().Equal(false, uk1.IsValueEqual(uk5), "uk1 should not equal uk5 on value")
-	s.Assert().Equal(false, uk5.IsValueEqual(uk1), "uk5 should not equal uk1 on value")
+	s.Equal(false, uk1.IsValueEqual(uk5), "uk1 should not equal uk5 on value")
+	s.Equal(false, uk5.IsValueEqual(uk1), "uk5 should not equal uk1 on value")
 }
 
-func TestUniqueKeySUite(t *testing.T) {
+func TestUniqueKeySuite(t *testing.T) {
 	suite.Run(t, &testUniqueKeySuite{})
 }

@@ -23,8 +23,6 @@ import (
 type UniqueKey struct {
 	// It inherits a RWMutex, which is used to modify the metadata inside the UK struct.
 	sync.RWMutex
-	// rowOPLock is the lock for operating on the corresponding row of the unique key
-	rowOPLock sync.Mutex
 	// rowID is an integer describing the row ID of the unique key.
 	// The row ID is a virtual concept, not the real row ID for a DB table.
 	// Usually it is used to locate the index in an MCP.
@@ -103,19 +101,6 @@ func (uk *UniqueKey) Clone() *UniqueKey {
 	return result
 }
 
-// LockRowOperation tries to apply a row op lock on the UK.
-// This means the correspongding row of the UK is doing some operations,
-// like modify/delete the row.
-func (uk *UniqueKey) LockRowOperation() {
-	uk.rowOPLock.Lock()
-}
-
-// UnlockRowOperation unlocks the row op lock on the UK.
-// This means the correspongding row operations of the UK has finished.
-func (uk *UniqueKey) UnlockRowOperation() {
-	uk.rowOPLock.Unlock()
-}
-
 // String returns the string representation of a UK.
 func (uk *UniqueKey) String() string {
 	uk.RLock()
@@ -132,7 +117,7 @@ func (uk *UniqueKey) String() string {
 
 // IsValueEqual tests whether two UK's value parts are equal.
 func (uk *UniqueKey) IsValueEqual(otherUK *UniqueKey) bool {
-	if otherUK == nil {
+	if uk == nil || otherUK == nil {
 		return false
 	}
 	uk.RLock()
