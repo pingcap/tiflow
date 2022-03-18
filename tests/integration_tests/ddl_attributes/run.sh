@@ -44,7 +44,7 @@ function run() {
 	run_sql "show create table ddl_attributes.placement_t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
 		check_contains "CREATE TABLE \`placement_t1\` (\`id\` bigint(20) NOT NULL AUTO_INCREMENT,\`b\` varchar(255) DEFAULT NULL,PRIMARY KEY (\`id\`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
 	run_sql "show create table ddl_attributes.placement_t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-		check_contains "CREATE TABLE \`placement_t2\` (\`id\` bigint(20) NOT NULL AUTO_INCREMENT,PRIMARY KEY (\`id\`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+		check_contains "CREATE TABLE \`placement_t2\` (\`id\` bigint(20) NOT NULL AUTO_INCREMENT,PRIMARY KEY (\`id\`) /*T![clustered_index] NONCLUSTERED */)"
 }
 
 trap stop_tidb_cluster EXIT
