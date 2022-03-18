@@ -395,7 +395,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	c.eventRouter = *eventRouter
+	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
