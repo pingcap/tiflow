@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -56,25 +57,27 @@ func TestIsS3(t *testing.T) {
 	}
 }
 
-func TestIsS3AndAdjustS3Path(t *testing.T) {
+func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 	testPaths := []struct {
 		isURLFormat bool
 		rawPath     string
 		expectPath  string
 	}{
-		{true, "file:///tmp/storage", "file:///tmp/storage.placeholder"},
-		{false, "/tmp/storage", "/tmp/storage.placeholder"},
-		{false, "./tmp/storage", "./tmp/storage.placeholder"},
-		{false, "tmp/storage", "tmp/storage.placeholder"},
-		{true, "s3:///bucket/more/prefix", "s3:///bucket/more/prefix.placeholder"},
-		{true, "s3://bucket2/prefix", "s3://bucket2/prefix.placeholder"},
+		{true, "file:///tmp/storage", "file:///tmp/storage_placeholder"},
+		{false, "/tmp/storage", "/tmp/storage_placeholder"},
+		{false, "./tmp/storage", "./tmp/storage_placeholder"},
+		{false, "./tmp/storage/", "./tmp/storage_placeholder"},
+		{false, "tmp/storage", "tmp/storage_placeholder"},
+		{true, "s3:///bucket/more/prefix", "s3:///bucket/more/prefix_placeholder"},
+		{true, "s3://bucket2/prefix", "s3://bucket2/prefix_placeholder"},
+		{true, "s3://bucket2/prefix/", "s3://bucket2/prefix_placeholder"},
 		{
 			true, "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
-			"s3://bucket3/prefix/path.placeholder?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+			"s3://bucket3/prefix/path_placeholder?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
 		},
 		{
 			true, "s3://bucket3/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
-			"s3://bucket3/prefix/path.placeholder?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt%2BPaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+			"s3://bucket3/prefix/path_placeholder?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt%2BPaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
 		},
 	}
 
@@ -89,36 +92,44 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		{"a%2F%3Fbc", "a%252F%253Fbc"},
 	}
 
+	testSeparators := []string{".", string(filepath.Separator)}
+
 	for _, testUniqueID := range testUniqueIDs {
 		for _, testPath := range testPaths {
-			// ""
-			res, err := AdjustPath("", "")
-			require.NoError(t, err)
-			require.Equal(t, "", res)
-			res, err = AdjustPath(testPath.rawPath, "")
-			require.NoError(t, err)
-			require.Equal(t, testPath.rawPath, res)
-			res, err = AdjustPath("", testUniqueID.test)
-			require.NoError(t, err)
-			require.Equal(t, "", res)
-			// error
-			_, err = AdjustPath("1invalid:", testUniqueID.test)
-			require.Error(t, err)
-			require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
-			// normal
-			var expectPath string
-			if testPath.isURLFormat {
-				expectPath = strings.ReplaceAll(testPath.expectPath, "placeholder", testUniqueID.expect)
-			} else {
-				expectPath = strings.ReplaceAll(testPath.expectPath, "placeholder", testUniqueID.test)
+			for _, testSeparator := range testSeparators {
+				// ""
+				res, err := AdjustPath("", "")
+				require.NoError(t, err)
+				require.Equal(t, "", res)
+				res, err = AdjustPath(testPath.rawPath, "")
+				require.NoError(t, err)
+				require.Equal(t, testPath.rawPath, res)
+				res, err = AdjustPath("", testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, "", res)
+				// error
+				_, err = AdjustPath("1invalid:", testSeparator+testUniqueID.test)
+				require.Error(t, err)
+				require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
+				// normal
+				var expectPath string
+				if testPath.isURLFormat {
+					expectPath = strings.ReplaceAll(testPath.expectPath, "_placeholder", testSeparator+testUniqueID.expect)
+				} else {
+					expectPath = strings.ReplaceAll(testPath.expectPath, "_placeholder", testSeparator+testUniqueID.test)
+				}
+				res, err = AdjustPath(testPath.rawPath, testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, expectPath, res)
+				// repeat
+				res, err = AdjustPath(expectPath, testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, expectPath, res)
+				// trim
+				res, err = TrimPath(expectPath, testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, strings.ReplaceAll(testPath.expectPath, "_placeholder", ""), res)
 			}
-			res, err = AdjustPath(testPath.rawPath, testUniqueID.test)
-			require.NoError(t, err)
-			require.Equal(t, expectPath, res)
-			// repeat
-			res, err = AdjustPath(expectPath, testUniqueID.test)
-			require.NoError(t, err)
-			require.Equal(t, expectPath, res)
 		}
 	}
 }

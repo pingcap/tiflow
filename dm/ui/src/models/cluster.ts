@@ -2,6 +2,9 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
+    dmapiGetClusterInfo: build.query<{ cluster_id: number }, void>({
+      query: () => ({ url: `/cluster/info` }),
+    }),
     dmapiGetClusterMasterList: build.query<ListResponse<ClusterMaster>, void>({
       query: () => ({ url: `/cluster/masters` }),
       providesTags: ['ClusterMaster'],

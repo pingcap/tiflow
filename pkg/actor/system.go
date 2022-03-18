@@ -388,8 +388,7 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 	router := NewRouter(b.name)
 	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
 	for i := range metricWorkingDurations {
-		metricWorkingDurations[i] =
-			workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
+		metricWorkingDurations[i] = workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
 	}
 	return &System{
 		name:                 b.name,
@@ -461,7 +460,7 @@ func (s *System) Start(ctx context.Context) {
 // Stop the system, cancels all actors. It should be called after Start.
 // Messages sent before this call will be receive by actors.
 // Stop is not threadsafe.
-func (s *System) Stop() error {
+func (s *System) Stop() {
 	// Cancel context-aware work currently being polled.
 	if s.cancel != nil {
 		s.cancel()
@@ -474,7 +473,8 @@ func (s *System) Stop() error {
 	// Wake workers to close ready actors.
 	s.rd.stop()
 	s.metricTotalWorkers.Add(-float64(s.numWorker))
-	return s.wg.Wait()
+	// Worker goroutines never return errors.
+	_ = s.wg.Wait()
 }
 
 // Spawn spawns an actor in the system.

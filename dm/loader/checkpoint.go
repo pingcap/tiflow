@@ -608,6 +608,7 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
+	// nolint:rowserrcheck
 	rows, err := connection.QuerySQL(tctx, query, cp.taskName, cp.sourceName)
 	if err != nil {
 		return lightningStatusInit, err

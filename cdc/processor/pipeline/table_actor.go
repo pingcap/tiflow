@@ -98,7 +98,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
-
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	changefeedVars := cdcCtx.ChangefeedVars()
@@ -319,8 +318,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 func (t *tableActor) getSinkAsyncMessageHolder(
 	sdtTableContext context.Context,
-	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error) {
-
+	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error,
+) {
 	var messageFetchFunc asyncMessageHolderFunc = func() *pipeline.Message {
 		return sortActorNodeContext.tryGetProcessedMessage()
 	}

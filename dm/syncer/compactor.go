@@ -191,22 +191,8 @@ func (c *compactor) compactJob(j *job) {
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
 
 	// adjust safemode
-	skipReduce := false
-	switch j.dml.Type() {
-	case sqlmodel.RowChangeUpdate:
-		if prevJob.dml.Type() == sqlmodel.RowChangeInsert {
-			// DELETE + INSERT + UPDATE => INSERT with safemode
-			j.safeMode = prevJob.safeMode
-		}
-	case sqlmodel.RowChangeInsert:
-		if prevJob.dml.Type() == sqlmodel.RowChangeDelete {
-			// DELETE + INSERT => INSERT with safemode
-			j.safeMode = true
-			skipReduce = true
-		}
-	}
-
-	if !skipReduce {
+	adjustSafeMode(j, prevJob)
+	if !shouldSkipReduce(j, prevJob) {
 		j.dml.Reduce(prevJob.dml)
 	}
 
@@ -216,4 +202,23 @@ func (c *compactor) compactJob(j *job) {
 	c.buffer = append(c.buffer, j)
 	c.logger.Debug("finish to compact", zap.Stringer("dml", j.dml))
 	c.updateJobMetricsFn(true, adminQueueName, newCompactJob(prevJob.targetTable))
+}
+
+func shouldSkipReduce(j, prevJob *job) bool {
+	return j.dml.Type() == sqlmodel.RowChangeInsert &&
+		prevJob.dml.Type() == sqlmodel.RowChangeDelete
+}
+
+func adjustSafeMode(j, prevJob *job) {
+	switch j.dml.Type() {
+	case sqlmodel.RowChangeUpdate:
+		if prevJob.dml.Type() == sqlmodel.RowChangeInsert {
+			// DELETE + INSERT + UPDATE => INSERT with safemode
+			j.safeMode = prevJob.safeMode
+		}
+	case sqlmodel.RowChangeInsert:
+		if prevJob.dml.Type() == sqlmodel.RowChangeDelete {
+			j.safeMode = true
+		}
+	}
 }
