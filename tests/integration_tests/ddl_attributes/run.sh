@@ -38,16 +38,11 @@ function run() {
 
 	cleanup_process $CDC_BINARY
 
-	run_sql "show create table ddl_attributes.placement_t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} &&
-		check_contains "CREATE TABLE placement_t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;"
-
-	run_sql "show create table ddl_attributes.placement_t2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} &&
-		check_contains "CREATE TABLE placement_t2 (id BIGINT NOT NULL PRIMARY KEY auto_increment) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" &&
-		check_contains "POLICY=placement1"
+	run_sql "show create table ddl_attributes.placement_t1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "show create table ddl_attributes.placement_t2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "show create table ddl_attributes.placement_t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
 		check_contains "CREATE TABLE placement_t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255))"
-
 	run_sql "show create table ddl_attributes.placement_t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
 		check_contains "CREATE TABLE placement_t2 (id BIGINT NOT NULL PRIMARY KEY auto_increment) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
 }
