@@ -41,8 +41,6 @@ const (
 	workerChannelSize = 1000
 
 	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
-
-	maxBatchSize = 100 // todo: choose a proper value, or configurable?
 )
 
 type validateFailedType int
@@ -89,7 +87,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		L:                  workerLog,
 		conn:               v.toDBConns[id],
 		rowChangeCh:        make(chan *rowChange, workerChannelSize),
-		batchSize:          maxBatchSize,
+		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
 
 		pendingChangesMap: make(map[string]*tableChange),
