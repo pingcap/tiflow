@@ -1,4 +1,4 @@
-# Leveldb Sorter
+# DB Sorter
 
 - Author(s): [overvenus](https://github.com/overvenus)
 - Tracking Issue: https://github.com/pingcap/tiflow/issues/3227
@@ -25,7 +25,7 @@
 
 ## Introduction
 
-This document provides a complete design on implementing leveldb sorter,
+This document provides a complete design on implementing db sorter,
 a resource-friendly sorter with predictable and controllable usage of CPU,
 memory, on-disk files, open file descriptors, and goroutines.
 
@@ -49,10 +49,10 @@ files and open file descriptors. It matches TiCDC sorter requirements.
 To further limit consumption, TiCDC creates a fixed set of leveldb instances
 that are shared by multiple tables.
 
-The leveldb sorter is driven by actors that run on a fixed-size of goroutine
+The db sorter is driven by actors that run on a fixed-size of goroutine
 pool. This addresses goroutine management issues.
 
-The leveldb sorter is composed of five structs:
+The db sorter is composed of five structs:
 
 1. `DBActor` is a struct that reads (by taking iterators) and writes to leveldb
    directly. It is shared by multiple tables. It is driven by an actor.
@@ -71,9 +71,10 @@ _Quantitative relationship between above structs_
 | ----- | ------- | ----------- | ------ | ------ | --------- |
 | N     | 1       | N           | N      | N      | 1         |
 
-| Read Write Sequence                                                                                       | Table Sorter Structs                                                                                |
-| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| <img src="../media/leveldb-sorter-sequence.svg?sanitize=true" alt="leveldb-sorter-sequence" width="600"/> | <img src="../media/leveldb-sorter-class.svg?sanitize=true" alt="leveldb-sorter-class" width="600"/> |
+| Read Write Sequence                                                                             | Table Sorter Structs                                                                      |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| <img src="../media/db-sorter-sequence.svg?sanitize=true" alt="db-sorter-sequence" width="600"/> | <img src="../media/db-sorter-class.svg?sanitize=true" alt="db-sorter-class" width="600"/> |
+
 ### Encoding
 
 #### Key
