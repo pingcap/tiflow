@@ -548,7 +548,6 @@ function run() {
 	init_cluster
 	init_database
 	start=46
-	start=46
 	end=70
 	except=(052 053 054 055 060 061 069 070)
 	for i in $(seq -f "%03g" ${start} ${end}); do

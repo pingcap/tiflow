@@ -938,6 +938,9 @@ func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) 
 func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtasksCanUpdateRequest) (*pb.CheckSubtasksCanUpdateResponse, error) {
 	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("payload", req))
 	resp := &pb.CheckSubtasksCanUpdateResponse{}
+	defer func() {
+		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
+	}()
 	w := s.getSourceWorker(true)
 	if w == nil {
 		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source is being handled in the worker"

@@ -3077,7 +3077,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist            bool
 		shouldTableExistNum          int  // tableNames[:shouldTableExistNum] should exist
 		shouldRefTableExistNum       int  // tableNames[1:shouldTableExistNum] should exist, since first one is "caller table"
-		tryFetchDownstreamTable      bool // to make sure if not exists will execute correctly
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
@@ -3103,7 +3102,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist = true
 		// for CREATE TABLE LIKE/AS, the reference tables should exist
 		shouldRefTableExistNum = len(srcTables)
-		tryFetchDownstreamTable = true
 	case *ast.DropTableStmt:
 		shouldExecDDLOnSchemaTracker = true
 		shouldReTrackDownstreamIndex = true
@@ -3163,11 +3161,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		if _, err := s.getTableInfo(ec.tctx, srcTables[i], targetTables[i]); err != nil {
 			return err
 		}
-	}
-
-	if tryFetchDownstreamTable {
-		// ignore table not exists error, just try to fetch table from downstream.
-		_, _ = s.getTableInfo(ec.tctx, srcTables[0], targetTables[0])
 	}
 
 	if shouldExecDDLOnSchemaTracker {
@@ -3567,6 +3560,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
 // 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
@@ -3588,8 +3582,19 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
 	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+
+	// support fields that changed in func `copyConfigFromSource`
+	oldCfg.From = newCfg.From
+	oldCfg.Flavor = newCfg.Flavor
+	oldCfg.ServerID = newCfg.ServerID
+	oldCfg.RelayDir = newCfg.RelayDir
+	oldCfg.UseRelay = newCfg.UseRelay
+	oldCfg.EnableGTID = newCfg.EnableGTID
+	oldCfg.AutoFixGTID = newCfg.AutoFixGTID
+	oldCfg.CaseSensitive = newCfg.CaseSensitive
+
 	if oldCfg.String() != newCfg.String() {
-		return terror.ErrWorkerUpdateSubTaskConfig.Generate(newCfg.Name, s.Type().String())
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
 }
@@ -3693,6 +3698,16 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 	// update syncer config
 	s.cfg.SyncerConfig = cfg.SyncerConfig
+
+	// updated fileds that changed in func `copyConfigFromSource`
+	s.cfg.From = cfg.From
+	s.cfg.Flavor = cfg.Flavor
+	s.cfg.ServerID = cfg.ServerID
+	s.cfg.RelayDir = cfg.RelayDir
+	s.cfg.UseRelay = cfg.UseRelay
+	s.cfg.EnableGTID = cfg.EnableGTID
+	s.cfg.AutoFixGTID = cfg.AutoFixGTID
+	s.cfg.CaseSensitive = cfg.CaseSensitive
 	return nil
 }
 

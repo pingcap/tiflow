@@ -14,12 +14,14 @@
 package shardddl
 
 import (
-	. "github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 )
 
-func (t *testPessimist) TestInfoSlice(c *C) {
+func TestInfoSlice(t *testing.T) {
 	var (
 		task          = "task"
 		source1       = "mysql-replica-1"
@@ -35,8 +37,8 @@ func (t *testPessimist) TestInfoSlice(c *C) {
 	)
 
 	ifs := pessimismInfoMapToSlice(ifm)
-	c.Assert(ifs, HasLen, 3)
-	c.Assert(ifs[0], DeepEquals, ifm[source1])
-	c.Assert(ifs[1], DeepEquals, ifm[source2])
-	c.Assert(ifs[2], DeepEquals, ifm[source3])
+	require.Len(t, ifs, 3)
+	require.Equal(t, ifm[source1], ifs[0])
+	require.Equal(t, ifm[source2], ifs[1])
+	require.Equal(t, ifm[source3], ifs[2])
 }

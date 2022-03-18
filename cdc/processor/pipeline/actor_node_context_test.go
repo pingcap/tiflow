@@ -81,7 +81,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	sys := system.NewSystem()
 	defer func() {
 		cancel()
-		require.Nil(t, sys.Stop())
+		sys.Stop()
 	}()
 
 	require.Nil(t, sys.Start(ctx))
