@@ -61,7 +61,8 @@ type ddlPullerImpl struct {
 	lastDDLJobID   int64
 	cancel         context.CancelFunc
 
-	clock clock.Clock
+	clock        clock.Clock
+	changefeedID string
 }
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
@@ -87,24 +88,27 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller:     plr,
-		resolvedTS: startTs,
-		filter:     f,
-		cancel:     func() {},
-		clock:      clock.New(),
+		puller:       plr,
+		resolvedTS:   startTs,
+		filter:       f,
+		cancel:       func() {},
+		clock:        clock.New(),
+		changefeedID: ctx.ChangefeedVars().ID + "_ddl_puller",
 	}, nil
 }
 
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Debug("DDL puller started", zap.String("changefeed", ctx.ChangefeedVars().ID))
+	log.Info("DDL puller started", zap.String("changefeed", h.changefeedID),
+		zap.Uint64("resolvedTS", h.resolvedTS))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	errg, stdCtx := errgroup.WithContext(stdCtx)
-	lastResolvedTsAdanvcedTime := h.clock.Now()
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	g, stdCtx := errgroup.WithContext(stdCtx)
+	lastResolvedTsAdvancedTime := h.clock.Now()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		return h.puller.Run(stdCtx)
 	})
 
@@ -118,7 +122,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			if rawDDL.CRTs > h.resolvedTS {
-				lastResolvedTsAdanvcedTime = h.clock.Now()
+				lastResolvedTsAdvancedTime = h.clock.Now()
 				h.resolvedTS = rawDDL.CRTs
 			}
 			return nil
@@ -128,16 +132,22 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		if job == nil {
+			log.Info("ddl job is nil after unmarshal", zap.String("changefeed", h.changefeedID))
 			return nil
 		}
 		if h.filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+			log.Info("discard the ddl job", zap.String("changefeed", h.changefeedID),
+				zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
 		if job.ID == h.lastDDLJobID {
-			log.Warn("ignore duplicated DDL job", zap.Any("job", job))
+			log.Warn("ignore duplicated DDL job", zap.String("changefeed", h.changefeedID),
+				zap.Any("job", job))
 			return nil
 		}
+		log.Info("receive new ddl job", zap.String("changefeed", h.changefeedID),
+			zap.Any("job", job))
+
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
@@ -148,16 +158,16 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		for {
 			select {
 			case <-stdCtx.Done():
 				return stdCtx.Err()
 			case <-ticker.C:
-				duration := h.clock.Since(lastResolvedTsAdanvcedTime)
+				duration := h.clock.Since(lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
-						zap.String("changefeed", ctx.ChangefeedVars().ID),
+						zap.String("changefeed", h.changefeedID),
 						zap.Duration("duration", duration),
 						zap.Uint64("resolvedTs", h.resolvedTS))
 				}
@@ -169,7 +179,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 	})
 
-	return errg.Wait()
+	return g.Wait()
 }
 
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
@@ -194,6 +204,6 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 }
 
 func (h *ddlPullerImpl) Close() {
-	log.Info("Close the ddl puller")
+	log.Info("Close the ddl puller", zap.String("changefeed", h.changefeedID))
 	h.cancel()
 }

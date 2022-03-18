@@ -112,12 +112,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
-	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
+	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
+		util.ChangefeedIDFromCtx(ctx), util.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
+				lockResolver, p, eventCh)
 		})
 	}
 
@@ -151,6 +153,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
+					zap.String("changefeed", changefeedID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -170,24 +173,29 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			var e model.RegionFeedEvent
 			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
 			case <-metricsTicker.C:
 				metricEventChanSize.Observe(float64(len(eventCh)))
 				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 				continue
 			case e = <-eventCh:
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
 			}
+
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
-			} else if e.Resolved != nil {
+				continue
+			}
+
+			if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
+						zap.String("changefeed", changefeedID),
 						zap.Reflect("resolved", e.Resolved),
 						zap.Int64("tableID", tableID),
 						zap.Reflect("spans", p.spans),
@@ -207,8 +215,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.Duration("duration", time.Since(start)),
 						zap.String("changefeed", changefeedID),
+						zap.Duration("duration", time.Since(start)),
 						zap.Int64("tableID", tableID),
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))

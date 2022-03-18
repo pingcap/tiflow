@@ -581,8 +581,7 @@ func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
 func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error {
 	cp.Lock()
 	defer cp.Unlock()
-	_, ok := cp.points[sourceSchema]
-	if !ok {
+	if _, ok := cp.points[sourceSchema]; !ok {
 		return nil
 	}
 

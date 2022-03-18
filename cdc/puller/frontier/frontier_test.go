@@ -19,19 +19,12 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/pkg/regionspan"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type spanFrontierSuite struct{}
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-var _ = check.Suite(&spanFrontierSuite{})
-
-func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanFrontier(t *testing.T) {
+	t.Parallel()
 	keyA := []byte("a")
 	keyB := []byte("b")
 	keyC := []byte("c")
@@ -46,125 +39,125 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	f := NewFrontier(5, spAD).(*spanFrontier)
 
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [d @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[a @ 5] [d @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	f.Forward(
 		regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")},
 		100,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [d @ 100] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[a @ 5] [d @ 100] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	f.Forward(
 		regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")},
 		200,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[a @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward the tracked span space.
 	f.Forward(
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// // Forward it again
 	f.Forward(
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		2,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.String(), check.Equals, `[a @ 2] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[a @ 2] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// // Forward to smaller ts
 	f.Forward(
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// // Forward b-c
 	f.Forward(spBC, 3)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [b @ 3] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [b @ 3] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward b-c more to be 4
 	f.Forward(spBC, 4)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [b @ 4] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [b @ 4] [c @ 1] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward all to at least 3
 	f.Forward(spAD, 3)
-	c.Assert(f.Frontier(), check.Equals, uint64(3))
-	c.Assert(f.String(), check.Equals, `[a @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(3), f.Frontier())
+	require.Equal(t, `[a @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward AB and CD to be 5, keep BC at 4
 	f.Forward(spAB, 5)
-	c.Assert(f.Frontier(), check.Equals, uint64(3))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [b @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(3), f.Frontier())
+	require.Equal(t, `[a @ 5] [b @ 3] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	f.Forward(spCD, 5)
-	c.Assert(f.Frontier(), check.Equals, uint64(3))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [b @ 3] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(3), f.Frontier())
+	require.Equal(t, `[a @ 5] [b @ 3] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Catch BC to be 5 too
 	f.Forward(spBC, 5)
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[a @ 5] [b @ 5] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[a @ 5] [b @ 5] [c @ 5] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward all to be 6
 	f.Forward(spAD, 6)
-	c.Assert(f.Frontier(), check.Equals, uint64(6))
-	c.Assert(f.String(), check.Equals, `[a @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(6), f.Frontier())
+	require.Equal(t, `[a @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward ac to 7
 	f.Forward(spAC, 7)
-	c.Assert(f.Frontier(), check.Equals, uint64(6))
-	c.Assert(f.String(), check.Equals, `[a @ 7] [c @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(6), f.Frontier())
+	require.Equal(t, `[a @ 7] [c @ 6] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward bd to 8
 	f.Forward(spBD, 8)
-	c.Assert(f.Frontier(), check.Equals, uint64(7))
-	c.Assert(f.String(), check.Equals, `[a @ 7] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(7), f.Frontier())
+	require.Equal(t, `[a @ 7] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Forward ab to 8
 	f.Forward(spAB, 8)
-	c.Assert(f.Frontier(), check.Equals, uint64(8))
-	c.Assert(f.String(), check.Equals, `[a @ 8] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(8), f.Frontier())
+	require.Equal(t, `[a @ 8] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	f.Forward(regionspan.ComparableSpan{Start: []byte("1"), End: []byte("g")}, 9)
-	c.Assert(f.Frontier(), check.Equals, uint64(9))
-	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 200] [h @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(9), f.Frontier())
+	require.Equal(t, `[1 @ 9] [g @ 200] [h @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	f.Forward(regionspan.ComparableSpan{Start: []byte("g"), End: []byte("i")}, 10)
-	c.Assert(f.Frontier(), check.Equals, uint64(9))
-	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 10] [i @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(9), f.Frontier())
+	require.Equal(t, `[1 @ 9] [g @ 10] [i @ Max] `, f.String())
+	checkFrontier(t, f)
 }
 
-func (s *spanFrontierSuite) TestSpanFrontierFallback(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanFrontierFallback(t *testing.T) {
+	t.Parallel()
 	keyA := []byte("a")
 	keyB := []byte("b")
 	keyC := []byte("c")
@@ -183,9 +176,9 @@ func (s *spanFrontierSuite) TestSpanFrontierFallback(c *check.C) {
 
 	// [A, B) [B, C) [C, D) [D, E)
 	// 20     20     10     20
-	c.Assert(f.Frontier(), check.Equals, uint64(10))
-	c.Assert(f.String(), check.Equals, `[a @ 20] [b @ 20] [c @ 10] [d @ 20] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(10), f.Frontier())
+	require.Equal(t, `[a @ 20] [b @ 20] [c @ 10] [d @ 20] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// [A, B) [B, D) [D, E)
 	// 20     10     10
@@ -195,18 +188,18 @@ func (s *spanFrontierSuite) TestSpanFrontierFallback(c *check.C) {
 	// 20     10     10     20
 	// [B, C) does not forward, because of merge into [A, C) immediately
 	f.Forward(spCD, 20)
-	c.Assert(f.Frontier(), check.Equals, uint64(20))
+	require.Equal(t, uint64(20), f.Frontier())
 	// the frontier stoes [A, B) and [B, C) but they are not correct exactly
-	c.Assert(f.String(), check.Equals, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
 }
 
-func (s *spanFrontierSuite) TestMinMax(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMinMax(t *testing.T) {
+	t.Parallel()
 	var keyMin []byte
 	var keyMax []byte
 	keyMid := []byte("m")
@@ -216,33 +209,33 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 
 	f := NewFrontier(0, spMinMax)
-	c.Assert(f.Frontier(), check.Equals, uint64(0))
-	c.Assert(f.String(), check.Equals, "[ @ 0] [\xff\xff\xff\xff\xff @ Max] ")
-	checkFrontier(c, f)
+	require.Equal(t, uint64(0), f.Frontier())
+	require.Equal(t, "[ @ 0] [\xff\xff\xff\xff\xff @ Max] ", f.String())
+	checkFrontier(t, f)
 
 	f.Forward(spMinMax, 1)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, "[ @ 1] [\xff\xff\xff\xff\xff @ Max] ")
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, "[ @ 1] [\xff\xff\xff\xff\xff @ Max] ", f.String())
+	checkFrontier(t, f)
 
 	f.Forward(spMinMid, 2)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, "[ @ 2] [m @ 1] [\xff\xff\xff\xff\xff @ Max] ")
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, "[ @ 2] [m @ 1] [\xff\xff\xff\xff\xff @ Max] ", f.String())
+	checkFrontier(t, f)
 
 	f.Forward(spMidMax, 2)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.String(), check.Equals, "[ @ 2] [m @ 2] [\xff\xff\xff\xff\xff @ Max] ")
-	checkFrontier(c, f)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, "[ @ 2] [m @ 2] [\xff\xff\xff\xff\xff @ Max] ", f.String())
+	checkFrontier(t, f)
 
 	f.Forward(spMinMax, 3)
-	c.Assert(f.Frontier(), check.Equals, uint64(3))
-	c.Assert(f.String(), check.Equals, "[ @ 3] [\xff\xff\xff\xff\xff @ Max] ")
-	checkFrontier(c, f)
+	require.Equal(t, uint64(3), f.Frontier())
+	require.Equal(t, "[ @ 3] [\xff\xff\xff\xff\xff @ Max] ", f.String())
+	checkFrontier(t, f)
 }
 
-func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanFrontierDisjoinSpans(t *testing.T) {
+	t.Parallel()
 	key1 := []byte("1")
 	key2 := []byte("2")
 	keyA := []byte("a")
@@ -261,53 +254,53 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 	sp1F := regionspan.ComparableSpan{Start: key1, End: keyF}
 
 	f := NewFrontier(0, spAB, spCE)
-	c.Assert(f.Frontier(), check.Equals, uint64(0))
-	c.Assert(f.String(), check.Equals, `[a @ 0] [b @ Max] [c @ 0] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(0), f.Frontier())
+	require.Equal(t, `[a @ 0] [b @ Max] [c @ 0] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance the tracked spans
 	f.Forward(spAB, 1)
-	c.Assert(f.Frontier(), check.Equals, uint64(0))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [b @ Max] [c @ 0] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(0), f.Frontier())
+	require.Equal(t, `[a @ 1] [b @ Max] [c @ 0] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 	f.Forward(spCE, 1)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [b @ Max] [c @ 1] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [b @ Max] [c @ 1] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance d-e split c-e to c-d and d-e
 	f.Forward(spDE, 2)
-	c.Assert(f.Frontier(), check.Equals, uint64(1))
-	c.Assert(f.String(), check.Equals, `[a @ 1] [b @ Max] [c @ 1] [d @ 2] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(1), f.Frontier())
+	require.Equal(t, `[a @ 1] [b @ Max] [c @ 1] [d @ 2] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance a-d cover a-b and c-d
 	f.Forward(spAD, 3)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.String(), check.Equals, `[a @ 3] [d @ 2] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[a @ 3] [d @ 2] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance one cover all 3 span
 	f.Forward(spAE, 4)
-	c.Assert(f.Frontier(), check.Equals, uint64(4))
-	c.Assert(f.String(), check.Equals, `[a @ 4] [e @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(4), f.Frontier())
+	require.Equal(t, `[a @ 4] [e @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance all with a larger span
 	f.Forward(sp1F, 5)
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[1 @ 5] [f @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[1 @ 5] [f @ Max] `, f.String())
+	checkFrontier(t, f)
 
 	// Advance span smaller than all tracked spans
 	f.Forward(sp12, 6)
-	c.Assert(f.Frontier(), check.Equals, uint64(5))
-	c.Assert(f.String(), check.Equals, `[1 @ 6] [2 @ 5] [f @ Max] `)
-	checkFrontier(c, f)
+	require.Equal(t, uint64(5), f.Frontier())
+	require.Equal(t, `[1 @ 6] [2 @ 5] [f @ Max] `, f.String())
+	checkFrontier(t, f)
 }
 
-func (s *spanFrontierSuite) TestSpanFrontierRandomly(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSpanFrontierRandomly(t *testing.T) {
+	t.Parallel()
 	var keyMin []byte
 	var keyMax []byte
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
@@ -333,11 +326,11 @@ func (s *spanFrontierSuite) TestSpanFrontierRandomly(c *check.C) {
 		ts := rand.Uint64()
 
 		f.Forward(span, ts)
-		checkFrontier(c, f)
+		checkFrontier(t, f)
 	}
 }
 
-func checkFrontier(c *check.C, f Frontier) {
+func checkFrontier(t *testing.T, f Frontier) {
 	sf := f.(*spanFrontier)
 	var tsInList, tsInHeap []uint64
 	sf.spanList.Entries(func(n *skipListNode) bool {
@@ -348,9 +341,9 @@ func checkFrontier(c *check.C, f Frontier) {
 		tsInHeap = append(tsInHeap, n.key)
 		return true
 	})
-	c.Assert(len(tsInList), check.Equals, len(tsInHeap))
+	require.Equal(t, len(tsInHeap), len(tsInList))
 	sort.Slice(tsInList, func(i, j int) bool { return tsInList[i] < tsInList[j] })
 	sort.Slice(tsInHeap, func(i, j int) bool { return tsInHeap[i] < tsInHeap[j] })
-	c.Assert(tsInList, check.DeepEquals, tsInHeap)
-	c.Assert(f.Frontier(), check.Equals, tsInList[0])
+	require.Equal(t, tsInHeap, tsInList)
+	require.Equal(t, tsInList[0], f.Frontier())
 }

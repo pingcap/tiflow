@@ -20,13 +20,16 @@ def create_source_failed():
 
 def create_source1_success():
     req = {
-        "case_sensitive": False,
-        "enable_gtid": False,
-        "host": "127.0.0.1",
-        "password": "123456",
-        "port": 3306,
-        "source_name": SOURCE1_NAME,
-        "user": "root",
+        "source": {
+            "case_sensitive": False,
+            "enable": True,
+            "enable_gtid": False,
+            "host": "127.0.0.1",
+            "password": "123456",
+            "port": 3306,
+            "source_name": SOURCE1_NAME,
+            "user": "root",
+        }
     }
     resp = requests.post(url=API_ENDPOINT, json=req)
     print("create_source1_success resp=", resp.json())
@@ -35,13 +38,16 @@ def create_source1_success():
 
 def create_source2_success():
     req = {
-        "case_sensitive": False,
-        "enable_gtid": False,
-        "host": "127.0.0.1",
-        "password": "123456",
-        "port": 3307,
-        "source_name": SOURCE2_NAME,
-        "user": "root",
+        "source": {
+            "enable": True,
+            "case_sensitive": False,
+            "enable_gtid": False,
+            "host": "127.0.0.1",
+            "password": "123456",
+            "port": 3307,
+            "source_name": SOURCE2_NAME,
+            "user": "root",
+        }
     }
     resp = requests.post(url=API_ENDPOINT, json=req)
     print("create_source1_success resp=", resp.json())
@@ -92,45 +98,63 @@ def delete_source_failed(source_name):
     assert resp.status_code == 400
 
 
-def start_relay_failed(source_name, worker_name):
-    url = API_ENDPOINT + "/" + source_name + "/start-relay"
+def enable_relay_failed(source_name, worker_name):
+    url = API_ENDPOINT + "/" + source_name + "/relay/enable"
     req = {
         "worker_name_list": [worker_name],
     }
     resp = requests.post(url=url, json=req)
-    print("start_relay_failed resp=", resp.json())
+    print("enable_relay_failed resp=", resp.json())
     assert resp.status_code == 400
 
 
-def start_relay_success(source_name, worker_name):
-    url = API_ENDPOINT + "/" + source_name + "/start-relay"
+def enable_relay_success(source_name, worker_name):
+    url = API_ENDPOINT + "/" + source_name + "/relay/enable"
     req = {
-        "worker_name_list": [worker_name],
         "purge": {"interval": 3600, "expires": 0, "remain_space": 15},
     }
     resp = requests.post(url=url, json=req)
     assert resp.status_code == 200
 
 
-def pause_relay_success(source_name):
-    url = API_ENDPOINT + "/" + source_name + "/pause-relay"
-    resp = requests.post(url=url)
-    assert resp.status_code == 200
-
-
-def resume_relay_success(source_name):
-    url = API_ENDPOINT + "/" + source_name + "/resume-relay"
-    resp = requests.post(url=url)
-    assert resp.status_code == 200
-
-
-def start_relay_success_with_two_worker(source_name, worker1_name, worker2_name):
-    url = API_ENDPOINT + "/" + source_name + "/start-relay"
+def enable_relay_success_with_two_worker(source_name, worker1_name, worker2_name):
+    url = API_ENDPOINT + "/" + source_name + "/relay/enable"
     req = {
         "worker_name_list": [worker1_name, worker2_name],
         "purge": {"interval": 3600, "expires": 0, "remain_space": 15},
     }
     resp = requests.post(url=url, json=req)
+    assert resp.status_code == 200
+
+
+def disable_relay_failed(source_name, worker_name):
+    url = API_ENDPOINT + "/" + source_name + "/relay/disable"
+    req = {
+        "worker_name_list": [worker_name],
+    }
+    resp = requests.post(url=url, json=req)
+    print("disable_relay_failed resp=", resp.json())
+    assert resp.status_code == 400
+
+
+def disable_relay_success(source_name, worker_name):
+    url = API_ENDPOINT + "/" + source_name + "/relay/disable"
+    req = {
+        "worker_name_list": [worker_name],
+    }
+    resp = requests.post(url=url, json=req)
+    assert resp.status_code == 200
+
+
+def purge_relay_success(source_name, relay_binlog_name, relay_dir=""):
+    url = API_ENDPOINT + "/" + source_name + "/relay/purge"
+    req = {
+        "relay_binlog_name": relay_binlog_name,
+        "relay_dir": relay_dir,
+    }
+    resp = requests.post(url=url, json=req)
+    if resp.status_code != 200:
+        print("purge relay  failed resp=", resp.json())
     assert resp.status_code == 200
 
 
@@ -165,25 +189,6 @@ def get_source_status_success_no_relay(source_name, source_idx=0):
     res = resp.json()
     print("get_source_status_success_no_relay resp=", res)
     assert res["data"][int(source_idx)].get("relay_status") is None
-
-
-def stop_relay_failed(source_name, worker_name):
-    url = API_ENDPOINT + "/" + source_name + "/stop-relay"
-    req = {
-        "worker_name_list": [worker_name],
-    }
-    resp = requests.post(url=url, json=req)
-    print("stop_relay_failed resp=", resp.json())
-    assert resp.status_code == 400
-
-
-def stop_relay_success(source_name, worker_name):
-    url = API_ENDPOINT + "/" + source_name + "/stop-relay"
-    req = {
-        "worker_name_list": [worker_name],
-    }
-    resp = requests.post(url=url, json=req)
-    assert resp.status_code == 200
 
 
 def transfer_source_success(source_name, worker_name):
@@ -221,13 +226,12 @@ if __name__ == "__main__":
         "delete_source_failed": delete_source_failed,
         "delete_source_success": delete_source_success,
         "delete_source_with_force_success": delete_source_with_force_success,
-        "start_relay_failed": start_relay_failed,
-        "pause_relay_success": pause_relay_success,
-        "resume_relay_success": resume_relay_success,
-        "start_relay_success": start_relay_success,
-        "start_relay_success_with_two_worker": start_relay_success_with_two_worker,
-        "stop_relay_failed": stop_relay_failed,
-        "stop_relay_success": stop_relay_success,
+        "enable_relay_failed": enable_relay_failed,
+        "enable_relay_success": enable_relay_success,
+        "enable_relay_success_with_two_worker": enable_relay_success_with_two_worker,
+        "disable_relay_failed": disable_relay_failed,
+        "disable_relay_success": disable_relay_success,
+        "purge_relay_success": purge_relay_success,
         "get_source_status_failed": get_source_status_failed,
         "get_source_status_success": get_source_status_success,
         "get_source_status_success_with_relay": get_source_status_success_with_relay,

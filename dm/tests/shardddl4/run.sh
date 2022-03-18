@@ -434,9 +434,35 @@ function DM_130_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# skip first ddl
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			"blockingDDLs" 2 \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` MODIFY COLUMN \`b\` INT DEFAULT -1" 1 \
+			"blockDDLOwner" 2 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID2} -d ${shardddl1} -t ${tb1} --action skip" \
+			"\"result\": true" 1
+		# skip second ddl
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"blockingDDLs" 2 \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` MODIFY COLUMN \`b\` INT DEFAULT -1" 1 \
+			"blockDDLOwner" 2 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb2}\`\"" 1
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"shard-ddl-lock unlock test-\`${shardddl}\`.\`${tb}\` -s ${SOURCE_ID2} -d ${shardddl1} -t ${tb2} --action skip" \
+			"\"result\": true" 1
+		# check whether both locks are unlocked
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"result\": true" 3 \
+			"\"blockDDLOwner\": \"\"" 2
+		run_sql_source1 "insert into ${shardddl1}.${tb1}(a) values(13);"
+		run_sql_source2 "insert into ${shardddl1}.${tb1}(a) values(14);"
+		run_sql_source2 "insert into ${shardddl1}.${tb2}(a) values(15);"
+		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	fi
 }
 
