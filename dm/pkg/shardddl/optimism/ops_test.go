@@ -85,14 +85,10 @@ func (t *testForEtcd) TestSourceTablesInfo(c *C) {
 	var (
 		task       = "task"
 		source     = "mysql-replica-1"
-		upSchema   = "foo-1"
-		upTable    = "bar-1"
 		downSchema = "foo"
 		downTable  = "bar"
 		st1        = NewSourceTables(task, source)
 		st2        = NewSourceTables(task, source)
-		i11        = NewInfo(task, source, upSchema, upTable, "foo", "bar",
-			[]string{"ALTER TABLE bar ADD COLUMN c1 INT"}, nil, nil)
 	)
 
 	st1.AddTable("db", "tbl-1", downSchema, downTable)
@@ -100,8 +96,8 @@ func (t *testForEtcd) TestSourceTablesInfo(c *C) {
 	st2.AddTable("db", "tbl-2", downSchema, downTable)
 	st2.AddTable("db", "tbl-3", downSchema, downTable)
 
-	// put source tables and info.
-	rev1, err := PutSourceTablesInfo(etcdTestCli, st1, i11)
+	// put source tables
+	rev1, err := PutSourceTables(etcdTestCli, st1)
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
 
@@ -112,20 +108,8 @@ func (t *testForEtcd) TestSourceTablesInfo(c *C) {
 	c.Assert(stm[task], HasLen, 1)
 	c.Assert(stm[task][source], DeepEquals, st1)
 
-	ifm, rev3, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev3, Equals, rev1)
-	c.Assert(ifm, HasLen, 1)
-	c.Assert(ifm[task], HasLen, 1)
-	c.Assert(ifm[task][source], HasLen, 1)
-	c.Assert(ifm[task][source][upSchema], HasLen, 1)
-	i11WithVer := i11
-	i11WithVer.Version = 1
-	i11WithVer.Revision = rev3
-	c.Assert(ifm[task][source][upSchema][upTable], DeepEquals, i11WithVer)
-
-	// put/update source tables and delete info.
-	rev4, err := PutSourceTablesDeleteInfo(etcdTestCli, st2, i11)
+	// put/update source tables
+	rev4, err := PutSourceTables(etcdTestCli, st2)
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Greater, rev1)
 
@@ -135,9 +119,4 @@ func (t *testForEtcd) TestSourceTablesInfo(c *C) {
 	c.Assert(stm, HasLen, 1)
 	c.Assert(stm[task], HasLen, 1)
 	c.Assert(stm[task][source], DeepEquals, st2)
-
-	ifm, rev6, err := GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	c.Assert(rev6, Equals, rev4)
-	c.Assert(ifm, HasLen, 0)
 }

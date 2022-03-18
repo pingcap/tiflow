@@ -15,9 +15,11 @@ package optimism
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
 func (t *testForEtcd) TestSourceTablesJSON(c *C) {
@@ -151,4 +153,113 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *C) {
 	c.Assert(std.Task, Equals, st2.Task)
 	c.Assert(std.Source, Equals, st2.Source)
 	c.Assert(len(ech), Equals, 0)
+}
+
+func TestToRouteTable(t *testing.T) {
+	var (
+		task1      = "task-1"
+		source1    = "mysql-replica-1"
+		downSchema = "db"
+		downTable  = "tbl"
+		upSchema   = "db"
+		upTable1   = "tbl-1"
+		upTable2   = "tbl-2"
+
+		tt11 = newTargetTable(task1, source1, downSchema, downTable, map[string]map[string]struct{}{
+			upSchema: {upTable1: struct{}{}, upTable2: struct{}{}},
+		})
+
+		result = map[RouteTable]struct{}{
+			{
+				UpSchema:   upSchema,
+				UpTable:    upTable1,
+				DownSchema: downSchema,
+				DownTable:  downTable,
+			}: {},
+			{
+				UpSchema:   upSchema,
+				UpTable:    upTable2,
+				DownSchema: downSchema,
+				DownTable:  downTable,
+			}: {},
+		}
+
+		st11 = NewSourceTables(task1, source1)
+	)
+
+	rt := st11.toRouteTable()
+	require.Len(t, rt, 0)
+
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			st11.AddTable(schema, table, tt11.DownSchema, tt11.DownTable)
+		}
+	}
+
+	rt = st11.toRouteTable()
+	require.Len(t, rt, 2)
+	require.Equal(t, result, rt)
+}
+
+func TestDiffSourceTable(t *testing.T) {
+	var (
+		task1      = "task-1"
+		source1    = "mysql-replica-1"
+		downSchema = "db"
+		downTable  = "tbl"
+		upSchema   = "db"
+		upTable1   = "tbl-1"
+		upTable2   = "tbl-2"
+
+		tt11 = newTargetTable(task1, source1, downSchema, downTable, map[string]map[string]struct{}{
+			upSchema: {upTable1: struct{}{}, upTable2: struct{}{}},
+		})
+
+		result1 = map[RouteTable]struct{}{
+			{
+				UpSchema:   upSchema,
+				UpTable:    upTable1,
+				DownSchema: downSchema,
+				DownTable:  downTable,
+			}: {},
+		}
+		result2 = map[RouteTable]struct{}{
+			{
+				UpSchema:   upSchema,
+				UpTable:    upTable2,
+				DownSchema: downSchema,
+				DownTable:  downTable,
+			}: {},
+		}
+		st11 SourceTables
+		st12 SourceTables
+	)
+
+	addTables, dropTables := DiffSourceTables(st11, st12)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
+
+	st11 = NewSourceTables(task1, source1)
+	st12 = NewSourceTables(task1, source1)
+	addTables, dropTables = DiffSourceTables(st11, st12)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
+
+	st11.AddTable(upSchema, upTable1, tt11.DownSchema, tt11.DownTable)
+
+	addTables, dropTables = DiffSourceTables(st11, st12)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 1)
+	require.Equal(t, dropTables, result1)
+	addTables, dropTables = DiffSourceTables(st12, st11)
+	require.Len(t, addTables, 1)
+	require.Len(t, dropTables, 0)
+	require.Equal(t, addTables, result1)
+
+	st12.AddTable(upSchema, upTable2, tt11.DownSchema, tt11.DownTable)
+	addTables, dropTables = DiffSourceTables(st11, st12)
+	require.Len(t, addTables, 1)
+	require.Len(t, dropTables, 1)
+	require.Equal(t, addTables, result2)
+	require.Equal(t, dropTables, result1)
 }

@@ -404,6 +404,72 @@ function DM_UPDATE_BA_ROUTE() {
 	run_case UPDATE_BA_ROUTE "double-source-optimistic" "init_table 111 121 211 221" "clean_table" "optimistic"
 }
 
+function DM_CREATE_DROP_TABLE_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
+	run_sql_source1 "insert into ${shardddl2}.${tb1} values(2);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3);"
+	run_sql_source2 "insert into ${shardddl2}.${tb1} values(4);"
+
+	# add source1.db1.table2
+	# drop source1.db1.table1
+	run_sql_source1 "create table ${shardddl1}.${tb2} (id int primary key);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(5);"
+	run_sql_source1 "drop table ${shardddl1}.${tb1};"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int"
+	run_sql_source1 "alter table ${shardddl2}.${tb1} add column new_col1 int"
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int"
+	run_sql_source2 "alter table ${shardddl2}.${tb1} add column new_col1 int"
+
+	run_sql_source1 "insert into ${shardddl2}.${tb1} values(6,6);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,7);"
+	run_sql_source2 "insert into ${shardddl2}.${tb1} values(8,8);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(9,9);"
+
+	# add source2.db1.table2 with a smaller schema
+	# drop source2.db1.table1
+	run_sql_source2 "create table ${shardddl1}.${tb2} (id int primary key);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(10);"
+	run_sql_source2 "drop table ${shardddl1}.${tb1};"
+
+	run_sql_source2 "alter table ${shardddl2}.${tb1} drop column new_col1"
+
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(11,11);"
+	run_sql_source1 "insert into ${shardddl2}.${tb1} values(12,12);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(13);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(14);"
+
+	# drop source1.db2.table1
+	run_sql_source1 "drop table ${shardddl2}.${tb1};"
+	# all table has no new_col1
+	run_sql_source1 "alter table ${shardddl1}.${tb2} drop column new_col1"
+
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(15);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(16);"
+	run_sql_source2 "insert into ${shardddl2}.${tb1} values(17);"
+
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 17"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col2 int"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column new_col2 int"
+	run_sql_source2 "alter table ${shardddl2}.${tb1} add column new_col2 int"
+
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(18,18);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(19,19);"
+	run_sql_source2 "insert into ${shardddl2}.${tb1} values(20,20);"
+
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 20"
+	run_sql_tidb_with_retry "select count(1) from INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA='${shardddl}' AND TABLE_NAME='${tb}';" \
+		"count(1): 2"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"show-ddl-locks" \
+		"no DDL lock exists" 1
+}
+
+function DM_CREATE_DROP_TABLE() {
+	run_case CREATE_DROP_TABLE "double-source-optimistic" "init_table 111 121 211 221" "clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -413,6 +479,7 @@ function run() {
 	DM_RESTART_TASK_MASTER_WORKER
 	DM_STOP_TASK_FOR_A_SOURCE
 	DM_UPDATE_BA_ROUTE
+	DM_CREATE_DROP_TABLE
 }
 
 cleanup_data $shardddl
