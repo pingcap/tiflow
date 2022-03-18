@@ -42,9 +42,10 @@ function run() {
 	run_sql "show create table ddl_attributes.placement_t2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "show create table ddl_attributes.placement_t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-		check_contains "CREATE TABLE placement_t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255))"
+		check_contains "CREATE TABLE `placement_t1` (`id` bigint(20) NOT NULL AUTO_INCREMENT,`b` varchar(255) DEFAULT NULL,PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+"
 	run_sql "show create table ddl_attributes.placement_t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-		check_contains "CREATE TABLE placement_t2 (id BIGINT NOT NULL PRIMARY KEY auto_increment) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+		check_contains "CREATE TABLE `placement_t2` (`id` BIGINT NOT NULL auto_increment,PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
 }
 
 trap stop_tidb_cluster EXIT
