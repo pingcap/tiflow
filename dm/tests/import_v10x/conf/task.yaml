@@ -124,6 +124,8 @@ validators:
   validator-01:
     mode: none
     worker-count: 4
+    row-error-delay: 30m
+    meta-flush-interval: 1m
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false
