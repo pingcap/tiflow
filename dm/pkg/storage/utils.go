@@ -69,7 +69,6 @@ func TrimPath(rawURL string, uniqueID string) (string, error) {
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
-		// avoid duplicate add uniqueID, and trim suffix '/' like './dump_data/'
 		return strings.TrimSuffix(rawURL, uniqueID), nil
 	}
 	// u.Path is an unescaped string and can be used as normal
