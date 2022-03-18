@@ -368,7 +368,7 @@ type Consumer struct {
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
-	eventRouter dispatcher.EventRouter
+	eventRouter *dispatcher.EventRouter
 }
 
 // NewConsumer creates a new cdc kafka consumer
