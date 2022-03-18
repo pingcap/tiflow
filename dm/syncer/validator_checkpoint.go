@@ -116,7 +116,6 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	return err
 }
 
-// todo: need to drop them if remove-meta is specified
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
 	args := make([]interface{}, 0)
