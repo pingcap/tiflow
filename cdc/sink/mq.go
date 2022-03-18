@@ -161,6 +161,11 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		case <-ctx.Done():
 			return ctx.Err()
 		case k.flushWorker.msgChan <- mqEvent{row: row, partition: partition}:
+			log.Debug("dispatch row changed event",
+				zap.String("topic", topic),
+				zap.Int32("partition", partition),
+				zap.Int32("partitionNum", partitionNum),
+				zap.Any("row", row))
 		}
 		rowsCount++
 	}

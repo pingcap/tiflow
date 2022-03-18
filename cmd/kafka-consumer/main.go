@@ -172,16 +172,17 @@ func init() {
 	if s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
-			log.Fatal("invalid enable-tidb-extension of upstream-uri")
+			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
 		if protocol != config.ProtocolCanalJSON && b {
-			log.Fatal("enable-tidb-extension only work with canal-json")
+			log.Panic("enable-tidb-extension only work with canal-json")
 		}
 
 		enableTiDBExtension = b
 	}
 
 	eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
+	eventRouterReplicaConfig.Sink.Protocol = protocol.String()
 	if configFile != "" {
 		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
 		if err != nil {
@@ -512,6 +513,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("RowChangedEvent dispatched to wrong partition",
 						zap.Int32("obtained", partition),
 						zap.Int32("expected", target),
+						zap.Int32("partitionNum", kafkaPartitionNum),
 						zap.Any("row", row),
 					)
 				}
