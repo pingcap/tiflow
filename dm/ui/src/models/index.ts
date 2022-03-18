@@ -7,7 +7,7 @@ import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
 
 import { api } from '~/models/api'
 import { globalSlice } from '~/models/global'
-import { message } from '~/uikit'
+import { message } from '~/uikit/message'
 
 const rtkQueryErrorLogger: Middleware = () => next => action => {
   if (isRejectedWithValue(action)) {

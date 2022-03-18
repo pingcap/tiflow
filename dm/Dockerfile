@@ -1,4 +1,4 @@
-FROM golang:1.16-alpine as builder
+FROM golang:1.18.0-alpine3.15 as builder
 MAINTAINER siddontang
 
 RUN apk add --no-cache git make
@@ -18,7 +18,7 @@ RUN apk update && apk add bash
 
 RUN make dm-worker dm-master dmctl
 
-FROM alpine:3.10
+FROM alpine:3.15
 
 # keep compatibility
 COPY --from=builder /go/src/github.com/pingcap/dm/bin/dm-worker /dm-worker

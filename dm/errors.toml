@@ -791,10 +791,16 @@ workaround = "Please check if session `binlog_row_image` variable is not FULL, r
 tags = ["upstream", "high"]
 
 [error.DM-functional-11127]
-message = "receive conflict DDL for the optimistic shard ddl lock %s: %s"
+message = "receive conflict DDL for the optimistic shard ddl lock %s: %s. Now DM does not support conflicting DDLs, such as 'modify column'/'rename column'/'add column not null non default'."
 description = ""
 workaround = ""
-tags = ["internal", "low"]
+tags = ["internal", "high"]
+
+[error.DM-functional-11128]
+message = "fail to resolve adding not fully dropped columns for optimistic shard ddl lock %s: %s"
+description = ""
+workaround = "Please use `binlog skip` command to skip this error."
+tags = ["internal", "medium"]
 
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"

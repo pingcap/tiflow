@@ -286,10 +286,9 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 		i11              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i12              = optimism.NewInfo(task, source1, "foo", "bar-2", downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
 		i21              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
-		i23              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable,
-			[]string{`CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`}, ti2, []*model.TableInfo{ti2})
-		i31 = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
-		i33 = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
+		i23              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2})
+		i31              = optimism.NewInfo(task, source1, "foo", "bar-1", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
+		i33              = optimism.NewInfo(task, source2, "foo-2", "bar-3", downSchema, downTable, DDLs3, ti2, []*model.TableInfo{ti3})
 	)
 
 	st1.AddTable("foo", "bar-1", downSchema, downTable)
@@ -444,20 +443,36 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	require.Equal(t.T(), 1, remain)
 
 	// put table info for a new table (to simulate `CREATE TABLE`).
-	rev3, err := optimism.PutSourceTablesInfo(cli, st32, i23)
+	// lock will fetch the new table info from downstream.
+	// here will use ti1
+	_, err = optimism.PutSourceTables(cli, st32)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		ready := o.Locks()[lockID].Ready()
-		return ready[source2][i23.UpSchema][i23.UpTable]
-	}))
+		return !ready[source2][i23.UpSchema][i23.UpTable]
+	}, time.Duration(backOff)*waitTime, waitTime)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
-	require.Equal(t.T(), 1, remain)
+	require.Equal(t.T(), remain, 2)
 	tts := o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), source2, tts[1].Source)
 	require.Contains(t.T(), tts[1].UpTables, i23.UpSchema)
 	require.Contains(t.T(), tts[1].UpTables[i23.UpSchema], i23.UpTable)
+
+	// ddl for new table
+	rev3, err := optimism.PutInfo(cli, i23)
+	require.NoError(t.T(), err)
+	// wait operation for i23 become available.
+	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), op23.DDLs, i23.DDLs)
+	require.Equal(t.T(), op23.ConflictStage, optimism.ConflictNone)
+
+	require.Contains(t.T(), o.Locks(), lockID)
+	synced, remain = o.Locks()[lockID].IsSynced()
+	require.False(t.T(), synced)
+	require.Equal(t.T(), remain, 1)
 
 	// check ShowLocks.
 	expectedLock = []*pb.DDLLock{
@@ -485,12 +500,6 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	checkLocks(t.T(), o, nil, "not-exist", []string{})
 	checkLocks(t.T(), o, nil, "", []string{"not-exist"})
 
-	// wait operation for i23 become available.
-	op23, err := watchExactOneOperation(ctx, cli, i23.Task, i23.Source, i23.UpSchema, i23.UpTable, rev3)
-	require.NoError(t.T(), err)
-	require.Equal(t.T(), i23.DDLs, op23.DDLs)
-	require.Equal(t.T(), optimism.ConflictNone, op23.ConflictStage)
-
 	// delete i12 for a table (to simulate `DROP TABLE`), the lock should become synced again.
 	rev2, err = optimism.PutInfo(cli, i12) // put i12 first to trigger DELETE for i12.
 	require.NoError(t.T(), err)
@@ -498,12 +507,12 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, err = watchExactOneOperation(ctx, cli, i12.Task, i12.Source, i12.UpSchema, i12.UpTable, rev2)
 	require.NoError(t.T(), err)
 
-	_, err = optimism.PutSourceTablesDeleteInfo(cli, st31, i12)
+	_, err = optimism.PutSourceTables(cli, st31)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}))
+	}, time.Duration(backOff)*waitTime, waitTime)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), source1, tts[0].Source)
