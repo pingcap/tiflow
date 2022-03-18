@@ -99,15 +99,6 @@ const ReplicationDetail: React.FC = () => {
     },
   ]
 
-  useEffect(() => {
-    if (!currentTask && taskList && taskList.data[0]) {
-      setCurrentTask(taskList.data[0])
-      setCurrentSourceName(
-        taskList.data[0]?.source_config.source_conf?.[0]?.source_name ?? ''
-      )
-    }
-  }, [currentTask, taskList])
-
   return (
     <div>
       <div className="px-4 pt-4">
@@ -129,6 +120,9 @@ const ReplicationDetail: React.FC = () => {
                 label: i.name,
                 value: i.name,
               }))}
+              onSelect={(value: string) => {
+                setCurrentTask(taskList?.data.find(i => i.name === value))
+              }}
             />
 
             <Select
@@ -140,6 +134,9 @@ const ReplicationDetail: React.FC = () => {
                 label: i.source_name,
                 value: i.source_name,
               }))}
+              onSelect={(value: string) => {
+                setCurrentSourceName(value)
+              }}
             />
 
             <Input

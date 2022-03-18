@@ -216,7 +216,7 @@ const TaskList: React.FC = () => {
   const dispatch = useAppDispatch()
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false)
   const [sourceDrawerVisible, setSourceDrawerVisible] = useState(false)
-  const [currentTask, setCurrentTask] = useState<Task>()
+  const [currentTaskName, setCurrentTaskName] = useState<string>()
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
@@ -227,20 +227,32 @@ const TaskList: React.FC = () => {
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
     withStatus: true,
   })
-  const { data: currentTaskStatus } = useDmapiGetTaskStatusQuery(
-    { taskName: currentTask?.name ?? '' },
-    { skip: !currentTask }
-  )
+  const { data: currentTaskStatus, refetch: refetchCurrentTaskStatus } =
+    useDmapiGetTaskStatusQuery(
+      { taskName: currentTaskName ?? '' },
+      { skip: !currentTaskName }
+    )
+  const taskMap = useMemo(() => {
+    return data?.data?.reduce((acc, cur) => {
+      acc.set(cur.name, cur)
+      return acc
+    }, new Map() as Map<string, Task>)
+  }, [data])
   const { data: sources } = useDmapiGetSourceListQuery({ with_status: false })
   const sourcesOfCurrentTask: Source[] = useMemo(() => {
-    if (!currentTask || !sources) {
+    if (!currentTaskName || !sources) {
       return []
     }
-    const names = new Set(
-      currentTask.source_config.source_conf.map(i => i.source_name)
-    )
-    return sources.data.filter(i => names.has(i.source_name))
-  }, [currentTask, sources])
+    const currentTask = taskMap?.get(currentTaskName)
+    if (currentTask) {
+      const names = new Set(
+        currentTask.source_config.source_conf.map(i => i.source_name)
+      )
+      return sources.data.filter(i => names.has(i.source_name))
+    }
+    return []
+  }, [currentTaskName, sources, taskMap])
+
   const [convertTaskDataToConfigFile] = useDmapiConverterTaskMutation()
 
   const [stopTask] = useDmapiStopTaskMutation()
@@ -320,7 +332,7 @@ const TaskList: React.FC = () => {
           <Button
             type="link"
             onClick={() => {
-              setCurrentTask(data)
+              setCurrentTaskName(data.name)
               setDetailDrawerVisible(true)
             }}
           >
@@ -349,7 +361,7 @@ const TaskList: React.FC = () => {
             <Button
               type="link"
               onClick={() => {
-                setCurrentTask(data)
+                setCurrentTaskName(data.name)
                 setSourceDrawerVisible(true)
               }}
             >
@@ -430,15 +442,22 @@ const TaskList: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (currentTask) {
-      const { status_list, ...rest } = currentTask
-      convertTaskDataToConfigFile({ task: rest })
-        .unwrap()
-        .then(res => {
-          setCurrentTaskConfigFile(res.task_config_file)
-        })
+    if (currentTaskName) {
+      const currentTask = taskMap?.get(currentTaskName)
+      if (currentTask) {
+        const { status_list, ...rest } = currentTask
+        convertTaskDataToConfigFile({ task: rest })
+          .unwrap()
+          .then(res => {
+            setCurrentTaskConfigFile(res.task_config_file)
+          })
+      }
     }
-  }, [currentTask])
+  }, [currentTaskName])
+
+  useEffect(() => {
+    refetchCurrentTaskStatus()
+  }, [data])
 
   return (
     <div>
