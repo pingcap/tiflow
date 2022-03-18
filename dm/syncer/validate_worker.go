@@ -61,20 +61,21 @@ type validateFailedRow struct {
 }
 
 type validateWorker struct {
-	cfg               config.ValidatorConfig
-	ctx               context.Context
-	interval          time.Duration
-	validator         *DataValidator
-	L                 log.Logger
-	conn              *dbconn.DBConn
-	rowChangeCh       chan *rowChange
+	sync.Mutex
+	cfg                config.ValidatorConfig
+	ctx                context.Context
+	interval           time.Duration
+	validator          *DataValidator
+	L                  log.Logger
+	conn               *dbconn.DBConn
+	rowChangeCh        chan *rowChange
+	batchSize          int
+	rowErrorDelayInSec int64
+
 	pendingChangesMap map[string]*tableChange
 	pendingRowCounts  []int64
 	accuRowCount      atomic.Int64 // accumulated row count from channel
-	batchSize         int
 	errorRows         []*validateFailedRow
-	sync.Mutex
-	rowErrorDelayInSec int64
 }
 
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
@@ -88,10 +89,11 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		L:                  workerLog,
 		conn:               v.toDBConns[id],
 		rowChangeCh:        make(chan *rowChange, workerChannelSize),
-		pendingChangesMap:  make(map[string]*tableChange),
-		pendingRowCounts:   make([]int64, rowChangeTypeCount),
 		batchSize:          maxBatchSize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
+
+		pendingChangesMap: make(map[string]*tableChange),
+		pendingRowCounts:  make([]int64, rowChangeTypeCount),
 	}
 }
 
@@ -226,11 +228,12 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 					allErrorRows = append(allErrorRows, row)
 				} else {
 					newPendingRows[pk] = r
+					newPendingCnt[r.Tp]++
 				}
 			} else {
 				newPendingRows[pk] = r
+				newPendingCnt[r.Tp]++
 			}
-			newPendingCnt[r.Tp]++
 		}
 		if len(newPendingRows) > 0 {
 			newPendingChanges[tblKey] = &tableChange{

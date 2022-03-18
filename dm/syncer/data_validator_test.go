@@ -307,7 +307,10 @@ func TestValidatorDoValidate(t *testing.T) {
 			// insert with pk=11
 			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
+		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
+	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
+		dbMock.NewRows([]string{"", ""}).AddRow(newValidateErrorRow, 2).AddRow(ignoredValidateErrorRow, 3).
+			AddRow(resolvedValidateErrorRow, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.schemaLoaded.Store(true)
@@ -452,9 +455,11 @@ func TestValidatorDoValidate(t *testing.T) {
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	validator.Stop()
-	require.Equal(t, int64(1), validator.processedRowCounts[rowInsert].Load())
+	// 3 real insert, 1 transformed from an update(updating key)
+	require.Equal(t, int64(4), validator.processedRowCounts[rowInsert].Load())
 	require.Equal(t, int64(1), validator.processedRowCounts[rowUpdated].Load())
-	require.Equal(t, int64(1), validator.processedRowCounts[rowDeleted].Load())
+	// 1 real delete, 1 transformed from an update(updating key)
+	require.Equal(t, int64(2), validator.processedRowCounts[rowDeleted].Load())
 
 	require.NotNil(t, validator.location)
 	require.Equal(t, mysql.Position{Name: "mysql-bin.000001", Pos: 100}, validator.location.Position)
@@ -465,8 +470,12 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.loadedPendingChanges[ft.String()].rows, 1)
 	require.Contains(t, validator.loadedPendingChanges[ft.String()].rows, "11")
 	require.Equal(t, validator.loadedPendingChanges[ft.String()].rows["11"].Tp, rowInsert)
+	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, int64(2), validator.errorRowCounts[newValidateErrorRow].Load())
+	require.Equal(t, int64(3), validator.errorRowCounts[ignoredValidateErrorRow].Load())
+	require.Equal(t, int64(4), validator.errorRowCounts[resolvedValidateErrorRow].Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
@@ -476,6 +485,11 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
 	require.Equal(t, tableWithoutPrimaryKeyMsg, validator.tableStatus[ft.String()].message)
+	// this one is loaded from meta data
+	ft = filter.Table{Schema: schemaName, Name: tableName4}
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, "load from meta", validator.tableStatus[ft.String()].message)
 }
 
 func TestValidatorGetRowChangeType(t *testing.T) {

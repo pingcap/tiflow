@@ -37,9 +37,9 @@ import (
 
 func TestValidatorCheckpointPersist(t *testing.T) {
 	var (
-		schemaName      = "test"
-		tableName       = "tbl"
-		createTableSQL  = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
+		schemaName     = "test"
+		tableName      = "tbl"
+		createTableSQL = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
 	)
 	cfg := genSubtaskConfig(t)
 	_, dbMock, err := conn.InitMockDBFull()
@@ -55,6 +55,9 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
+	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
+		dbMock.NewRows([]string{"", ""}).AddRow(newValidateErrorRow, 2).AddRow(ignoredValidateErrorRow, 3).
+			AddRow(resolvedValidateErrorRow, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.schemaLoaded.Store(true)
