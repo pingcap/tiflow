@@ -86,7 +86,7 @@ func newAgent(
 	messageRouter p2p.MessageRouter,
 	executor scheduler.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (processorAgent, error) {
+) (retVal processorAgent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
@@ -112,6 +112,23 @@ func newAgent(
 		executor,
 		ret,
 		&scheduler.BaseAgentConfig{SendCheckpointTsInterval: flushInterval})
+
+	// Note that registerPeerMessageHandlers sets handlerErrChs.
+	if err := ret.registerPeerMessageHandlers(); err != nil {
+		log.Warn("failed to register processor message handlers",
+			zap.String("changefeed", changeFeedID),
+			zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		if err != nil {
+			if err1 := ret.deregisterPeerMessageHandlers(); err1 != nil {
+				log.Warn("failed to unregister processor message handlers",
+					zap.String("changefeed", changeFeedID),
+					zap.Error(err))
+			}
+		}
+	}()
 
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
@@ -146,14 +163,6 @@ func newAgent(
 			ret.ownerCaptureID = ""
 			return ret, nil
 		}
-		return nil, errors.Trace(err)
-	}
-
-	// Note that registerPeerMessageHandlers sets handlerErrChs.
-	if err := ret.registerPeerMessageHandlers(); err != nil {
-		log.Warn("failed to register processor message handlers",
-			zap.String("changefeed", changeFeedID),
-			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	return ret, nil
