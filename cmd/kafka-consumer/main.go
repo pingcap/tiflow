@@ -512,6 +512,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("RowChangedEvent dispatched to wrong partition",
 						zap.Int32("obtained", partition),
 						zap.Int32("expected", target),
+						zap.Any("row", row),
 					)
 				}
 
