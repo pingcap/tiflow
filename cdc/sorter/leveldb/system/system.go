@@ -143,8 +143,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
-		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
+		compactor, cmb, err := lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -153,8 +152,7 @@ func (s *System) Start(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		// Create and spawn db actor.
-		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
+		dbac, dbmb, err := lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -647,6 +647,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	restoreFlags |= format.RestoreKeyWordUppercase
 	// wrap string with single quote
 	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}

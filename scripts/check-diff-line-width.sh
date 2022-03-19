@@ -27,10 +27,10 @@ git --no-pager diff $BASE_HASH -U0 -- cdc pkg -- ':(exclude)*_gen.go' -- ':(excl
 {
     # Minus 1 for +
     width = length($0) - 1;
-    if (width > 100) {
+    if (width > 120) {
         print "\033[0;31m[ERROR]\033[0m width too long, " length ": " $0 ;
         fail=1 ;
-    } else if (width > 80) {
+    } else if (width > 110) {
         print "\033[0;33m[WARN]\033[0m  width too long, " length ": " $0 ;
     }
 }

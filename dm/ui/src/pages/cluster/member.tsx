@@ -41,7 +41,7 @@ const MasterTable: React.FC = () => {
         message.loading({ content: t('requesting'), key })
         try {
           await offlineMasterNode(name).unwrap()
-          message.success({ content: t('request success') })
+          message.success({ content: t('request success'), key })
         } catch (e) {
           message.destroy(key)
         }
@@ -131,7 +131,7 @@ const WorkerTable: React.FC = () => {
         message.loading({ content: t('requesting'), key })
         try {
           await offlineWorkerNode(name).unwrap()
-          message.success({ content: t('request success') })
+          message.success({ content: t('request success'), key })
         } catch (e) {
           message.destroy(key)
         }
