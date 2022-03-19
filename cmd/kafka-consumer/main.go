@@ -392,11 +392,22 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
 
-	eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
-	if err != nil {
-		return nil, errors.Trace(err)
+	// this means user has input config file to enable dispatcher check
+	// some protocol does not provide enough information to check the
+	// dispatched partition match or not. such as `open-protocol`, which
+	// does not have `IndexColumn` info, then make the default dispatcher
+	// use different dispatch rule to the CDC side.
+	// when try to enable dispatcher check for any protocol and dispatch
+	// rule, make sure decoded `RowChangedEvent` contains information
+	// identical to the CDC side.
+	if eventRouterReplicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		c.eventRouter = eventRouter
+
 	}
-	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
@@ -508,15 +519,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 
-				// this means use has input config file to enable dispatcher check
-				// some protocol does not provide enough information to check the
-				// dispatched partition match or not. such as `open-protocol`, which
-				// does not have `IndexColumn` info, then make the default dispatcher
-				// use different dispatch rule to the CDC side.
-				// when try to enable dispatcher check for any protocol and dispatch
-				// rule, make sure decoded `RowChangedEvent` contains information
-				// identical to the CDC side.
-				if eventRouterReplicaConfig != nil {
+				if c.eventRouter != nil {
 					target := c.eventRouter.GetPartition(row, kafkaPartitionNum)
 					if partition != target {
 						log.Panic("RowChangedEvent dispatched to wrong partition",
