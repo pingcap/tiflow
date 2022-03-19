@@ -181,9 +181,9 @@ func init() {
 		enableTiDBExtension = b
 	}
 
-	eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
-	eventRouterReplicaConfig.Sink.Protocol = protocol.String()
 	if configFile != "" {
+		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
+		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
 		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
@@ -494,9 +494,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// if we receive `a` from partition-1, which would be seemed as DDL regression,
 				// then cause the consumer panic, but it was a duplicate one.
 				// so we only handle DDL received from partition-0 should be enough.
-				// if partition != 0 {
-				// 	continue
-				// }
+				if partition != 0 {
+					continue
+				}
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
@@ -508,14 +508,24 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 
-				target := c.eventRouter.GetPartition(row, kafkaPartitionNum)
-				if partition != target {
-					log.Panic("RowChangedEvent dispatched to wrong partition",
-						zap.Int32("obtained", partition),
-						zap.Int32("expected", target),
-						zap.Int32("partitionNum", kafkaPartitionNum),
-						zap.Any("row", row),
-					)
+				// this means use has input config file to enable dispatcher check
+				// some protocol does not provide enough information to check the
+				// dispatched partition match or not. such as `open-protocol`, which
+				// does not have `IndexColumn` info, then make the default dispatcher
+				// use different dispatch rule to the CDC side.
+				// when try to enable dispatcher check for any protocol and dispatch
+				// rule, make sure decoded `RowChangedEvent` contains information
+				// identical to the CDC side.
+				if eventRouterReplicaConfig != nil {
+					target := c.eventRouter.GetPartition(row, kafkaPartitionNum)
+					if partition != target {
+						log.Panic("RowChangedEvent dispatched to wrong partition",
+							zap.Int32("obtained", partition),
+							zap.Int32("expected", target),
+							zap.Int32("partitionNum", kafkaPartitionNum),
+							zap.Any("row", row),
+						)
+					}
 				}
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
