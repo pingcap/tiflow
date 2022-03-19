@@ -379,7 +379,7 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 type Column struct {
 	Name    string         `json:"name" msg:"name"`
 	Type    byte           `json:"type" msg:"type"`
-	Charset string         `json:"-"`
+	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
 	Value   interface{}    `json:"value" msg:"value"`
 

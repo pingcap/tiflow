@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -208,6 +208,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@echo "check-file-width"
 	@./scripts/check-diff-line-width.sh
 endif
+
+generate-msgp-code:
+	@echo "generate-msgp-code"
+	./scripts/generate-msgp-code.sh
 
 vet:
 	@echo "vet"

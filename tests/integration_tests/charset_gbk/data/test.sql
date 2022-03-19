@@ -5,7 +5,6 @@ CREATE DATABASE `charset_gbk_test0` CHARACTER SET utf8mb4;
 USE `charset_gbk_test0`;
 
 /* this is a test for columns which charset is gbk*/
-/* this is a test for columns which charset is gbk*/
 CREATE TABLE t0 (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -31,7 +30,6 @@ WHERE name = '测试';
 DELETE FROM t0
 WHERE name = '部署';
 
-/* this is a test for table which charset is gbk*/
 /* this is a test for table which charset is gbk*/
 CREATE TABLE t1 (
 	id INT,
@@ -95,7 +93,6 @@ WHERE name = '部署'
 	AND description = '世界,你好';
 
 /* this is a DLL test for column */
-/* this is a DLL test for column */
 CREATE TABLE t1 (
 	id INT,
 	名称 varchar(128),
@@ -111,7 +108,6 @@ ALTER TABLE t1
 ALTER TABLE t1
 	DROP COLUMN 城市;
 
-/* this is a DDL test for table */
 /* this is a DDL test for table */
 CREATE TABLE 表2 (
 	id INT,
