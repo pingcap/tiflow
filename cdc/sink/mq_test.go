@@ -16,10 +16,11 @@ package sink
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"net/url"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,18 +31,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type mqSinkSuite struct{}
-
-var _ = check.Suite(&mqSinkSuite{})
-
-func (s mqSinkSuite) TestKafkaSink(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestKafkaSink(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(c, 1)
+	leader := sarama.NewMockBroker(t, 1)
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
@@ -57,10 +55,10 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
@@ -70,13 +68,13 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
 
-	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 1048576)
+	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), 1)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), 1048576)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -92,20 +90,20 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs, check.Equals, uint64(120))
+	require.Nil(t, err)
+	require.Equal(t, checkpointTs, uint64(120))
 	// flush older resolved ts
 	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, uint64(110))
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs, check.Equals, uint64(120))
+	require.Nil(t, err)
+	require.Equal(t, checkpointTs, uint64(120))
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
 	// TODO(hi-rustin): fix it after topic manager is ready.
 	err = sink.EmitCheckpointTs(ctx, uint64(120), nil)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// mock kafka broker processes 1 ddl event
 	leader.Returns(prodSuccess)
@@ -119,35 +117,35 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 		Type:  1,
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	cancel()
 	err = sink.EmitRowChangedEvents(ctx, row)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 	err = sink.EmitCheckpointTs(ctx, uint64(140), nil)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 
 	err = sink.Close(ctx)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }
 
-func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestKafkaSinkFilter(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(c, 1)
+	leader := sarama.NewMockBroker(t, 1)
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
@@ -161,13 +159,13 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Filter = &config.FilterConfig{
 		Rules: []string{"test.*"},
 	}
 	fr, err := filter.NewFilter(replicaConfig)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
@@ -177,7 +175,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -188,8 +186,8 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 		CommitTs: 120,
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
-	c.Assert(err, check.IsNil)
-	c.Assert(sink.statistics.TotalRowsCount(), check.Equals, uint64(0))
+	require.Nil(t, err)
+	require.Equal(t, sink.statistics.TotalRowsCount(), uint64(0))
 
 	ddl := &model.DDLEvent{
 		StartTs:  130,
@@ -201,49 +199,49 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 		Type:  1,
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
-	c.Assert(cerror.ErrDDLEventIgnored.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
 
 	err = sink.Close(ctx)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }
 
-func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPulsarSinkEncoderConfig(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	uri := "pulsar://127.0.0.1:1234/kafka-test?" +
 		"max-message-bytes=4194304&max-batch-size=1"
 
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
 	sink, err := newPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
-	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
-	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)
+	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), 1)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), 4194304)
 }
 
-func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFlushRowChangedEvents(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(c, 1)
+	leader := sarama.NewMockBroker(t, 1)
 	defer leader.Close()
 
 	metadataResponse := new(sarama.MetadataResponse)
@@ -260,10 +258,10 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
@@ -273,7 +271,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 	}()
 
 	sink, err := newKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -289,7 +287,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row1)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	tableID2 := model.TableID(2)
 	row2 := &model.RowChangedEvent{
@@ -303,7 +301,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row2)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	tableID3 := model.TableID(3)
 	row3 := &model.RowChangedEvent{
@@ -318,29 +316,29 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 	}
 
 	err = sink.EmitRowChangedEvents(ctx, row3)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row resolvedTs event
 	leader.Returns(prodSuccess)
 	checkpointTs1, err := sink.FlushRowChangedEvents(ctx, tableID1, row1.CommitTs)
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs1, check.Equals, row1.CommitTs)
+	require.Nil(t, err)
+	require.Equal(t, checkpointTs1, row1.CommitTs)
 
 	checkpointTs2, err := sink.FlushRowChangedEvents(ctx, tableID2, row2.CommitTs)
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs2, check.Equals, row2.CommitTs)
+	require.Nil(t, err)
+	require.Equal(t, checkpointTs2, row2.CommitTs)
 
 	checkpointTs3, err := sink.FlushRowChangedEvents(ctx, tableID3, row3.CommitTs)
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTs3, check.Equals, row3.CommitTs)
+	require.Nil(t, err)
+	require.Equal(t, checkpointTs3, row3.CommitTs)
 
 	// flush older resolved ts
 	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1, uint64(110))
-	c.Assert(err, check.IsNil)
-	c.Assert(checkpointTsOld, check.Equals, row1.CommitTs)
+	require.Nil(t, err)
+	require.Equal(t, checkpointTsOld, row1.CommitTs)
 
 	err = sink.Close(ctx)
 	if err != nil {
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }

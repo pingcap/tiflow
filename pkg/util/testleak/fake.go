@@ -17,8 +17,6 @@ package testleak
 
 import (
 	"testing"
-
-	"github.com/pingcap/check"
 )
 
 // BeforeTest is a dummy implementation when build tag 'leak' is not set.
@@ -26,7 +24,7 @@ func BeforeTest() {
 }
 
 // AfterTest is a dummy implementation when build tag 'leak' is not set.
-func AfterTest(c *check.C) func() {
+func AfterTest(t *testing.T) func() {
 	return func() {
 	}
 }

@@ -18,10 +18,10 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -31,20 +31,22 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNewSaramaConfig(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx := context.Background()
 	config := NewConfig()
 	config.Version = "invalid"
 	_, err := NewSaramaConfig(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
+	require.Error(t, errors.Cause(err), "invalid version.*")
+
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
 	_, err = NewSaramaConfig(ctx, config)
-	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 
 	config.ClientID = "test-kafka-client"
 	compressionCases := []struct {
@@ -61,15 +63,15 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	for _, cc := range compressionCases {
 		config.Compression = cc.algorithm
 		cfg, err := NewSaramaConfig(ctx, config)
-		c.Assert(err, check.IsNil)
-		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
+		require.Nil(t, err)
+		require.Equal(t, cfg.Producer.Compression, cc.expected)
 	}
 
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
 	}
 	_, err = NewSaramaConfig(ctx, config)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
+	require.Error(t, errors.Cause(err), ".*no such file or directory")
 
 	saslConfig := NewConfig()
 	saslConfig.Version = "2.6.0"
@@ -81,48 +83,49 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 
 	cfg, err := NewSaramaConfig(ctx, saslConfig)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg, check.NotNil)
-	c.Assert(cfg.Net.SASL.User, check.Equals, "user")
-	c.Assert(cfg.Net.SASL.Password, check.Equals, "password")
-	c.Assert(cfg.Net.SASL.Mechanism, check.Equals, sarama.SASLMechanism("SCRAM-SHA-256"))
+	require.Nil(t, err)
+	require.NotNil(t, cfg)
+	require.Equal(t, cfg.Net.SASL.User, "user")
+	require.Equal(t, cfg.Net.SASL.Password, "password")
+	require.Equal(t, cfg.Net.SASL.Mechanism, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
-func (s *kafkaSuite) TestConfigTimeouts(c *check.C) {
-	defer testleak.AfterTest(c)()
+func  TestConfigTimeouts(t *testing.T) {
+	defer testleak.AfterTest(t)()
 
 	cfg := NewConfig()
-	c.Assert(cfg.DialTimeout, check.Equals, 10*time.Second)
-	c.Assert(cfg.ReadTimeout, check.Equals, 10*time.Second)
-	c.Assert(cfg.WriteTimeout, check.Equals, 10*time.Second)
+	require.Equal(t, cfg.DialTimeout, 10*time.Second)
+	require.Equal(t, cfg.ReadTimeout, 10*time.Second)
+	require.Equal(t, cfg.WriteTimeout, 10*time.Second)
 
 	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, cfg.DialTimeout)
-	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, cfg.WriteTimeout)
-	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, cfg.ReadTimeout)
+	require.Nil(t, err)
+	require.Equal(t, saramaConfig.Net.DialTimeout, cfg.DialTimeout)
+	require.Equal(t, saramaConfig.Net.WriteTimeout, cfg.DialTimeout)
+	require.Equal(t, saramaConfig.Net.ReadTimeout, cfg.DialTimeout)
 
 	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
 		"&write-timeout=2m"
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = cfg.Apply(sinkURI)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(cfg.DialTimeout, check.Equals, 5*time.Second)
-	c.Assert(cfg.ReadTimeout, check.Equals, 1000*time.Millisecond)
-	c.Assert(cfg.WriteTimeout, check.Equals, 2*time.Minute)
+	require.Equal(t, cfg.DialTimeout, 5*time.Second)
+	require.Equal(t, cfg.ReadTimeout, 1000*time.Millisecond)
+	require.Equal(t, cfg.WriteTimeout, 2*time.Minute)
 
 	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(saramaConfig.Net.DialTimeout, check.Equals, 5*time.Second)
-	c.Assert(saramaConfig.Net.ReadTimeout, check.Equals, 1000*time.Millisecond)
-	c.Assert(saramaConfig.Net.WriteTimeout, check.Equals, 2*time.Minute)
+	require.Nil(t, err)
+	require.Equal(t, saramaConfig.Net.DialTimeout, 5*time.Second)
+	require.Equal(t, saramaConfig.Net.ReadTimeout, 1000*time.Millisecond)
+	require.Equal(t, saramaConfig.Net.WriteTimeout, 2*time.Minute)
+
 }
 
-func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCompleteConfigByOpts(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	cfg := NewConfig()
 
 	// Normal config.
@@ -132,76 +135,77 @@ func (s *kafkaSuite) TestCompleteConfigByOpts(c *check.C) {
 	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 	sinkURI, err := url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	err = cfg.Apply(sinkURI)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
-	c.Assert(cfg.ReplicationFactor, check.Equals, int16(3))
-	c.Assert(cfg.Version, check.Equals, "2.6.0")
-	c.Assert(cfg.MaxMessageBytes, check.Equals, 4096)
+	require.Nil(t, err)
+	require.Equal(t, cfg.PartitionNum, int32(1))
+	require.Equal(t, cfg.ReplicationFactor, int16(3))
+	require.Equal(t, cfg.Version, "2.6.0")
+	require.Equal(t, cfg.MaxMessageBytes, 4096)
 
 	// multiple kafka broker endpoints
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
 	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(cfg.BrokerEndpoints), check.Equals, 3)
+	require.Nil(t, err)
+	require.Equal(t, len(cfg.BrokerEndpoints), 3)
 
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+	require.Error(t, errors.Cause(err), ".*invalid syntax.*")
 
 	// Illegal max-message-bytes.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
 	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+	require.Error(t, errors.Cause(err), ".*invalid syntax.*")
 
 	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
 	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid syntax.*")
+	require.Error(t, errors.Cause(err), ".*invalid syntax.*")
 
 	// Out of range partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
-	c.Assert(errors.Cause(err), check.ErrorMatches, ".*invalid partition num.*")
+	err = cfg.Apply(sinkURI)
+	require.Error(t, errors.Cause(err), ".*invalid partition num.*")
 }
 
-func (s *kafkaSuite) TestSetPartitionNum(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSetPartitionNum(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	cfg := NewConfig()
 	err := cfg.setPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.PartitionNum, check.Equals, int32(2))
+	require.Nil(t, err)
+	require.Equal(t, cfg.PartitionNum, int32(2))
 
 	cfg.PartitionNum = 1
 	err = cfg.setPartitionNum(2)
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.PartitionNum, check.Equals, int32(1))
+	require.Nil(t, err)
+	require.Equal(t, cfg.PartitionNum, int32(1))
 
 	cfg.PartitionNum = 3
 	err = cfg.setPartitionNum(2)
-	c.Assert(cerror.ErrKafkaInvalidPartitionNum.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrKafkaInvalidPartitionNum.Equal(err))
 }
 
-func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestConfigurationCombinations(t *testing.T) {
+	defer testleak.AfterTest(t)()
 
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
@@ -392,38 +396,38 @@ func (s *kafkaSuite) TestConfigurationCombinations(c *check.C) {
 
 		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
 		sinkURI, err := url.Parse(uri)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		baseConfig := NewConfig()
 		err = baseConfig.Apply(sinkURI)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		topic, ok := a.uriParams[0].(string)
-		c.Assert(ok, check.IsTrue)
-		c.Assert(topic, check.Not(check.Equals), "")
+		require.True(t, ok)
+		require.NotEqual(t, topic, "")
 		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
 		err = encoderConfig.Apply(sinkURI, map[string]string{})
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
 
 		err = encoderConfig.Validate()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, encoderConfig.MaxMessageBytes())
+		require.Equal(t, saramaConfig.Producer.MaxMessageBytes, encoderConfig.MaxMessageBytes())
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
-		c.Assert(err, check.IsNil)
-		c.Assert(saramaConfig.Producer.MaxMessageBytes, check.Equals, expected)
+		require.Nil(t, err)
+		require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expected)
 
 		_ = adminClient.Close()
 	}

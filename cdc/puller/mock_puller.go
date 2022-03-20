@@ -16,9 +16,9 @@ package puller
 import (
 	"context"
 	"sync"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/domain"
@@ -26,9 +26,10 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util/testkit"
+	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/testutils"
 	"go.uber.org/zap"
 )
@@ -118,7 +119,7 @@ type MockPullerManager struct {
 	rawKVEntriesMu sync.RWMutex
 	closeCh        chan struct{}
 
-	c *check.C
+	t *testing.T
 }
 
 var _ Puller = &mockPuller{}
@@ -181,11 +182,11 @@ func (p *mockPuller) IsInitialized() bool {
 }
 
 // NewMockPullerManager creates and sets up a mock puller manager
-func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
+func NewMockPullerManager(t *testing.T, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:  make(map[uint64]*kvrpcpb.PrewriteRequest),
 		closeCh: make(chan struct{}),
-		c:       c,
+		t:       t,
 	}
 	m.setUp(newRowFormat)
 	return m
@@ -216,9 +217,9 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 
 	m.domain.SetStatsUpdating(true)
 
-	m.tidbKit = testkit.NewTestKit(m.c, m.store)
+	m.tidbKit = testkit.NewTestKit(m.t, m.store)
 	m.MustExec("use test;")
-	m.tidbKit.Se.GetSessionVars().RowEncoder.Enable = newRowFormat
+	m.tidbKit.Session().GetSessionVars().RowEncoder.Enable = newRowFormat
 
 	mvccListener.registerPostPrewrite(m.postPrewrite)
 	mvccListener.registerPostCommit(m.postCommit)
@@ -250,9 +251,9 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *model.TableInfo {
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
-	m.c.Assert(err, check.IsNil)
+	require.Nil(m.t, err)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
-	m.c.Assert(exist, check.IsTrue)
+	require.True(m.t, exist)
 	return model.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
 }
 

@@ -14,6 +14,8 @@
 package codec
 
 import (
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"sort"
 	"testing"
 
@@ -28,16 +30,19 @@ import (
 func Test(t *testing.T) { check.TestingT(t) }
 
 type batchSuite struct {
+	suite.Suite
 	rowCases        [][]*model.RowChangedEvent
 	ddlCases        [][]*model.DDLEvent
 	resolvedTsCases [][]uint64
 }
 
-var _ = check.Suite(&batchSuite{
-	rowCases:        codecRowCases,
-	ddlCases:        codecDDLCases,
-	resolvedTsCases: codecResolvedTSCases,
-})
+func TestColumnChangeSuite(t *testing.T) {
+	suite.Run(t, &batchSuite{
+		rowCases:        codecRowCases,
+		ddlCases:        codecDDLCases,
+		resolvedTsCases: codecResolvedTSCases,
+	})
+}
 
 type columnsArray []*model.Column
 
@@ -61,20 +66,20 @@ func sortColumnsArrays(arrays ...[]*model.Column) {
 	}
 }
 
-func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
+func (s *batchSuite) testBatchCodec(encoderBuilder EncoderBuilder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
+			require.Equal(s.T(), tp, model.MqMessageTypeRow)
 			row, err := decoder.NextRowChangedEvent()
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
-			c.Assert(row, check.DeepEquals, cs[index])
+			require.Equal(s.T(), row, cs[index])
 			index++
 		}
 	}
@@ -82,14 +87,14 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
+			require.Equal(s.T(), tp, model.MqMessageTypeDDL)
 			ddl, err := decoder.NextDDLEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), ddl, cs[index])
 			index++
 		}
 	}
@@ -97,14 +102,14 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeResolved)
+			require.Equal(s.T(), tp, model.MqMessageTypeResolved)
 			ts, err := decoder.NextResolvedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ts, check.DeepEquals, cs[index])
+			require.Nil(s.T(), err)
+			require.Equal(s.T(), ts, cs[index])
 			index++
 		}
 	}
@@ -114,15 +119,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 		}
 
 		if len(cs) > 0 {
 			res := encoder.Build()
-			c.Assert(res, check.HasLen, 1)
-			c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
+			require.Len(s.T(), res, 1)
+			require.Equal(s.T(), res[0].GetRowsCount(), len(cs))
 			decoder, err := newDecoder(res[0].Key, res[0].Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			checkRowDecoder(decoder, cs)
 		}
 	}
@@ -130,10 +135,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		encoder := encoderBuilder.Build()
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), msg)
 			decoder, err := newDecoder(msg.Key, msg.Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			checkDDLDecoder(decoder, cs[i:i+1])
 
 		}
@@ -143,27 +148,27 @@ func (s *batchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, n
 		encoder := encoderBuilder.Build()
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), msg)
 			decoder, err := newDecoder(msg.Key, msg.Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 			checkTSDecoder(decoder, cs[i:i+1])
 		}
 	}
 }
 
-func (s *batchSuite) TestBuildJSONEventBatchEncoder(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *batchSuite) TestBuildJSONEventBatchEncoder() {
+	defer testleak.AfterTest(s.T())()
 	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
 	builder := &jsonEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*JSONEventBatchEncoder)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
+	require.True(s.T(), ok)
+	require.Equal(s.T(), encoder.maxBatchSize, config.maxBatchSize)
+	require.Equal(s.T(), encoder.maxMessageBytes, config.maxMessageBytes)
 }
 
-func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *batchSuite) TestMaxMessageBytes() {
+	defer testleak.AfterTest(s.T())()
 
 	// the size of `testEvent` is 87
 	testEvent := &model.RowChangedEvent{
@@ -177,30 +182,30 @@ func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
 	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(a)
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(testEvent)
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	err = encoder.AppendRowChangedEvent(testEvent)
-	c.Check(err, check.NotNil)
+	require.NotNil(s.T(), err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(err, check.IsNil)
+		require.Nil(s.T(), err)
 	}
 
 	messages := encoder.Build()
 	for _, msg := range messages {
-		c.Assert(msg.Length(), check.LessEqual, 256)
+		require.LessOrEqual(s.T(), msg.Length(), 256)
 	}
 }
 
-func (s *batchSuite) TestMaxBatchSize(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *batchSuite) TestMaxBatchSize() {
+	defer testleak.AfterTest(s.T())()
 
 	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(1048576)
 	config.maxBatchSize = 64
@@ -214,72 +219,67 @@ func (s *batchSuite) TestMaxBatchSize(c *check.C) {
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(err, check.IsNil)
+		require.Nil(s.T(), err)
 	}
 
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
 		decoder, err := NewJSONEventBatchDecoder(msg.Key, msg.Value)
-		c.Check(err, check.IsNil)
+		require.Nil(s.T(), err)
 		count := 0
 		for {
 			t, hasNext, err := decoder.HasNext()
-			c.Check(err, check.IsNil)
+			require.Nil(s.T(), err)
 			if !hasNext {
 				break
 			}
-
-			c.Check(t, check.Equals, model.MqMessageTypeRow)
+			require.Equal(s.T(), t, model.MqMessageTypeRow)
 			_, err = decoder.NextRowChangedEvent()
-			c.Check(err, check.IsNil)
+			require.Nil(s.T(), err)
 			count++
 		}
-		c.Check(count, check.LessEqual, 64)
+		require.LessOrEqual(s.T(), count, 64)
 		sum += count
 	}
-	c.Check(sum, check.Equals, 10000)
+	require.Equal(s.T(), sum, 10000)
 }
 
-func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *batchSuite) TestDefaultEventBatchCodec() {
+	defer testleak.AfterTest(s.T())()
 
 	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
-	s.testBatchCodec(c, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
+	s.testBatchCodec(newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
 }
 
-var _ = check.Suite(&columnSuite{})
-
-type columnSuite struct{}
-
-func (s *columnSuite) TestFormatCol(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFormatCol(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	row := &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
 	rowEncode, err := row.Encode()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
-	c.Assert(err, check.IsNil)
-	c.Assert(row2, check.DeepEquals, row)
+	require.Nil(t, err)
+	require.Equal(t, row2, row)
 
 	row = &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
 	rowEncode, err = row.Encode()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	row2 = new(mqMessageRow)
 	err = row2.Decode(rowEncode)
-	c.Assert(err, check.IsNil)
-	c.Assert(row2, check.DeepEquals, row)
+	require.Nil(t, err)
+	require.Equal(t, row2, row)
 }
 
-func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNonBinaryStringCol(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	col := &model.Column{
 		Name:  "test",
 		Type:  mysql.TypeString,
@@ -289,19 +289,19 @@ func (s *columnSuite) TestNonBinaryStringCol(c *check.C) {
 	jsonCol.FromSinkColumn(col)
 	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
 	rowEncode, err := row.Encode()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
-	c.Assert(err, check.IsNil)
-	c.Assert(row2, check.DeepEquals, row)
+	require.Nil(t, err)
+	require.Equal(t, row2, row)
 	jsonCol2 := row2.Update["test"]
 	col2 := jsonCol2.ToSinkColumn("test")
 	col2.Value = string(col2.Value.([]byte))
-	c.Assert(col2, check.DeepEquals, col)
+	require.Equal(t, col2, col)
 }
 
-func (s *columnSuite) TestVarBinaryCol(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestVarBinaryCol(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	col := &model.Column{
 		Name:  "test",
 		Type:  mysql.TypeString,
@@ -312,12 +312,12 @@ func (s *columnSuite) TestVarBinaryCol(c *check.C) {
 	jsonCol.FromSinkColumn(col)
 	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
 	rowEncode, err := row.Encode()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
-	c.Assert(err, check.IsNil)
-	c.Assert(row2, check.DeepEquals, row)
+	require.Nil(t, err)
+	require.Equal(t, row2, row)
 	jsonCol2 := row2.Update["test"]
 	col2 := jsonCol2.ToSinkColumn("test")
-	c.Assert(col2, check.DeepEquals, col)
+	require.Equal(t, col2, col)
 }

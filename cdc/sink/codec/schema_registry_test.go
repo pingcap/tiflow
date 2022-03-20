@@ -20,19 +20,25 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-type AvroSchemaRegistrySuite struct{}
+type AvroSchemaRegistrySuite struct {
+	suite.Suite
+}
 
-var _ = check.Suite(&AvroSchemaRegistrySuite{})
+func TestAvroSchemaRegistrySuite(t *testing.T) {
+	suite.Run(t, new(AvroSchemaRegistrySuite))
+}
 
 type mockRegistry struct {
 	mu       sync.Mutex
@@ -46,7 +52,7 @@ type mockRegistrySchema struct {
 	ID      int
 }
 
-func startHTTPInterceptForTestingRegistry(c *check.C) {
+func startHTTPInterceptForTestingRegistry(t *testing.T) {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -144,8 +150,8 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
 		func(req *http.Request) (*http.Response, error) {
 			data, _ := io.ReadAll(req.Body)
-			c.Assert(len(data), check.Greater, 0)
-			c.Assert(int64(len(data)), check.Equals, req.ContentLength)
+			require.Greater(t, len(data), 0)
+			require.Equal(t, int64(len(data)), req.ContentLength)
 			if failCounter < 3 {
 				failCounter++
 				return httpmock.NewStringResponse(422, ""), nil
@@ -158,11 +164,11 @@ func stopHTTPInterceptForTestingRegistry() {
 	httpmock.DeactivateAndReset()
 }
 
-func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
-	startHTTPInterceptForTestingRegistry(c)
+func (s *AvroSchemaRegistrySuite) SetupSuite() {
+	startHTTPInterceptForTestingRegistry(s.T())
 }
 
-func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
+func (s *AvroSchemaRegistrySuite) TearDownSuite() {
 	stopHTTPInterceptForTestingRegistry()
 }
 
@@ -172,21 +178,21 @@ func getTestingContext() context.Context {
 	return ctx
 }
 
-func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *AvroSchemaRegistrySuite) TestSchemaRegistry() {
+	defer testleak.AfterTest(s.T())()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",
 	}
 
 	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	err = manager.ClearRegistry(getTestingContext(), table)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	_, _, err = manager.Lookup(getTestingContext(), table, 1)
-	c.Assert(err, check.ErrorMatches, `.*not\sfound.*`)
+	require.Error(s.T(), err, `.*not\sfound.*`)
 
 	codec, err := goavro.NewCodec(`{
        "type": "record",
@@ -199,16 +205,16 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
            }
           ]
      }`)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	_, err = manager.Register(getTestingContext(), table, codec)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	var id int
 	for i := 0; i < 2; i++ {
 		_, id, err = manager.Lookup(getTestingContext(), table, 1)
-		c.Assert(err, check.IsNil)
-		c.Assert(id, check.Greater, 0)
+		require.Nil(s.T(), err)
+		require.Greater(s.T(), id, 0)
 	}
 
 	codec, err = goavro.NewCodec(`{
@@ -230,37 +236,37 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
            }
           ]
      }`)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	_, err = manager.Register(getTestingContext(), table, codec)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	codec2, id2, err := manager.Lookup(getTestingContext(), table, 999)
-	c.Assert(err, check.IsNil)
-	c.Assert(id2, check.Not(check.Equals), id)
-	c.Assert(codec.CanonicalSchema(), check.Equals, codec2.CanonicalSchema())
+	require.Nil(s.T(), err)
+	require.NotEqual(s.T(), id2, id)
+	require.Equal(s.T(), codec.CanonicalSchema(), codec2.CanonicalSchema())
 }
 
-func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad() {
+	defer testleak.AfterTest(s.T())()
 	_, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:808", "-value")
-	c.Assert(err, check.NotNil)
+	require.NotNil(s.T(), err)
 
 	_, err = NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "https://127.0.0.1:8080", "-value")
-	c.Assert(err, check.NotNil)
+	require.NotNil(s.T(), err)
 }
 
-func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent() {
+	defer testleak.AfterTest(s.T())()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",
 	}
 
 	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(getTestingContext(), table)
-		c.Assert(err, check.IsNil)
+		require.Nil(s.T(), err)
 	}
 	codec, err := goavro.NewCodec(`{
        "type": "record",
@@ -281,26 +287,26 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
            }
           ]
      }`)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	id := 0
 	for i := 0; i < 20; i++ {
 		id1, err := manager.Register(getTestingContext(), table, codec)
-		c.Assert(err, check.IsNil)
-		c.Assert(id == 0 || id == id1, check.IsTrue)
+		require.Nil(s.T(), err)
+		require.True(s.T(), id == 0 || id == id1)
 		id = id1
 	}
 }
 
-func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister() {
+	defer testleak.AfterTest(s.T())()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",
 	}
 
 	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	called := 0
 	// nolint:unparam
@@ -329,20 +335,20 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
 	}
 
 	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
-	c.Assert(err, check.IsNil)
-	c.Assert(id, check.Greater, 0)
-	c.Assert(codec, check.NotNil)
-	c.Assert(called, check.Equals, 1)
+	require.Nil(s.T(), err)
+	require.Greater(s.T(), id, 0)
+	require.NotNil(s.T(), codec)
+	require.Equal(s.T(), called, 1)
 
 	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
-	c.Assert(err, check.IsNil)
-	c.Assert(codec1, check.Equals, codec)
-	c.Assert(called, check.Equals, 1)
+	require.Nil(s.T(), err)
+	require.Equal(s.T(), codec1, codec)
+	require.Equal(s.T(), called, 1)
 
 	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 2, schemaGen)
-	c.Assert(err, check.IsNil)
-	c.Assert(codec2, check.Not(check.Equals), codec)
-	c.Assert(called, check.Equals, 2)
+	require.Nil(s.T(), err)
+	require.NotEqual(s.T(), codec2, codec)
+	require.Equal(s.T(), called, 2)
 
 	schemaGen = func() (string, error) {
 		return `{
@@ -374,25 +380,25 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
 				codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, uint64(finalI), schemaGen)
-				c.Assert(err, check.IsNil)
-				c.Assert(id, check.Greater, 0)
-				c.Assert(codec, check.NotNil)
+				require.Nil(s.T(), err)
+				require.Greater(s.T(), id, 0)
+				require.NotNil(s.T(), codec)
 			}
 		}()
 	}
 	wg.Wait()
 }
 
-func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *AvroSchemaRegistrySuite) TestHTTPRetry() {
+	defer testleak.AfterTest(s.T())()
 	payload := []byte("test")
 	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	resp, err := httpRetry(ctx, nil, req, false)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	_ = resp.Body.Close()
 }

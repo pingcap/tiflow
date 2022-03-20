@@ -14,11 +14,11 @@
 package craft
 
 import (
+	"github.com/stretchr/testify/require"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -26,16 +26,9 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-var _ = check.Suite(&codecSuite{allocator: NewSliceAllocator(64)})
-
-func Test(t *testing.T) { check.TestingT(t) }
-
-type codecSuite struct {
-	allocator *SliceAllocator
-}
-
-func (s *codecSuite) TestSizeTable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSizeTable(t *testing.T) {
+	allocator := NewSliceAllocator(64)
+	defer testleak.AfterTest(t)()
 	tables := [][]int64{
 		{
 			1, 3, 5, 7, 9,
@@ -48,14 +41,14 @@ func (s *codecSuite) TestSizeTable(c *check.C) {
 	rand.Read(bits)
 	bits = encodeSizeTables(bits, tables)
 
-	size, decoded, err := decodeSizeTables(bits, s.allocator)
-	c.Check(err, check.IsNil)
-	c.Check(decoded, check.DeepEquals, tables)
-	c.Check(size, check.Equals, len(bits)-16)
+	size, decoded, err := decodeSizeTables(bits, allocator)
+	require.Nil(t, err)
+	require.Equal(t, decoded, tables)
+	require.Equal(t, size, len(bits)-16)
 }
 
-func (s *codecSuite) TestUvarintReverse(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestUvarintReverse(t *testing.T) {
+	defer testleak.AfterTest(t)()
 
 	var i uint64 = 0
 
@@ -64,10 +57,10 @@ func (s *codecSuite) TestUvarintReverse(c *check.C) {
 		rand.Read(bits)
 		bits, bytes1 := encodeUvarintReversed(bits, i)
 		bytes2, u64, err := decodeUvarintReversed(bits)
-		c.Check(err, check.IsNil)
-		c.Check(u64, check.Equals, i)
-		c.Check(bytes1, check.Equals, len(bits)-16)
-		c.Check(bytes1, check.Equals, bytes2)
+		require.Nil(t, err)
+		require.Equal(t, u64, i)
+		require.Equal(t, bytes1, len(bits)-16)
+		require.Equal(t, bytes1, bytes2)
 		if i == 0 {
 			i = 1
 		} else {
@@ -80,27 +73,27 @@ func newNullableString(a string) *string {
 	return &a
 }
 
-func (s *codecSuite) TestEncodeChunk(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEncodeChunk(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	stringChunk := []string{"a", "b", "c"}
 	nullableStringChunk := []*string{newNullableString("a"), newNullableString("b"), newNullableString("c")}
 	int64Chunk := []int64{1, 2, 3}
-
+	allocator := NewSliceAllocator(64)
 	bits := encodeStringChunk(nil, stringChunk)
-	bits, decodedStringChunk, err := decodeStringChunk(bits, 3, s.allocator)
-	c.Check(err, check.IsNil)
-	c.Check(len(bits), check.Equals, 0)
-	c.Check(decodedStringChunk, check.DeepEquals, stringChunk)
+	bits, decodedStringChunk, err := decodeStringChunk(bits, 3, allocator)
+	require.Nil(t, err)
+	require.Equal(t, len(bits), 0)
+	require.Equal(t, decodedStringChunk, stringChunk)
 
 	bits = encodeNullableStringChunk(nil, nullableStringChunk)
-	bits, decodedNullableStringChunk, err := decodeNullableStringChunk(bits, 3, s.allocator)
-	c.Check(err, check.IsNil)
-	c.Check(len(bits), check.Equals, 0)
-	c.Check(decodedNullableStringChunk, check.DeepEquals, nullableStringChunk)
+	bits, decodedNullableStringChunk, err := decodeNullableStringChunk(bits, 3, allocator)
+	require.Nil(t, err)
+	require.Equal(t, len(bits), 0)
+	require.Equal(t, decodedNullableStringChunk, nullableStringChunk)
 
 	bits = encodeVarintChunk(nil, int64Chunk)
-	bits, decodedVarintChunk, err := decodeVarintChunk(bits, 3, s.allocator)
-	c.Check(err, check.IsNil)
-	c.Check(len(bits), check.Equals, 0)
-	c.Check(decodedVarintChunk, check.DeepEquals, int64Chunk)
+	bits, decodedVarintChunk, err := decodeVarintChunk(bits, 3, allocator)
+	require.Nil(t, err)
+	require.Equal(t, len(bits), 0)
+	require.Equal(t, decodedVarintChunk, int64Chunk)
 }

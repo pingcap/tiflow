@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro/v2"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	model2 "github.com/pingcap/tidb/parser/model"
@@ -31,23 +30,24 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 )
 
 type avroBatchEncoderSuite struct {
+	suite.Suite
 	encoder *AvroEventBatchEncoder
 }
 
-var _ = check.Suite(&avroBatchEncoderSuite{})
-
-func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
-	startHTTPInterceptForTestingRegistry(c)
+func (s *avroBatchEncoderSuite) SetupSuite() {
+	startHTTPInterceptForTestingRegistry(s.T())
 
 	keyManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-key")
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	valueManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	s.encoder = &AvroEventBatchEncoder{
 		valueSchemaManager: valueManager,
@@ -56,7 +56,7 @@ func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
+func (s *avroBatchEncoderSuite) TearDownSuite() {
 	stopHTTPInterceptForTestingRegistry()
 }
 
@@ -75,8 +75,8 @@ func setElems(ft *types.FieldType, elems []string) *types.FieldType {
 	return ft
 }
 
-func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *avroBatchEncoderSuite) TestAvroEncodeOnly() {
+	defer testleak.AfterTest(s.T())()
 
 	table := model.TableName{
 		Schema: "testdb",
@@ -134,32 +134,32 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	}
 
 	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	avroCodec, err := goavro.NewCodec(schema)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, time.Local)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
-	c.Check(err, check.IsNil)
-	c.Check(res, check.NotNil)
+	require.Nil(s.T(), err)
+	require.NotNil(s.T(), res)
 	for k, v := range res.(map[string]interface{}) {
 		if k == "myenum" || k == "myset" {
 			if vmap, ok := v.(map[string]interface{}); ok {
 				_, exists := vmap["string"]
-				c.Check(exists, check.IsTrue)
+				require.True(s.T(), exists)
 			}
 		}
 	}
 
 	txt, err := avroCodec.TextualFromNative(nil, res)
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
 }
 
-func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *avroBatchEncoderSuite) TestAvroNull() {
+	defer testleak.AfterTest(s.T())()
 
 	table := model.TableName{
 		Schema: "testdb",
@@ -184,56 +184,56 @@ func (s *avroBatchEncoderSuite) TestAvroNull(c *check.C) {
 	}
 
 	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	var schemaObj avroSchemaTop
 	err = json.Unmarshal([]byte(schema), &schemaObj)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	for _, v := range schemaObj.Fields {
 		if v["name"] == "colNullable" {
-			c.Assert(v["type"], check.DeepEquals, []interface{}{"null", "int"})
+			require.Equal(s.T(), v["type"], []interface{}{"null", "int"})
 		}
 		if v["name"] == "colNotnull" {
-			c.Assert(v["type"], check.Equals, "int")
+			require.Equal(s.T(), v["type"], "int")
 		}
 	}
 
 	native, err := rowToAvroNativeData(cols, colInfos, time.Local)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	for k, v := range native.(map[string]interface{}) {
 		if k == "colNullable" {
-			c.Check(v, check.IsNil)
+			require.Nil(s.T(), v)
 		}
 		if k == "colNotnull" {
-			c.Assert(v, check.Equals, int64(0))
+			require.Equal(s.T(), v, int64(0))
 		}
 		if k == "colNullable1" {
-			c.Assert(v, check.DeepEquals, map[string]interface{}{"int": int64(0)})
+			require.Equal(s.T(), v, map[string]interface{}{"int": int64(0)})
 		}
 	}
 
 	avroCodec, err := goavro.NewCodec(schema)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, time.Local)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	native, _, err = avroCodec.NativeFromBinary(r.data)
-	c.Check(err, check.IsNil)
-	c.Check(native, check.NotNil)
+	require.Nil(s.T(), err)
+	require.NotNil(s.T(), native)
 	for k, v := range native.(map[string]interface{}) {
 		if k == "colNullable" {
-			c.Check(v, check.IsNil)
+			require.Nil(s.T(), v)
 		}
 		if k == "colNotnull" {
-			c.Assert(v.(int32), check.Equals, int32(0))
+			require.Equal(s.T(), v.(int32), 0)
 		}
 		if k == "colNullable1" {
-			c.Assert(v, check.DeepEquals, map[string]interface{}{"int": int32(0)})
+			require.Equal(s.T(), v, map[string]interface{}{"int": int32(0)})
 		}
 	}
 }
 
-func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *avroBatchEncoderSuite) TestAvroTimeZone() {
+	defer testleak.AfterTest(s.T())()
 
 	table := model.TableName{
 		Schema: "testdb",
@@ -241,7 +241,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	}
 
 	location, err := time.LoadLocation("UTC")
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	timestamp := time.Now()
 	cols := []*model.Column{
@@ -263,22 +263,22 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone(c *check.C) {
 	}
 
 	schema, err := ColumnInfoToAvroSchema(table.Table, cols)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 	avroCodec, err := goavro.NewCodec(schema)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, cols, colInfos, location)
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	res, _, err := avroCodec.NativeFromBinary(r.data)
-	c.Check(err, check.IsNil)
-	c.Check(res, check.NotNil)
+	require.Nil(s.T(), err)
+	require.NotNil(s.T(), res)
 	actual := (res.(map[string]interface{}))["ts"].(time.Time)
-	c.Check(actual.Local().Sub(timestamp), check.LessEqual, time.Millisecond)
+	require.LessOrEqual(s.T(), actual.Local().Sub(timestamp), time.Millisecond)
 }
 
-func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *avroBatchEncoderSuite) TestAvroEnvelope() {
+	defer testleak.AfterTest(s.T())()
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -288,13 +288,13 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
           ]
         }`)
 
-	c.Assert(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	testNativeData := make(map[string]interface{})
 	testNativeData["id"] = 7
 
 	bin, err := avroCodec.BinaryFromNative(nil, testNativeData)
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	res := avroEncodeResult{
 		data:       bin,
@@ -302,22 +302,22 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	}
 
 	evlp, err := res.toEnvelope()
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 
-	c.Assert(evlp[0], check.Equals, magicByte)
-	c.Assert(evlp[1:5], check.BytesEquals, []byte{0, 0, 0, 7})
+	require.Equal(s.T(), evlp[0], magicByte)
+	require.Equal(s.T(), evlp[1:5], []byte{0, 0, 0, 7})
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
-	c.Assert(err, check.IsNil)
-	c.Assert(parsed, check.NotNil)
+	require.Nil(s.T(), err)
+	require.NotNil(s.T(), parsed)
 
 	id, exists := parsed.(map[string]interface{})["id"]
-	c.Assert(exists, check.IsTrue)
-	c.Assert(id, check.Equals, int32(7))
+	require.True(s.T(), exists)
+	require.Equal(s.T(), id, int32(7))
 }
 
-func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
-	defer testleak.AfterTest(c)()
+func (s *avroBatchEncoderSuite) TestAvroEncode() {
+	defer testleak.AfterTest(s.T())()
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -352,14 +352,14 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pm := puller.NewMockPullerManager(c, true)
+	pm := puller.NewMockPullerManager(s.T(), true)
 	defer pm.TearDown()
 	pm.MustExec(testCaseDdl.Query)
 	ddlPlr := pm.CreatePuller(0, []regionspan.ComparableSpan{regionspan.ToComparableSpan(regionspan.GetDDLSpan())})
 	go func() {
 		err := ddlPlr.Run(ctx)
 		if err != nil && errors.Cause(err) != context.Canceled {
-			c.Fail()
+			s.T().Fail()
 		}
 	}()
 
@@ -374,8 +374,8 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}
 
 	_, err := s.encoder.EncodeDDLEvent(testCaseDdl)
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 
 	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
-	c.Check(err, check.IsNil)
+	require.Nil(s.T(), err)
 }

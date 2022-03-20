@@ -15,118 +15,115 @@ package util
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.uber.org/zap"
 )
 
-type ctxValueSuite struct{}
-
-var _ = check.Suite(&ctxValueSuite{})
-
-func (s *ctxValueSuite) TestShouldReturnCaptureID(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnCaptureID(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx := PutCaptureAddrInCtx(context.Background(), "ello")
-	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "ello")
+	require.Equal(t, CaptureAddrFromCtx(ctx), "ello")
 }
 
-func (s *ctxValueSuite) TestCaptureIDNotSet(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Assert(CaptureAddrFromCtx(context.Background()), check.Equals, "")
+func TestCaptureIDNotSet(t *testing.T) {
+	defer testleak.AfterTest(t)()
+	require.Equal(t, CaptureAddrFromCtx(context.Background()), "")
 	captureAddr := CaptureAddrFromCtx(context.Background())
-	c.Assert(captureAddr, check.Equals, "")
+	require.Equal(t, captureAddr, "")
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
-	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "")
+	require.Equal(t, CaptureAddrFromCtx(ctx), "")
 }
 
-func (s *ctxValueSuite) TestShouldReturnChangefeedID(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnChangefeedID(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
-	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "ello")
+	require.Equal(t, ChangefeedIDFromCtx(ctx), "ello")
 }
 
-func (s *ctxValueSuite) TestCanceledContext(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCanceledContext(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "test-cf")
-	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "test-cf")
+	require.Equal(t, ChangefeedIDFromCtx(ctx), "test-cf")
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
-	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "test-cf")
+	require.Equal(t, ChangefeedIDFromCtx(ctx), "test-cf")
 }
 
-func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
+func TestChangefeedIDNotSet(t *testing.T) {
+	defer testleak.AfterTest(t)()
+	require.Equal(t, ChangefeedIDFromCtx(context.Background()), "")
 	changefeedID := ChangefeedIDFromCtx(context.Background())
-	c.Assert(changefeedID, check.Equals, "")
+	require.Equal(t, changefeedID, "")
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
 	changefeedID = ChangefeedIDFromCtx(ctx)
-	c.Assert(changefeedID, check.Equals, "")
+	require.Equal(t, changefeedID, "")
 }
 
-func (s *ctxValueSuite) TestShouldReturnTimezone(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnTimezone(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	tz, _ := getTimezoneFromZonefile("UTC")
 	ctx := PutTimezoneInCtx(context.Background(), tz)
 	tz = TimezoneFromCtx(ctx)
-	c.Assert(tz.String(), check.Equals, "UTC")
+	require.Equal(t, tz.String(), "UTC")
 }
 
-func (s *ctxValueSuite) TestTimezoneNotSet(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTimezoneNotSet(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	tz := TimezoneFromCtx(context.Background())
-	c.Assert(tz, check.IsNil)
+	require.Nil(t, tz)
 	ctx := context.WithValue(context.Background(), ctxKeyTimezone, 1321)
 	tz = TimezoneFromCtx(ctx)
-	c.Assert(tz, check.IsNil)
+	require.Nil(t, tz)
 }
 
-func (s *ctxValueSuite) TestShouldReturnTableInfo(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnTableInfo(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
 	tableID, tableName := TableIDFromCtx(ctx)
-	c.Assert(tableID, check.Equals, int64(1321))
-	c.Assert(tableName, check.Equals, "ello")
+	require.Equal(t, tableID, int64(1321))
+	require.Equal(t, tableName, "ello")
 }
 
-func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTableInfoNotSet(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	tableID, tableName := TableIDFromCtx(context.Background())
-	c.Assert(tableID, check.Equals, int64(0))
-	c.Assert(tableName, check.Equals, "")
+	require.Equal(t, tableID, int64(0))
+	require.Equal(t, tableName, "")
 	ctx := context.WithValue(context.Background(), ctxKeyTableID, 1321)
 	tableID, tableName = TableIDFromCtx(ctx)
-	c.Assert(tableID, check.Equals, int64(0))
-	c.Assert(tableName, check.Equals, "")
+	require.Equal(t, tableID, int64(0))
+	require.Equal(t, tableName, "")
 }
 
-func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestShouldReturnKVStorage(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	kvStorage, _ := mockstore.NewMockStore()
 	defer kvStorage.Close()
 	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
 	kvStorage2, err := KVStorageFromCtx(ctx)
-	c.Assert(kvStorage2, check.DeepEquals, kvStorage)
-	c.Assert(err, check.IsNil)
+	require.Equal(t, kvStorage2, kvStorage)
+	require.Nil(t, err)
 }
 
-func (s *ctxValueSuite) TestKVStorageNotSet(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestKVStorageNotSet(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	// Context not set value
 	kvStorage, err := KVStorageFromCtx(context.Background())
-	c.Assert(kvStorage, check.IsNil)
-	c.Assert(err, check.NotNil)
+	require.Nil(t, kvStorage)
+	require.NotNil(t, err)
 	// Type of value is not kv.Storage
 	ctx := context.WithValue(context.Background(), ctxKeyKVStorage, 1321)
 	kvStorage, err = KVStorageFromCtx(ctx)
-	c.Assert(kvStorage, check.IsNil)
-	c.Assert(err, check.NotNil)
+	require.Nil(t, kvStorage)
+	require.NotNil(t, err)
 }
 
-func (s *ctxValueSuite) TestZapFieldWithContext(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestZapFieldWithContext(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	var (
 		capture    string = "127.0.0.1:8200"
 		changefeed string = "test-cf"
@@ -134,6 +131,6 @@ func (s *ctxValueSuite) TestZapFieldWithContext(c *check.C) {
 	ctx := context.Background()
 	ctx = PutCaptureAddrInCtx(ctx, capture)
 	ctx = PutChangefeedIDInCtx(ctx, changefeed)
-	c.Assert(ZapFieldCapture(ctx), check.DeepEquals, zap.String("capture", capture))
-	c.Assert(ZapFieldChangefeed(ctx), check.DeepEquals, zap.String("changefeed", changefeed))
+	require.Equal(t, ZapFieldCapture(ctx), zap.String("capture", capture))
+	require.Equal(t, ZapFieldChangefeed(ctx), zap.String("changefeed", changefeed))
 }

@@ -14,72 +14,74 @@
 package codec
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 type maxwellbatchSuite struct {
+	suite.Suite
 	rowCases [][]*model.RowChangedEvent
 	ddlCases [][]*model.DDLEvent
 }
 
-var _ = check.Suite(&maxwellbatchSuite{
-	rowCases: [][]*model.RowChangedEvent{{{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}}, {}},
-	ddlCases: [][]*model.DDLEvent{{{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}}},
-})
+func TestMaxwellbatchSuite(t *testing.T) {
+	suite.Run(t, &maxwellbatchSuite{
+		rowCases: [][]*model.RowChangedEvent{{{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
+		}}, {}},
+		ddlCases: [][]*model.DDLEvent{{{
+			CommitTs: 1,
+			TableInfo: &model.SimpleTableInfo{
+				Schema: "a", Table: "b",
+			},
+			Query: "create table a",
+			Type:  1,
+		}}},
+	})
+}
 
-func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder) {
+func (s *maxwellbatchSuite) testmaxwellBatchCodec(newEncoder func() EventBatchEncoder) {
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
+			require.Nil(s.T(), err)
 		}
 		size := encoder.Size()
 		messages := encoder.Build()
 		if len(cs) == 0 {
-			c.Assert(messages, check.IsNil)
+			require.Nil(s.T(), messages)
 			continue
 		}
-		c.Assert(messages, check.HasLen, 1)
-		c.Assert(messages[0].GetRowsCount(), check.Equals, len(cs))
-		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
+		require.Len(s.T(), messages, 1)
+		require.Equal(s.T(), messages[0].GetRowsCount(), len(cs))
+		require.Equal(s.T(), len(messages[0].Key)+len(messages[0].Value), size)
 	}
 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
+			require.Nil(s.T(), err)
+			require.NotNil(s.T(), msg)
 		}
 
 	}
 }
 
-func (s *maxwellbatchSuite) TestmaxwellEventBatchCodec(c *check.C) {
-	defer testleak.AfterTest(c)()
-	s.testmaxwellBatchCodec(c, NewMaxwellEventBatchEncoder)
+func (s *maxwellbatchSuite) TestmaxwellEventBatchCodec() {
+	defer testleak.AfterTest(s.T())()
+	s.testmaxwellBatchCodec(NewMaxwellEventBatchEncoder)
 }
 
-var _ = check.Suite(&maxwellcolumnSuite{})
-
-type maxwellcolumnSuite struct{}
-
-func (s *maxwellcolumnSuite) TestMaxwellFormatCol(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMaxwellFormatCol(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	row := &maxwellMessage{
 		Ts:       1,
 		Database: "a",
@@ -94,6 +96,6 @@ func (s *maxwellcolumnSuite) TestMaxwellFormatCol(c *check.C) {
 		},
 	}
 	rowEncode, err := row.Encode()
-	c.Assert(err, check.IsNil)
-	c.Assert(rowEncode, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, rowEncode)
 }

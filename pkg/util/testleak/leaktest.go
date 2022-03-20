@@ -25,8 +25,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/pingcap/check"
 )
 
 func interestingGoroutines() (gs []string) {
@@ -160,7 +158,7 @@ func checkLeakAfterTest(errorFunc func(cnt int, g string)) func() {
 // Usage: defer testleak.AfterTest(c)()
 // It can call with BeforeTest() at the beginning of check.Suite.TearDownSuite() or
 // call alone at the beginning of each test.
-func AfterTest(c *check.C) func() {
+func AfterTest(t *testing.T) func() {
 	errorFunc := func(cnt int, g string) {
 		c.Errorf("Test %s check-count %d appears to have leaked: %v", c.TestName(), cnt, g)
 	}

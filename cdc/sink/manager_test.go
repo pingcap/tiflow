@@ -22,27 +22,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type managerSuite struct{}
-
-var _ = check.Suite(&managerSuite{})
-
 type checkSink struct {
-	*check.C
+	*testing.T
 	rows           map[model.TableID][]*model.RowChangedEvent
 	rowsMu         sync.Mutex
 	lastResolvedTs map[model.TableID]uint64
 }
 
-func newCheckSink(c *check.C) *checkSink {
+func newCheckSink(t *testing.T) *checkSink {
 	return &checkSink{
-		C:              c,
+		T:              t,
 		rows:           make(map[model.TableID][]*model.RowChangedEvent),
 		lastResolvedTs: make(map[model.TableID]uint64),
 	}
@@ -78,8 +74,7 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 			newRows = append(newRows, row)
 		}
 	}
-
-	c.Assert(c.lastResolvedTs[tableID], check.LessEqual, resolvedTs)
+	require.LessOrEqual(c.T, c.lastResolvedTs[tableID], resolvedTs)
 	c.lastResolvedTs[tableID] = resolvedTs
 	c.rows[tableID] = newRows
 
@@ -98,12 +93,12 @@ func (c *checkSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
-func (s *managerSuite) TestManagerRandom(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestManagerRandom(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(t), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -130,18 +125,18 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 				if rand.Intn(10) == 0 {
 					resolvedTs := lastResolvedTs + uint64(rand.Intn(j-int(lastResolvedTs)))
 					_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), resolvedTs)
-					c.Assert(err, check.IsNil)
+					require.Nil(t, err)
 					lastResolvedTs = resolvedTs
 				} else {
 					err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 						Table:    &model.TableName{TableID: int64(i)},
 						CommitTs: uint64(j),
 					})
-					c.Assert(err, check.IsNil)
+					require.Nil(t, err)
 				}
 			}
 			_, err := tableSink.FlushRowChangedEvents(ctx, model.TableID(i), uint64(rowNum))
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}()
 	}
 	wg.Wait()
@@ -149,16 +144,16 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	time.Sleep(1 * time.Second)
 	close(errCh)
 	for err := range errCh {
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 }
 
-func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestManagerAddRemoveTable(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(t), errCh, 0, "", "")
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -189,11 +184,11 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 					Table:    &model.TableName{TableID: index},
 					CommitTs: i,
 				})
-				c.Assert(err, check.IsNil)
+				require.Nil(t, err)
 			}
 			_, err := sink.FlushRowChangedEvents(ctx, sink.(*tableSink).tableID, resolvedTs)
 			if err != nil {
-				c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+				require.Equal(t, errors.Cause(err), context.Canceled)
 			}
 			lastResolvedTs = resolvedTs
 		}
@@ -221,7 +216,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 				// note when a table is removed, no more data can be sent to the
 				// backend sink, so we cancel the context of this table sink.
 				tableCancels[0]()
-				c.Assert(table.Close(ctx), check.IsNil)
+				require.Nil(t, table.Close(ctx))
 				tableSinks = tableSinks[1:]
 				tableCancels = tableCancels[1:]
 			}
@@ -235,17 +230,17 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	time.Sleep(1 * time.Second)
 	close(errCh)
 	for err := range errCh {
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 }
 
-func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestManagerDestroyTableSink(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(t), errCh, 0, "", "")
 	defer manager.Close(ctx)
 
 	table := &model.TableName{TableID: int64(49)}
@@ -254,11 +249,11 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 		Table:    table,
 		CommitTs: uint64(110),
 	})
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	_, err = tableSink.FlushRowChangedEvents(ctx, table.TableID, 110)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = manager.destroyTableSink(ctx, table.TableID)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }
 
 // Run the benchmark
@@ -341,7 +336,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 }
 
 type errorSink struct {
-	*check.C
+	*testing.T
 }
 
 func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
@@ -372,21 +367,21 @@ func (e *errorSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
-func (s *managerSuite) TestManagerError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestManagerError(t *testing.T) {
+	defer testleak.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, &errorSink{T: t}, errCh, 0, "", "")
 	defer manager.Close(ctx)
 	sink := manager.CreateTableSink(1, 0, redo.NewDisabledManager())
 	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{TableID: 1},
 	})
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	_, err = sink.FlushRowChangedEvents(ctx, 1, 2)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	err = <-errCh
-	c.Assert(err.Error(), check.Equals, "error in emit row changed events")
+	require.Equal(t, err.Error(), "error in emit row changed events")
 }
