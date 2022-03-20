@@ -16,9 +16,8 @@ package sink
 import (
 	"context"
 	"fmt"
-	"testing"
-
 	"net/url"
+	"testing"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
