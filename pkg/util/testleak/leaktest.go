@@ -160,7 +160,7 @@ func checkLeakAfterTest(errorFunc func(cnt int, g string)) func() {
 // call alone at the beginning of each test.
 func AfterTest(t *testing.T) func() {
 	errorFunc := func(cnt int, g string) {
-		c.Errorf("Test %s check-count %d appears to have leaked: %v", c.TestName(), cnt, g)
+		c.Errorf("Test %s check-count %d appears to have leaked: %v", t.TestName(), cnt, g)
 	}
 	return checkLeakAfterTest(errorFunc)
 }
