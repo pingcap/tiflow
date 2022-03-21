@@ -20,13 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClientID(t *testing.T) {
@@ -112,14 +112,13 @@ func TestNewSaramaProducer(t *testing.T) {
 	)
 	require.Nil(t, err)
 
-
 	for i := 0; i < 100; i++ {
 		err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
 		require.Nil(t, err)
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(1), &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
