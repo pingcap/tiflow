@@ -9,16 +9,16 @@ check-struct-only = false
 [task]
     output-dir = "/tmp/ticdc_dm_test/output"
 
-    source-instances = ["mysql1"]
+    source-instances = ["mysql2"]
 
     target-instance = "tidb0"
 
     target-check-tables = ["new_collation_off.?*"]
 
 [data-sources]
-[data-sources.mysql1]
+[data-sources.mysql2]
 host = "127.0.0.1"
-port = 3306
+port = 3307
 user = "root"
 password = "123456"
 
