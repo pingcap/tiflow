@@ -39,7 +39,7 @@ func TestGetTimezoneFromZonefile(t *testing.T) {
 			require.NotNil(t, err)
 		} else {
 			require.Nil(t, err)
-			require.Equal(t, loc.String(), tc.name)
+			require.Equal(t, tc.name, loc.String())
 		}
 	}
 }

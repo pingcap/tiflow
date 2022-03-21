@@ -151,7 +151,7 @@ func startHTTPInterceptForTestingRegistry(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			data, _ := io.ReadAll(req.Body)
 			require.Greater(t, len(data), 0)
-			require.Equal(t, int64(len(data)), req.ContentLength)
+			require.Equal(t, req.ContentLength, int64(len(data)))
 			if failCounter < 3 {
 				failCounter++
 				return httpmock.NewStringResponse(422, ""), nil
@@ -242,8 +242,8 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry() {
 
 	codec2, id2, err := manager.Lookup(getTestingContext(), table, 999)
 	require.Nil(s.T(), err)
-	require.NotEqual(s.T(), id2, id)
-	require.Equal(s.T(), codec.CanonicalSchema(), codec2.CanonicalSchema())
+	require.NotEqual(s.T(), id, id2)
+	require.Equal(s.T(), codec2.CanonicalSchema(), codec.CanonicalSchema())
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad() {
@@ -338,17 +338,17 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister() {
 	require.Nil(s.T(), err)
 	require.Greater(s.T(), id, 0)
 	require.NotNil(s.T(), codec)
-	require.Equal(s.T(), called, 1)
+	require.Equal(s.T(), 1, called)
 
 	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
 	require.Nil(s.T(), err)
-	require.Equal(s.T(), codec1, codec)
-	require.Equal(s.T(), called, 1)
+	require.Equal(s.T(), codec, codec1)
+	require.Equal(s.T(), 1, called)
 
 	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 2, schemaGen)
 	require.Nil(s.T(), err)
-	require.NotEqual(s.T(), codec2, codec)
-	require.Equal(s.T(), called, 2)
+	require.NotEqual(s.T(), codec, codec2)
+	require.Equal(s.T(), 2, called)
 
 	schemaGen = func() (string, error) {
 		return `{

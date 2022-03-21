@@ -18,11 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/pdtime"
-
 	"github.com/pingcap/errors"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -36,9 +35,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 
 	startTs := oracle.GoTimeToTS(time.Now())
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		require.Equal(t, safePoint, startTs)
-		require.Equal(t, ttl, gcManager.gcTTL)
-		require.Equal(t, serviceID, CDCServiceSafePointID)
+		require.Equal(t, startTs, safePoint)
+		require.Equal(t, gcManager.gcTTL, ttl)
+		require.Equal(t, CDCServiceSafePointID, serviceID)
 		return 0, nil
 	}
 	err := gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -54,9 +53,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	gcManager.lastUpdatedTime = time.Now().Add(-gcSafepointUpdateInterval)
 	startTs++
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		require.Equal(t, safePoint, startTs)
-		require.Equal(t, ttl, gcManager.gcTTL)
-		require.Equal(t, serviceID, CDCServiceSafePointID)
+		require.Equal(t, startTs, safePoint)
+		require.Equal(t, gcManager.gcTTL, ttl)
+		require.Equal(t, CDCServiceSafePointID, serviceID)
 		return 0, nil
 	}
 	err = gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -66,9 +65,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	startTs++
 	ch := make(chan struct{}, 1)
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-		require.Equal(t, safePoint, startTs)
-		require.Equal(t, ttl, gcManager.gcTTL)
-		require.Equal(t, serviceID, CDCServiceSafePointID)
+		require.Equal(t, startTs, safePoint)
+		require.Equal(t, gcManager.gcTTL, ttl)
+		require.Equal(t, CDCServiceSafePointID, serviceID)
 		ch <- struct{}{}
 		return 0, nil
 	}

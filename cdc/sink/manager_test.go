@@ -188,7 +188,7 @@ func TestManagerAddRemoveTable(t *testing.T) {
 			}
 			_, err := sink.FlushRowChangedEvents(ctx, sink.(*tableSink).tableID, resolvedTs)
 			if err != nil {
-				require.Equal(t, errors.Cause(err), context.Canceled)
+				require.Equal(t, context.Canceled, errors.Cause(err))
 			}
 			lastResolvedTs = resolvedTs
 		}
@@ -383,5 +383,5 @@ func TestManagerError(t *testing.T) {
 	_, err = sink.FlushRowChangedEvents(ctx, 1, 2)
 	require.Nil(t, err)
 	err = <-errCh
-	require.Equal(t, err.Error(), "error in emit row changed events")
+	require.Equal(t, "error in emit row changed events", err.Error())
 }

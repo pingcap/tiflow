@@ -73,9 +73,9 @@ func TestHandleFailpoint(t *testing.T) {
 	require.True(t, w.Code >= 200 && w.Code <= 300)
 
 	failpointHit := false
-	failpoint.Inject("TestHandleFailpoint", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("TestHandleFailpoint")); _err_ == nil {
 		failpointHit = true
-	})
+	}
 	require.True(t, failpointHit)
 
 	req, err = http.NewRequest("DELETE", uri, body)
@@ -85,8 +85,8 @@ func TestHandleFailpoint(t *testing.T) {
 	require.True(t, w.Code >= 200 && w.Code <= 300)
 
 	failpointHit = false
-	failpoint.Inject("TestHandleFailpoint", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("TestHandleFailpoint")); _err_ == nil {
 		failpointHit = true
-	})
+	}
 	require.False(t, failpointHit)
 }

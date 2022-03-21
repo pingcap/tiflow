@@ -190,10 +190,10 @@ func (s *avroBatchEncoderSuite) TestAvroNull() {
 	require.Nil(s.T(), err)
 	for _, v := range schemaObj.Fields {
 		if v["name"] == "colNullable" {
-			require.Equal(s.T(), v["type"], []interface{}{"null", "int"})
+			require.Equal(s.T(), []interface{}{"null", "int"}, v["type"])
 		}
 		if v["name"] == "colNotnull" {
-			require.Equal(s.T(), v["type"], "int")
+			require.Equal(s.T(), "int", v["type"])
 		}
 	}
 
@@ -204,10 +204,10 @@ func (s *avroBatchEncoderSuite) TestAvroNull() {
 			require.Nil(s.T(), v)
 		}
 		if k == "colNotnull" {
-			require.Equal(s.T(), v, int64(0))
+			require.Equal(s.T(), int64(0), v)
 		}
 		if k == "colNullable1" {
-			require.Equal(s.T(), v, map[string]interface{}{"int": int64(0)})
+			require.Equal(s.T(), map[string]interface{}{"int": int64(0)}, v)
 		}
 	}
 
@@ -224,10 +224,10 @@ func (s *avroBatchEncoderSuite) TestAvroNull() {
 			require.Nil(s.T(), v)
 		}
 		if k == "colNotnull" {
-			require.Equal(s.T(), v.(int32), 0)
+			require.Equal(s.T(), int32(0), v.(int32))
 		}
 		if k == "colNullable1" {
-			require.Equal(s.T(), v, map[string]interface{}{"int": int32(0)})
+			require.Equal(s.T(), map[string]interface{}{"int": int32(0)}, v)
 		}
 	}
 }
@@ -274,7 +274,7 @@ func (s *avroBatchEncoderSuite) TestAvroTimeZone() {
 	require.Nil(s.T(), err)
 	require.NotNil(s.T(), res)
 	actual := (res.(map[string]interface{}))["ts"].(time.Time)
-	require.LessOrEqual(s.T(), actual.Local().Sub(timestamp), time.Millisecond)
+	require.LessOrEqual(s.T(), time.Millisecond, actual.Local().Sub(timestamp))
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEnvelope() {
@@ -304,8 +304,8 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope() {
 	evlp, err := res.toEnvelope()
 	require.Nil(s.T(), err)
 
-	require.Equal(s.T(), evlp[0], magicByte)
-	require.Equal(s.T(), evlp[1:5], []byte{0, 0, 0, 7})
+	require.Equal(s.T(), magicByte, evlp[0])
+	require.Equal(s.T(), []byte{0, 0, 0, 7}, evlp[1:5])
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
 	require.Nil(s.T(), err)
@@ -313,7 +313,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope() {
 
 	id, exists := parsed.(map[string]interface{})["id"]
 	require.True(s.T(), exists)
-	require.Equal(s.T(), id, int32(7))
+	require.Equal(s.T(), int32(7), id)
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncode() {

@@ -15,7 +15,6 @@ package common
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -71,15 +71,15 @@ func TestMemoryQuotaBasic(t *testing.T) {
 		defer wg.Done()
 
 		for size := range sizeCh {
-			require.GreaterOrEqual(t, atomic.LoadUint64(&consumed), size)
+			require.GreaterOrEqual(t, size, atomic.LoadUint64(&consumed))
 			atomic.AddUint64(&consumed, -size)
 			controller.Release(size)
 		}
 	}()
 
 	wg.Wait()
-	require.Equal(t, atomic.LoadUint64(&consumed), uint64(0))
-	require.Equal(t, controller.GetConsumption(), uint64(0))
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumed))
+	require.Equal(t, uint64(0), controller.GetConsumption())
 }
 
 func TestMemoryQuotaForceConsume(t *testing.T) {
@@ -119,14 +119,14 @@ func TestMemoryQuotaForceConsume(t *testing.T) {
 		defer wg.Done()
 
 		for size := range sizeCh {
-			require.GreaterOrEqual(t, atomic.LoadUint64(&consumed), size)
+			require.GreaterOrEqual(t, size, atomic.LoadUint64(&consumed))
 			atomic.AddUint64(&consumed, -size)
 			controller.Release(size)
 		}
 	}()
 
 	wg.Wait()
-	require.Equal(t, atomic.LoadUint64(&consumed), uint64(0))
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumed))
 }
 
 // TestMemoryQuotaAbort verifies that Abort works
@@ -277,7 +277,7 @@ func TestFlowControlBasic(t *testing.T) {
 		return nil
 	})
 	require.Nil(t, errg.Wait())
-	require.Equal(t, atomic.LoadUint64(&consumedBytes), uint64(0))
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumedBytes))
 }
 
 func TestFlowControlAbort(t *testing.T) {
@@ -292,13 +292,13 @@ func TestFlowControlAbort(t *testing.T) {
 
 		err := controller.Consume(1, 1000, callBacker.cb)
 		require.Nil(t, err)
-		require.Equal(t, callBacker.timesCalled, 0)
+		require.Equal(t, 0, callBacker.timesCalled)
 		err = controller.Consume(2, 1000, callBacker.cb)
 		require.Error(t, err, ".*ErrFlowControllerAborted.*")
-		require.Equal(t, callBacker.timesCalled, 1)
+		require.Equal(t, 1, callBacker.timesCalled)
 		err = controller.Consume(2, 10, callBacker.cb)
 		require.Error(t, err, ".*ErrFlowControllerAborted.*")
-		require.Equal(t, callBacker.timesCalled, 1)
+		require.Equal(t, 1, callBacker.timesCalled)
 	}()
 
 	time.Sleep(3 * time.Second)
@@ -409,7 +409,7 @@ func TestFlowControlCallBack(t *testing.T) {
 		return nil
 	})
 	require.Nil(t, errg.Wait())
-	require.Equal(t, atomic.LoadUint64(&consumedBytes), uint64(0))
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumedBytes))
 }
 
 func TestFlowControlCallBackNotBlockingRelease(t *testing.T) {
@@ -436,7 +436,7 @@ func TestFlowControlCallBackNotBlockingRelease(t *testing.T) {
 			defer wg.Done()
 			<-time.After(time.Second * 1)
 			// makes sure that this test case is valid
-			require.Equal(t, atomic.LoadInt32(&isBlocked), int32(1))
+			require.Equal(t, int32(1), atomic.LoadInt32(&isBlocked))
 			controller.Release(1)
 			cancel()
 		}()
