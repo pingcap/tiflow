@@ -287,7 +287,13 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		case <-k.closeCh:
 			return nil
 		case <-ticker.C:
-			k.metricsMonitor.CollectMetrics()
+			// if error returned, it means the kafka broker clusters is unreachable,
+			// it's ok to return error. Most of the time, this only happen when no
+			// data sending, since if there is any data sending to the kafka,
+			// `ErrKafkaAsyncSendMessage` would have a higher chance to be triggered.
+			if err := k.metricsMonitor.CollectMetrics(); err != nil {
+				return cerror.WrapError(cerror.ErrKafkaCollectSaramaMetrics, err)
+			}
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
@@ -357,7 +363,7 @@ func NewKafkaSaramaProducer(
 		role: role,
 
 		metricsMonitor: newSaramaMetricsMonitor(
-			saramaConfig.MetricRegistry, changefeedID, admin),
+			saramaConfig.MetricRegistry, changefeedID, role, admin),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

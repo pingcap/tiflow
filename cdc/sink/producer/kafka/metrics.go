@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -174,17 +175,23 @@ const (
 
 type saramaMetricsMonitor struct {
 	changefeedID string
+	role         util.Role
 
 	registry metrics.Registry
 	admin    kafka.ClusterAdminClient
 }
 
 // CollectMetrics collect all monitored metrics
-func (sm *saramaMetricsMonitor) CollectMetrics() {
+func (sm *saramaMetricsMonitor) CollectMetrics() error {
 	sm.collectProducerMetrics()
 	if err := sm.collectBrokerMetrics(); err != nil {
-		log.Warn("collect broker metrics failed", zap.Error(err))
+		log.Warn("collect broker metrics failed",
+			zap.Error(err),
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role))
+		return err
 	}
+	return nil
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
@@ -265,18 +272,26 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 	return nil
 }
 
-func newSaramaMetricsMonitor(registry metrics.Registry, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
+func newSaramaMetricsMonitor(registry metrics.Registry, changefeedID string,
+	role util.Role, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
 	return &saramaMetricsMonitor{
 		changefeedID: changefeedID,
+		role:         role,
 		registry:     registry,
 		admin:        admin,
 	}
 }
 
+// Cleanup called when the changefeed stop the kafka sink,
+// broker metrics may cannot be cleaned if that broker cluster information
+// is unreachable, but this might be acceptable because changefeed may be
+// rescheduled, and uncleaned metrics have a chance to be cleaned next time.
 func (sm *saramaMetricsMonitor) Cleanup() {
 	sm.cleanUpProducerMetrics()
 	if err := sm.cleanUpBrokerMetrics(); err != nil {
-		log.Warn("clean up broker metrics failed", zap.Error(err))
+		log.Warn("clean up broker metrics failed", zap.Error(err),
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role))
 	}
 }
 
