@@ -505,9 +505,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// if we receive `a` from partition-1, which would be seemed as DDL regression,
 				// then cause the consumer panic, but it was a duplicate one.
 				// so we only handle DDL received from partition-0 should be enough.
-				if partition != 0 {
-					continue
-				}
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
@@ -562,9 +559,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				log.Info("resolved ts received",
-					zap.Uint64("ts", ts),
-					zap.Int32("partition", partition))
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
