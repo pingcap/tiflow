@@ -443,6 +443,9 @@ tools/bin/errdoc-gen: tools/check/go.mod
 tools/bin/swag: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
 
+tools/bin/msgp: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp 
+
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
 failpoint-enable: check_failpoint_ctl
