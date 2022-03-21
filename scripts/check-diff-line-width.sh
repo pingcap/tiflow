@@ -23,7 +23,7 @@ BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 WARN_THRESHOLD=80
 ERROR_THRESHOLD=100
 
-git --no-pager diff $BASE_HASH -U0 -- cdc pkg |
+git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd |
 	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
 	awk "
