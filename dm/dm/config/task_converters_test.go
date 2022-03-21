@@ -454,3 +454,35 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		require.EqualValues(t, taskAfterConvert, &task)
 	}
 }
+
+func TestRouteAndFilterGeneratedByOpenAPI(t *testing.T) {
+	// no route and filter
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+	toDBCfg := &DBConfig{
+		Host:     task.TargetConfig.Host,
+		Port:     task.TargetConfig.Port,
+		User:     task.TargetConfig.User,
+		Password: task.TargetConfig.Password,
+	}
+	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Len(t, subTaskConfigList, 1)
+	// subTaskConfig := subTaskConfigList[0]
+
+	// test route
+	{
+	}
+
+	// test filter
+	{
+	}
+
+}

@@ -526,7 +526,6 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		}
 	}
 	// set table migrate rules
-
 	tableMigrateRuleList := []openapi.TaskTableMigrateRule{}
 	// used to remove repeated rules
 	ruleMap := map[string]struct{}{}
