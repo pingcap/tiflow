@@ -248,7 +248,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	values              [][]interface{}
 	putApproximateBytes [][]int
 	delApproximateBytes [][]int
-}) {
+},
+) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
 	defer store.Close() //nolint:errcheck
