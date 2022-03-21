@@ -650,7 +650,7 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTaskRequest) (*openapi.Task, *config.TaskConfig, error) {
 	if req.TaskConfigFile != nil {
 		taskCfg := config.NewTaskConfig()
-		if err := taskCfg.RawDecode(*req.TaskConfigFile); err != nil {
+		if err := taskCfg.Decode(*req.TaskConfigFile); err != nil {
 			return nil, nil, err
 		}
 		sourceCfgMap := make(map[string]*config.SourceConfig, len(taskCfg.MySQLInstances))

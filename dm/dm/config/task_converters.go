@@ -149,7 +149,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		subTaskCfg.Name = task.Name
 		subTaskCfg.Mode = string(task.TaskMode)
 		// set task meta
-		subTaskCfg.MetaFile = *task.MetaSchema
+		subTaskCfg.MetaSchema = *task.MetaSchema
 		// add binlog meta
 		if sourceCfg.BinlogGtid != nil || sourceCfg.BinlogName != nil || sourceCfg.BinlogPos != nil {
 			meta := &Meta{}

@@ -65,6 +65,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 	}
+	// change meta
+	newMeta := "new_dm_meta"
+	task.MetaSchema = &newMeta
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	c.Assert(err, check.IsNil)
 	c.Assert(subTaskConfigList, check.HasLen, 1)

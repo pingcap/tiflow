@@ -1580,6 +1580,7 @@ components:
           example: "123456"
           description: "source password"
         security:
+          nullable: true
           $ref: "#/components/schemas/Security"
       required:
         - "host"
