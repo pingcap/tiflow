@@ -88,9 +88,8 @@ function run() {
 	cleanup_process $CDC_BINARY
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-
-	run_sql "create table consistent_replicate_s3.USERTABLE2 like consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_s3.USERTABLE2 select * from consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table consistent_replicate_s3.GBKTABLE2 like consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_s3.GBKTABLE2 values (2, '部署', '美国', '纽约', '世界,你好', 0xCAC0BDE7C4E3BAC3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 5
@@ -110,8 +109,8 @@ function run() {
 	# test gbk compatibility
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	run_sql "create table consistent_replicate_s3.GBKTABLE2 like consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_s3.GBKTABLE2 values (2, '部署', '美国', '纽约', '世界,你好', 0xCAC0BDE7C4E3BAC3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table consistent_replicate_s3.USERTABLE2 like consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_s3.USERTABLE2 select * from consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	sleep 5
 
