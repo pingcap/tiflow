@@ -19,12 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type matcher struct {
-	// TODO : clear the single prewrite
-	unmatchedValue map[matchKey]*cdcpb.Event_Row
-	cachedCommit   []*cdcpb.Event_Row
-}
-
 type matchKey struct {
 	startTs uint64
 	key     string
@@ -32,6 +26,12 @@ type matchKey struct {
 
 func newMatchKey(row *cdcpb.Event_Row) matchKey {
 	return matchKey{startTs: row.GetStartTs(), key: string(row.GetKey())}
+}
+
+type matcher struct {
+	// TODO : clear the single prewrite
+	unmatchedValue map[matchKey]*cdcpb.Event_Row
+	cachedCommit   []*cdcpb.Event_Row
 }
 
 func newMatcher() *matcher {
@@ -49,7 +49,7 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	// when the old-value is enabled, the value of the fake prewrite event is also empty,
 	// but the old value of the fake prewrite event is not empty.
 	// We can distinguish fake prewrite events by whether the value is empty,
-	// no matter the old-value is enable or disabled
+	// no matter the old-value is enabled or disabled
 	if _, exist := m.unmatchedValue[key]; exist && len(row.GetValue()) == 0 {
 		return
 	}
