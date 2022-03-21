@@ -51,7 +51,7 @@ func TestClientID(t *testing.T) {
 			require.NotNil(t, err)
 		} else {
 			require.Nil(t, err)
-			require.Equal(t, tc.expected, id)
+			require.Equal(t, id, tc.expected)
 		}
 	}
 }
@@ -133,13 +133,13 @@ func TestNewSaramaProducer(t *testing.T) {
 	default:
 	}
 	producer.mu.Lock()
-	require.Equal(t, int64(0), producer.mu.inflight)
+	require.Equal(t, producer.mu.inflight, int64(0))
 	producer.mu.Unlock()
 	// check no events to flush
 	err = producer.Flush(ctx)
 	require.Nil(t, err)
 	producer.mu.Lock()
-	require.Equal(t, int64(0), producer.mu.inflight)
+	require.Equal(t, producer.mu.inflight, int64(0))
 	producer.mu.Unlock()
 
 	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
@@ -161,14 +161,14 @@ func TestNewSaramaProducer(t *testing.T) {
 		Value: nil,
 	})
 	if err != nil {
-		require.Equal(t, context.Canceled, err)
+		require.Equal(t, err, context.Canceled)
 	}
 	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
 	if err != nil {
-		require.Equal(t, context.Canceled, err)
+		require.Equal(t, err, context.Canceled)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random1")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
 	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
@@ -201,7 +201,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random2")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
 	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
@@ -210,7 +210,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-random3")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 }
 
 func TestAdjustConfigTopicExist(t *testing.T) {
@@ -233,7 +233,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	require.Nil(t, err)
 
 	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
 	config.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
@@ -244,7 +244,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	require.Nil(t, err)
 
 	expectedSaramaMaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
 	config.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
@@ -255,7 +255,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	require.Nil(t, err)
 
 	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// When the topic exists, but the topic does not have `max.message.bytes`
 	// create a topic without `max.message.bytes`
@@ -277,7 +277,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// since `max.message.bytes` cannot found, use broker's `message.max.bytes` instead.
 	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
 	// `max-message-bytes` > `message.max.bytes`
@@ -288,7 +288,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expectedSaramaMaxMessageBytes)
 }
 
 func TestAdjustConfigMinInsyncReplicas(t *testing.T) {

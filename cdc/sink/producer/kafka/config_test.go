@@ -64,7 +64,7 @@ func TestNewSaramaConfig(t *testing.T) {
 		config.Compression = cc.algorithm
 		cfg, err := NewSaramaConfig(ctx, config)
 		require.Nil(t, err)
-		require.Equal(t, cc.expected, cfg.Producer.Compression)
+		require.Equal(t, cfg.Producer.Compression, cc.expected)
 	}
 
 	config.Credential = &security.Credential{
@@ -85,24 +85,24 @@ func TestNewSaramaConfig(t *testing.T) {
 	cfg, err := NewSaramaConfig(ctx, saslConfig)
 	require.Nil(t, err)
 	require.NotNil(t, cfg)
-	require.Equal(t,"user", cfg.Net.SASL.User)
-	require.Equal(t, "password", cfg.Net.SASL.Password)
-	require.Equal(t, sarama.SASLMechanism("SCRAM-SHA-256"), cfg.Net.SASL.Mechanism)
+	require.Equal(t, cfg.Net.SASL.User, "user")
+	require.Equal(t, cfg.Net.SASL.Password, "password")
+	require.Equal(t, cfg.Net.SASL.Mechanism, sarama.SASLMechanism("SCRAM-SHA-256"))
 }
 
-func  TestConfigTimeouts(t *testing.T) {
+func TestConfigTimeouts(t *testing.T) {
 	defer testleak.AfterTest(t)()
 
 	cfg := NewConfig()
-	require.Equal(t, 10*time.Second, cfg.DialTimeout)
-	require.Equal(t, 10*time.Second, cfg.ReadTimeout)
-	require.Equal(t, 10*time.Second, cfg.WriteTimeout)
+	require.Equal(t, cfg.DialTimeout, 10*time.Second)
+	require.Equal(t, cfg.ReadTimeout, 10*time.Second)
+	require.Equal(t, cfg.WriteTimeout, 10*time.Second)
 
 	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
 	require.Nil(t, err)
-	require.Equal(t, cfg.DialTimeout, saramaConfig.Net.DialTimeout)
-	require.Equal(t, cfg.DialTimeout, saramaConfig.Net.WriteTimeout)
-	require.Equal(t, cfg.DialTimeout, saramaConfig.Net.ReadTimeout)
+	require.Equal(t, saramaConfig.Net.DialTimeout, cfg.DialTimeout)
+	require.Equal(t, saramaConfig.Net.WriteTimeout, cfg.DialTimeout)
+	require.Equal(t, saramaConfig.Net.ReadTimeout, cfg.DialTimeout)
 
 	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
 		"&write-timeout=2m"
@@ -112,15 +112,15 @@ func  TestConfigTimeouts(t *testing.T) {
 	err = cfg.Apply(sinkURI)
 	require.Nil(t, err)
 
-	require.Equal(t, 5*time.Second, cfg.DialTimeout)
-	require.Equal(t, 1000*time.Millisecond, cfg.ReadTimeout)
-	require.Equal(t, 2*time.Minute, cfg.WriteTimeout)
+	require.Equal(t, cfg.DialTimeout, 5*time.Second)
+	require.Equal(t, cfg.ReadTimeout, 1000*time.Millisecond)
+	require.Equal(t, cfg.WriteTimeout, 2*time.Minute)
 
 	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
 	require.Nil(t, err)
-	require.Equal(t, 5*time.Second, saramaConfig.Net.DialTimeout)
-	require.Equal(t, 1000*time.Millisecond, saramaConfig.Net.ReadTimeout)
-	require.Equal(t, 2*time.Minute, saramaConfig.Net.WriteTimeout)
+	require.Equal(t, saramaConfig.Net.DialTimeout, 5*time.Second)
+	require.Equal(t, saramaConfig.Net.ReadTimeout, 1000*time.Millisecond)
+	require.Equal(t, saramaConfig.Net.WriteTimeout, 2*time.Minute)
 
 }
 
@@ -139,10 +139,10 @@ func TestCompleteConfigByOpts(t *testing.T) {
 
 	err = cfg.Apply(sinkURI)
 	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
-	require.Equal(t, int16(3), cfg.ReplicationFactor)
-	require.Equal(t, "2.6.0", cfg.Version)
-	require.Equal(t, 4096, cfg.MaxMessageBytes)
+	require.Equal(t, cfg.PartitionNum, int32(1))
+	require.Equal(t, cfg.ReplicationFactor, int16(3))
+	require.Equal(t, cfg.Version, "2.6.0")
+	require.Equal(t, cfg.MaxMessageBytes, 4096)
 
 	// multiple kafka broker endpoints
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
@@ -151,7 +151,7 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	cfg = NewConfig()
 	err = cfg.Apply(sinkURI)
 	require.Nil(t, err)
-	require.Equal(t, 3, len(cfg.BrokerEndpoints))
+	require.Equal(t, len(cfg.BrokerEndpoints), 3)
 
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
@@ -192,12 +192,12 @@ func TestSetPartitionNum(t *testing.T) {
 	cfg := NewConfig()
 	err := cfg.setPartitionNum(2)
 	require.Nil(t, err)
-	require.Equal(t, int32(2), cfg.PartitionNum)
+	require.Equal(t, cfg.PartitionNum, int32(2))
 
 	cfg.PartitionNum = 1
 	err = cfg.setPartitionNum(2)
 	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
+	require.Equal(t, cfg.PartitionNum, int32(1))
 
 	cfg.PartitionNum = 3
 	err = cfg.setPartitionNum(2)
@@ -410,7 +410,7 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
-		require.NotEqual(t, "", topic)
+		require.NotEqual(t, topic, "")
 		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
 		require.Nil(t, err)
 
@@ -423,11 +423,11 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		require.Equal(t, encoderConfig.MaxMessageBytes(), saramaConfig.Producer.MaxMessageBytes)
+		require.Equal(t, saramaConfig.Producer.MaxMessageBytes, encoderConfig.MaxMessageBytes())
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		require.Nil(t, err)
-		require.Equal(t, expected, saramaConfig.Producer.MaxMessageBytes)
+		require.Equal(t, saramaConfig.Producer.MaxMessageBytes, expected)
 
 		_ = adminClient.Close()
 	}

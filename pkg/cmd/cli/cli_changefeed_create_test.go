@@ -90,6 +90,6 @@ func TestInvalidSortEngine(t *testing.T) {
 		err := opt.completeCfg(cmd,
 			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
 		require.Nil(t, err)
-		require.Equal(t, cs.expect, opt.commonChangefeedOptions.sortEngine)
+		require.Equal(t, opt.commonChangefeedOptions.sortEngine, cs.expect)
 	}
 }

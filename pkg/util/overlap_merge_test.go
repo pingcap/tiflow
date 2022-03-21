@@ -135,8 +135,8 @@ func TestOverlapCoveringMerge(t *testing.T) {
 			}
 			outputPayloads = append(outputPayloads, payload.String())
 		}
-		require.Equal(t, test.expectedIntervals, outputIntervals)
-		require.Equal(t, test.expectedPayloads, outputPayloads)
+		require.Equal(t, outputIntervals, test.expectedIntervals)
+		require.Equal(t, outputPayloads, test.expectedPayloads)
 
 	}
 }

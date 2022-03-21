@@ -63,7 +63,7 @@ func TestTxnsHeap(t *testing.T) {
 		h := newTxnsHeap(tc.txnsMap)
 		i := 0
 		h.iter(func(txn *model.SingleTableTxn) {
-			require.Equal(t, tc.expected[i], txn)
+			require.Equal(t, txn, tc.expected[i])
 			i++
 		})
 	}

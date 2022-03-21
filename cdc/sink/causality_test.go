@@ -36,14 +36,14 @@ func TestCausality(t *testing.T) {
 	for i, row := range rows {
 		conflict, idx := ca.detectConflict(row)
 		require.False(t, conflict)
-		require.Equal(t, -1, idx)
+		require.Equal(t, idx, -1)
 		ca.add(row, i)
 		// Test for single key index conflict.
 		conflict, idx = ca.detectConflict(row)
 		require.True(t, conflict)
-		require.Equal(t, i, idx)
+		require.Equal(t, idx, i)
 	}
-	require.Equal(t, 3, len(ca.relations))
+	require.Equal(t, len(ca.relations), 3)
 	cases := []struct {
 		keys     [][]byte
 		conflict bool
@@ -63,11 +63,11 @@ func TestCausality(t *testing.T) {
 	for _, cas := range cases {
 		conflict, idx := ca.detectConflict(cas.keys)
 		comment := fmt.Sprintf("keys: %v", cas.keys)
-		require.Equal(t, cas.conflict, conflict, comment)
-		require.Equal(t, cas.idx, idx, comment)
+		require.Equal(t, conflict, cas.conflict, comment)
+		require.Equal(t, idx, cas.idx, comment)
 	}
 	ca.reset()
-	require.Equal(t, 0, len(ca.relations))
+	require.Equal(t, len(ca.relations), 0)
 }
 
 func TestGenKeys(t *testing.T) {

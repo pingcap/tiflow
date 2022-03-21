@@ -101,11 +101,11 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, flatMessage.Data)
 	require.Nil(t, flatMessage.Old)
-	require.Equal(t, "INSERT", flatMessage.EventType)
-	require.Equal(t, convertToCanalTs(testCaseInsert.CommitTs), flatMessage.ExecutionTime)
-	require.Equal(t, testCaseInsert.CommitTs, flatMessage.tikvTs)
-	require.Equal(t, "cdc", flatMessage.Schema)
-	require.Equal(t, "person", flatMessage.Table)
+	require.Equal(t, flatMessage.EventType, "INSERT")
+	require.Equal(t, flatMessage.ExecutionTime, convertToCanalTs(testCaseInsert.CommitTs))
+	require.Equal(t, flatMessage.tikvTs, testCaseInsert.CommitTs)
+	require.Equal(t, flatMessage.Schema, "cdc")
+	require.Equal(t, flatMessage.Table, "person")
 	require.False(t, flatMessage.IsDDL)
 
 	// check data is enough
@@ -116,23 +116,23 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 		obtainedValue, ok := obtainedDataMap[item.column.Name]
 		require.True(t, ok)
 		if !item.column.Flag.IsBinary() {
-			require.Equal(t, item.expectedEncodedValue, obtainedValue)
+			require.Equal(t, obtainedValue, item.expectedEncodedValue)
 			continue
 		}
 
 		// for `Column.Value` is nil, which mean's it is nullable, set the value to `""`
 		if obtainedValue == nil {
-			require.Equal(t, "", item.expectedEncodedValue)
+			require.Equal(t, item.expectedEncodedValue, "")
 			continue
 		}
 
 		if bytes, ok := item.column.Value.([]byte); ok {
 			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
 			require.Nil(t, err)
-			require.Equal(t, string(expectedValue), obtainedValue)
+			require.Equal(t, obtainedValue, string(expectedValue))
 			continue
 		}
-		require.Equal(t, item.expectedEncodedValue, obtainedValue)
+		require.Equal(t, obtainedValue, item.expectedEncodedValue)
 	}
 
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
@@ -141,7 +141,7 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, flatMessage.Data)
 	require.NotNil(t, flatMessage.Old)
-	require.Equal(t, "UPDATE", flatMessage.EventType)
+	require.Equal(t, flatMessage.EventType, "UPDATE")
 
 	message, err = encoder.newFlatMessageForDML(testCaseDelete)
 	require.Nil(t, err)
@@ -149,7 +149,7 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, flatMessage.Data)
 	require.Nil(t, flatMessage.Old)
-	require.Equal(t, "DELETE", flatMessage.EventType)
+	require.Equal(t, flatMessage.EventType, "DELETE")
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
@@ -160,7 +160,7 @@ func TestNewCanalFlatMessage4DML(t *testing.T) {
 	require.True(t, ok)
 
 	require.NotNil(t, withExtension.Extensions)
-	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+	require.Equal(t, withExtension.Extensions.CommitTs, testCaseUpdate.CommitTs)
 }
 
 func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
@@ -175,7 +175,7 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 		require.Nil(t, err)
 
 		mqMessages := encoder.Build()
-		require.Equal(t, 1, len(mqMessages))
+		require.Equal(t, len(mqMessages), 1)
 		msg := mqMessages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
@@ -184,26 +184,26 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeRow, ty)
+			require.Equal(t, ty, model.MqMessageTypeRow)
 
 			consumed, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 
-			require.Equal(t, testCaseInsert.Table, consumed.Table)
+			require.Equal(t, consumed.Table, testCaseInsert.Table)
 			if encodeEnable && decodeEnable {
-				require.Equal(t, testCaseInsert.CommitTs, consumed.CommitTs)
+				require.Equal(t, consumed.CommitTs, testCaseInsert.CommitTs)
 			} else {
-				require.Equal(t, uint64(0), consumed.CommitTs)
+				require.Equal(t, consumed.CommitTs, uint64(0))
 			}
 
 			for _, col := range consumed.Columns {
 				expected, ok := expectedDecodedValue[col.Name]
 				require.True(t, ok)
-				require.Equal(t, expected, col.Value)
+				require.Equal(t, col.Value, expected)
 
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
-						require.Equal(t, item.Type, col.Type)
+						require.Equal(t, col.Type, item.Type)
 					}
 				}
 			}
@@ -228,13 +228,13 @@ func TestNewCanalFlatMessageFromDDL(t *testing.T) {
 
 	msg, ok := message.(*canalFlatMessage)
 	require.True(t, ok)
-	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
-	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
+	require.Equal(t, msg.tikvTs, testCaseDDL.CommitTs)
+	require.Equal(t, msg.ExecutionTime, convertToCanalTs(testCaseDDL.CommitTs))
 	require.True(t, msg.IsDDL)
-	require.Equal(t, "cdc", msg.Schema)
-	require.Equal(t, "person", msg.Table)
-	require.Equal(t, testCaseDDL.Query, msg.Query)
-	require.Equal(t, "CREATE", msg.EventType)
+	require.Equal(t, msg.Schema, "cdc")
+	require.Equal(t, msg.Table, "person")
+	require.Equal(t, msg.Query, testCaseDDL.Query)
+	require.Equal(t, msg.EventType, "CREATE")
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
@@ -265,24 +265,24 @@ func TestNewCanalFlatEventBatchDecoder4DDLMessage(t *testing.T) {
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeDDL, ty)
+			require.Equal(t, ty, model.MqMessageTypeDDL)
 
 			consumed, err := decoder.NextDDLEvent()
 			require.Nil(t, err)
 
 			if encodeEnable && decodeEnable {
-				require.Equal(t, testCaseDDL.CommitTs, consumed.CommitTs)
+				require.Equal(t, consumed.CommitTs, testCaseDDL.CommitTs)
 			} else {
-				require.Equal(t, uint64(0), consumed.CommitTs)
+				require.Equal(t, consumed.CommitTs, uint64(0))
 			}
 
-			require.Equal(t, testCaseDDL.TableInfo, consumed.TableInfo)
-			require.Equal(t, testCaseDDL.Query, consumed.Query)
+			require.Equal(t, consumed.TableInfo, testCaseDDL.TableInfo)
+			require.Equal(t, consumed.Query, testCaseDDL.Query)
 
 			ty, hasNext, err = decoder.HasNext()
 			require.Nil(t, err)
 			require.False(t, hasNext)
-			require.Equal(t, model.MqMessageTypeUnknown, ty)
+			require.Equal(t, ty, model.MqMessageTypeUnknown)
 
 			consumed, err = decoder.NextDDLEvent()
 			require.NotNil(t, err)
@@ -309,12 +309,12 @@ func TestBatching(t *testing.T) {
 			require.Len(t, msgs, 100)
 
 			for j := range msgs {
-				require.Equal(t, 1, msgs[j].GetRowsCount())
+				require.Equal(t, msgs[j].GetRowsCount(), 1)
 
 				var msg canalFlatMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				require.Nil(t, err)
-				require.Equal(t, "UPDATE", msg.EventType)
+				require.Equal(t, msg.EventType, "UPDATE")
 			}
 		}
 	}
@@ -344,19 +344,19 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.Nil(t, err)
 		if enable {
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeResolved, ty)
+			require.Equal(t, ty, model.MqMessageTypeResolved)
 			consumed, err := decoder.NextResolvedEvent()
 			require.Nil(t, err)
-			require.Equal(t, watermark, consumed)
+			require.Equal(t, consumed, watermark)
 		} else {
 			require.False(t, hasNext)
-			require.Equal(t, model.MqMessageTypeUnknown, ty)
+			require.Equal(t, ty, model.MqMessageTypeUnknown)
 		}
 
 		ty, hasNext, err = decoder.HasNext()
 		require.Nil(t, err)
 		require.False(t, hasNext)
-		require.Equal(t, model.MqMessageTypeUnknown, ty)
+		require.Equal(t, ty, model.MqMessageTypeUnknown)
 	}
 }
 
@@ -380,7 +380,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 	}
 	err = json.Unmarshal(msg.Value, &flatMsg)
 	require.Nil(t, err)
-	require.Equal(t, watermark, flatMsg.Extensions.WatermarkTs)
+	require.Equal(t, flatMsg.Extensions.WatermarkTs, watermark)
 	// Hack the build time.
 	// Otherwise, the timing will be inconsistent.
 	flatMsg.BuildTime = 1469579899
@@ -406,7 +406,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
     "watermarkTs": 1024
   }
 }`
-	require.Equal(t, expectedJSON, string(rawBytes))
+	require.Equal(t, string(rawBytes), expectedJSON)
 }
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
@@ -445,5 +445,5 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
     "commitTs": 417318403368288260
   }
 }`
-	require.Equal(t, expectedJSON, string(rawBytes))
+	require.Equal(t, string(rawBytes), expectedJSON)
 }

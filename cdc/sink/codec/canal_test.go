@@ -102,17 +102,17 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder() {
 		}
 		require.Len(s.T(), res, 1)
 		require.Nil(s.T(), res[0].Key)
-		require.Equal(s.T(), size, len(res[0].Value))
-		require.Equal(s.T(), len(cs), res[0].GetRowsCount())
+		require.Equal(s.T(), len(res[0].Value), size)
+		require.Equal(s.T(), res[0].GetRowsCount(), len(cs))
 
 		packet := &canal.Packet{}
 		err := proto.Unmarshal(res[0].Value, packet)
 		require.Nil(s.T(), err)
-		require.Equal(s.T(), canal.PacketType_MESSAGES, packet.GetType())
+		require.Equal(s.T(), packet.GetType(), canal.PacketType_MESSAGES)
 		messages := &canal.Messages{}
 		err = proto.Unmarshal(packet.GetBody(), messages)
 		require.Nil(s.T(), err)
-		require.Equal(s.T(), len(cs), len(messages.GetMessages()))
+		require.Equal(s.T(), len(messages.GetMessages()), len(cs))
 
 	}
 
@@ -127,11 +127,11 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder() {
 			packet := &canal.Packet{}
 			err = proto.Unmarshal(msg.Value, packet)
 			require.Nil(s.T(), err)
-			require.Equal(s.T(), canal.PacketType_MESSAGES, packet.GetType())
+			require.Equal(s.T(), packet.GetType(), canal.PacketType_MESSAGES)
 			messages := &canal.Messages{}
 			err = proto.Unmarshal(packet.GetBody(), messages)
 			require.Nil(s.T(), err)
-			require.Equal(s.T(), 1, len(messages.GetMessages()))
+			require.Equal(s.T(), len(messages.GetMessages()), 1)
 			require.Nil(s.T(), err)
 		}
 	}
@@ -164,13 +164,13 @@ func testInsert(t *testing.T) {
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseInsert)
 	require.Nil(t, err)
-	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
+	require.Equal(t, entry.GetEntryType(), canal.EntryType_ROWDATA)
 	header := entry.GetHeader()
-	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
-	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, testCaseInsert.Table.Schema, header.GetSchemaName())
-	require.Equal(t, testCaseInsert.Table.Table, header.GetTableName())
-	require.Equal(t, canal.EventType_INSERT, header.GetEventType())
+	require.Equal(t, header.GetExecuteTime(), int64(1591943372224))
+	require.Equal(t, header.GetSourceType(), canal.Type_MYSQL)
+	require.Equal(t, header.GetSchemaName(), testCaseInsert.Table.Schema)
+	require.Equal(t, header.GetTableName(), testCaseInsert.Table.Table)
+	require.Equal(t, header.GetEventType(), canal.EventType_INSERT)
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
 	rc := &canal.RowChange{}
@@ -178,45 +178,45 @@ func testInsert(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	require.Equal(t, 1, len(rowDatas))
+	require.Equal(t, len(rowDatas), 1)
 
 	columns := rowDatas[0].AfterColumns
-	require.Equal(t, len(testCaseInsert.Columns), len(columns))
+	require.Equal(t, len(columns), len(testCaseInsert.Columns))
 	for _, col := range columns {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeINTEGER))
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "1", col.GetValue())
-			require.Equal(t, "int", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "1")
+			require.Equal(t, col.GetMysqlType(), "int")
 		case "name":
-			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeVARCHAR))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "Bob", col.GetValue())
-			require.Equal(t, "varchar", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "Bob")
+			require.Equal(t, col.GetMysqlType(), "varchar")
 		case "tiny":
-			require.Equal(t, int32(JavaSQLTypeTINYINT), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeTINYINT))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "255", col.GetValue())
+			require.Equal(t, col.GetValue(), "255")
 		case "comment":
-			require.Equal(t, int32(JavaSQLTypeCLOB), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeCLOB))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Nil(t, err)
-			require.Equal(t, "测试", col.GetValue())
-			require.Equal(t, "text", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "测试")
+			require.Equal(t, col.GetMysqlType(), "text")
 		case "blob":
-			require.Equal(t, int32(JavaSQLTypeBLOB), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeBLOB))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
 			require.Nil(t, err)
-			require.Equal(t, "测试blob", s)
-			require.Equal(t, "blob", col.GetMysqlType())
+			require.Equal(t, s, "测试blob")
+			require.Equal(t, col.GetMysqlType(), "blob")
 		}
 	}
 }
@@ -240,14 +240,14 @@ func testUpdate(t *testing.T) {
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseUpdate)
 	require.Nil(t, err)
-	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
+	require.Equal(t, entry.GetEntryType(), canal.EntryType_ROWDATA)
 
 	header := entry.GetHeader()
-	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
-	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, testCaseUpdate.Table.Schema, header.GetSchemaName())
-	require.Equal(t, testCaseUpdate.Table.Table, header.GetTableName())
-	require.Equal(t, canal.EventType_UPDATE, header.GetEventType())
+	require.Equal(t, header.GetExecuteTime(), int64(1591943372224))
+	require.Equal(t, header.GetSourceType(), canal.Type_MYSQL)
+	require.Equal(t, header.GetSchemaName(), testCaseUpdate.Table.Schema)
+	require.Equal(t, header.GetTableName(), testCaseUpdate.Table.Table)
+	require.Equal(t, header.GetEventType(), canal.EventType_UPDATE)
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
 	rc := &canal.RowChange{}
@@ -255,45 +255,45 @@ func testUpdate(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	require.Equal(t, 1, len(rowDatas))
+	require.Equal(t, len(rowDatas), 1)
 
 	beforeColumns := rowDatas[0].BeforeColumns
-	require.Equal(t, len(testCaseUpdate.PreColumns), len(beforeColumns))
+	require.Equal(t, len(beforeColumns), len(testCaseUpdate.PreColumns))
 	for _, col := range beforeColumns {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeINTEGER))
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "2", col.GetValue())
-			require.Equal(t, "int", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "2")
+			require.Equal(t, col.GetMysqlType(), "int")
 		case "name":
-			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeVARCHAR))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "Nancy", col.GetValue())
-			require.Equal(t, "varchar", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "Nancy")
+			require.Equal(t, col.GetMysqlType(), "varchar")
 		}
 	}
 
 	afterColumns := rowDatas[0].AfterColumns
-	require.Equal(t, len(testCaseUpdate.Columns), len(afterColumns))
+	require.Equal(t, len(afterColumns), len(testCaseUpdate.Columns))
 	for _, col := range afterColumns {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeINTEGER))
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "1", col.GetValue())
-			require.Equal(t, "int", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "1")
+			require.Equal(t, col.GetMysqlType(), "int")
 		case "name":
-			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeVARCHAR))
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "Bob", col.GetValue())
-			require.Equal(t, "varchar", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "Bob")
+			require.Equal(t, col.GetMysqlType(), "varchar")
 		}
 	}
 }
@@ -313,11 +313,11 @@ func testDelete(t *testing.T) {
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseDelete)
 	require.Nil(t, err)
-	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
+	require.Equal(t, entry.GetEntryType(), canal.EntryType_ROWDATA)
 	header := entry.GetHeader()
-	require.Equal(t, testCaseDelete.Table.Schema, header.GetSchemaName())
-	require.Equal(t, testCaseDelete.Table.Table, header.GetTableName())
-	require.Equal(t, canal.EventType_DELETE, header.GetEventType())
+	require.Equal(t, header.GetSchemaName(), testCaseDelete.Table.Schema)
+	require.Equal(t, header.GetTableName(), testCaseDelete.Table.Table)
+	require.Equal(t, header.GetEventType(), canal.EventType_DELETE)
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
 	rc := &canal.RowChange{}
@@ -325,19 +325,19 @@ func testDelete(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	require.Equal(t, 1, len(rowDatas))
+	require.Equal(t, len(rowDatas), 1)
 
 	columns := rowDatas[0].BeforeColumns
-	require.Equal(t, len(testCaseDelete.PreColumns), len(columns))
+	require.Equal(t, len(columns), len(testCaseDelete.PreColumns))
 	for _, col := range columns {
 		require.False(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, col.GetSqlType(), int32(JavaSQLTypeINTEGER))
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
-			require.Equal(t, "1", col.GetValue())
-			require.Equal(t, "int", col.GetMysqlType())
+			require.Equal(t, col.GetValue(), "1")
+			require.Equal(t, col.GetMysqlType(), "int")
 		}
 	}
 }
@@ -726,16 +726,16 @@ func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
 	canalEntryBuilder := NewCanalEntryBuilder()
 	for _, item := range testColumnsTable {
 		obtainedMySQLType := getMySQLType(item.column)
-		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
+		require.Equal(t, obtainedMySQLType, item.expectedMySQLType)
 
 		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
 		require.Nil(t, err)
-		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
+		require.Equal(t, obtainedJavaSQLType, item.expectedJavaSQLType)
 
 		if !item.column.Flag.IsBinary() {
 			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
 			require.Nil(t, err)
-			require.Equal(t, item.expectedEncodedValue, obtainedFinalValue)
+			require.Equal(t, obtainedFinalValue, item.expectedEncodedValue)
 		}
 	}
 }

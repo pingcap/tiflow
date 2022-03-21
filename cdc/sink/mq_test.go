@@ -72,8 +72,8 @@ func TestKafkaSink(t *testing.T) {
 	encoder := sink.encoderBuilder.Build()
 
 	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 1048576, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), 1)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), 1048576)
 
 	// mock kafka broker processes 1 row changed event
 	leader.Returns(prodSuccess)
@@ -92,11 +92,11 @@ func TestKafkaSink(t *testing.T) {
 	require.Nil(t, err)
 	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
 	require.Nil(t, err)
-	require.Equal(t, uint64(120), checkpointTs)
+	require.Equal(t, checkpointTs, uint64(120))
 	// flush older resolved ts
 	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, uint64(110))
 	require.Nil(t, err)
-	require.Equal(t, uint64(120), checkpointTs)
+	require.Equal(t, checkpointTs, uint64(120))
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
@@ -123,20 +123,20 @@ func TestKafkaSink(t *testing.T) {
 	cancel()
 	err = sink.EmitRowChangedEvents(ctx, row)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 	err = sink.EmitCheckpointTs(ctx, uint64(140), nil)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 
 	err = sink.Close(ctx)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	require.Nil(t, err)
-	require.Equal(t, uint64(0), sink.statistics.TotalRowsCount())
+	require.Equal(t, sink.statistics.TotalRowsCount(), uint64(0))
 
 	ddl := &model.DDLEvent{
 		StartTs:  130,
@@ -204,7 +204,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 
 	err = sink.Close(ctx)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }
 
@@ -232,8 +232,8 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 
 	encoder := sink.encoderBuilder.Build()
 	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), 1)
+	require.Equal(t, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), 4194304)
 }
 
 func TestFlushRowChangedEvents(t *testing.T) {
@@ -323,23 +323,23 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	leader.Returns(prodSuccess)
 	checkpointTs1, err := sink.FlushRowChangedEvents(ctx, tableID1, row1.CommitTs)
 	require.Nil(t, err)
-	require.Equal(t, row1.CommitTs, checkpointTs1)
+	require.Equal(t, checkpointTs1, row1.CommitTs)
 
 	checkpointTs2, err := sink.FlushRowChangedEvents(ctx, tableID2, row2.CommitTs)
 	require.Nil(t, err)
-	require.Equal(t, row2.CommitTs, checkpointTs2)
+	require.Equal(t, checkpointTs2, row2.CommitTs)
 
 	checkpointTs3, err := sink.FlushRowChangedEvents(ctx, tableID3, row3.CommitTs)
 	require.Nil(t, err)
-	require.Equal(t, row3.CommitTs, checkpointTs3)
+	require.Equal(t, checkpointTs3, row3.CommitTs)
 
 	// flush older resolved ts
 	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1, uint64(110))
 	require.Nil(t, err)
-	require.Equal(t, row1.CommitTs, checkpointTsOld)
+	require.Equal(t, checkpointTsOld, row1.CommitTs)
 
 	err = sink.Close(ctx)
 	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
+		require.Equal(t, errors.Cause(err), context.Canceled)
 	}
 }

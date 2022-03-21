@@ -44,7 +44,7 @@ func TestConfirmLargeDataGap(t *testing.T) {
 	}()
 
 	err = confirmLargeDataGap(cmd, currentTs, startTs)
-	require.Error(t, err, "abort changefeed create or resume")
+	require.Equal(t, err.Error(), "abort changefeed create or resume")
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
 	err = os.WriteFile(path, []byte("Y"), 0o644)
@@ -76,7 +76,7 @@ func TestConfirmIgnoreIneligibleTables(t *testing.T) {
 	}()
 
 	err = confirmIgnoreIneligibleTables(cmd)
-	require.Error(t, err, "abort changefeed create or resume")
+	require.Equal(t, err.Error(), "abort changefeed create or resume")
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
 	err = os.WriteFile(path, []byte("Y"), 0o644)

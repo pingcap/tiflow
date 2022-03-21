@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/require"
 )
 
 func TestProxyFields(t *testing.T) {
@@ -52,8 +52,8 @@ func TestProxyFields(t *testing.T) {
 		for _, field := range findProxyFields() {
 			idx, ok := revIndex[field.Key]
 			require.True(t, ok)
-			require.NotEqual(t, 0, (1<<idx)&mask)
-			require.Equal(t, envPreset[idx], field.String)
+			require.NotEqual(t, (1<<idx)&mask, 0)
+			require.Equal(t, field.String, envPreset[idx])
 		}
 	}
 }
@@ -171,14 +171,14 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Nil(t, err)
 
 	require.True(t, cfg.CaseSensitive)
-	require.Equal(t, &config.FilterConfig{
+	require.Equal(t, cfg.Filter, &config.FilterConfig{
 		IgnoreTxnStartTs: []uint64{1, 2},
 		Rules:            []string{"*.*", "!test.*"},
-	}, cfg.Filter)
-	require.Equal(t, &config.MounterConfig{
+	})
+	require.Equal(t, cfg.Mounter, &config.MounterConfig{
 		WorkerNum: 16,
-	}, cfg.Mounter)
-	require.Equal(t, &config.SinkConfig{
+	})
+	require.Equal(t, cfg.Sink, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
 			{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
 			{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},
@@ -188,13 +188,13 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
 		Protocol: "open-protocol",
-	}, cfg.Sink)
-	require.Equal(t, &config.CyclicConfig{
+	})
+	require.Equal(t, cfg.Cyclic, &config.CyclicConfig{
 		Enable:          false,
 		ReplicaID:       1,
 		FilterReplicaID: []uint64{2, 3},
 		SyncDDL:         true,
-	}, cfg.Cyclic)
+	})
 
 }
 
@@ -206,7 +206,7 @@ func TestAndWriteExampleServerTOML(t *testing.T) {
 	defcfg := config.GetDefaultServerConfig()
 	defcfg.AdvertiseAddr = "127.0.0.1:8300"
 	defcfg.LogFile = "/tmp/ticdc/ticdc.log"
-	require.Equal(t, defcfg, cfg)
+	require.Equal(t, cfg, defcfg)
 }
 
 func TestJSONPrint(t *testing.T) {
@@ -230,7 +230,7 @@ func TestJSONPrint(t *testing.T) {
   "a": "string"
 }
 `
-	require.Equal(t, output, b.String())
+	require.Equal(t, b.String(), output)
 }
 
 func TestIgnoreStrictCheckItem(t *testing.T) {

@@ -38,7 +38,7 @@ func TestWaitSomething(t *testing.T) {
 		return false
 	}
 	require.False(t, WaitSomething(backoff, waitTime, f1))
-	require.Equal(t, backoff, count)
+	require.Equal(t, count, backoff)
 
 	count = 0 // reset
 	// wait success
@@ -47,7 +47,7 @@ func TestWaitSomething(t *testing.T) {
 		return count >= 5
 	}
 	require.True(t, WaitSomething(backoff, waitTime, f2))
-	require.Equal(t, 5, count)
+	require.Equal(t, count, 5)
 }
 
 func TestHandleErr(t *testing.T) {
