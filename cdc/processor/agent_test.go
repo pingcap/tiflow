@@ -517,7 +517,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 		return false
-	}, 100*time.Millisecond, 10*time.Millisecond)
+	}, 1*time.Second, 10*time.Millisecond)
 
 	require.Eventually(t, func() bool {
 		select {
