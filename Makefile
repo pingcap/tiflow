@@ -209,7 +209,7 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@./scripts/check-diff-line-width.sh
 endif
 
-generate-msgp-code:
+generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
 
