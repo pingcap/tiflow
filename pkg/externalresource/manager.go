@@ -1,4 +1,4 @@
-package resource
+package externalresource
 
 // not thread-safe now
 type manager struct {

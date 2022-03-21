@@ -6,7 +6,7 @@ orbs:
 jobs:
     build:
         docker:
-            - image: golang:1.18-buster
+            - image: cimg/go:1.18
 
         steps:
             - checkout

@@ -15,9 +15,9 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/resource"
 )
 
 type MockMasterImpl struct {
@@ -71,7 +71,7 @@ type masterParamListForTest struct {
 	MetaKVClient          metadata.MetaKV
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
-	ResourceProxy         resource.Proxy
+	ResourceBroker        broker.Broker
 }
 
 func (m *MockMasterImpl) Reset() {
@@ -90,7 +90,7 @@ func (m *MockMasterImpl) Reset() {
 			MetaKVClient:          m.metaKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
-			ResourceProxy:         resource.NewMockProxy(m.id),
+			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}
 	})
 	if err != nil {

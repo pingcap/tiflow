@@ -29,6 +29,7 @@ require (
 	go.uber.org/atomic v1.9.0
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.1.12
+	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.20.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
@@ -45,6 +46,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
+	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/aws/aws-sdk-go v1.35.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
