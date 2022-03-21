@@ -15,12 +15,12 @@ package kafka
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -106,24 +106,23 @@ func TestNewSaramaProducer(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		topic,
 		config,
 		saramaConfig,
 		errCh,
 	)
 	require.Nil(t, err)
-	require.Equal(t, producer.GetPartitionNum(), int32(2))
+
 
 	for i := 0; i < 100; i++ {
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(0))
+		})
 		require.Nil(t, err)
 		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(1))
+		})
 		require.Nil(t, err)
 	}
 
@@ -144,7 +143,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Equal(t, producer.mu.inflight, int64(0))
 	producer.mu.Unlock()
 
-	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
 		Key:   []byte("test-broadcast"),
 		Value: nil,
 	})
@@ -158,14 +157,14 @@ func TestNewSaramaProducer(t *testing.T) {
 	cancel()
 
 	// check send messages when context is canceled or producer closed
-	err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+	err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
-	}, int32(0))
+	})
 	if err != nil {
 		require.Equal(t, err, context.Canceled)
 	}
-	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
@@ -375,7 +374,6 @@ func TestProducerSendMessageFailed(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		topic,
 		config,
 		saramaConfig,
 		errCh,
@@ -394,10 +392,10 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
-			err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+			err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
-			}, int32(0))
+			})
 			require.Nil(t, err)
 		}
 	}()
@@ -457,7 +455,6 @@ func TestProducerDoubleClose(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		topic,
 		config,
 		saramaConfig,
 		errCh,

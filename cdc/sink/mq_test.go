@@ -100,8 +100,10 @@ func TestKafkaSink(t *testing.T) {
 
 	// mock kafka broker processes 1 checkpoint ts event
 	leader.Returns(prodSuccess)
-	// TODO(hi-rustin): fix it after topic manager is ready.
-	err = sink.EmitCheckpointTs(ctx, uint64(120), nil)
+	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
+		Schema: "test",
+		Table:  "t1",
+	}})
 	require.Nil(t, err)
 
 	// mock kafka broker processes 1 ddl event
