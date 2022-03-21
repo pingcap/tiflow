@@ -213,6 +213,6 @@ func TestGenKeys(t *testing.T) {
 		sort.Slice(keys, func(i, j int) bool {
 			return bytes.Compare(keys[i], keys[j]) > 0
 		})
-		require.Equal(t, keys, tc.expected)
+		require.Equal(t, tc.expected, keys)
 	}
 }
