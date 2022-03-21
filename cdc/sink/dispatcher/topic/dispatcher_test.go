@@ -16,29 +16,12 @@ package topic
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStaticTopicDispatcher(t *testing.T) {
-	row := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "db1",
-			Table:  "tbl1",
-		},
-	}
-
-	ddl := &model.DDLEvent{
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "db1",
-			Table:  "tbl1",
-		},
-	}
-
 	p := NewStaticTopicDispatcher("cdctest")
-	require.Equal(t, p.DispatchRowChangedEvent(row), "cdctest")
-	require.Equal(t, p.DispatchDDLEvent(ddl), "cdctest")
+	require.Equal(t, p.Substitute("db1", "tbl1"), "cdctest")
 }
 
 func TestDynamicTopicDispatcherForSchema(t *testing.T) {
@@ -48,50 +31,35 @@ func TestDynamicTopicDispatcherForSchema(t *testing.T) {
 	err := topicExpr.Validate()
 	require.Nil(t, err)
 	testCase := []struct {
-		row         *model.RowChangedEvent
+		schema      string
+		table       string
 		expectTopic string
 	}{
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test1",
-					Table:  "tb1",
-				},
-			},
+			schema:      "test1",
+			table:       "tb1",
 			expectTopic: "hello_test1_world",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test1",
-					Table:  "tb2",
-				},
-			},
+			schema:      "test1",
+			table:       "tb2",
 			expectTopic: "hello_test1_world",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test2",
-					Table:  "tb1",
-				},
-			},
+			schema:      "test2",
+			table:       "tb1",
 			expectTopic: "hello_test2_world",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test2",
-					Table:  "tb2",
-				},
-			},
+			schema:      "test2",
+			table:       "tb2",
 			expectTopic: "hello_test2_world",
 		},
 	}
 
-	p := NewDynamicTopicDispatcher("cdctest", topicExpr)
+	p := NewDynamicTopicDispatcher(topicExpr)
 	for _, tc := range testCase {
-		require.Equal(t, tc.expectTopic, p.DispatchRowChangedEvent(tc.row))
+		require.Equal(t, tc.expectTopic, p.Substitute(tc.schema, tc.table))
 	}
 }
 
@@ -102,125 +70,33 @@ func TestDynamicTopicDispatcherForTable(t *testing.T) {
 	err := topicExpr.Validate()
 	require.Nil(t, err)
 	testCases := []struct {
-		row           *model.RowChangedEvent
+		schema        string
+		table         string
 		expectedTopic string
 	}{
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test1",
-					Table:  "tb1",
-				},
-			},
+			schema:        "test1",
+			table:         "tb1",
 			expectedTopic: "test1_tb1",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test1",
-					Table:  "tb2",
-				},
-			},
+			schema:        "test1",
+			table:         "tb2",
 			expectedTopic: "test1_tb2",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test2",
-					Table:  "tb1",
-				},
-			},
+			schema:        "test2",
+			table:         "tb1",
 			expectedTopic: "test2_tb1",
 		},
 		{
-			row: &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: "test2",
-					Table:  "tb2",
-				},
-			},
+			schema:        "test2",
+			table:         "tb2",
 			expectedTopic: "test2_tb2",
 		},
 	}
-	p := NewDynamicTopicDispatcher("cdctest", topicExpr)
+	p := NewDynamicTopicDispatcher(topicExpr)
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectedTopic, p.DispatchRowChangedEvent(tc.row))
-	}
-}
-
-func TestDynamicTopicDispatcherForDDL(t *testing.T) {
-	t.Parallel()
-
-	defaultTopic := "cdctest"
-	topicExpr := Expression("{schema}_{table}")
-	testCases := []struct {
-		ddl           *model.DDLEvent
-		expectedTopic string
-	}{
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
-				},
-				Type: timodel.ActionCreateSchema,
-			},
-			expectedTopic: defaultTopic,
-		},
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "test",
-				},
-				Type: timodel.ActionDropSchema,
-			},
-			expectedTopic: defaultTopic,
-		},
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "cdc",
-					Table:  "person",
-				},
-				Query: "CREATE TABLE person(id int, name varchar(32), primary key(id))",
-				Type:  timodel.ActionCreateTable,
-			},
-			expectedTopic: "cdc_person",
-		},
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "cdc",
-					Table:  "person",
-				},
-				Query: "DROP TABLE person",
-				Type:  timodel.ActionDropTable,
-			},
-			expectedTopic: "cdc_person",
-		},
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "cdc",
-					Table:  "person",
-				},
-				Query: "ALTER TABLE cdc.person ADD COLUMN age int",
-				Type:  timodel.ActionAddColumn,
-			},
-			expectedTopic: "cdc_person",
-		},
-		{
-			ddl: &model.DDLEvent{
-				TableInfo: &model.SimpleTableInfo{
-					Schema: "",
-					Table:  "",
-				},
-			},
-			expectedTopic: defaultTopic,
-		},
-	}
-
-	p := NewDynamicTopicDispatcher(defaultTopic, topicExpr)
-	for _, tc := range testCases {
-		require.Equal(t, tc.expectedTopic, p.DispatchDDLEvent(tc.ddl))
+		require.Equal(t, tc.expectedTopic, p.Substitute(tc.schema, tc.table))
 	}
 }
