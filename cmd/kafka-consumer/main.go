@@ -675,6 +675,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
+		if todoDDL == nil {
+			log.Info("todoDDL not found")
+		} else if todoDDL.CommitTs > minPartitionResolvedTs {
+			log.Info("ddl's commitTs larger",
+				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+				zap.Any("DDL", todoDDL))
+		}
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSink) error {
