@@ -29,7 +29,7 @@ function run() {
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config $CUR/conf/changefeed.toml
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-  # NOTICE: we need to wait for the kafka topic to be created.
+	# NOTICE: we need to wait for the kafka topic to be created.
 	sleep 1m
 
 	for i in $(seq 1 3); do
