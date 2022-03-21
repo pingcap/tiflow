@@ -505,11 +505,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// if we receive `a` from partition-1, which would be seemed as DDL regression,
 				// then cause the consumer panic, but it was a duplicate one.
 				// so we only handle DDL received from partition-0 should be enough.
+				// but all DDL event messages should be consumed.
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
-				c.appendDDL(ddl)
+				if partition == 0 {
+					c.appendDDL(ddl)
+				}
 			case model.MqMessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
@@ -672,11 +675,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs > minPartitionResolvedTs {
-			log.Info("ddl's commitTs larger",
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-				zap.Any("DDL", todoDDL))
-		}
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSink) error {
