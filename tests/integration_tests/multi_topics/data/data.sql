@@ -1,5 +1,4 @@
-use
-test;
+use test;
 
 create table test1
 (
