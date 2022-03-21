@@ -526,7 +526,8 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int ) shard_row_id_bits=2     pre_split_regions=2;",
-			"CREATE TABLE `t1` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
+			"CREATE TABLE `t1` (`id` INT) " +
+				"/*T! SHARD_ROW_ID_BITS = 2 */ /*T! PRE_SPLIT_REGIONS = 2 */",
 		},
 		{
 			"create table t1 (id int ) shard_row_id_bits=2 engine=innodb pre_split_regions=2;",
@@ -539,7 +540,8 @@ func TestAddSpecialComment(t *testing.T) {
 				" /*T! SHARD_ROW_ID_BITS = 2 */",
 		},
 		{
-			"create table t6 (id int ) shard_row_id_bits=2 shard_row_id_bits=3 pre_split_regions=2;",
+			"create table t6 (id int ) " +
+				"shard_row_id_bits=2 shard_row_id_bits=3 pre_split_regions=2;",
 			"CREATE TABLE `t6` (`id` INT) /*T! SHARD_ROW_ID_BITS = 2 */ " +
 				"/*T! SHARD_ROW_ID_BITS = 3 */ /*T! PRE_SPLIT_REGIONS = 2 */",
 		},
@@ -639,7 +641,8 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table t1 (id int, a varchar(255) key clustered);",
-			"CREATE TABLE `t1` (`id` INT,`a` VARCHAR(255) PRIMARY KEY /*T![clustered_index] CLUSTERED */)",
+			"CREATE TABLE `t1` (" +
+				"`id` INT,`a` VARCHAR(255) PRIMARY KEY /*T![clustered_index] CLUSTERED */)",
 		},
 		{
 			"alter table t force auto_increment = 12;",
@@ -651,11 +654,11 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			"create table cdc_test (id varchar(10) primary key ,c1 varchar(10)) " +
-				"ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 " +
-				"COLLATE=utf8mb4_bin/*!90000  SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
-			"CREATE TABLE `cdc_test` (`id` VARCHAR(10) PRIMARY KEY,`c1` VARCHAR(10)) ENGINE = InnoDB " +
-				"DEFAULT CHARACTER SET = UTF8MB4 DEFAULT " +
-				"COLLATE = UTF8MB4_BIN /*T! SHARD_ROW_ID_BITS = 4 */ /*T! PRE_SPLIT_REGIONS = 3 */",
+				"ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" +
+				"/*!90000  SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			"CREATE TABLE `cdc_test` (`id` VARCHAR(10) PRIMARY KEY,`c1` VARCHAR(10)) " +
+				"ENGINE = InnoDB DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_BIN " +
+				"/*T! SHARD_ROW_ID_BITS = 4 */ /*T! PRE_SPLIT_REGIONS = 3 */",
 		},
 		{
 			"CREATE TABLE t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, " +
@@ -663,21 +666,29 @@ func TestAddSpecialComment(t *testing.T) {
 			"CREATE TABLE `t1` (`id` BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT,`b` VARCHAR(255)) ",
 		},
 		{
-			"CREATE TABLE `t1` (\n  `a` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 " +
-				"COLLATE=utf8mb4_bin /*T![placement] PLACEMENT POLICY=`p2` */",
-			"CREATE TABLE `t1` (`a` INT(11) DEFAULT NULL) ENGINE = InnoDB DEFAULT CHARACTER " +
-				"SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_BIN ",
+			"CREATE TABLE `t1` (\n  `a` int(11) DEFAULT NULL\n) " +
+				"ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin " +
+				"/*T![placement] PLACEMENT POLICY=`p2` */",
+			"CREATE TABLE `t1` (`a` INT(11) DEFAULT NULL) " +
+				"ENGINE = InnoDB DEFAULT CHARACTER SET = UTF8MB4 DEFAULT COLLATE = UTF8MB4_BIN ",
 		},
 		{
-			"CREATE TABLE t4 (firstname VARCHAR(25) NOT NULL,lastname VARCHAR(25) " +
-				"NOT NULL,username VARCHAR(16) NOT NULL," +
-				"email VARCHAR(35),joined DATE NOT NULL) PARTITION BY RANGE( YEAR(joined) )" +
-				" (PARTITION p0 VALUES LESS THAN (1960) " +
-				"PLACEMENT POLICY=p1,PARTITION p1 VALUES LESS THAN (1970),PARTITION p2 VALUES LESS THAN (1980)," +
+			"CREATE TABLE t4 (" +
+				"firstname VARCHAR(25) NOT NULL," +
+				"lastname VARCHAR(25) NOT NULL," +
+				"username VARCHAR(16) NOT NULL," +
+				"email VARCHAR(35)," +
+				"joined DATE NOT NULL) " +
+				"PARTITION BY RANGE( YEAR(joined) )" +
+				" (PARTITION p0 VALUES LESS THAN (1960) PLACEMENT POLICY=p1," +
+				"PARTITION p1 VALUES LESS THAN (1970),PARTITION p2 VALUES LESS THAN (1980)," +
 				"PARTITION p3 VALUES LESS THAN (1990),PARTITION p4 VALUES LESS THAN MAXVALUE);",
-			"CREATE TABLE `t4` (`firstname` VARCHAR(25) NOT NULL,`lastname`" +
-				" VARCHAR(25) NOT NULL,`username` " +
-				"VARCHAR(16) NOT NULL,`email` VARCHAR(35),`joined` DATE NOT NULL) " +
+			"CREATE TABLE `t4` (" +
+				"`firstname` VARCHAR(25) NOT NULL," +
+				"`lastname` VARCHAR(25) NOT NULL," +
+				"`username` VARCHAR(16) NOT NULL," +
+				"`email` VARCHAR(35)," +
+				"`joined` DATE NOT NULL) " +
 				"PARTITION BY RANGE (YEAR(`joined`)) " +
 				"(PARTITION `p0` VALUES LESS THAN (1960) ,PARTITION `p1` VALUES LESS THAN (1970)," +
 				"PARTITION `p2` VALUES LESS THAN (1980),PARTITION `p3` VALUES LESS THAN (1990)," +
@@ -721,7 +732,8 @@ func TestAddSpecialComment(t *testing.T) {
 			"",
 		},
 		{
-			"ALTER PLACEMENT POLICY p3 PRIMARY_REGION='us-east-1' REGIONS='us-east-1,us-east-2,us-west-1';",
+			"ALTER PLACEMENT POLICY p3 PRIMARY_REGION='us-east-1' " +
+				"REGIONS='us-east-1,us-east-2,us-west-1';",
 			"",
 		},
 	}
