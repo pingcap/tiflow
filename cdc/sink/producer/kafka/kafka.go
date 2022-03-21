@@ -213,6 +213,9 @@ func (k *kafkaSaramaProducer) Close() error {
 	if k.producersReleased {
 		// We need to guard against double closing the clients,
 		// which could lead to panic.
+		log.Warn("kafka producer already released",
+			zap.String("changefeed", k.id),
+			zap.Any("role", k.role))
 		return nil
 	}
 	k.producersReleased = true
