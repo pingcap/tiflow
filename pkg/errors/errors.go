@@ -71,14 +71,15 @@ var (
 	ErrCreateMarkTableFailed = errors.Normalize("create mark table failed", errors.RFCCodeText("CDC:ErrCreateMarkTableFailed"))
 
 	// sink related errors
-	ErrExecDDLFailed               = errors.Normalize("exec DDL failed", errors.RFCCodeText("CDC:ErrExecDDLFailed"))
-	ErrDDLEventIgnored             = errors.Normalize("ddl event is ignored", errors.RFCCodeText("CDC:ErrDDLEventIgnored"))
-	ErrKafkaSendMessage            = errors.Normalize("kafka send message failed", errors.RFCCodeText("CDC:ErrKafkaSendMessage"))
-	ErrKafkaAsyncSendMessage       = errors.Normalize("kafka async send message failed", errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"))
-	ErrKafkaFlushUnfinished        = errors.Normalize("flush not finished before producer close", errors.RFCCodeText("CDC:ErrKafkaFlushUnfinished"))
-	ErrKafkaInvalidPartitionNum    = errors.Normalize("invalid partition num %d", errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"))
-	ErrKafkaNewSaramaProducer      = errors.Normalize("new sarama producer", errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"))
-	ErrKafkaCollectSaramaMetrics   = errors.Normalize("collect sarama metrics failed", errors.RFCCodeText("CDC:ErrCollectSaramaMetrics"))
+	ErrExecDDLFailed             = errors.Normalize("exec DDL failed", errors.RFCCodeText("CDC:ErrExecDDLFailed"))
+	ErrDDLEventIgnored           = errors.Normalize("ddl event is ignored", errors.RFCCodeText("CDC:ErrDDLEventIgnored"))
+	ErrKafkaSendMessage          = errors.Normalize("kafka send message failed", errors.RFCCodeText("CDC:ErrKafkaSendMessage"))
+	ErrKafkaAsyncSendMessage     = errors.Normalize("kafka async send message failed", errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"))
+	ErrKafkaFlushUnfinished      = errors.Normalize("flush not finished before producer close", errors.RFCCodeText("CDC:ErrKafkaFlushUnfinished"))
+	ErrKafkaInvalidPartitionNum  = errors.Normalize("invalid partition num %d", errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"))
+	ErrKafkaNewSaramaProducer    = errors.Normalize("new sarama producer", errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"))
+	ErrKafkaCollectSaramaMetrics = errors.Normalize("collect sarama metrics failed",
+		errors.RFCCodeText("CDC:ErrCollectSaramaMetrics"))
 	ErrKafkaInvalidClientID        = errors.Normalize("invalid kafka client ID '%s'", errors.RFCCodeText("CDC:ErrKafkaInvalidClientID"))
 	ErrKafkaInvalidVersion         = errors.Normalize("invalid kafka version", errors.RFCCodeText("CDC:ErrKafkaInvalidVersion"))
 	ErrKafkaInvalidConfig          = errors.Normalize("kafka config invalid", errors.RFCCodeText("CDC:ErrKafkaInvalidConfig"))
