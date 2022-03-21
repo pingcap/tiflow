@@ -35,12 +35,12 @@ import (
 )
 
 func init() {
-	failpoint.Inject("SimpleMySQLSinkTester", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("SimpleMySQLSinkTester")); _err_ == nil {
 		sinkIniterMap["simple-mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 			filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 			return newSimpleMySQLSink(ctx, sinkURI, config)
 		}
-	})
+	}
 }
 
 type simpleMySQLSink struct {

@@ -117,7 +117,7 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 // 2. succeed: (len(sqls), nil).
 func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *metricsproxy.HistogramVecProxy, task string, ignoreErr func(error) bool, queries []string, args ...[]interface{}) (int, error) {
 	// inject an error to trigger retry, this should be placed before the real execution of the SQL statement.
-	failpoint.Inject("retryableError", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("retryableError")); _err_ == nil {
 		if mark, ok := val.(string); ok {
 			enabled := false
 			for _, query := range queries {
@@ -127,13 +127,13 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 			}
 			if enabled {
 				tctx.L().Info("", zap.String("failpoint", "retryableError"), zap.String("mark", mark))
-				failpoint.Return(0, &mysql.MySQLError{
+				return 0, &mysql.MySQLError{
 					Number:  gmysql.ER_LOCK_DEADLOCK,
 					Message: fmt.Sprintf("failpoint inject retryable error for %s", mark),
-				})
+				}
 			}
 		}
-	})
+	}
 
 	if len(queries) == 0 {
 		return 0, nil

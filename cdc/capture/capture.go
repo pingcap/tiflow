@@ -366,9 +366,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	// campaign loop. We treat campaign loop as a special background routine.
 	conf := config.GetGlobalServerConfig()
 	ownerFlushInterval := time.Duration(conf.OwnerFlushInterval)
-	failpoint.Inject("ownerFlushIntervalInject", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("ownerFlushIntervalInject")); _err_ == nil {
 		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
-	})
+	}
 	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
 	rl := rate.NewLimiter(0.05, 2)
 	for {
@@ -501,17 +501,17 @@ func (c *Capture) GetOwner() (owner.Owner, error) {
 
 // campaign to be an owner.
 func (c *Capture) campaign(ctx cdcContext.Context) error {
-	failpoint.Inject("capture-campaign-compacted-error", func() {
-		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("capture-campaign-compacted-error")); _err_ == nil {
+		return errors.Trace(mvcc.ErrCompacted)
+	}
 	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
 // resign lets an owner start a new election.
 func (c *Capture) resign(ctx cdcContext.Context) error {
-	failpoint.Inject("capture-resign-failed", func() {
-		failpoint.Return(errors.New("capture resign failed"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("capture-resign-failed")); _err_ == nil {
+		return errors.New("capture resign failed")
+	}
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 

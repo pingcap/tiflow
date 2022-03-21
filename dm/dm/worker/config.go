@@ -41,14 +41,14 @@ var (
 )
 
 func init() {
-	failpoint.Inject("defaultKeepAliveTTL", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("defaultKeepAliveTTL")); _err_ == nil {
 		i := val.(int)
 		defaultKeepAliveTTL = int64(i)
-	})
-	failpoint.Inject("defaultRelayKeepAliveTTL", func(val failpoint.Value) {
+	}
+	if val, _err_ := failpoint.Eval(_curpkg_("defaultRelayKeepAliveTTL")); _err_ == nil {
 		i := val.(int)
 		defaultRelayKeepAliveTTL = int64(i)
-	})
+	}
 }
 
 // NewConfig creates a new base config for worker.

@@ -112,18 +112,18 @@ func (c *compactor) run() {
 				c.compactJob(j)
 			}
 
-			failpoint.Inject("SkipFlushCompactor", func() {
-				failpoint.Continue()
-			})
+			if _, _err_ := failpoint.Eval(_curpkg_("SkipFlushCompactor")); _err_ == nil {
+				continue
+			}
 			// if the number of outer jobs is zero or buffer is full, flush the buffer
 			if len(c.outCh) == 0 || len(c.buffer) >= c.bufferSize {
 				c.flushBuffer()
 			}
 			// if no inner jobs and the number of outer jobs is zero, flush the buffer
 		case <-time.After(waitTime):
-			failpoint.Inject("SkipFlushCompactor", func() {
-				failpoint.Continue()
-			})
+			if _, _err_ := failpoint.Eval(_curpkg_("SkipFlushCompactor")); _err_ == nil {
+				continue
+			}
 			c.flushBuffer()
 		}
 	}
@@ -171,13 +171,13 @@ func (c *compactor) compactJob(j *job) {
 
 	key := j.dml.IdentityKey()
 
-	failpoint.Inject("DownstreamIdentifyKeyCheckInCompact", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("DownstreamIdentifyKeyCheckInCompact")); _err_ == nil {
 		value, err := strconv.Atoi(key)
 		upper := v.(int)
 		if err != nil || value > upper {
 			panic(fmt.Sprintf("downstream identifyKey check failed. key value %v should less than %v", value, upper))
 		}
-	})
+	}
 
 	prevPos, ok := tableKeyMap[key]
 	// if no such key in the buffer, add it

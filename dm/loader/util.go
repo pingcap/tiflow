@@ -117,20 +117,20 @@ func getDBAndTableFromFilename(filename string) (string, string, error) {
 
 func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig, workerName string) (string, string, error) {
 	metafile := "metadata"
-	failpoint.Inject("TestRemoveMetaFile", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("TestRemoveMetaFile")); _err_ == nil {
 		err := storage.RemoveAll(ctx, cfg.LoaderConfig.Dir, nil)
 		if err != nil {
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
-	})
+	}
 	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.Flavor)
 	if err == nil {
 		return loc.Position.String(), loc.GTIDSetStr(), nil
 	}
 	if storage.IsNotExistError(err) {
-		failpoint.Inject("TestRemoveMetaFile", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("TestRemoveMetaFile")); _err_ == nil {
 			panic("success check file not exist!!")
-		})
+		}
 		worker, err2 := getLoadTask(cli, cfg.Name, cfg.SourceID)
 		if err2 != nil {
 			log.L().Warn("get load task", log.ShortError(err2))

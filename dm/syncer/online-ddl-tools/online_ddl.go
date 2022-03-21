@@ -250,10 +250,10 @@ func (s *Storage) saveToDB(tctx *tcontext.Context, ghostSchema, ghostTable strin
 
 	query := fmt.Sprintf("REPLACE INTO %s(`id`,`ghost_schema`, `ghost_table`, `ddls`) VALUES (?, ?, ?, ?)", s.tableName)
 	_, err = s.dbConn.ExecuteSQL(tctx, []string{query}, []interface{}{s.id, ghostSchema, ghostTable, string(ddlsBytes)})
-	failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("ExitAfterSaveOnlineDDL")); _err_ == nil {
 		tctx.L().Info("failpoint ExitAfterSaveOnlineDDL")
 		panic("ExitAfterSaveOnlineDDL")
-	})
+	}
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 

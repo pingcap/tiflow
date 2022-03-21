@@ -887,12 +887,12 @@ func (s *Syncer) updateReplicationLagMetric() {
 	metrics.ReplicationLagGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(lag))
 	s.secondsBehindMaster.Store(lag)
 
-	failpoint.Inject("ShowLagInLog", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("ShowLagInLog")); _err_ == nil {
 		minLag := v.(int)
 		if int(lag) >= minLag {
 			s.tctx.L().Info("ShowLagInLog", zap.Int64("lag", lag))
 		}
-	})
+	}
 
 	// reset skip job TS in case of skip job TS is never updated
 	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
@@ -928,7 +928,7 @@ var (
 // Caller should prepare all needed jobs before calling this function, addJob should not generate any new jobs.
 // There should not be a second way to send jobs to DML queue or DDL queue.
 func (s *Syncer) addJob(job *job) {
-	failpoint.Inject("countJobFromOneEvent", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("countJobFromOneEvent")); _err_ == nil {
 		if job.tp == dml {
 			if job.currentLocation.Position.Compare(lastLocationForTest.Position) == 0 {
 				lastLocationNumForTest++
@@ -947,8 +947,8 @@ func (s *Syncer) addJob(job *job) {
 				s.tctx.L().Info("meet the second job of an event", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
-	})
-	failpoint.Inject("countJobFromOneGTID", func() {
+	}
+	if _, _err_ := failpoint.Eval(_curpkg_("countJobFromOneGTID")); _err_ == nil {
 		if job.tp == dml {
 			if binlog.CompareLocation(job.currentLocation, lastLocationForTest, true) == 0 {
 				lastLocationNumForTest++
@@ -967,7 +967,7 @@ func (s *Syncer) addJob(job *job) {
 				s.tctx.L().Info("meet the second job of a GTID", zap.Any("binlog position", lastLocationForTest))
 			}
 		}
-	})
+	}
 
 	// avoid job.type data race with compactor.run()
 	// simply copy the opType for performance, though copy a new job in compactor is better
@@ -987,10 +987,10 @@ func (s *Syncer) addJob(job *job) {
 		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	case dml:
 		s.dmlJobCh <- job
-		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("checkCheckpointInMiddleOfTransaction")); _err_ == nil {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
 			time.Sleep(500 * time.Millisecond)
-		})
+		}
 	case gc:
 		s.dmlJobCh <- job
 	default:
@@ -1031,11 +1031,11 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	s.waitTransactionLock.Lock()
 	defer s.waitTransactionLock.Unlock()
 
-	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("checkCheckpointInMiddleOfTransaction")); _err_ == nil {
 		if waitXIDStatus(s.waitXIDJob.Load()) == waiting {
 			s.tctx.L().Info("not receive xid job yet", zap.Any("next job", job))
 		}
-	})
+	}
 
 	if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete && job.tp != flush {
 		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
@@ -1076,17 +1076,17 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 			return
 		}
 		s.updateReplicationJobTS(nil, ddlJobIdx) // clear ddl job ts because this ddl is already done.
-		failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("ExitAfterDDLBeforeFlush")); _err_ == nil {
 			s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
 			utils.OsExit(1)
-		})
+		}
 		// interrupted after executed DDL and before save checkpoint.
-		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 			err = handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
 			if err != nil {
-				failpoint.Return()
+				return
 			}
-		})
+		}
 		// save global checkpoint for DDL
 		s.saveGlobalPoint(job.location)
 		for sourceSchema, tbs := range job.sourceTbls {
@@ -1101,12 +1101,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.resetShardingGroup(job.targetTable)
 
 		// interrupted after save checkpoint and before flush checkpoint.
-		failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 			err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
 			if err != nil {
-				failpoint.Return()
+				return
 			}
-		})
+		}
 		skipCheckFlush = true
 		err = s.flushCheckPoints()
 		return
@@ -1310,11 +1310,11 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
-		failpoint.Inject("BlockDDLJob", func(v failpoint.Value) {
+		if v, _err_ := failpoint.Eval(_curpkg_("BlockDDLJob")); _err_ == nil {
 			t := v.(int) // sleep time
 			s.tctx.L().Info("BlockDDLJob", zap.Any("job", ddlJob), zap.Int("sleep time", t))
 			time.Sleep(time.Second * time.Duration(t))
-		})
+		}
 
 		var (
 			ignore           = false
@@ -1334,11 +1334,11 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			}
 		}
 
-		failpoint.Inject("ExecDDLError", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("ExecDDLError")); _err_ == nil {
 			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
 			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
-			failpoint.Goto("bypass")
-		})
+			goto bypass
+		}
 
 		if !ignore {
 			var affected int
@@ -1348,8 +1348,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
-		failpoint.Label("bypass")
-		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
+	bypass:
+		if val, _err_ := failpoint.Eval(_curpkg_("SafeModeExit")); _err_ == nil {
 			if intVal, ok := val.(int); ok && (intVal == 2 || intVal == 3) {
 				s.tctx.L().Warn("mock safe mode error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "SafeModeExit"))
 				if intVal == 2 {
@@ -1358,7 +1358,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 					err = terror.ErrDBExecuteFailed.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
 				}
 			}
-		})
+		}
 		// If downstream has error (which may cause by tracker is more compatible than downstream), we should stop handling
 		// this job, set `s.execError` to let caller of `addJob` discover error
 		if err != nil {
@@ -1466,10 +1466,10 @@ func (s *Syncer) syncDML() {
 
 func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 	defer s.runWg.Done()
-	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("checkCheckpointInMiddleOfTransaction")); _err_ == nil {
 		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
 		defaultMaxPauseOrStopWaitTime = time.Minute * 10
-	})
+	}
 	select {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")
@@ -1491,13 +1491,13 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			waitDuration, _ = time.ParseDuration(s.cliArgs.WaitTimeOnStop)
 		}
 		prepareForWaitTime := time.Since(needToExitTime)
-		failpoint.Inject("recordAndIgnorePrepareTime", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("recordAndIgnorePrepareTime")); _err_ == nil {
 			prepareForWaitTime = time.Duration(0)
-		})
+		}
 		waitDuration -= prepareForWaitTime
-		failpoint.Inject("recordAndIgnorePrepareTime", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("recordAndIgnorePrepareTime")); _err_ == nil {
 			waitBeforeRunExitDurationForTest = waitDuration
-		})
+		}
 		if waitDuration.Seconds() <= 0 {
 			s.tctx.L().Info("wait transaction end timeout, exit now")
 			s.runCancel()
@@ -1669,11 +1669,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	failpoint.Inject("AdjustGTIDExit", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("AdjustGTIDExit")); _err_ == nil {
 		s.tctx.L().Warn("exit triggered", zap.String("failpoint", "AdjustGTIDExit"))
 		s.streamerController.Close()
 		utils.OsExit(1)
-	})
+	}
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
@@ -1717,10 +1717,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// this is second defer func in syncer.Run so in this time checkpointFlushWorker are still running
 	defer func() {
 		if err1 := recover(); err1 != nil {
-			failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("ExitAfterSaveOnlineDDL")); _err_ == nil {
 				s.tctx.L().Info("force panic")
 				panic("ExitAfterSaveOnlineDDL")
-			})
+			}
 			s.tctx.L().Error("panic log", zap.Reflect("error message", err1), zap.Stack("stack"))
 			err = terror.ErrSyncerUnitPanic.Generate(err1)
 		}
@@ -1858,10 +1858,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err
 			}
 
-			failpoint.Inject("ReSyncExit", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("ReSyncExit")); _err_ == nil {
 				s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
 				utils.OsExit(1)
-			})
+			}
 		}
 
 		var e *replication.BinlogEvent
@@ -1869,20 +1869,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		startTime := time.Now()
 		e, err = s.getEvent(s.runCtx, currentLocation)
 
-		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("SafeModeExit")); _err_ == nil {
 			if intVal, ok := val.(int); ok && intVal == 1 {
 				s.tctx.L().Warn("fail to get event", zap.String("failpoint", "SafeModeExit"))
 				err = errors.New("connect: connection refused")
 			}
-		})
-		failpoint.Inject("GetEventErrorInTxn", func(val failpoint.Value) {
+		}
+		if val, _err_ := failpoint.Eval(_curpkg_("GetEventErrorInTxn")); _err_ == nil {
 			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnceForTest.CAS(false, true) {
 				err = errors.New("failpoint triggered")
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
 					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
 			}
-		})
+		}
 		switch {
 		case err == context.Canceled:
 			s.tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastLocation))
@@ -1941,12 +1941,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return terror.ErrSyncerGetEvent.Generate(err)
 		}
 
-		failpoint.Inject("IgnoreSomeTypeEvent", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("IgnoreSomeTypeEvent")); _err_ == nil {
 			if e.Header.EventType.String() == val.(string) {
 				s.tctx.L().Debug("IgnoreSomeTypeEvent", zap.Reflect("event", e))
-				failpoint.Continue()
+				continue
 			}
-		})
+		}
 
 		// time duration for reading an event from relay log or upstream master.
 		metrics.BinlogReadDurationHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
@@ -1964,7 +1964,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		s.binlogSizeCount.Add(int64(e.Header.EventSize))
 		metrics.BinlogEventSizeHistogram.WithLabelValues(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(float64(e.Header.EventSize))
 
-		failpoint.Inject("ProcessBinlogSlowDown", nil)
+		failpoint.Eval(_curpkg_("ProcessBinlogSlowDown"))
 
 		s.tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
 
@@ -2239,11 +2239,11 @@ type eventContext struct {
 
 // TODO: Further split into smaller functions and group common arguments into a context struct.
 func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext) error {
-	failpoint.Inject("MakeFakeRotateEvent", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("MakeFakeRotateEvent")); _err_ == nil {
 		ec.header.LogPos = 0
 		ev.NextLogName = []byte(val.(string))
 		ec.tctx.L().Info("MakeFakeRotateEvent", zap.String("fake file name", string(ev.NextLogName)))
-	})
+	}
 
 	if utils.IsFakeRotateEvent(ec.header) {
 		if fileName := string(ev.NextLogName); mysql.CompareBinlogFileName(fileName, ec.lastLocation.Position.Name) <= 0 {
@@ -2466,7 +2466,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		s.saveTablePoint(sourceTable, *ec.currentLocation)
 	}
 
-	failpoint.Inject("flushFirstJob", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("flushFirstJob")); _err_ == nil {
 		if waitJobsDoneForTest {
 			s.tctx.L().Info("trigger flushFirstJob")
 			waitJobsDoneForTest = false
@@ -2475,9 +2475,9 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 			if err2 != nil {
 				s.tctx.L().DPanic("flush checkpoint failed", zap.Error(err2))
 			}
-			failpoint.Return(nil)
+			return nil
 		}
-	})
+	}
 
 	return s.checkShouldFlush()
 }
@@ -2768,12 +2768,12 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 
 	// interrupted before flush old checkpoint.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err = handleFlushCheckpointStage(0, val.(int), "before flush old checkpoint")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	// flush previous DMLs and checkpoint if needing to handle the DDL.
 	// NOTE: do this flush before operations on shard groups which may lead to skip a table caused by `UnresolvedTables`.
@@ -2796,12 +2796,12 @@ func (s *Syncer) handleQueryEventNoSharding(qec *queryEventContext) error {
 	qec.tctx.L().Info("start to handle ddls in normal mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 
 	// interrupted after flush old checkpoint and before track DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err := handleFlushCheckpointStage(1, val.(int), "before track DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	// run trackDDL before add ddl job to make sure checkpoint can be flushed
 	for _, trackInfo := range qec.trackInfos {
@@ -2811,12 +2811,12 @@ func (s *Syncer) handleQueryEventNoSharding(qec *queryEventContext) error {
 	}
 
 	// interrupted after track DDL and before execute DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err := handleFlushCheckpointStage(2, val.(int), "before execute DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	job := newDDLJob(qec)
 	_, err := s.handleJobFunc(job)
@@ -2908,12 +2908,12 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 		zap.Int("unsynced", remain))
 
 	// interrupted after flush old checkpoint and before track DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err = handleFlushCheckpointStage(1, val.(int), "before track DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	for _, trackInfo := range qec.trackInfos {
 		if err = s.trackDDL(qec.ddlSchema, trackInfo, qec.eventContext); err != nil {
@@ -2997,13 +2997,13 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 		}
 
 		if shardOp.Exec {
-			failpoint.Inject("ShardSyncedExecutionExit", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("ShardSyncedExecutionExit")); _err_ == nil {
 				qec.tctx.L().Warn("exit triggered", zap.String("failpoint", "ShardSyncedExecutionExit"))
 				//nolint:errcheck
 				s.flushCheckPoints()
 				utils.OsExit(1)
-			})
-			failpoint.Inject("SequenceShardSyncedExecutionExit", func() {
+			}
+			if _, _err_ := failpoint.Eval(_curpkg_("SequenceShardSyncedExecutionExit")); _err_ == nil {
 				group := s.sgk.Group(ddlInfo.targetTables[0])
 				if group != nil {
 					// exit in the first round sequence sharding DDL only
@@ -3014,7 +3014,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 						utils.OsExit(1)
 					}
 				}
-			})
+			}
 
 			qec.tctx.L().Info("execute DDL job",
 				zap.String("event", "query"),
@@ -3033,12 +3033,12 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 	qec.tctx.L().Info("start to handle ddls in shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 
 	// interrupted after track DDL and before execute DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err = handleFlushCheckpointStage(2, val.(int), "before execute DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	job := newDDLJob(qec)
 	_, err = s.handleJobFunc(job)

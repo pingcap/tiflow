@@ -51,10 +51,10 @@ var createUnits = createRealUnits
 
 // createRealUnits creates process units base on task mode.
 func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string, relay relay.Process) []unit.Unit {
-	failpoint.Inject("mockCreateUnitsDumpOnly", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("mockCreateUnitsDumpOnly")); _err_ == nil {
 		log.L().Info("create mock worker units with dump unit only", zap.String("failpoint", "mockCreateUnitsDumpOnly"))
-		failpoint.Return([]unit.Unit{dumpling.NewDumpling(cfg)})
-	})
+		return []unit.Unit{dumpling.NewDumpling(cfg)}
+	}
 
 	us := make([]unit.Unit, 0, 3)
 	switch cfg.Mode {

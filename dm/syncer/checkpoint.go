@@ -1002,10 +1002,10 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 		}
 	}()
 
-	failpoint.Inject("LoadCheckpointFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("LoadCheckpointFailed")); _err_ == nil {
 		err = tmysql.NewErr(uint16(val.(int)))
 		log.L().Warn("Load failed", zap.String("failpoint", "LoadCheckpointFailed"), zap.Error(err))
-	})
+	}
 
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)

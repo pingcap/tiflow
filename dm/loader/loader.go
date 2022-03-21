@@ -109,11 +109,11 @@ func NewWorker(loader *Loader, id int) *Worker {
 		logger:     loader.logger.WithFields(zap.Int("worker ID", id)),
 	}
 
-	failpoint.Inject("workerChanSize", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("workerChanSize")); _err_ == nil {
 		size := val.(int)
 		w.logger.Info("", zap.String("failpoint", "workerChanSize"), zap.Int("size", size))
 		w.jobQueue = make(chan *dataJob, size)
-	})
+	}
 
 	return w
 }
@@ -121,10 +121,10 @@ func NewWorker(loader *Loader, id int) *Worker {
 // Close closes worker.
 func (w *Worker) Close() {
 	// simulate the case that doesn't wait all doJob goroutine exit
-	failpoint.Inject("workerCantClose", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("workerCantClose")); _err_ == nil {
 		w.logger.Info("", zap.String("failpoint", "workerCantClose"))
-		failpoint.Return()
-	})
+		return
+	}
 
 	if !w.closed.CAS(false, true) {
 		w.wg.Wait()
@@ -173,17 +173,17 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 			offsetSQL := w.checkPoint.GenSQL(job.file, job.offset)
 			sqls = append(sqls, offsetSQL)
 
-			failpoint.Inject("LoadExceedOffsetExit", func(val failpoint.Value) {
+			if val, _err_ := failpoint.Eval(_curpkg_("LoadExceedOffsetExit")); _err_ == nil {
 				threshold, _ := val.(int)
 				if job.offset >= int64(threshold) {
 					w.logger.Warn("load offset execeeds threshold, it will exit", zap.Int64("load offset", job.offset), zap.Int("value", threshold), zap.String("failpoint", "LoadExceedOffsetExit"))
 					utils.OsExit(1)
 				}
-			})
+			}
 
-			failpoint.Inject("LoadDataSlowDown", nil)
+			failpoint.Eval(_curpkg_("LoadDataSlowDown"))
 
-			failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
+			if val, _err_ := failpoint.Eval(_curpkg_("LoadDataSlowDownByTask")); _err_ == nil {
 				tasks := val.(string)
 				taskNames := strings.Split(tasks, ",")
 				for _, taskName := range taskNames {
@@ -192,14 +192,14 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 						<-newCtx.Done()
 					}
 				}
-			})
+			}
 
 			startTime := time.Now()
 			err := w.conn.executeSQL(ctctx, sqls)
-			failpoint.Inject("executeSQLError", func(_ failpoint.Value) {
+			if _, _err_ := failpoint.Eval(_curpkg_("executeSQLError")); _err_ == nil {
 				w.logger.Info("", zap.String("failpoint", "executeSQLError"))
 				err = errors.New("inject failpoint executeSQLError")
-			})
+			}
 			if err != nil {
 				// expect pause rather than exit
 				err = terror.WithScope(terror.Annotatef(err, "file %s", job.file), terror.ScopeDownstream)
@@ -207,16 +207,16 @@ func (w *Worker) run(ctx context.Context, fileJobQueue chan *fileJob, runFatalCh
 					runFatalChan <- unit.NewProcessError(err)
 				}
 				hasError = true
-				failpoint.Inject("returnDoJobError", func(_ failpoint.Value) {
+				if _, _err_ := failpoint.Eval(_curpkg_("returnDoJobError")); _err_ == nil {
 					w.logger.Info("", zap.String("failpoint", "returnDoJobError"))
-					failpoint.Return()
-				})
+					return
+				}
 				continue
 			}
 			txnHistogram.WithLabelValues(w.cfg.Name, w.cfg.WorkerName, w.cfg.SourceID, job.schema, job.table).Observe(time.Since(startTime).Seconds())
-			failpoint.Inject("loaderCPUpdateOffsetError", func(_ failpoint.Value) {
+			if _, _err_ := failpoint.Eval(_curpkg_("loaderCPUpdateOffsetError")); _err_ == nil {
 				job.file = "notafile" + job.file
-			})
+			}
 			if err := w.loader.checkPoint.UpdateOffset(job.file, job.offset); err != nil {
 				runFatalChan <- unit.NewProcessError(err)
 				hasError = true
@@ -270,10 +270,10 @@ func (w *Worker) restoreDataFile(ctx context.Context, filePath string, offset in
 		return err
 	}
 
-	failpoint.Inject("dispatchError", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("dispatchError")); _err_ == nil {
 		w.logger.Info("", zap.String("failpoint", "dispatchError"))
-		failpoint.Return(errors.New("inject failpoint dispatchError"))
-	})
+		return errors.New("inject failpoint dispatchError")
+	}
 
 	// dispatchSQL completed, send nil to make sure all dmls are applied to target database
 	// we don't want to close and re-make chan frequently
@@ -311,13 +311,13 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 
 		tctx := tcontext.NewContext(ctx, w.logger)
 		err2 = w.checkPoint.Init(tctx, baseFile, finfo.Size())
-		failpoint.Inject("WaitLoaderStopAfterInitCheckpoint", func(v failpoint.Value) {
+		if v, _err_ := failpoint.Eval(_curpkg_("WaitLoaderStopAfterInitCheckpoint")); _err_ == nil {
 			t := v.(int)
 			w.logger.Info("wait loader stop after init checkpoint")
 			w.wg.Add(1)
 			time.Sleep(time.Duration(t) * time.Second)
 			w.wg.Done()
-		})
+		}
 
 		if err2 != nil {
 			w.logger.Error("fail to initial checkpoint", zap.String("data file", file), zap.Int64("offset", offset), log.ShortError(err2))
@@ -497,10 +497,10 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	tctx := tcontext.NewContext(ctx, l.logger)
 
 	checkpoint, err := newRemoteCheckPoint(tctx, l.cfg, l.checkpointID())
-	failpoint.Inject("ignoreLoadCheckpointErr", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("ignoreLoadCheckpointErr")); _err_ == nil {
 		l.logger.Info("", zap.String("failpoint", "ignoreLoadCheckpointErr"))
 		err = nil
-	})
+	}
 	if err != nil {
 		return err
 	}
@@ -614,10 +614,10 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	close(l.runFatalChan) // Restore returned, all potential fatal sent to l.runFatalChan
 	cancel()              // cancel the goroutines created in `Restore`.
 
-	failpoint.Inject("dontWaitWorkerExit", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("dontWaitWorkerExit")); _err_ == nil {
 		l.logger.Info("", zap.String("failpoint", "dontWaitWorkerExit"))
 		l.workerWg.Wait()
-	})
+	}
 
 	wg.Wait() // wait for receive all fatal from l.runFatalChan
 
@@ -718,13 +718,13 @@ func (l *Loader) Restore(ctx context.Context) error {
 		return err
 	}
 
-	failpoint.Inject("WaitLoaderStopBeforeLoadCheckpoint", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("WaitLoaderStopBeforeLoadCheckpoint")); _err_ == nil {
 		t := v.(int)
 		l.logger.Info("wait loader stop before load checkpoint")
 		l.wg.Add(1)
 		time.Sleep(time.Duration(t) * time.Second)
 		l.wg.Done()
-	})
+	}
 
 	// not update checkpoint in memory when restoring, so when re-Restore, we need to load checkpoint from DB
 	err := l.checkPoint.Load(tcontext.NewContext(ctx, l.logger))
@@ -745,10 +745,10 @@ func (l *Loader) Restore(ctx context.Context) error {
 	begin := time.Now()
 	err = l.restoreData(ctx)
 
-	failpoint.Inject("dontWaitWorkerExit", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("dontWaitWorkerExit")); _err_ == nil {
 		l.logger.Info("", zap.String("failpoint", "dontWaitWorkerExit"))
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 
 	// make sure all workers exit
 	l.closeFileJobQueue() // all data file dispatched, close it

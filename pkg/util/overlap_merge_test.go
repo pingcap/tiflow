@@ -16,10 +16,10 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOverlapCoveringMerge(t *testing.T) {
@@ -135,8 +135,8 @@ func TestOverlapCoveringMerge(t *testing.T) {
 			}
 			outputPayloads = append(outputPayloads, payload.String())
 		}
-		require.Equal(t, outputIntervals, test.expectedIntervals)
-		require.Equal(t, outputPayloads, test.expectedPayloads)
+		require.Equal(t, test.expectedIntervals, outputIntervals)
+		require.Equal(t, test.expectedPayloads, outputPayloads)
 
 	}
 }

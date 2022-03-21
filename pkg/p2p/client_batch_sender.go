@@ -65,9 +65,9 @@ func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) 
 // maxEntryCount messages or the total size of messages exceeds maxSizeBytes,
 // the batch is flushed.
 func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
-	failpoint.Inject("ClientBatchSenderInjectError", func() {
-		failpoint.Return(errors.New("injected error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("ClientBatchSenderInjectError")); _err_ == nil {
+		return errors.New("injected error")
+	}
 
 	s.buffer = append(s.buffer, msg)
 	s.sizeBytes += msg.Size()
@@ -80,9 +80,9 @@ func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
 
 // Flush flushes the batch.
 func (s *clientBatchSenderImpl) Flush() error {
-	failpoint.Inject("ClientBatchSenderInjectError", func() {
-		failpoint.Return(errors.New("injected error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("ClientBatchSenderInjectError")); _err_ == nil {
+		return errors.New("injected error")
+	}
 
 	if len(s.buffer) == 0 {
 		return nil

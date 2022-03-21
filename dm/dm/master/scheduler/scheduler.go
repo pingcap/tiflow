@@ -732,9 +732,9 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	}
 
 	// 5. replace the source bound
-	failpoint.Inject("failToReplaceSourceBound", func(_ failpoint.Value) {
-		failpoint.Return(errors.New("failToPutSourceBound"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("failToReplaceSourceBound")); _err_ == nil {
+		return errors.New("failToPutSourceBound")
+	}
 	s.mu.Lock()
 	_, err := ha.ReplaceSourceBound(s.etcdCli, source, oldWorker.BaseInfo().Name, worker)
 	if err != nil {
@@ -778,14 +778,14 @@ WaitLoop:
 			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
 		}
 
-		failpoint.Inject("batchOperateTaskOnWorkerMustRetry", func(v failpoint.Value) {
+		if v, _err_ := failpoint.Eval(_curpkg_("batchOperateTaskOnWorkerMustRetry")); _err_ == nil {
 			if retry < v.(int) {
 				resp.QueryStatus.SubTaskStatus[0].Stage = pb.Stage_InvalidStage
 				log.L().Info("batchOperateTaskOnWorkerMustRetry failpoint triggered", zap.Int("retry", retry))
 			} else {
 				log.L().Info("batchOperateTaskOnWorkerMustRetry passed", zap.Int("retry", retry))
 			}
-		})
+		}
 
 		for _, status := range resp.QueryStatus.GetSubTaskStatus() {
 			if status == nil {
@@ -803,9 +803,9 @@ WaitLoop:
 					zap.String("want stage", stage.String()),
 					zap.String("current stage", status.Stage.String()),
 				)
-				failpoint.Inject("skipBatchOperateTaskOnWorkerSleep", func(_ failpoint.Value) {
-					failpoint.Continue("WaitLoop")
-				})
+				if _, _err_ := failpoint.Eval(_curpkg_("skipBatchOperateTaskOnWorkerSleep")); _err_ == nil {
+					continue WaitLoop
+				}
 				select {
 				case <-ctx.Done():
 					return terror.Annotatef(err, "failed to wait task on worker: %s because context is canceled", worker.baseInfo.Name)
@@ -1957,10 +1957,10 @@ func (s *Scheduler) recoverWorkersBounds() (int64, error) {
 		}
 	}
 
-	failpoint.Inject("failToRecoverWorkersBounds", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("failToRecoverWorkersBounds")); _err_ == nil {
 		log.L().Info("mock failure", zap.String("failpoint", "failToRecoverWorkersBounds"))
-		failpoint.Return(0, errors.New("failToRecoverWorkersBounds"))
-	})
+		return 0, errors.New("failToRecoverWorkersBounds")
+	}
 	// 5. delete invalid source bound info in etcd
 	if len(sbm) > 0 {
 		invalidSourceBounds := make([]string, 0, len(sbm))

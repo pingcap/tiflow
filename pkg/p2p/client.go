@@ -171,9 +171,9 @@ func (c *MessageClient) Run(
 }
 
 func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
-	failpoint.Inject("InjectClientPermanentFailure", func() {
-		failpoint.Return(cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs())
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("InjectClientPermanentFailure")); _err_ == nil {
+		return cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs()
+	}
 
 	cancelCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
@@ -390,14 +390,14 @@ func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value inte
 func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	// FIXME (zixiong): This is a temporary way for testing client congestion.
 	// This failpoint will be removed once we abstract the MessageClient as an interface.
-	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
-		failpoint.Return(0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs())
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("ClientInjectSendMessageTryAgain")); _err_ == nil {
+		return 0, cerrors.ErrPeerMessageSendTryAgain.GenWithStackByArgs()
+	}
 
 	// FIXME (zixiong): This is a temporary way for testing whether the caller can handler this error.
-	failpoint.Inject("ClientInjectClosed", func() {
-		failpoint.Return(0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs())
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("ClientInjectClosed")); _err_ == nil {
+		return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
+	}
 
 	return c.sendMessage(ctx, topic, value, true)
 }

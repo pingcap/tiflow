@@ -322,14 +322,14 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	shouldSwitchDB := needSwitchDB(ddl)
 
-	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MySQLSinkExecDDLDelay")); _err_ == nil {
 		select {
 		case <-ctx.Done():
-			failpoint.Return(ctx.Err())
+			return ctx.Err()
 		case <-time.After(time.Hour):
 		}
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 	log.Info("start exec DDL", zap.Any("DDL", ddl))
 	err := s.statistics.RecordDDLExecution(func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -562,12 +562,12 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}
 
 	return retry.Do(ctx, func() error {
-		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(logDMLTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
-		})
-		failpoint.Inject("MySQLSinkHangLongTime", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("MySQLSinkTxnRandomError")); _err_ == nil {
+			return logDMLTxnErr(errors.Trace(dmysql.ErrInvalidConn))
+		}
+		if _, _err_ := failpoint.Eval(_curpkg_("MySQLSinkHangLongTime")); _err_ == nil {
 			time.Sleep(time.Hour)
-		})
+		}
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(ctx, nil)
@@ -720,16 +720,16 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-	failpoint.Inject("SinkFlushDMLPanic", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("SinkFlushDMLPanic")); _err_ == nil {
 		time.Sleep(time.Second)
 		log.Fatal("SinkFlushDMLPanic")
-	})
-	failpoint.Inject("MySQLSinkExecDMLError", func() {
+	}
+	if _, _err_ := failpoint.Eval(_curpkg_("MySQLSinkExecDMLError")); _err_ == nil {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
 		// failpoint injected is executed first.
 		time.Sleep(time.Second * 2)
-		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
-	})
+		return errors.Trace(dmysql.ErrInvalidConn)
+	}
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {

@@ -641,7 +641,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	}
 
 	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
-	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("kvClientMockRangeLock")); _err_ == nil {
 		// short sleep to wait region has split
 		time.Sleep(time.Second)
 		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer(), sri.ts)
@@ -659,7 +659,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			Status:      regionspan.LockRangeStatusStale,
 			RetryRanges: retryRanges,
 		}
-	})
+	}
 
 	if res.Status == regionspan.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -729,7 +729,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			ExtraOp:      extraOp,
 		}
 
-		failpoint.Inject("kvClientPendingRegionDelay", nil)
+		failpoint.Eval(_curpkg_("kvClientPendingRegionDelay"))
 
 		// each TiKV store has an independent pendingRegions.
 		var pendingRegions *syncRegionFeedStateMap
@@ -772,9 +772,9 @@ func (s *eventFeedSession) requestRegionToStore(
 				if cerror.ErrVersionIncompatible.Equal(err) {
 					// It often occurs on rolling update. Sleep 20s to reduce logs.
 					delay := 20 * time.Second
-					failpoint.Inject("kvClientDelayWhenIncompatible", func() {
+					if _, _err_ := failpoint.Eval(_curpkg_("kvClientDelayWhenIncompatible")); _err_ == nil {
 						delay = 100 * time.Millisecond
-					})
+					}
 					time.Sleep(delay)
 				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -1104,7 +1104,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		s.client.regionCache.OnSendFail(bo, errInfo.rpcCtx, regionScheduleReload, err)
 	}
 
-	failpoint.Inject("kvClientRegionReentrantErrorDelay", nil)
+	failpoint.Eval(_curpkg_("kvClientRegionReentrantErrorDelay"))
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 	return nil
 }
@@ -1140,7 +1140,7 @@ func (s *eventFeedSession) receiveFromStream(
 			zap.String("changefeed", s.client.changefeed),
 			zap.String("addr", addr), zap.Uint64("storeID", storeID))
 
-		failpoint.Inject("kvClientStreamCloseDelay", nil)
+		failpoint.Eval(_curpkg_("kvClientStreamCloseDelay"))
 
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
@@ -1165,19 +1165,19 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
+		if op, _err_ := failpoint.Eval(_curpkg_("kvClientRegionReentrantError")); _err_ == nil {
 			if op.(string) == "error" {
 				worker.inputCh <- nil
 			}
-		})
-		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+		}
+		if msg, _err_ := failpoint.Eval(_curpkg_("kvClientStreamRecvError")); _err_ == nil {
 			errStr := msg.(string)
 			if errStr == io.EOF.Error() {
 				err = io.EOF
 			} else {
 				err = errors.New(errStr)
 			}
-		})
+		}
 		if err != nil {
 			if status.Code(errors.Cause(err)) == codes.Canceled {
 				log.Debug(

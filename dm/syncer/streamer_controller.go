@@ -142,11 +142,11 @@ func NewStreamerController(
 		}
 	}
 	// let local binlog also return error to avoid infinity loop
-	failpoint.Inject("GetEventError", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("GetEventError")); _err_ == nil {
 		strategy = &maxIntervalRetryStrategy{
 			interval: minErrorRetryInterval,
 		}
-	})
+	}
 	streamerController := &StreamerController{
 		initBinlogType:    binlogType,
 		currentBinlogType: binlogType,
@@ -255,22 +255,22 @@ var mockRestarted = false
 // GetEvent returns binlog event, should only have one thread call this function.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, err error) {
 	ctx, cancel := context.WithTimeout(tctx.Context(), common.SlaveReadTimeout)
-	failpoint.Inject("SyncerEventTimeout", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("SyncerEventTimeout")); _err_ == nil {
 		if seconds, ok := val.(int); ok {
 			cancel()
 			ctx, cancel = context.WithTimeout(tctx.Context(), time.Duration(seconds)*time.Second)
 			tctx.L().Info("set fetch binlog event timeout", zap.String("failpoint", "SyncerEventTimeout"), zap.Int("value", seconds))
 		}
-	})
+	}
 
-	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("SyncerGetEventError")); _err_ == nil {
 		if !mockRestarted {
 			mockRestarted = true
 			c.meetError = true
 			tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
-			failpoint.Return(nil, terror.ErrDBBadConn.Generate())
+			return nil, terror.ErrDBBadConn.Generate()
 		}
-	})
+	}
 
 	c.RLock()
 	streamer := c.streamer
@@ -278,9 +278,9 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 
 	event, err = streamer.GetEvent(ctx)
 	cancel()
-	failpoint.Inject("GetEventError", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("GetEventError")); _err_ == nil {
 		err = errors.New("go-mysql returned an error")
-	})
+	}
 	if err != nil {
 		if err != context.Canceled && err != context.DeadlineExceeded {
 			c.Lock()

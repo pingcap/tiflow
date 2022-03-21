@@ -67,10 +67,10 @@ func TrimQuoteMark(s string) string {
 func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[string][]string, error) {
 	schemas, err := dbutil.GetSchemas(ctx, db)
 
-	failpoint.Inject("FetchAllDoTablesFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FetchAllDoTablesFailed")); _err_ == nil {
 		err = tmysql.NewErr(uint16(val.(int)))
 		log.L().Warn("FetchAllDoTables failed", zap.String("failpoint", "FetchAllDoTablesFailed"), zap.Error(err))
-	})
+	}
 
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeUpstream)
@@ -127,10 +127,10 @@ func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, rou
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
 
-	failpoint.Inject("FetchTargetDoTablesFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FetchTargetDoTablesFailed")); _err_ == nil {
 		err = tmysql.NewErr(uint16(val.(int)))
 		log.L().Warn("FetchTargetDoTables failed", zap.String("failpoint", "FetchTargetDoTablesFailed"), zap.Error(err))
-	})
+	}
 
 	if err != nil {
 		return nil, err

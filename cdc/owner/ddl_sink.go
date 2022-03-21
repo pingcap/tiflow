@@ -180,9 +180,9 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Any("DDL", ddl))
 				err := s.sink.EmitDDLEvent(ctx, ddl)
-				failpoint.Inject("InjectChangefeedDDLError", func() {
+				if _, _err_ := failpoint.Eval(_curpkg_("InjectChangefeedDDLError")); _err_ == nil {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
-				})
+				}
 				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
 					log.Info("Execute DDL succeeded",
 						zap.String("changefeed", ctx.ChangefeedVars().ID),

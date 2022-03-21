@@ -33,11 +33,11 @@ func newMemoryBackEnd() *memoryBackEnd {
 }
 
 func (m *memoryBackEnd) reader() (backEndReader, error) {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.SwapInt32(&m.borrowed, 1) != 0 {
 			log.Panic("memoryBackEnd: already borrowed")
 		}
-	})
+	}
 
 	return &memoryBackEndReader{
 		backEnd:   m,
@@ -46,21 +46,21 @@ func (m *memoryBackEnd) reader() (backEndReader, error) {
 }
 
 func (m *memoryBackEnd) writer() (backEndWriter, error) {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.SwapInt32(&m.borrowed, 1) != 0 {
 			log.Panic("memoryBackEnd: already borrowed")
 		}
-	})
+	}
 
 	return &memoryBackEndWriter{backEnd: m}, nil
 }
 
 func (m *memoryBackEnd) free() error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.LoadInt32(&m.borrowed) != 0 {
 			log.Panic("fileBackEnd: trying to free borrowed file")
 		}
-	})
+	}
 
 	if pool != nil {
 		atomic.AddInt64(&pool.memoryUseEstimate, -m.estimatedSize)
@@ -88,9 +88,9 @@ func (r *memoryBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 }
 
 func (r *memoryBackEndReader) resetAndClose() error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
-	})
+	}
 
 	if pool != nil {
 		atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
@@ -112,14 +112,14 @@ func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	// 8 * 5 is for the 5 fields in PolymorphicEvent, each of which is thought of as a 64-bit pointer
 	w.bytesWritten += 8*5 + event.RawKV.ApproximateDataSize()
 
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if event.CRTs < w.maxTs {
 			log.Panic("memoryBackEnd: ts regressed, bug?",
 				zap.Uint64("prev-ts", w.maxTs),
 				zap.Uint64("cur-ts", event.CRTs))
 		}
 		w.maxTs = event.CRTs
-	})
+	}
 	return nil
 }
 
@@ -133,9 +133,9 @@ func (w *memoryBackEndWriter) dataSize() uint64 {
 }
 
 func (w *memoryBackEndWriter) flushAndClose() error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		atomic.StoreInt32(&w.backEnd.borrowed, 0)
-	})
+	}
 
 	w.backEnd.estimatedSize = w.bytesWritten
 	if pool != nil {

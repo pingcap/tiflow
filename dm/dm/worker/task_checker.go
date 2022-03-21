@@ -194,7 +194,7 @@ func (tsc *realTaskStatusChecker) run() {
 	tsc.ctx, tsc.cancel = context.WithCancel(context.Background())
 	tsc.closed.Store(false)
 
-	failpoint.Inject("TaskCheckInterval", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("TaskCheckInterval")); _err_ == nil {
 		interval, err := time.ParseDuration(val.(string))
 		if err != nil {
 			tsc.l.Warn("inject failpoint TaskCheckInterval failed", zap.Reflect("value", val), zap.Error(err))
@@ -202,7 +202,7 @@ func (tsc *realTaskStatusChecker) run() {
 			tsc.cfg.CheckInterval = config.Duration{Duration: interval}
 			tsc.l.Info("set TaskCheckInterval", zap.String("failpoint", "TaskCheckInterval"), zap.Duration("value", interval))
 		}
-	})
+	}
 
 	ticker := time.NewTicker(tsc.cfg.CheckInterval.Duration)
 	defer ticker.Stop()
@@ -264,9 +264,9 @@ func (tsc *realTaskStatusChecker) getResumeStrategy(stStatus *pb.SubTaskStatus, 
 	for _, processErr := range stStatus.Result.Errors {
 		pErr := processErr
 		if !isResumableError(processErr) {
-			failpoint.Inject("TaskCheckInterval", func(_ failpoint.Value) {
+			if _, _err_ := failpoint.Eval(_curpkg_("TaskCheckInterval")); _err_ == nil {
 				tsc.l.Info("error is not resumable", zap.Stringer("error", pErr))
-			})
+			}
 			return ResumeNoSense
 		}
 	}

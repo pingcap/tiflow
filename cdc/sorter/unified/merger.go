@@ -252,7 +252,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return nil
 		}
 
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			if sortHeap.Len() > 0 {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: start merging",
@@ -260,11 +260,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.String("tableName", tableName),
 					zap.Uint64("minResolvedTs", minResolvedTs))
 			}
-		})
+		}
 
 		counter := 0
 		for sortHeap.Len() > 0 {
-			failpoint.Inject("sorterMergeDelay", func() {})
+			failpoint.Eval(_curpkg_("sorterMergeDelay"))
 
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
@@ -360,7 +360,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			failpoint.Inject("sorterDebug", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 				if counter%10 == 0 {
 					tableID, tableName := util.TableIDFromCtx(ctx)
 					log.Debug("Merging progress",
@@ -368,7 +368,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.String("tableName", tableName),
 						zap.Int("counter", counter))
 				}
-			})
+			}
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
@@ -380,7 +380,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			log.Panic("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
 
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			if counter > 0 {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: merging ended",
@@ -388,7 +388,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.String("tableName", tableName),
 					zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 			}
-		})
+		}
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)

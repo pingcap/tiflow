@@ -92,20 +92,19 @@ func (s *Server) KeepAlive() {
 	for {
 		log.L().Info("start to keepalive with master")
 
-		failpoint.Inject("FailToKeepAlive", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("FailToKeepAlive")); _err_ == nil {
 			workerStrings := val.(string)
 			if strings.Contains(workerStrings, s.cfg.Name) {
 				log.L().Info("worker keep alive failed", zap.String("failpoint", "FailToKeepAlive"))
-				failpoint.Goto("bypass")
+				goto bypass
 			}
-		})
+		}
 
 		{
 			err1 := ha.KeepAlive(s.kaCtx, s.etcdClient, s.cfg.Name, s.cfg.KeepAliveTTL)
 			log.L().Warn("keepalive with master goroutine paused", zap.Error(err1))
 		}
-
-		failpoint.Label("bypass")
+	bypass:
 
 		// TODO: report the error.
 		// when lost keepalive, stop the worker without graceful. this is to fix https://github.com/pingcap/tiflow/issues/3737

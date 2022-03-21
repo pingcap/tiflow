@@ -205,11 +205,11 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 			e.l.Error("fail to close etcd session", zap.Int64("lease", int64(se.Lease())), zap.Error(err2))
 		}
 	}
-	failpoint.Inject("mockCampaignLoopExitedAbnormally", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("mockCampaignLoopExitedAbnormally")); _err_ == nil {
 		closeSession = func(_ *concurrency.Session) {
 			e.l.Info("skip closeSession", zap.String("failpoint", "mockCampaignLoopExitedAbnormally"))
 		}
-	})
+	}
 
 	var err error
 	defer func() {

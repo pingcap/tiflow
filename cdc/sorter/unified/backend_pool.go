@@ -121,9 +121,9 @@ func newBackEndPool(dir string) (*backEndPool, error) {
 			// update memPressure
 			usedMemory, err := memory.MemUsed()
 			if err != nil || totalMemory == 0 {
-				failpoint.Inject("sorterDebug", func() {
+				if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 					log.Panic("unified sorter: getting system memory usage failed", zap.Error(err))
-				})
+				}
 
 				log.Warn("unified sorter: getting system memory usage failed", zap.Error(err))
 				// Reports a 100% memory pressure, so that the backEndPool will allocate fileBackEnds.
@@ -215,12 +215,12 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 		// Let GC do its job
 		return nil
 	case *fileBackEnd:
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			if atomic.LoadInt32(&b.borrowed) != 0 {
 				log.Warn("Deallocating a fileBackEnd in use", zap.String("filename", b.fileName))
-				failpoint.Return(nil)
+				return nil
 			}
-		})
+		}
 
 		b.cleanStats()
 
@@ -305,16 +305,16 @@ func (p *backEndPool) terminate() {
 }
 
 func (p *backEndPool) sorterMemoryUsage() int64 {
-	failpoint.Inject("memoryUsageInjectPoint", func(val failpoint.Value) {
-		failpoint.Return(int64(val.(int)))
-	})
+	if val, _err_ := failpoint.Eval(_curpkg_("memoryUsageInjectPoint")); _err_ == nil {
+		return int64(val.(int))
+	}
 	return atomic.LoadInt64(&p.memoryUseEstimate)
 }
 
 func (p *backEndPool) memoryPressure() int32 {
-	failpoint.Inject("memoryPressureInjectPoint", func(val failpoint.Value) {
-		failpoint.Return(int32(val.(int)))
-	})
+	if val, _err_ := failpoint.Eval(_curpkg_("memoryPressureInjectPoint")); _err_ == nil {
+		return int32(val.(int))
+	}
 	return atomic.LoadInt32(&p.memPressure)
 }
 
@@ -373,9 +373,9 @@ func (p *backEndPool) cleanUpStaleFiles() error {
 				zap.String("file", toRemoveFilePath),
 				zap.Error(err))
 			// For fail-fast in integration tests
-			failpoint.Inject("sorterDebug", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 				log.Panic("panicking", zap.Error(err))
-			})
+			}
 		}
 	}
 
@@ -393,10 +393,10 @@ func checkDataDirSatisfied() error {
 		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, err)
 	}
 	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
-		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("InjectCheckDataDirSatisfied")); _err_ == nil {
 			log.Info("inject check data dir satisfied error")
-			failpoint.Return(nil)
-		})
+			return nil
+		}
 		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, errors.Errorf("disk is almost full, TiCDC require that the disk mount data-dir "+
 			"have 10%% available space, and the total amount has at least 500GB is preferred. disk info: %+v", diskInfo))
 	}

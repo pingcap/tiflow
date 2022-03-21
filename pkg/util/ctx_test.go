@@ -15,52 +15,52 @@ package util
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 func TestShouldReturnCaptureID(t *testing.T) {
 	defer testleak.AfterTest(t)()
 	ctx := PutCaptureAddrInCtx(context.Background(), "ello")
-	require.Equal(t, CaptureAddrFromCtx(ctx), "ello")
+	require.Equal(t, "ello", CaptureAddrFromCtx(ctx))
 }
 
 func TestCaptureIDNotSet(t *testing.T) {
 	defer testleak.AfterTest(t)()
-	require.Equal(t, CaptureAddrFromCtx(context.Background()), "")
+	require.Equal(t, "", CaptureAddrFromCtx(context.Background()))
 	captureAddr := CaptureAddrFromCtx(context.Background())
-	require.Equal(t, captureAddr, "")
+	require.Equal(t, "", captureAddr)
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
-	require.Equal(t, CaptureAddrFromCtx(ctx), "")
+	require.Equal(t, "", CaptureAddrFromCtx(ctx))
 }
 
 func TestShouldReturnChangefeedID(t *testing.T) {
 	defer testleak.AfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
-	require.Equal(t, ChangefeedIDFromCtx(ctx), "ello")
+	require.Equal(t, "ello", ChangefeedIDFromCtx(ctx))
 }
 
 func TestCanceledContext(t *testing.T) {
 	defer testleak.AfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "test-cf")
-	require.Equal(t, ChangefeedIDFromCtx(ctx), "test-cf")
+	require.Equal(t, "test-cf", ChangefeedIDFromCtx(ctx))
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
-	require.Equal(t, ChangefeedIDFromCtx(ctx), "test-cf")
+	require.Equal(t, "test-cf", ChangefeedIDFromCtx(ctx))
 }
 
 func TestChangefeedIDNotSet(t *testing.T) {
 	defer testleak.AfterTest(t)()
-	require.Equal(t, ChangefeedIDFromCtx(context.Background()), "")
+	require.Equal(t, "", ChangefeedIDFromCtx(context.Background()))
 	changefeedID := ChangefeedIDFromCtx(context.Background())
-	require.Equal(t, changefeedID, "")
+	require.Equal(t, "", changefeedID)
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
 	changefeedID = ChangefeedIDFromCtx(ctx)
-	require.Equal(t, changefeedID, "")
+	require.Equal(t, "", changefeedID)
 }
 
 func TestShouldReturnTimezone(t *testing.T) {
@@ -68,7 +68,7 @@ func TestShouldReturnTimezone(t *testing.T) {
 	tz, _ := getTimezoneFromZonefile("UTC")
 	ctx := PutTimezoneInCtx(context.Background(), tz)
 	tz = TimezoneFromCtx(ctx)
-	require.Equal(t, tz.String(), "UTC")
+	require.Equal(t, "UTC", tz.String())
 }
 
 func TestTimezoneNotSet(t *testing.T) {
@@ -84,19 +84,19 @@ func TestShouldReturnTableInfo(t *testing.T) {
 	defer testleak.AfterTest(t)()
 	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
 	tableID, tableName := TableIDFromCtx(ctx)
-	require.Equal(t, tableID, int64(1321))
-	require.Equal(t, tableName, "ello")
+	require.Equal(t, int64(1321), tableID)
+	require.Equal(t, "ello", tableName)
 }
 
 func TestTableInfoNotSet(t *testing.T) {
 	defer testleak.AfterTest(t)()
 	tableID, tableName := TableIDFromCtx(context.Background())
-	require.Equal(t, tableID, int64(0))
-	require.Equal(t, tableName, "")
+	require.Equal(t, int64(0), tableID)
+	require.Equal(t, "", tableName)
 	ctx := context.WithValue(context.Background(), ctxKeyTableID, 1321)
 	tableID, tableName = TableIDFromCtx(ctx)
-	require.Equal(t, tableID, int64(0))
-	require.Equal(t, tableName, "")
+	require.Equal(t, int64(0), tableID)
+	require.Equal(t, "", tableName)
 }
 
 func TestShouldReturnKVStorage(t *testing.T) {
@@ -105,7 +105,7 @@ func TestShouldReturnKVStorage(t *testing.T) {
 	defer kvStorage.Close()
 	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
 	kvStorage2, err := KVStorageFromCtx(ctx)
-	require.Equal(t, kvStorage2, kvStorage)
+	require.Equal(t, kvStorage, kvStorage2)
 	require.Nil(t, err)
 }
 
@@ -131,6 +131,6 @@ func TestZapFieldWithContext(t *testing.T) {
 	ctx := context.Background()
 	ctx = PutCaptureAddrInCtx(ctx, capture)
 	ctx = PutChangefeedIDInCtx(ctx, changefeed)
-	require.Equal(t, ZapFieldCapture(ctx), zap.String("capture", capture))
-	require.Equal(t, ZapFieldChangefeed(ctx), zap.String("changefeed", changefeed))
+	require.Equal(t, zap.String("capture", capture), ZapFieldCapture(ctx))
+	require.Equal(t, zap.String("changefeed", changefeed), ZapFieldChangefeed(ctx))
 }

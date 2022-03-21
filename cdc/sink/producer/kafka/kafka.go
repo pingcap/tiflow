@@ -99,19 +99,19 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		return nil
 	}
 
-	failpoint.Inject("KafkaSinkAsyncSendError", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("KafkaSinkAsyncSendError")); _err_ == nil {
 		// simulate sending message to input channel successfully but flushing
 		// message to Kafka meets error
 		log.Info("failpoint error injected", zap.String("changefeed", k.id), zap.Any("role", k.role))
 		k.failpointCh <- errors.New("kafka sink injected error")
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 
-	failpoint.Inject("SinkFlushDMLPanic", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("SinkFlushDMLPanic")); _err_ == nil {
 		time.Sleep(time.Second)
 		log.Panic("SinkFlushDMLPanic",
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
-	})
+	}
 
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,

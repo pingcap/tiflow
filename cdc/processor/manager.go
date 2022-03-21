@@ -96,7 +96,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			if m.enableNewScheduler {
-				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				failpoint.Eval(_curpkg_("processorManagerHandleNewChangefeedDelay"))
 				processor = m.newProcessor(ctx)
 				m.processors[changefeedID] = processor
 			} else {
@@ -108,7 +108,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 				if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
 					continue
 				}
-				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+				failpoint.Eval(_curpkg_("processorManagerHandleNewChangefeedDelay"))
 				processor = m.newProcessor(ctx)
 				m.processors[changefeedID] = processor
 			}

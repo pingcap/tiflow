@@ -299,11 +299,11 @@ func (n *sinkNode) clearBuffers() {
 
 // emitRowToSink emits the rows in rowBuffer to backend sink.
 func (n *sinkNode) emitRowToSink(ctx context.Context) error {
-	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("ProcessorSyncResolvedPreEmit")); _err_ == nil {
 		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
 		time.Sleep(10 * time.Second)
 		panic("ProcessorSyncResolvedPreEmit")
-	})
+	}
 	err := n.sink.EmitRowChangedEvents(ctx, n.rowBuffer...)
 	if err != nil {
 		return errors.Trace(err)
@@ -329,9 +329,9 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 			if n.status == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)
 			}
-			failpoint.Inject("ProcessorSyncResolvedError", func() {
-				failpoint.Return(false, errors.New("processor sync resolved injected error"))
-			})
+			if _, _err_ := failpoint.Eval(_curpkg_("ProcessorSyncResolvedError")); _err_ == nil {
+				return false, errors.New("processor sync resolved injected error")
+			}
 			if err := n.flushSink(ctx, msg.PolymorphicEvent.CRTs); err != nil {
 				return false, errors.Trace(err)
 			}

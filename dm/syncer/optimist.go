@@ -63,12 +63,12 @@ func (s *Syncer) initOptimisticShardDDL(ctx context.Context) error {
 // handleQueryEventOptimistic handles QueryEvent in the optimistic shard DDL mode.
 func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	// interrupted after flush old checkpoint and before track DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err := handleFlushCheckpointStage(1, val.(int), "before track DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	var (
 		upTable   *filter.Table
@@ -194,12 +194,12 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	s.tctx.L().Info("start to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 
 	// interrupted after track DDL and before execute DDL.
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FlushCheckpointStage")); _err_ == nil {
 		err = handleFlushCheckpointStage(2, val.(int), "before execute DDL")
 		if err != nil {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	qec.shardingDDLInfo = trackInfos[0]
 	job := newDDLJob(qec)

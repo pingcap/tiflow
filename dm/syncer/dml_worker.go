@@ -171,11 +171,11 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 			}
 		}
 
-		failpoint.Inject("syncDMLBatchNotFull", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("syncDMLBatchNotFull")); _err_ == nil {
 			if len(jobCh) == 0 && len(jobs) < w.batch {
 				w.logger.Info("execute not full job queue")
 			}
-		})
+		}
 
 		w.executeBatchJobs(queueID, jobs)
 		if j.tp == conflict || j.tp == flush || j.tp == asyncFlush {
@@ -184,10 +184,10 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 
 		jobs = jobs[0:0]
 		if len(jobCh) == 0 {
-			failpoint.Inject("noJobInQueueLog", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("noJobInQueueLog")); _err_ == nil {
 				w.logger.Debug("no job in queue, update lag to zero", zap.Int(
 					"workerJobIdx", workerJobIdx), zap.Int64("current ts", time.Now().Unix()))
-			})
+			}
 			w.lagFunc(nil, workerJobIdx)
 		}
 	}
@@ -224,16 +224,16 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	if len(jobs) == 0 {
 		return
 	}
-	failpoint.Inject("failSecondJob", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("failSecondJob")); _err_ == nil {
 		if failExecuteSQLForTest && failOnceForTest.CAS(false, true) {
 			w.logger.Info("trigger failSecondJob")
 			err = terror.ErrDBExecuteFailed.Delegate(errors.New("failSecondJob"), "mock")
-			failpoint.Return()
+			return
 		}
-	})
+	}
 
 	queries, args = w.genSQLs(jobs)
-	failpoint.Inject("BlockExecuteSQLs", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("BlockExecuteSQLs")); _err_ == nil {
 		t := v.(int) // sleep time
 		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
 		for _, query := range queries {
@@ -243,30 +243,30 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 			}
 		}
 		time.Sleep(time.Second * time.Duration(t))
-	})
-	failpoint.Inject("WaitUserCancel", func(v failpoint.Value) {
+	}
+	if v, _err_ := failpoint.Eval(_curpkg_("WaitUserCancel")); _err_ == nil {
 		t := v.(int)
 		time.Sleep(time.Duration(t) * time.Second)
-	})
+	}
 	// use background context to execute sqls as much as possible
 	// set timeout to maxDMLConnectionDuration to make sure dmls can be replicated to downstream event if the latency is high
 	// if users need to quit this asap, we can support pause-task/stop-task --force in the future
 	ctx, cancel := w.syncCtx.WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
 	affect, err = db.ExecuteSQL(ctx, queries, args...)
-	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("SafeModeExit")); _err_ == nil {
 		if intVal, ok := val.(int); ok && intVal == 4 && len(jobs) > 0 {
 			w.logger.Warn("fail to exec DML", zap.String("failpoint", "SafeModeExit"))
 			affect, err = 0, terror.ErrDBExecuteFailed.Delegate(errors.New("SafeModeExit"), "mock")
 		}
-	})
+	}
 
-	failpoint.Inject("ErrorOnLastDML", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("ErrorOnLastDML")); _err_ == nil {
 		if len(queries) > len(jobs) {
 			w.logger.Error("error on last queries", zap.Int("queries", len(queries)), zap.Int("jobs", len(jobs)))
 			affect, err = len(queries)-1, terror.ErrDBExecuteFailed.Delegate(errors.New("ErrorOnLastDML"), "mock")
 		}
-	})
+	}
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.

@@ -132,10 +132,10 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 	if err == nil {
 		l.checkPointList = checkpointList
 	}
-	failpoint.Inject("ignoreLoadCheckpointErr", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("ignoreLoadCheckpointErr")); _err_ == nil {
 		l.logger.Info("", zap.String("failpoint", "ignoreLoadCheckpointErr"))
 		err = nil
-	})
+	}
 	if err != nil {
 		return err
 	}
@@ -201,8 +201,8 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		return err
 	}
 	err = l.core.RunOnce(taskCtx, cfg, nil)
-	failpoint.Inject("LoadDataSlowDown", nil)
-	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
+	failpoint.Eval(_curpkg_("LoadDataSlowDown"))
+	if val, _err_ := failpoint.Eval(_curpkg_("LoadDataSlowDownByTask")); _err_ == nil {
 		tasks := val.(string)
 		taskNames := strings.Split(tasks, ",")
 		for _, taskName := range taskNames {
@@ -211,7 +211,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 				<-taskCtx.Done()
 			}
 		}
-	})
+	}
 	return err
 }
 
@@ -286,13 +286,13 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.logger.Info("lightning load start")
 	errs := make([]*pb.ProcessError, 0, 1)
-	failpoint.Inject("lightningAlwaysErr", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("lightningAlwaysErr")); _err_ == nil {
 		l.logger.Info("", zap.String("failpoint", "lightningAlwaysErr"))
 		pr <- pb.ProcessResult{
 			Errors: []*pb.ProcessError{unit.NewProcessError(errors.New("failpoint lightningAlwaysErr"))},
 		}
-		failpoint.Return()
-	})
+		return
+	}
 
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {

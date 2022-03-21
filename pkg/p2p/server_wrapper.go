@@ -93,7 +93,7 @@ func (s *ServerWrapper) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 
 	// Used in unit tests to simulate a race situation between `SendMessage` and `Reset`.
 	// TODO think of another way to make tests parallelizable.
-	failpoint.Inject("ServerWrapperSendMessageDelay", func() {})
+	failpoint.Eval(_curpkg_("ServerWrapperSendMessageDelay"))
 	return innerServer.SendMessage(wrappedStream)
 }
 

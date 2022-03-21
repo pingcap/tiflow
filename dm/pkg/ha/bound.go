@@ -139,9 +139,9 @@ func GetSourceBound(cli *clientv3.Client, worker string) (map[string]SourceBound
 		resp *clientv3.GetResponse
 		err  error
 	)
-	failpoint.Inject("FailToGetSourceCfg", func() {
-		failpoint.Return(sbm, 0, context.DeadlineExceeded)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("FailToGetSourceCfg")); _err_ == nil {
+		return sbm, 0, context.DeadlineExceeded
+	}
 	if worker != "" {
 		resp, err = cli.Get(ctx, common.UpstreamBoundWorkerKeyAdapter.Encode(worker))
 	} else {

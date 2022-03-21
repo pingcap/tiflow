@@ -254,13 +254,13 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
 	w.delRegionState(regionID)
-	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
+	failpoint.Eval(_curpkg_("kvClientSingleFeedProcessDelay"))
 
-	failpoint.Inject("kvClientErrUnreachable", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("kvClientErrUnreachable")); _err_ == nil {
 		if err == errUnreachable {
-			failpoint.Return(err)
+			return err
 		}
-	})
+	}
 
 	// check and cancel gRPC stream before reconnecting region, in case of the
 	// scenario that region connects to the same TiKV store again and reuses
@@ -287,9 +287,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 	// as lock penalty.
 	resolveLockPenalty := 10
 	resolveLockInterval := 20 * time.Second
-	failpoint.Inject("kvClientResolveLockInterval", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("kvClientResolveLockInterval")); _err_ == nil {
 		resolveLockInterval = time.Duration(val.(int)) * time.Second
-	})
+	}
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	defer advanceCheckTicker.Stop()
 

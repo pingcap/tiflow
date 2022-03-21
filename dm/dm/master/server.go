@@ -251,13 +251,13 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		}()
 	})
 
-	failpoint.Inject("FailToElect", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FailToElect")); _err_ == nil {
 		masterStrings := val.(string)
 		if strings.Contains(masterStrings, s.cfg.Name) {
 			log.L().Info("master election failed", zap.String("failpoint", "FailToElect"))
 			s.election.Close()
 		}
-	})
+	}
 
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.MasterAddr))
 	return nil
@@ -456,7 +456,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		resp2 *pb.StartTaskResponse
 		err2  error
 	)
-	failpoint.Inject("LongRPCResponse", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("LongRPCResponse")); _err_ == nil {
 		var b strings.Builder
 		size := 5 * 1024 * 1024
 		b.Grow(size)
@@ -464,8 +464,8 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 			b.WriteByte(0)
 		}
 		resp2 = &pb.StartTaskResponse{Msg: b.String()}
-		failpoint.Return(resp2, nil)
-	})
+		return resp2, nil
+	}
 
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
 	if shouldRet {
@@ -1353,9 +1353,9 @@ func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
 	}
 
-	failpoint.Inject("MockSkipAdjustTargetDB", func() {
-		failpoint.Return(nil)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("MockSkipAdjustTargetDB")); _err_ == nil {
+		return nil
+	}
 
 	toDB, err := conn.DefaultDBProvider.Apply(&cfg)
 	if err != nil {
@@ -1626,9 +1626,9 @@ func withHost(addr string) string {
 }
 
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *config.DBConfig) error {
-	failpoint.Inject("MockSkipRemoveMetaData", func() {
-		failpoint.Return(nil)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("MockSkipRemoveMetaData")); _err_ == nil {
+		return nil
+	}
 	toDBCfg.Adjust()
 
 	// clear shard meta data for pessimistic/optimist

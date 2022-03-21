@@ -73,10 +73,10 @@ func (r *TCPReader) StartSyncByPos(pos gmysql.Position) error {
 		return terror.ErrRelayReaderNotStateNew.Generate(r.stage, common.StageNew)
 	}
 
-	failpoint.Inject("MockTCPReaderStartSyncByPos", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MockTCPReaderStartSyncByPos")); _err_ == nil {
 		r.stage = common.StagePrepared
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 
 	streamer, err := r.syncer.StartSync(pos)
 	if err != nil {
@@ -101,10 +101,10 @@ func (r *TCPReader) StartSyncByGTID(gSet gtid.Set) error {
 		return terror.ErrRelayTCPReaderNilGTID.Generate()
 	}
 
-	failpoint.Inject("MockTCPReaderStartSyncByGTID", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MockTCPReaderStartSyncByGTID")); _err_ == nil {
 		r.stage = common.StagePrepared
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 
 	streamer, err := r.syncer.StartSyncGTID(gSet.Origin())
 	if err != nil {
@@ -125,10 +125,10 @@ func (r *TCPReader) Close() error {
 		return terror.ErrRelayReaderStateCannotClose.Generate(r.stage, common.StagePrepared)
 	}
 
-	failpoint.Inject("MockTCPReaderClose", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MockTCPReaderClose")); _err_ == nil {
 		r.stage = common.StageClosed
-		failpoint.Return(nil)
-	})
+		return nil
+	}
 
 	// unclosed conn bug already fixed in go-mysql, https://github.com/go-mysql-org/go-mysql/pull/411
 	r.syncer.Close()
@@ -145,9 +145,9 @@ func (r *TCPReader) GetEvent(ctx context.Context) (*replication.BinlogEvent, err
 		return nil, terror.ErrRelayReaderNeedStart.Generate(r.stage, common.StagePrepared)
 	}
 
-	failpoint.Inject("MockTCPReaderGetEvent", func() {
-		failpoint.Return(nil, nil)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("MockTCPReaderGetEvent")); _err_ == nil {
+		return nil, nil
+	}
 
 	ev, err := r.streamer.GetEvent(ctx)
 	return ev, terror.ErrRelayTCPReaderGetEvent.Delegate(err)
@@ -159,13 +159,13 @@ func (r *TCPReader) Status() interface{} {
 	stage := r.stage
 	r.mu.RUnlock()
 
-	failpoint.Inject("MockTCPReaderStatus", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MockTCPReaderStatus")); _err_ == nil {
 		status := &TCPReaderStatus{
 			Stage:  stage.String(),
 			ConnID: uint32(1),
 		}
-		failpoint.Return(status)
-	})
+		return status
+	}
 	var connID uint32
 	if stage != common.StageNew {
 		connID = r.syncer.LastConnectionID()

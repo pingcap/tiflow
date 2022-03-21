@@ -206,9 +206,9 @@ func (m *MessageServer) run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		failpoint.Inject("ServerInjectTaskDelay", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("ServerInjectTaskDelay")); _err_ == nil {
 			log.Info("channel size", zap.Int("len", len(m.taskQueue)))
-		})
+		}
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -710,12 +710,12 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 	})
 
 	for {
-		failpoint.Inject("ServerInjectServerRestart", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("ServerInjectServerRestart")); _err_ == nil {
 			_ = stream.Send(&p2p.SendMessageResponse{
 				ExitReason: p2p.ExitReason_CONGESTED,
 			})
-			failpoint.Return(errors.Trace(errors.New("injected error")))
-		})
+			return errors.Trace(errors.New("injected error"))
+		}
 
 		packet, err := stream.Recv()
 		if err != nil {

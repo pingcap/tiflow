@@ -131,9 +131,9 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 	default:
 		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
-	failpoint.Inject("ProcessorAddTableError", func() {
-		failpoint.Return(errors.New("processor add table injected error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("ProcessorAddTableError")); _err_ == nil {
+		return errors.New("processor add table injected error")
+	}
 	n.eg.Go(func() error {
 		ctx.Throw(errors.Trace(eventSorter.Run(stdCtx)))
 		return nil

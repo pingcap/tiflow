@@ -153,7 +153,7 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
 			_, err := conn.baseConn.ExecuteSQL(ctx, stmtHistogram, conn.name, queries, args...)
-			failpoint.Inject("LoadExecCreateTableFailed", func(val failpoint.Value) {
+			if val, _err_ := failpoint.Eval(_curpkg_("LoadExecCreateTableFailed")); _err_ == nil {
 				errCode, err1 := strconv.ParseUint(val.(string), 10, 16)
 				if err1 != nil {
 					ctx.L().Fatal("failpoint LoadExecCreateTableFailed's value is invalid", zap.String("val", val.(string)))
@@ -163,7 +163,7 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 					err = &mysql.MySQLError{Number: uint16(errCode), Message: ""}
 					ctx.L().Warn("executeSQL failed", zap.String("failpoint", "LoadExecCreateTableFailed"), zap.Error(err))
 				}
-			})
+			}
 			if err == nil {
 				cost := time.Since(startTime)
 				// duration seconds

@@ -404,11 +404,11 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	// For testing the situation where we have a progress notification that
 	// has the same revision as the committed Etcd transaction.
-	failpoint.Inject("InjectProgressRequestAfterCommit", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("InjectProgressRequestAfterCommit")); _err_ == nil {
 		if err := worker.client.RequestProgress(ctx); err != nil {
-			failpoint.Return(errors.Trace(err))
+			return errors.Trace(err)
 		}
-	})
+	}
 
 	costTime := time.Since(startTime)
 	if costTime > etcdWorkerLogsWarnDuration {

@@ -14,12 +14,12 @@
 package craft
 
 import (
-	"github.com/stretchr/testify/require"
 	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -43,8 +43,8 @@ func TestSizeTable(t *testing.T) {
 
 	size, decoded, err := decodeSizeTables(bits, allocator)
 	require.Nil(t, err)
-	require.Equal(t, decoded, tables)
-	require.Equal(t, size, len(bits)-16)
+	require.Equal(t, tables, decoded)
+	require.Equal(t, len(bits)-16, size)
 }
 
 func TestUvarintReverse(t *testing.T) {
@@ -58,9 +58,9 @@ func TestUvarintReverse(t *testing.T) {
 		bits, bytes1 := encodeUvarintReversed(bits, i)
 		bytes2, u64, err := decodeUvarintReversed(bits)
 		require.Nil(t, err)
-		require.Equal(t, u64, i)
-		require.Equal(t, bytes1, len(bits)-16)
-		require.Equal(t, bytes1, bytes2)
+		require.Equal(t, i, u64)
+		require.Equal(t, len(bits)-16, bytes1)
+		require.Equal(t, bytes2, bytes1)
 		if i == 0 {
 			i = 1
 		} else {
@@ -82,18 +82,18 @@ func TestEncodeChunk(t *testing.T) {
 	bits := encodeStringChunk(nil, stringChunk)
 	bits, decodedStringChunk, err := decodeStringChunk(bits, 3, allocator)
 	require.Nil(t, err)
-	require.Equal(t, len(bits), 0)
-	require.Equal(t, decodedStringChunk, stringChunk)
+	require.Equal(t, 0, len(bits))
+	require.Equal(t, stringChunk, decodedStringChunk)
 
 	bits = encodeNullableStringChunk(nil, nullableStringChunk)
 	bits, decodedNullableStringChunk, err := decodeNullableStringChunk(bits, 3, allocator)
 	require.Nil(t, err)
-	require.Equal(t, len(bits), 0)
-	require.Equal(t, decodedNullableStringChunk, nullableStringChunk)
+	require.Equal(t, 0, len(bits))
+	require.Equal(t, nullableStringChunk, decodedNullableStringChunk)
 
 	bits = encodeVarintChunk(nil, int64Chunk)
 	bits, decodedVarintChunk, err := decodeVarintChunk(bits, 3, allocator)
 	require.Nil(t, err)
-	require.Equal(t, len(bits), 0)
-	require.Equal(t, decodedVarintChunk, int64Chunk)
+	require.Equal(t, 0, len(bits))
+	require.Equal(t, int64Chunk, decodedVarintChunk)
 }

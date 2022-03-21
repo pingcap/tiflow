@@ -38,7 +38,7 @@ func TestApplyChanges(t *testing.T) {
 	require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}))
 	newInfo, err := o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
-	require.Equal(t, newInfo.SinkURI, "mysql://root@downstream-tidb:4000")
+	require.Equal(t, "mysql://root@downstream-tidb:4000", newInfo.SinkURI)
 
 	// Test for cli command flags that should be ignored.
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
@@ -62,7 +62,7 @@ func TestApplyChanges(t *testing.T) {
 	require.Nil(t, cmd.ParseFlags([]string{"--sort-dir=/home"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
-	require.Equal(t, newInfo.SortDir, ".")
+	require.Equal(t, ".", newInfo.SortDir)
 	file, err := os.ReadFile(filename)
 	require.Nil(t, err)
 	require.True(t, strings.Contains(string(file), "this flag cannot be updated and will be ignored"))

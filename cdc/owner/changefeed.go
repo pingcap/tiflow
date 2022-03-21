@@ -153,9 +153,9 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
-		failpoint.Inject("InjectChangefeedFastFailError", func() error {
+		if _, _err_ := failpoint.Eval(_curpkg_("InjectChangefeedFastFailError")); _err_ == nil {
 			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
-		})
+		}
 		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
@@ -264,12 +264,12 @@ LOOP:
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
 		zap.Uint64("checkpoint ts", checkpointTs))
-	failpoint.Inject("NewChangefeedNoRetryError", func() {
-		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
-	})
-	failpoint.Inject("NewChangefeedRetryError", func() {
-		failpoint.Return(errors.New("failpoint injected retriable error"))
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("NewChangefeedNoRetryError")); _err_ == nil {
+		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs)
+	}
+	if _, _err_ := failpoint.Eval(_curpkg_("NewChangefeedRetryError")); _err_ == nil {
+		return errors.New("failpoint injected retriable error")
+	}
 	if c.state.Info.Config.CheckGCSafePoint {
 		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//

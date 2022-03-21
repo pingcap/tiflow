@@ -210,7 +210,7 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 		columnNames = append(columnNames, column.Name.O)
 	}
 
-	failpoint.Inject("DownstreamTrackerWhereCheck", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("DownstreamTrackerWhereCheck")); _err_ == nil {
 		if r.tp == RowChangeUpdate {
 			log.L().Info("UpdateWhereColumnsCheck",
 				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
@@ -218,7 +218,7 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 			log.L().Info("DeleteWhereColumnsCheck",
 				zap.String("Columns", fmt.Sprintf("%v", columnNames)))
 		}
-	})
+	}
 
 	return columnNames, values
 }

@@ -132,7 +132,7 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
 	}
 
-	failpoint.Inject("addEventDelayPoint", func() {})
+	failpoint.Eval(_curpkg_("addEventDelayPoint"))
 
 	task := task{
 		handle: h,
@@ -174,7 +174,7 @@ func (h *defaultEventHandle) Unregister() {
 		return
 	}
 
-	failpoint.Inject("unregisterDelayPoint", func() {})
+	failpoint.Eval(_curpkg_("unregisterDelayPoint"))
 
 	// call synchronize so that all function executions related to this handle will be
 	// linearized BEFORE Unregister.

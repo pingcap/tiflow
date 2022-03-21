@@ -123,9 +123,9 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
 	var finishCh chan error
 	if !isEmptyFlush {
-		failpoint.Inject("InjectErrorBackEndAlloc", func() {
-			failpoint.Return(cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected alloc error")).FastGenWithCause())
-		})
+		if _, _err_ := failpoint.Eval(_curpkg_("InjectErrorBackEndAlloc")); _err_ == nil {
+			return cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected alloc error")).FastGenWithCause()
+		}
 
 		var err error
 		backEnd, err = pool.alloc(ctx)
@@ -166,21 +166,21 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			return nil
 		}
 	}
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		tableID, tableName := util.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
 			zap.Int64("tableID", tableID),
 			zap.String("tableName", tableName),
 			zap.Int("heapID", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs))
-	})
+	}
 
 	if !isEmptyFlush {
 		backEndFinal := backEnd
 		err := heapSorterIOPool.Go(ctx, func() {
-			failpoint.Inject("asyncFlushStartDelay", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("asyncFlushStartDelay")); _err_ == nil {
 				log.Debug("asyncFlushStartDelay")
-			})
+			}
 
 			h.canceller.EnterAsyncOp()
 			defer h.canceller.FinishAsyncOp()
@@ -213,16 +213,16 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 				close(task.finished)
 			}()
 
-			failpoint.Inject("InjectErrorBackEndWrite", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("InjectErrorBackEndWrite")); _err_ == nil {
 				task.finished <- cerrors.ErrUnifiedSorterIOError.Wrap(errors.New("injected write error")).FastGenWithCause()
-				failpoint.Return()
-			})
+				return
+			}
 
 			counter := 0
 			for oldHeap.Len() > 0 {
-				failpoint.Inject("asyncFlushInProcessDelay", func() {
+				if _, _err_ := failpoint.Eval(_curpkg_("asyncFlushInProcessDelay")); _err_ == nil {
 					log.Debug("asyncFlushInProcessDelay")
-				})
+				}
 				// no need to check for cancellation so frequently.
 				if counter%10000 == 0 && h.canceller.IsCanceled() {
 					task.finished <- cerrors.ErrAsyncIOCancelled.GenWithStackByArgs()
@@ -252,7 +252,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 
 			backEndFinal = nil
 
-			failpoint.Inject("sorterDebug", func() {
+			if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 				tableID, tableName := util.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
 					zap.Int("heapID", task.heapSorterID),
@@ -261,7 +261,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
 					zap.Uint64("data-size", dataSize),
 					zap.Int("size", eventCount))
-			})
+			}
 
 			task.finished <- nil // DO NOT access `task` beyond this point in this function
 		})

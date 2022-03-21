@@ -73,19 +73,19 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 	atomic.AddInt64(&openFDCount, 1)
 
 	var totalSize int64
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		info, err := fd.Stat()
 		if err != nil {
-			failpoint.Return(nil, errors.Trace(wrapIOError(err)))
+			return nil, errors.Trace(wrapIOError(err))
 		}
 		totalSize = info.Size()
-	})
+	}
 
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
 			log.Panic("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
 		}
-	})
+	}
 
 	ret := &fileBackEndReader{
 		backEnd:   f,
@@ -110,11 +110,11 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 
 	atomic.AddInt64(&openFDCount, 1)
 
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
 			log.Panic("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
 		}
-	})
+	}
 
 	ret := &fileBackEndWriter{
 		backEnd: f,
@@ -131,11 +131,11 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 }
 
 func (f *fileBackEnd) free() error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		if atomic.LoadInt32(&f.borrowed) != 0 {
 			log.Panic("fileBackEnd: trying to free borrowed file", zap.String("fileName", f.fileName))
 		}
-	})
+	}
 
 	log.Debug("Removing file", zap.String("file", f.fileName))
 
@@ -143,9 +143,9 @@ func (f *fileBackEnd) free() error {
 
 	err := os.Remove(f.fileName)
 	if err != nil {
-		failpoint.Inject("sorterDebug", func() {
-			failpoint.Return(errors.Trace(wrapIOError(err)))
-		})
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
+			return errors.Trace(wrapIOError(err))
+		}
 		// ignore this error in production to provide some resilience
 		log.Warn("fileBackEnd: failed to remove file", zap.Error(wrapIOError(err)))
 	}
@@ -176,16 +176,16 @@ type fileBackEndReader struct {
 }
 
 func (r *fileBackEndReader) readHeader() error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		pos, err := r.f.Seek(0, 1 /* relative to the current position */)
 		if err != nil {
-			failpoint.Return(errors.Trace(err))
+			return errors.Trace(err)
 		}
 		// verify that we are reading from the beginning of the file
 		if pos != 0 {
 			log.Panic("unexpected file descriptor cursor position", zap.Int64("pos", pos))
 		}
-	})
+	}
 
 	var m uint32
 	err := binary.Read(r.reader, binary.LittleEndian, &m)
@@ -258,13 +258,13 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 
 	r.readEvents++
 
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		r.readBytes += int64(4 + 4 + int(size))
 		if r.readBytes > r.totalSize {
 			log.Panic("fileSorterBackEnd: read more bytes than expected, check concurrent use of file",
 				zap.String("fileName", r.backEnd.fileName))
 		}
-	})
+	}
 
 	return event, nil
 }
@@ -276,40 +276,40 @@ func (r *fileBackEndReader) resetAndClose() error {
 
 		r.backEnd.cleanStats()
 
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)
-		})
+		}
 	}()
 
 	if r.f == nil {
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			log.Panic("Double closing of file", zap.String("filename", r.backEnd.fileName))
-		})
+		}
 		log.Warn("Double closing of file", zap.String("filename", r.backEnd.fileName))
 		return nil
 	}
 
 	err := r.f.Truncate(0)
 	if err != nil {
-		failpoint.Inject("sorterDebug", func() {
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 			info, err1 := r.f.Stat()
 			if err1 != nil {
-				failpoint.Return(errors.Trace(wrapIOError(err)))
+				return errors.Trace(wrapIOError(err))
 			}
 
 			log.Info("file debug info", zap.String("filename", info.Name()),
 				zap.Int64("size", info.Size()))
 
-			failpoint.Return(nil)
-		})
+			return nil
+		}
 		log.Warn("fileBackEndReader: could not truncate file", zap.Error(err))
 	}
 
 	err = r.f.Close()
 	if err != nil {
-		failpoint.Inject("sorterDebug", func() {
-			failpoint.Return(errors.Trace(err))
-		})
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
+			return errors.Trace(err)
+		}
 		log.Warn("fileBackEndReader: could not close file", zap.Error(err))
 		return nil
 	}
@@ -417,9 +417,9 @@ func (w *fileBackEndWriter) flushAndClose() error {
 
 	err = w.f.Close()
 	if err != nil {
-		failpoint.Inject("sorterDebug", func() {
-			failpoint.Return(errors.Trace(wrapIOError(err)))
-		})
+		if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
+			return errors.Trace(wrapIOError(err))
+		}
 		log.Warn("fileBackEndReader: could not close file", zap.Error(err))
 		return nil
 	}
@@ -428,9 +428,9 @@ func (w *fileBackEndWriter) flushAndClose() error {
 	w.backEnd.size = w.bytesWritten
 	atomic.AddInt64(&pool.onDiskDataSize, w.bytesWritten)
 
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		atomic.StoreInt32(&w.backEnd.borrowed, 0)
-	})
+	}
 
 	return nil
 }

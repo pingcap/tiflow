@@ -206,10 +206,10 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	failpoint.Inject("NewUpstreamServer", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("NewUpstreamServer")); _err_ == nil {
 		// test a bug which caused by upstream switching
 		isNew = true
-	})
+	}
 
 	if isNew {
 		// re-setup meta for new server or new source
@@ -448,10 +448,10 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 	}
 
 	// mock file truncated by recover
-	failpoint.Inject("MockRecoverRelayWriter", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("MockRecoverRelayWriter")); _err_ == nil {
 		r.logger.Info("mock recover relay writer")
-		failpoint.Goto("bypass")
-	})
+		goto bypass
+	}
 
 	// in most cases, we think the file is fine, so compare the size is simpler.
 	if fs.Size() == latestPos {
@@ -463,8 +463,7 @@ func (r *Relay) doRecovering(ctx context.Context, binlogDir, filename string, pa
 	} else if fs.Size() < latestPos {
 		return recoverResult{}, terror.ErrRelayWriterLatestPosGTFileSize.Generate(latestPos, fs.Size())
 	}
-
-	failpoint.Label("bypass")
+bypass:
 
 	// truncate the file
 	f, err := os.OpenFile(fullName, os.O_WRONLY, 0o600)
@@ -570,7 +569,7 @@ func (r *Relay) handleEvents(
 		// 1. read events from upstream server
 		readTimer := time.Now()
 		rResult, err := reader2.GetEvent(ctx)
-		failpoint.Inject("RelayGetEventFailed", func(v failpoint.Value) {
+		if v, _err_ := failpoint.Eval(_curpkg_("RelayGetEventFailed")); _err_ == nil {
 			if intVal, ok := v.(int); ok && intVal == eventIndex {
 				err = errors.New("fail point triggered")
 				_, gtid := r.meta.GTID()
@@ -579,7 +578,7 @@ func (r *Relay) handleEvents(
 				// wait backoff retry interval
 				time.Sleep(1 * time.Second)
 			}
-		})
+		}
 		if err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:
@@ -606,10 +605,10 @@ func (r *Relay) handleEvents(
 		}
 
 		binlogReadDurationHistogram.Observe(time.Since(readTimer).Seconds())
-		failpoint.Inject("BlackholeReadBinlog", func(_ failpoint.Value) {
+		if _, _err_ := failpoint.Eval(_curpkg_("BlackholeReadBinlog")); _err_ == nil {
 			// r.logger.Info("back hole read binlog takes effects")
-			failpoint.Continue()
-		})
+			continue
+		}
 
 		e := rResult.Event
 		r.logger.Debug("receive binlog event with header", zap.Reflect("header", e.Header))

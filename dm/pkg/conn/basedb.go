@@ -114,19 +114,19 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("failDBPing")); _err_ == nil {
 		db.Close()
 		db, mockDB, _ = sqlmock.New()
 		mockDB.ExpectPing()
 		mockDB.ExpectClose()
-	})
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("failDBPing")); _err_ == nil {
 		err = errors.New("injected error")
-	})
+	}
 	if err != nil {
 		db.Close()
 		doFuncInClose()

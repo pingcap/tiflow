@@ -28,12 +28,12 @@ import (
 
 // NewProducer create a pulsar producer.
 func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
-	failpoint.Inject("MockPulsar", func() {
-		failpoint.Return(&Producer{
+	if _, _err_ := failpoint.Eval(_curpkg_("MockPulsar")); _err_ == nil {
+		return &Producer{
 			errCh:        errCh,
 			partitionNum: 4,
-		}, nil)
-	})
+		}, nil
+	}
 
 	opt, err := parseSinkOptions(u)
 	if err != nil {

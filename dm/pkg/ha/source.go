@@ -76,9 +76,9 @@ func GetSourceCfg(cli *clientv3.Client, source string, rev int64) (map[string]*c
 		resp *clientv3.GetResponse
 		err  error
 	)
-	failpoint.Inject("FailToGetSourceCfg", func() {
-		failpoint.Return(scm, 0, context.DeadlineExceeded)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("FailToGetSourceCfg")); _err_ == nil {
+		return scm, 0, context.DeadlineExceeded
+	}
 	if source != "" {
 		resp, err = cli.Get(ctx, common.UpstreamConfigKeyAdapter.Encode(source), clientv3.WithRev(rev))
 	} else {

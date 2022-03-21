@@ -155,14 +155,14 @@ func (w *SourceWorker) Start() {
 	w.l.Info("start running")
 
 	printTaskInterval := 30 * time.Second
-	failpoint.Inject("PrintStatusCheckSeconds", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("PrintStatusCheckSeconds")); _err_ == nil {
 		if seconds, ok := val.(int); ok {
 			printTaskInterval = time.Duration(seconds) * time.Second
 			log.L().Info("set printStatusInterval",
 				zap.String("failpoint", "PrintStatusCheckSeconds"),
 				zap.Int("value", seconds))
 		}
-	})
+	}
 
 	ticker := time.NewTicker(printTaskInterval)
 	w.closed.Store(false)
@@ -305,14 +305,14 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 
 	w.startedRelayBySourceCfg = startBySourceCfg
 
-	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
-		failpoint.Goto("bypass")
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("MockGetSourceCfgFromETCD")); _err_ == nil {
+		goto bypass
+	}
 	// we need update config from etcd first in case this cfg is updated by master
 	if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 		return refreshErr
 	}
-	failpoint.Label("bypass")
+bypass:
 
 	w.relayCtx, w.relayCancel = context.WithCancel(w.ctx)
 	// 1. adjust relay starting position, to the earliest of subtasks
@@ -629,14 +629,14 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		w.l.Info("pause subtask", zap.String("task", name))
 		err = st.Pause()
 	case pb.TaskOp_Resume:
-		failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
-			failpoint.Goto("bypassRefresh")
-		})
+		if _, _err_ := failpoint.Eval(_curpkg_("SkipRefreshFromETCDInUT")); _err_ == nil {
+			goto bypassRefresh
+		}
 		if refreshErr := w.tryRefreshSubTaskAndSourceConfig(st); refreshErr != nil {
 			// NOTE: for current unit is not syncer unit or is in shard merge.
 			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
 		}
-		failpoint.Label("bypassRefresh")
+	bypassRefresh:
 		w.l.Info("resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:

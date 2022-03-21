@@ -803,7 +803,7 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 
 // removeLock removes the lock in memory and its information in etcd.
 func (o *Optimist) removeLock(lock *optimism.Lock) (bool, error) {
-	failpoint.Inject("SleepWhenRemoveLock", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("SleepWhenRemoveLock")); _err_ == nil {
 		t := val.(int)
 		log.L().Info("wait new ddl info putted into etcd in optimistic",
 			zap.String("failpoint", "SleepWhenRemoveLock"),
@@ -839,7 +839,7 @@ func (o *Optimist) removeLock(lock *optimism.Lock) (bool, error) {
 				}
 			}
 		}
-	})
+	}
 	deleted, err := o.deleteInfosOps(lock)
 	if err != nil {
 		return deleted, err

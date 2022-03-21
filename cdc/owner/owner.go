@@ -138,10 +138,10 @@ func NewOwner4Test(
 
 // Tick implements the Reactor interface
 func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	failpoint.Inject("owner-run-with-error", func() {
-		failpoint.Return(nil, errors.New("owner run with injected error"))
-	})
-	failpoint.Inject("sleep-in-owner-tick", nil)
+	if _, _err_ := failpoint.Eval(_curpkg_("owner-run-with-error")); _err_ == nil {
+		return nil, errors.New("owner run with injected error")
+	}
+	failpoint.Eval(_curpkg_("sleep-in-owner-tick"))
 	state := rawState.(*orchestrator.GlobalReactorState)
 	// At the first Tick, we need to do a bootstrap operation.
 	// Fix incompatible or incorrect meta information.

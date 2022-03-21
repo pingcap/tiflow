@@ -182,12 +182,12 @@ func getGlobalPos(tctx *tcontext.Context, dbConn *conn.BaseConn, tableName, sour
 func getGTIDsForPos(tctx *tcontext.Context, pos gmysql.Position, tcpReader reader.Reader) (gs gtid.Set, err error) {
 	// NOTE: because we have multiple unit test cases updating/clearing binlog in the upstream,
 	// we may encounter errors when reading binlog event but cleared by another test case.
-	failpoint.Inject("MockGetGTIDsForPos", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("MockGetGTIDsForPos")); _err_ == nil {
 		str := val.(string)
 		gs, _ = gtid.ParserGTID(gmysql.MySQLFlavor, str)
 		tctx.L().Info("set gs for position", zap.String("failpoint", "MockGetGTIDsForPos"), zap.Stringer("pos", pos))
-		failpoint.Return(gs, nil)
-	})
+		return gs, nil
+	}
 
 	var realPos gmysql.Position
 	realPos, err = binlog.RealMySQLPos(pos)

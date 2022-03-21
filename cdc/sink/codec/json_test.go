@@ -75,11 +75,11 @@ func (s *batchSuite) testBatchCodec(encoderBuilder EncoderBuilder, newDecoder fu
 			if !hasNext {
 				break
 			}
-			require.Equal(s.T(), tp, model.MqMessageTypeRow)
+			require.Equal(s.T(), model.MqMessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(s.T(), err)
 			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
-			require.Equal(s.T(), row, cs[index])
+			require.Equal(s.T(), cs[index], row)
 			index++
 		}
 	}
@@ -91,10 +91,10 @@ func (s *batchSuite) testBatchCodec(encoderBuilder EncoderBuilder, newDecoder fu
 			if !hasNext {
 				break
 			}
-			require.Equal(s.T(), tp, model.MqMessageTypeDDL)
+			require.Equal(s.T(), model.MqMessageTypeDDL, tp)
 			ddl, err := decoder.NextDDLEvent()
 			require.Nil(s.T(), err)
-			require.Equal(s.T(), ddl, cs[index])
+			require.Equal(s.T(), cs[index], ddl)
 			index++
 		}
 	}
@@ -106,10 +106,10 @@ func (s *batchSuite) testBatchCodec(encoderBuilder EncoderBuilder, newDecoder fu
 			if !hasNext {
 				break
 			}
-			require.Equal(s.T(), tp, model.MqMessageTypeResolved)
+			require.Equal(s.T(), model.MqMessageTypeResolved, tp)
 			ts, err := decoder.NextResolvedEvent()
 			require.Nil(s.T(), err)
-			require.Equal(s.T(), ts, cs[index])
+			require.Equal(s.T(), cs[index], ts)
 			index++
 		}
 	}
@@ -125,7 +125,7 @@ func (s *batchSuite) testBatchCodec(encoderBuilder EncoderBuilder, newDecoder fu
 		if len(cs) > 0 {
 			res := encoder.Build()
 			require.Len(s.T(), res, 1)
-			require.Equal(s.T(), res[0].GetRowsCount(), len(cs))
+			require.Equal(s.T(), len(cs), res[0].GetRowsCount())
 			decoder, err := newDecoder(res[0].Key, res[0].Value)
 			require.Nil(s.T(), err)
 			checkRowDecoder(decoder, cs)
@@ -163,8 +163,8 @@ func (s *batchSuite) TestBuildJSONEventBatchEncoder() {
 	builder := &jsonEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*JSONEventBatchEncoder)
 	require.True(s.T(), ok)
-	require.Equal(s.T(), encoder.maxBatchSize, config.maxBatchSize)
-	require.Equal(s.T(), encoder.maxMessageBytes, config.maxMessageBytes)
+	require.Equal(s.T(), config.maxBatchSize, encoder.maxBatchSize)
+	require.Equal(s.T(), config.maxMessageBytes, encoder.maxMessageBytes)
 }
 
 func (s *batchSuite) TestMaxMessageBytes() {
@@ -234,15 +234,15 @@ func (s *batchSuite) TestMaxBatchSize() {
 			if !hasNext {
 				break
 			}
-			require.Equal(s.T(), t, model.MqMessageTypeRow)
+			require.Equal(s.T(), model.MqMessageTypeRow, t)
 			_, err = decoder.NextRowChangedEvent()
 			require.Nil(s.T(), err)
 			count++
 		}
-		require.LessOrEqual(s.T(), count, 64)
+		require.LessOrEqual(s.T(), count,64)
 		sum += count
 	}
-	require.Equal(s.T(), sum, 10000)
+	require.Equal(s.T(), 10000, sum)
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec() {
@@ -264,7 +264,7 @@ func TestFormatCol(t *testing.T) {
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
 	require.Nil(t, err)
-	require.Equal(t, row2, row)
+	require.Equal(t, row, row2)
 
 	row = &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeBlob,
@@ -275,7 +275,7 @@ func TestFormatCol(t *testing.T) {
 	row2 = new(mqMessageRow)
 	err = row2.Decode(rowEncode)
 	require.Nil(t, err)
-	require.Equal(t, row2, row)
+	require.Equal(t, row, row2)
 }
 
 func TestNonBinaryStringCol(t *testing.T) {
@@ -293,11 +293,11 @@ func TestNonBinaryStringCol(t *testing.T) {
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
 	require.Nil(t, err)
-	require.Equal(t, row2, row)
+	require.Equal(t, row, row2)
 	jsonCol2 := row2.Update["test"]
 	col2 := jsonCol2.ToSinkColumn("test")
 	col2.Value = string(col2.Value.([]byte))
-	require.Equal(t, col2, col)
+	require.Equal(t, col, col2)
 }
 
 func TestVarBinaryCol(t *testing.T) {
@@ -316,8 +316,8 @@ func TestVarBinaryCol(t *testing.T) {
 	row2 := new(mqMessageRow)
 	err = row2.Decode(rowEncode)
 	require.Nil(t, err)
-	require.Equal(t, row2, row)
+	require.Equal(t, row, row2)
 	jsonCol2 := row2.Update["test"]
 	col2 := jsonCol2.ToSinkColumn("test")
-	require.Equal(t, col2, col)
+	require.Equal(t, col, col2)
 }

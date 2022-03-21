@@ -84,7 +84,7 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 		}
 	}
 
-	failpoint.Inject("BlockSyncStatus", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("BlockSyncStatus")); _err_ == nil {
 		interval, err := time.ParseDuration(val.(string))
 		if err != nil {
 			s.tctx.L().Warn("inject failpoint BlockSyncStatus failed", zap.Reflect("value", val), zap.Error(err))
@@ -92,7 +92,7 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 			s.tctx.L().Info("set BlockSyncStatus", zap.String("failpoint", "BlockSyncStatus"), zap.Duration("value", interval))
 			time.Sleep(interval)
 		}
-	})
+	}
 	go s.printStatus(sourceStatus)
 	return st
 }

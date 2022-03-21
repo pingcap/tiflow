@@ -48,16 +48,16 @@ func (s *LocalStreamer) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 		return nil, terror.ErrNeedSyncAgain.Generate()
 	}
 
-	failpoint.Inject("GetEventFromLocalFailed", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("GetEventFromLocalFailed")); _err_ == nil {
 		log.L().Info("get event from local failed", zap.String("failpoint", "GetEventFromLocalFailed"))
-		failpoint.Return(nil, terror.ErrSyncClosed.Generate())
-	})
+		return nil, terror.ErrSyncClosed.Generate()
+	}
 
-	failpoint.Inject("SetHeartbeatInterval", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("SetHeartbeatInterval")); _err_ == nil {
 		i := v.(int)
 		log.L().Info("will change heartbeat interval", zap.Int("new", i))
 		heartbeatInterval = time.Duration(i) * time.Second
-	})
+	}
 
 	fired := false
 	s.heatBeatTimer.Reset(heartbeatInterval)

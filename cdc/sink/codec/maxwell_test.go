@@ -60,8 +60,8 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(newEncoder func() EventBatchEn
 			continue
 		}
 		require.Len(s.T(), messages, 1)
-		require.Equal(s.T(), messages[0].GetRowsCount(), len(cs))
-		require.Equal(s.T(), len(messages[0].Key)+len(messages[0].Value), size)
+		require.Equal(s.T(), len(cs), messages[0].GetRowsCount())
+		require.Equal(s.T(), size, len(messages[0].Key)+len(messages[0].Value))
 	}
 
 	for _, cs := range s.ddlCases {

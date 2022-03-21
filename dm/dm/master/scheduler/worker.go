@@ -255,21 +255,21 @@ func (w *Worker) reportMetrics() {
 func (w *Worker) queryStatus(ctx context.Context) (*workerrpc.Response, error) {
 	rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
 	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
-	failpoint.Inject("operateWorkerQueryStatus", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("operateWorkerQueryStatus")); _err_ == nil {
 		resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
 		switch v.(string) {
 		case "notInSyncUnit":
 			resp.QueryStatus.SubTaskStatus = append(
 				resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Unit: pb.UnitType_Dump})
-			failpoint.Return(resp, nil)
+			return resp, nil
 		case "allTaskIsPaused":
 			resp.QueryStatus.SubTaskStatus = append(
 				resp.QueryStatus.SubTaskStatus, &pb.SubTaskStatus{Stage: pb.Stage_Paused, Unit: pb.UnitType_Sync})
-			failpoint.Return(resp, nil)
+			return resp, nil
 		default:
-			failpoint.Return(nil, errors.New("query error"))
+			return nil, errors.New("query error")
 		}
-	})
+	}
 	return w.SendRequest(ctx, req, rpcTimeOut)
 }
 
@@ -283,22 +283,22 @@ func (w *Worker) checkSubtasksCanUpdate(ctx context.Context, cfg *config.SubTask
 		Type:                   workerrpc.CmdCheckSubtasksCanUpdate,
 		CheckSubtasksCanUpdate: &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr},
 	}
-	failpoint.Inject("operateCheckSubtasksCanUpdate", func(v failpoint.Value) {
+	if v, _err_ := failpoint.Eval(_curpkg_("operateCheckSubtasksCanUpdate")); _err_ == nil {
 		resp := &workerrpc.Response{
 			Type: workerrpc.CmdCheckSubtasksCanUpdate, CheckSubtasksCanUpdate: &pb.CheckSubtasksCanUpdateResponse{},
 		}
 		switch v.(string) {
 		case "success":
 			resp.CheckSubtasksCanUpdate.Success = true
-			failpoint.Return(resp, nil)
+			return resp, nil
 		case "failed":
 			resp.CheckSubtasksCanUpdate.Success = false
 			resp.CheckSubtasksCanUpdate.Msg = "error happened"
-			failpoint.Return(resp, nil)
+			return resp, nil
 		default:
-			failpoint.Return(nil, errors.New("query error"))
+			return nil, errors.New("query error")
 		}
-	})
+	}
 
 	return w.SendRequest(ctx, req, rpcTimeOut)
 }

@@ -103,9 +103,9 @@ func ResetGlobalPoolWithoutCleanup() {
 
 // Run implements the EventSorter interface
 func (s *Sorter) Run(ctx context.Context) error {
-	failpoint.Inject("sorterDebug", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("sorterDebug")); _err_ == nil {
 		log.Info("sorterDebug: Running Unified Sorter in debug mode")
-	})
+	}
 
 	defer close(s.closeCh)
 

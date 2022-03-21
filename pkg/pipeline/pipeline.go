@@ -112,9 +112,9 @@ func (p *Pipeline) SendToFirstNode(msg Message) error {
 		return cerror.ErrSendToClosedPipeline.GenWithStackByArgs()
 	}
 
-	failpoint.Inject("PipelineSendToFirstNodeTryAgain", func() {
-		failpoint.Return(cerror.ErrPipelineTryAgain.GenWithStackByArgs())
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("PipelineSendToFirstNodeTryAgain")); _err_ == nil {
+		return cerror.ErrPipelineTryAgain.GenWithStackByArgs()
+	}
 
 	select {
 	case p.header <- msg:

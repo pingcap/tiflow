@@ -287,7 +287,7 @@ func GetMariaDBGTID(ctx context.Context, db *sql.DB) (gtid.Set, error) {
 
 // GetGlobalVariable gets server's global variable.
 func GetGlobalVariable(ctx context.Context, db *sql.DB, variable string) (value string, err error) {
-	failpoint.Inject("GetGlobalVariableFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("GetGlobalVariableFailed")); _err_ == nil {
 		items := strings.Split(val.(string), ",")
 		if len(items) != 2 {
 			log.L().Fatal("failpoint GetGlobalVariableFailed's value is invalid", zap.String("val", val.(string)))
@@ -300,9 +300,9 @@ func GetGlobalVariable(ctx context.Context, db *sql.DB, variable string) (value 
 		if variable == variableName {
 			err = tmysql.NewErr(uint16(errCode))
 			log.L().Warn("GetGlobalVariable failed", zap.String("variable", variable), zap.String("failpoint", "GetGlobalVariableFailed"), zap.Error(err))
-			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
+			return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-	})
+	}
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -314,7 +314,7 @@ func GetGlobalVariable(ctx context.Context, db *sql.DB, variable string) (value 
 
 // GetSessionVariable gets connection's session variable.
 func GetSessionVariable(ctx context.Context, conn *sql.Conn, variable string) (value string, err error) {
-	failpoint.Inject("GetSessionVariableFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("GetSessionVariableFailed")); _err_ == nil {
 		items := strings.Split(val.(string), ",")
 		if len(items) != 2 {
 			log.L().Fatal("failpoint GetSessionVariableFailed's value is invalid", zap.String("val", val.(string)))
@@ -327,9 +327,9 @@ func GetSessionVariable(ctx context.Context, conn *sql.Conn, variable string) (v
 		if variable == variableName {
 			err = tmysql.NewErr(uint16(errCode))
 			log.L().Warn("GetSessionVariable failed", zap.String("variable", variable), zap.String("failpoint", "GetSessionVariableFailed"), zap.Error(err))
-			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
+			return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
-	})
+	}
 	return getVariable(ctx, conn, variable, false)
 }
 
@@ -554,18 +554,18 @@ func AddGSetWithPurged(ctx context.Context, gset gtid.Set, conn *sql.Conn) (gtid
 		err     error
 	)
 
-	failpoint.Inject("GetGTIDPurged", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("GetGTIDPurged")); _err_ == nil {
 		str := val.(string)
 		gtidStr = str
-		failpoint.Goto("bypass")
-	})
+		goto bypass
+	}
 	row = conn.QueryRowContext(ctx, "select @@GLOBAL.gtid_purged")
 	err = row.Scan(&gtidStr)
 	if err != nil {
 		log.L().Error("can't get @@GLOBAL.gtid_purged when try to add it to gtid set", zap.Error(err))
 		return gset, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	failpoint.Label("bypass")
+bypass:
 	if gtidStr == "" {
 		return gset, nil
 	}

@@ -54,10 +54,10 @@ func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, gtid.Set, error) {
 	pos, gtidSet, err := utils.GetPosAndGs(ctx, conn.BaseDB.DB, flavor)
 
-	failpoint.Inject("GetMasterStatusFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("GetMasterStatusFailed")); _err_ == nil {
 		err = tmysql.NewErr(uint16(val.(int)))
 		log.L().Warn("GetMasterStatus failed", zap.String("failpoint", "GetMasterStatusFailed"), zap.Error(err))
-	})
+	}
 
 	return pos, gtidSet, err
 }

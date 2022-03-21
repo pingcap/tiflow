@@ -135,15 +135,15 @@ func SendRequest(ctx context.Context, reqName string, req interface{}, respPoint
 		return err
 	}
 
-	failpoint.Inject("SkipUpdateMasterClient", func() {
-		failpoint.Goto("bypass")
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("SkipUpdateMasterClient")); _err_ == nil {
+		goto bypass
+	}
 	// update master client
 	err = GlobalCtlClient.updateMasterClient()
 	if err != nil {
 		return err
 	}
-	failpoint.Label("bypass")
+bypass:
 
 	// sendRequest again
 	return GlobalCtlClient.sendRequest(ctx, reqName, req, respPointer, opts...)

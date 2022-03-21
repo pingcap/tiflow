@@ -41,9 +41,9 @@ func RegisterMetrics(registry *prometheus.Registry) {
 func (m *Dumpling) removeLabelValuesWithTaskInMetrics(task, source string) {
 	labels := prometheus.Labels{"task": task, "source_id": source}
 	dumplingExitWithErrorCounter.DeleteAllAboutLabels(labels)
-	failpoint.Inject("SkipRemovingDumplingMetrics", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("SkipRemovingDumplingMetrics")); _err_ == nil {
 		m.logger.Info("", zap.String("failpoint", "SkipRemovingDumplingMetrics"))
-		failpoint.Return()
-	})
+		return
+	}
 	export.RemoveLabelValuesWithTaskInMetrics(labels)
 }

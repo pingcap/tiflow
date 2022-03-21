@@ -144,13 +144,13 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 
 // ExecuteSQLWithIgnore do some SQL executions and can ignore some error by `ignoreError`.
 func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError func(error) bool, queries []string, args ...[]interface{}) (int, error) {
-	failpoint.Inject("ExecuteSQLWithIgnoreFailed", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("ExecuteSQLWithIgnoreFailed")); _err_ == nil {
 		queryPattern := val.(string)
 		if len(queries) == 1 && strings.Contains(queries[0], queryPattern) {
 			tctx.L().Warn("executeSQLWithIgnore failed", zap.String("failpoint", "ExecuteSQLWithIgnoreFailed"))
-			failpoint.Return(0, terror.ErrDBUnExpect.Generate("invalid connection"))
+			return 0, terror.ErrDBUnExpect.Generate("invalid connection")
 		}
-	})
+	}
 
 	if len(queries) == 0 {
 		return 0, nil

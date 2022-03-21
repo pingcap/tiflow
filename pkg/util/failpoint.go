@@ -24,6 +24,6 @@ var FailpointBuild = isFailpointBuild()
 var _failpointValue = failpoint.Value(0) //nolint
 
 func isFailpointBuild() bool {
-	failpoint.Return(true)
+	return true
 	return false
 }

@@ -58,9 +58,9 @@ func NewReaderRetry(cfg ReaderRetryConfig) (*ReaderRetry, error) {
 
 // Check checks whether should retry for the error.
 func (rr *ReaderRetry) Check(ctx context.Context, err error) bool {
-	failpoint.Inject("RelayAllowRetry", func() {
-		failpoint.Return(true)
-	})
+	if _, _err_ := failpoint.Eval(_curpkg_("RelayAllowRetry")); _err_ == nil {
+		return true
+	}
 	if !retry.IsConnectionError(err) {
 		return false
 	}

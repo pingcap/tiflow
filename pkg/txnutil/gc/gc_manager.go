@@ -59,9 +59,9 @@ type gcManager struct {
 // NewManager creates a new Manager.
 func NewManager(pdClient pd.Client) Manager {
 	serverConfig := config.GetGlobalServerConfig()
-	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("InjectGcSafepointUpdateInterval")); _err_ == nil {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
-	})
+	}
 	return &gcManager{
 		pdClient:          pdClient,
 		lastSucceededTime: time.Now(),
@@ -88,9 +88,9 @@ func (m *gcManager) TryUpdateGCSafePoint(
 		}
 		return nil
 	}
-	failpoint.Inject("InjectActualGCSafePoint", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("InjectActualGCSafePoint")); _err_ == nil {
 		actual = uint64(val.(int))
-	})
+	}
 	if actual == checkpointTs {
 		log.Info("update gc safe point success", zap.Uint64("gcSafePointTs", checkpointTs))
 	}

@@ -194,13 +194,13 @@ func (s *Server) startLeaderComponent(ctx context.Context) bool {
 		return false
 	}
 
-	failpoint.Inject("FailToStartLeader", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("FailToStartLeader")); _err_ == nil {
 		masterStrings := val.(string)
 		if strings.Contains(masterStrings, s.cfg.Name) {
 			log.L().Info("fail to start leader", zap.String("failpoint", "FailToStartLeader"))
-			failpoint.Return(false)
+			return false
 		}
-	})
+	}
 
 	return true
 }

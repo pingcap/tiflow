@@ -238,7 +238,7 @@ func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (WResult, e
 	}
 
 	// write the non-duplicate event
-	failpoint.Inject("SlowDownWriteDMLRelayLog", func(_ failpoint.Value) {
+	if _, _err_ := failpoint.Eval(_curpkg_("SlowDownWriteDMLRelayLog")); _err_ == nil {
 		w.logger.Debug("enter SlowDownWriteDMLRelayLog")
 		switch ev.Header.EventType {
 		case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2,
@@ -252,13 +252,12 @@ func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (WResult, e
 			}
 			time.Sleep(time.Second)
 			err = w.out.Write(second)
-			failpoint.Goto("afterWrite")
+			goto afterWrite
 		}
-	})
+	}
 
 	err = w.out.Write(ev.RawData)
-
-	failpoint.Label("afterWrite")
+afterWrite:
 
 	return WResult{
 		Ignore: false,

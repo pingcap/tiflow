@@ -714,7 +714,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if ddlRawKV == nil {
 				continue
 			}
-			failpoint.Inject("processorDDLResolved", nil)
+			failpoint.Eval(_curpkg_("processorDDLResolved"))
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
@@ -1109,7 +1109,7 @@ func (p *processor) Close() error {
 	}
 
 	// mark tables share the same cdcContext with its original table, don't need to cancel
-	failpoint.Inject("processorStopDelay", nil)
+	failpoint.Eval(_curpkg_("processorStopDelay"))
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID)

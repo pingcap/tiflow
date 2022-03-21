@@ -159,10 +159,10 @@ func reportRelayLogSpaceInBackground(ctx context.Context, dirpath string) error 
 	go func() {
 		var ticker *time.Ticker
 		ticker = time.NewTicker(time.Second * 10)
-		failpoint.Inject("ReportRelayLogSpaceInBackground", func(val failpoint.Value) {
+		if val, _err_ := failpoint.Eval(_curpkg_("ReportRelayLogSpaceInBackground")); _err_ == nil {
 			t := val.(int)
 			ticker = time.NewTicker(time.Duration(t) * time.Second)
-		})
+		}
 		defer ticker.Stop()
 		for {
 			select {

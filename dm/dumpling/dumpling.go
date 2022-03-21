@@ -74,7 +74,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
 
-	failpoint.Inject("dumpUnitProcessWithError", func(val failpoint.Value) {
+	if val, _err_ := failpoint.Eval(_curpkg_("dumpUnitProcessWithError")); _err_ == nil {
 		m.logger.Info("dump unit runs with injected error", zap.String("failpoint", "dumpUnitProcessWithError"), zap.Reflect("error", val))
 		msg, ok := val.(string)
 		if !ok {
@@ -84,21 +84,21 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			IsCanceled: false,
 			Errors:     []*pb.ProcessError{unit.NewProcessError(errors.New(msg))},
 		}
-		failpoint.Return()
-	})
+		return
+	}
 
 	begin := time.Now()
 	errs := make([]*pb.ProcessError, 0, 1)
 
-	failpoint.Inject("dumpUnitProcessForever", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("dumpUnitProcessForever")); _err_ == nil {
 		m.logger.Info("dump unit runs forever", zap.String("failpoint", "dumpUnitProcessForever"))
 		<-ctx.Done()
 		pr <- pb.ProcessResult{
 			IsCanceled: true,
 			Errors:     []*pb.ProcessError{unit.NewProcessError(ctx.Err())},
 		}
-		failpoint.Return()
-	})
+		return
+	}
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
@@ -113,10 +113,10 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		return
 	}
 
-	failpoint.Inject("dumpUnitProcessCancel", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("dumpUnitProcessCancel")); _err_ == nil {
 		m.logger.Info("mock dump unit cancel", zap.String("failpoint", "dumpUnitProcessCancel"))
 		<-ctx.Done()
-	})
+	}
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
@@ -153,10 +153,10 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			zap.String("error", unit.JoinProcessErrors(errs)))
 	}
 
-	failpoint.Inject("dumpUnitProcessNoError", func() {
+	if _, _err_ := failpoint.Eval(_curpkg_("dumpUnitProcessNoError")); _err_ == nil {
 		m.logger.Info("dump unit runs no error", zap.String("failpoint", "dumpUnitProcessNoError"))
 		errs = errs[:0]
-	})
+	}
 
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
