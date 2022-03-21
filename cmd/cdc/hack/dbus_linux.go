@@ -26,6 +26,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -39,6 +40,7 @@ const (
 var (
 	execCommand = exec.Command
 	pid         int
+	once        sync.Once
 )
 
 // init check DBUS_SESSION_BUS_ADDRESS first and then try to discovery it.
@@ -82,14 +84,16 @@ func init() {
 
 // TryClearDbusDaemon kill the created daemon-dbus process
 func TryClearDbusDaemon() {
-	if pid > 0 {
-		proc, err := os.FindProcess(pid)
-		if err == nil {
-			// Kill the process
-			log.Info("killing daemon-dbus process", zap.Int("pid", pid))
-			_ = proc.Kill()
+	once.Do(func() {
+		if pid > 0 {
+			proc, err := os.FindProcess(pid)
+			if err == nil {
+				// Kill the process
+				log.Info("killing daemon-dbus process", zap.Int("pid", pid))
+				_ = proc.Kill()
+			}
 		}
-	}
+	})
 }
 
 // canDiscoverDbusSessionBusAddress check if we can discover an existing dbus session
@@ -132,11 +136,14 @@ func canDiscoverDbusSessionBusAddress() bool {
 }
 
 func getRuntimeDirectory() (string, error) {
-	if currentUser, err := user.Current(); err != nil {
+	var (
+		currentUser *user.User
+		err         error
+	)
+	if currentUser, err = user.Current(); err != nil {
 		return "", err
-	} else {
-		return fmt.Sprintf("/run/user/%s", currentUser.Uid), nil
 	}
+	return fmt.Sprintf("/run/user/%s", currentUser.Uid), nil
 }
 
 func fileExists(filename string) bool {
