@@ -112,7 +112,6 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	// check balist
 	c.Assert(subTaskConfig.BAList, check.NotNil)
 	bAListFromOpenAPITask := &filter.Rules{
-		DoDBs:    []string{sourceSchema},
 		DoTables: []*filter.Table{{Schema: sourceSchema, Name: sourceTable}},
 	}
 	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
@@ -200,7 +199,6 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	// check balist
 	c.Assert(subTask1Config.BAList, check.NotNil)
 	bAListFromOpenAPITask := &filter.Rules{
-		DoDBs:    []string{source1Schema},
 		DoTables: []*filter.Table{{Schema: source1Schema, Name: source1Table}},
 	}
 	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
@@ -248,7 +246,6 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	// check balist
 	c.Assert(subTask2Config.BAList, check.NotNil)
 	bAListFromOpenAPITask = &filter.Rules{
-		DoDBs:    []string{source2Schema},
 		DoTables: []*filter.Table{{Schema: source2Schema, Name: source2Table}},
 	}
 	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
