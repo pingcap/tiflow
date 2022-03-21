@@ -179,6 +179,8 @@ type saramaMetricsMonitor struct {
 
 	registry metrics.Registry
 	admin    kafka.ClusterAdminClient
+
+	brokers map[int32]struct{}
 }
 
 // CollectMetrics collect all monitored metrics
@@ -227,6 +229,7 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 	}
 
 	for _, b := range brokers {
+		sm.brokers[b.ID()] = struct{}{}
 		brokerID := strconv.Itoa(int(b.ID()))
 
 		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
@@ -279,20 +282,14 @@ func newSaramaMetricsMonitor(registry metrics.Registry, changefeedID string,
 		role:         role,
 		registry:     registry,
 		admin:        admin,
+		brokers:      make(map[int32]struct{}),
 	}
 }
 
-// Cleanup called when the changefeed stop the kafka sink,
-// broker metrics may cannot be cleaned if that broker cluster information
-// is unreachable, but this might be acceptable because changefeed may be
-// rescheduled, and uncleaned metrics have a chance to be cleaned next time.
+// Cleanup called when the changefeed / processor stop the kafka sink.
 func (sm *saramaMetricsMonitor) Cleanup() {
 	sm.cleanUpProducerMetrics()
-	if err := sm.cleanUpBrokerMetrics(); err != nil {
-		log.Warn("clean up broker metrics failed", zap.Error(err),
-			zap.String("changefeed", sm.changefeedID),
-			zap.Any("role", sm.role))
-	}
+	sm.cleanUpBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
@@ -302,15 +299,10 @@ func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
 	compressionRatioGauge.DeleteLabelValues(sm.changefeedID)
 }
 
-func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
-	brokers, _, err := sm.admin.DescribeCluster()
-	if err != nil {
-		return err
-	}
-
-	for _, b := range brokers {
-		brokerID := strconv.Itoa(int(b.ID()))
-
+func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
+	brokerIDs := sm.getBrokerIDs()
+	for _, id := range brokerIDs {
+		brokerID := strconv.Itoa(int(id))
 		incomingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		outgoingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		requestRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
@@ -320,5 +312,25 @@ func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
 		responseRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		responseSizeGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 	}
-	return nil
+}
+
+func (sm *saramaMetricsMonitor) getBrokerIDs() []int32 {
+	result := make([]int32, 0, len(sm.brokers))
+	brokers, _, err := sm.admin.DescribeCluster()
+	if err != nil {
+		// kafka cluster is unreachable, use historical brokers
+		log.Warn("kafka cluster unreachable,"+
+			" use historical broker information to clean up metrics",
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role))
+		for id := range sm.brokers {
+			result = append(result, id)
+		}
+		return result
+	}
+
+	for _, b := range brokers {
+		result = append(result, b.ID())
+	}
+	return result
 }
