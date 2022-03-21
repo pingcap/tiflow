@@ -30,6 +30,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/metadata"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
@@ -177,6 +178,14 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 	}
 	err = deps.Provide(func() externalresource.Proxy {
 		return proxy
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = deps.Provide(func() broker.Broker {
+		// TODO: use correct broker.Broker
+		return nil
 	})
 	if err != nil {
 		return nil, err
