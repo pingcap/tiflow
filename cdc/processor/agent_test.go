@@ -481,7 +481,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		Return(model.Ts(1000), model.Ts(1000))
 
 	require.Never(t, func() bool {
-		err = agent.Tick(suite.cdcCtx)
+		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 
 		select {
@@ -514,7 +514,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err = agent.Tick(suite.cdcCtx)
+		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 		return false
 	}, 100*time.Millisecond, 10*time.Millisecond)
@@ -528,7 +528,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err = agent.Tick(suite.cdcCtx)
+		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 		return false
 	}, time.Second*3, time.Millisecond*10)
@@ -542,7 +542,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err = agent.Tick(suite.cdcCtx)
+		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 		return false
 	}, time.Second*3, time.Millisecond*10)
