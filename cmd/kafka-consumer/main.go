@@ -562,6 +562,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				log.Info("resolved ts received",
+					zap.Uint64("ts", ts),
+					zap.Int32("partition", partition))
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
@@ -675,9 +678,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL == nil {
-			log.Info("todoDDL not found")
-		} else if todoDDL.CommitTs > minPartitionResolvedTs {
+		if todoDDL != nil && todoDDL.CommitTs > minPartitionResolvedTs {
 			log.Info("ddl's commitTs larger",
 				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
 				zap.Any("DDL", todoDDL))
