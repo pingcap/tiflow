@@ -32,13 +32,18 @@ const (
 	flushInterval = 500 * time.Millisecond
 )
 
+type topicPartitionKey struct {
+	topic     string
+	partition int32
+}
+
 // mqEvent is the event of the mq flush worker.
 // It carries the partition information of the message,
 // and it is also used as resolved ts messaging.
 type mqEvent struct {
+	key        topicPartitionKey
 	row        *model.RowChangedEvent
 	resolvedTs model.Ts
-	partition  int32
 }
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
@@ -116,13 +121,13 @@ func (w *flushWorker) batch(
 }
 
 // group is responsible for grouping messages by the partition.
-func (w *flushWorker) group(events []mqEvent) map[int32][]*model.RowChangedEvent {
-	paritionedRows := make(map[int32][]*model.RowChangedEvent)
+func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.RowChangedEvent {
+	paritionedRows := make(map[topicPartitionKey][]*model.RowChangedEvent)
 	for _, event := range events {
-		if _, ok := paritionedRows[event.partition]; !ok {
-			paritionedRows[event.partition] = make([]*model.RowChangedEvent, 0)
+		if _, ok := paritionedRows[event.key]; !ok {
+			paritionedRows[event.key] = make([]*model.RowChangedEvent, 0)
 		}
-		paritionedRows[event.partition] = append(paritionedRows[event.partition], event.row)
+		paritionedRows[event.key] = append(paritionedRows[event.key], event.row)
 	}
 	return paritionedRows
 }
@@ -130,9 +135,9 @@ func (w *flushWorker) group(events []mqEvent) map[int32][]*model.RowChangedEvent
 // asyncSend is responsible for sending messages to the Kafka producer.
 func (w *flushWorker) asyncSend(
 	ctx context.Context,
-	paritionedRows map[int32][]*model.RowChangedEvent,
+	paritionedRows map[topicPartitionKey][]*model.RowChangedEvent,
 ) error {
-	for partition, events := range paritionedRows {
+	for key, events := range paritionedRows {
 		for _, event := range events {
 			err := w.encoder.AppendRowChangedEvent(event)
 			if err != nil {
@@ -143,7 +148,7 @@ func (w *flushWorker) asyncSend(
 		err := w.statistics.RecordBatchExecution(func() (int, error) {
 			thisBatchSize := 0
 			for _, message := range w.encoder.Build() {
-				err := w.producer.AsyncSendMessage(ctx, message, partition)
+				err := w.producer.AsyncSendMessage(ctx, key.topic, key.partition, message)
 				if err != nil {
 					return 0, err
 				}
