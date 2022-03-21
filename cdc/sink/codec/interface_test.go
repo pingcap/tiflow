@@ -47,13 +47,13 @@ func TestCreate(t *testing.T) {
 	}
 
 	msg := NewMQMessage(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
-	require.Equal(t, msg.Key, []byte("key1"))
-	require.Equal(t, msg.Value, []byte("value1"))
-	require.Equal(t, msg.Ts, rowEvent.CommitTs)
-	require.Equal(t, msg.Type, model.MqMessageTypeRow)
-	require.Equal(t, *msg.Schema, rowEvent.Table.Schema)
-	require.Equal(t, *msg.Table, rowEvent.Table.Table)
-	require.Equal(t, msg.Protocol, config.ProtocolOpen)
+	require.Equal(t, []byte("key1"), msg.Key)
+	require.Equal(t, []byte("value1"), msg.Value)
+	require.Equal(t, rowEvent.CommitTs, msg.Ts)
+	require.Equal(t, model.MqMessageTypeRow, msg.Type)
+	require.Equal(t, rowEvent.Table.Schema, *msg.Schema)
+	require.Equal(t, rowEvent.Table.Table, *msg.Table)
+	require.Equal(t, config.ProtocolOpen, msg.Protocol)
 
 	job := &timodel.Job{
 		ID:         1071,
@@ -93,19 +93,19 @@ func TestCreate(t *testing.T) {
 
 	msg = newDDLMQMessage(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	require.Nil(t, msg.Key)
-	require.Equal(t, msg.Value, []byte("value1"))
-	require.Equal(t, msg.Ts, ddlEvent.CommitTs)
-	require.Equal(t, msg.Type, model.MqMessageTypeDDL)
-	require.Equal(t, *msg.Schema, ddlEvent.TableInfo.Schema)
-	require.Equal(t, *msg.Table, ddlEvent.TableInfo.Table)
-	require.Equal(t, msg.Protocol, config.ProtocolMaxwell)
+	require.Equal(t, []byte("value1"), msg.Value)
+	require.Equal(t, ddlEvent.CommitTs, msg.Ts)
+	require.Equal(t, model.MqMessageTypeDDL, msg.Type)
+	require.Equal(t, ddlEvent.TableInfo.Schema, *msg.Schema)
+	require.Equal(t, ddlEvent.TableInfo.Table, *msg.Table)
+	require.Equal(t, config.ProtocolMaxwell, msg.Protocol)
 
 	msg = newResolvedMQMessage(config.ProtocolCanal, []byte("key1"), nil, 1234)
-	require.Equal(t, msg.Key, []byte("key1"))
+	require.Equal(t, []byte("key1"), msg.Key)
 	require.Nil(t, msg.Value)
-	require.Equal(t, msg.Ts, uint64(1234))
-	require.Equal(t, msg.Type, model.MqMessageTypeResolved)
+	require.Equal(t, uint64(1234), msg.Ts)
+	require.Equal(t, model.MqMessageTypeResolved, msg.Type)
 	require.Nil(t, msg.Schema)
 	require.Nil(t, msg.Table)
-	require.Equal(t, msg.Protocol, config.ProtocolCanal)
+	require.Equal(t, config.ProtocolCanal, msg.Protocol)
 }
