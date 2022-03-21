@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -31,7 +32,7 @@ import (
 type echoNode struct{}
 
 func (e echoNode) Init(ctx NodeContext) error {
-	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	ctx.SendToNextNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "init function is called in echo node",
@@ -45,7 +46,7 @@ func (e echoNode) Receive(ctx NodeContext) error {
 	msg := ctx.Message()
 	log.Info("Receive message in echo node", zap.Any("msg", msg))
 	ctx.SendToNextNode(msg)
-	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	ctx.SendToNextNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "ECHO: " + msg.PolymorphicEvent.Row.Table.Schema,
@@ -57,7 +58,7 @@ func (e echoNode) Receive(ctx NodeContext) error {
 }
 
 func (e echoNode) Destroy(ctx NodeContext) error {
-	ctx.SendToNextNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	ctx.SendToNextNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "destroy function is called in echo node",
@@ -69,7 +70,7 @@ func (e echoNode) Destroy(ctx NodeContext) error {
 
 type checkNode struct {
 	t        *testing.T
-	expected []Message
+	expected []pmessage.Message
 	index    int
 }
 
@@ -104,15 +105,15 @@ func TestPipelineUsage(t *testing.T) {
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "check node", &checkNode{
 		t: t,
-		expected: []Message{
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+		expected: []pmessage.Message{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "init function is called in echo node",
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "I am built by test function",
@@ -120,7 +121,7 @@ func TestPipelineUsage(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "ECHO: I am built by test function",
@@ -128,7 +129,7 @@ func TestPipelineUsage(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "I am built by test function",
@@ -136,7 +137,7 @@ func TestPipelineUsage(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "ECHO: I am built by test function",
@@ -144,7 +145,7 @@ func TestPipelineUsage(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "destroy function is called in echo node",
@@ -154,7 +155,7 @@ func TestPipelineUsage(t *testing.T) {
 		},
 	})
 
-	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -163,7 +164,7 @@ func TestPipelineUsage(t *testing.T) {
 		},
 	}))
 	require.Nil(t, err)
-	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err = p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -216,15 +217,15 @@ func TestPipelineError(t *testing.T) {
 	p.AppendNode(ctx, "error node", &errorNode{t: t})
 	p.AppendNode(ctx, "check node", &checkNode{
 		t: t,
-		expected: []Message{
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+		expected: []pmessage.Message{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "init function is called in echo node",
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "I am built by test function",
@@ -235,7 +236,7 @@ func TestPipelineError(t *testing.T) {
 		},
 	})
 
-	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -246,7 +247,7 @@ func TestPipelineError(t *testing.T) {
 	require.Nil(t, err)
 	// this line may be return an error because the pipeline maybe closed before this line was executed
 	//nolint:errcheck
-	p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -297,7 +298,7 @@ func TestPipelineThrow(t *testing.T) {
 	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 	p.AppendNode(ctx, "echo node", echoNode{})
 	p.AppendNode(ctx, "error node", &throwNode{t: t})
-	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -310,7 +311,7 @@ func TestPipelineThrow(t *testing.T) {
 	// If add some delay here, such as sleep 50ms, there will be more probability
 	// that the second message is not sent.
 	// time.Sleep(time.Millisecond * 50)
-	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err = p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -345,7 +346,7 @@ func TestPipelineAppendNode(t *testing.T) {
 	})
 	runnersSize, outputChannelSize := 2, 64
 	p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
-	err := p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err := p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -354,7 +355,7 @@ func TestPipelineAppendNode(t *testing.T) {
 		},
 	}))
 	require.Nil(t, err)
-	err = p.SendToFirstNode(PolymorphicEventMessage(&model.PolymorphicEvent{
+	err = p.SendToFirstNode(pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		Row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "I am built by test function",
@@ -369,15 +370,15 @@ func TestPipelineAppendNode(t *testing.T) {
 
 	p.AppendNode(ctx, "check node", &checkNode{
 		t: t,
-		expected: []Message{
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+		expected: []pmessage.Message{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "init function is called in echo node",
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "I am built by test function",
@@ -385,7 +386,7 @@ func TestPipelineAppendNode(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "ECHO: I am built by test function",
@@ -393,7 +394,7 @@ func TestPipelineAppendNode(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "I am built by test function",
@@ -401,7 +402,7 @@ func TestPipelineAppendNode(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "ECHO: I am built by test function",
@@ -409,7 +410,7 @@ func TestPipelineAppendNode(t *testing.T) {
 					},
 				},
 			}),
-			PolymorphicEventMessage(&model.PolymorphicEvent{
+			pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 				Row: &model.RowChangedEvent{
 					Table: &model.TableName{
 						Schema: "destroy function is called in echo node",
@@ -424,7 +425,7 @@ func TestPipelineAppendNode(t *testing.T) {
 }
 
 type forward struct {
-	ch chan Message
+	ch chan pmessage.Message
 }
 
 func (n *forward) Init(ctx NodeContext) error {
@@ -459,7 +460,7 @@ func BenchmarkPipeline(b *testing.B) {
 				return err
 			})
 
-			ch := make(chan Message)
+			ch := make(chan pmessage.Message)
 			p := NewPipeline(ctx, -1, runnersSize, outputChannelSize)
 			for j := 0; j < i; j++ {
 				if (j + 1) == i {
@@ -473,7 +474,7 @@ func BenchmarkPipeline(b *testing.B) {
 			b.ResetTimer()
 			b.Run(fmt.Sprintf("%d node(s)", i), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					err := p.SendToFirstNode(BarrierMessage(1))
+					err := p.SendToFirstNode(pmessage.BarrierMessage(1))
 					if err != nil {
 						b.Fatal(err)
 					}

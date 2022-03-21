@@ -198,5 +198,6 @@ func TestWriterPoll(t *testing.T) {
 	}
 
 	// writer should stop once it receives Stop message.
-	require.False(t, writer.Poll(ctx, []actormsg.Message[message.Task]{actormsg.StopMessage[message.Task]()}))
+	msg := actormsg.StopMessage[message.Task]()
+	require.False(t, writer.Poll(ctx, []actormsg.Message[message.Task]{msg}))
 }
