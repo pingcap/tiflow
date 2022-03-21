@@ -15,8 +15,6 @@
 # Run this scripts via `make generate-msgp-code`.
 set -e
 
-find . -type f -name '*.go' | xargs grep 'go:generate msgp' | awk -F '://' '{print $1}' | xargs dirname | uniq | while read dir; do
-	cd $dir
-	go generate
-	cd -
+find . -type f -name '*.go' | xargs grep 'go:generate msgp' | awk -F '://' '{print $1}' | while read file; do
+	./tools/bin/msgp --file=$file
 done

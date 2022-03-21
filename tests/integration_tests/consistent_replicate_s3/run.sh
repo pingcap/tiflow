@@ -91,8 +91,6 @@ function run() {
 
 	run_sql "create table consistent_replicate_s3.USERTABLE2 like consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "insert into consistent_replicate_s3.USERTABLE2 select * from consistent_replicate_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "create table consistent_replicate_s3.GBKTABLE2 like consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_s3.GBKTABLE2 select * from consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 5
@@ -104,7 +102,29 @@ function run() {
 	export GO_FAILPOINTS=''
 	export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
 	export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
-	cdc redo apply --tmp-dir="$WORK_DIR/reod/apply" \
+	cdc redo apply --tmp-dir="$WORK_DIR/redo/apply" \
+		--storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
+		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+	# test gbk compatibility
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/MySQLSinkHangLongTime=return(true)'
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	run_sql "create table consistent_replicate_s3.GBKTABLE2 like consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_s3.GBKTABLE2 values (2, '部署', '美国', '纽约', '世界,你好', 0xCAC0BDE7C4E3BAC3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+	sleep 5
+
+	rm -rf $WORK_DIR/redo/apply
+	rm -rf $WORK_DIR/redo/meta
+	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+	ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/redo/meta
+	cleanup_process $CDC_BINARY
+
+	export GO_FAILPOINTS=''
+	export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
+	export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
+	cdc redo apply --tmp-dir="$WORK_DIR/redo/apply" \
 		--storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
 		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml

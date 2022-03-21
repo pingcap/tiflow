@@ -404,8 +404,8 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 	}
 
 	var characterSetName string
-	querySQL := fmt.Sprintf("select character_set_name from information_schema.character_sets "+
-		"where character_set_name = '%s';", charsetName)
+	querySQL := "select character_set_name from information_schema.character_sets " +
+		"where character_set_name = '" + charsetName + "';"
 	err = db.QueryRowContext(ctx, querySQL).Scan(&characterSetName)
 	if err != nil && err != sql.ErrNoRows {
 		return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
