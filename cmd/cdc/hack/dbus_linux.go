@@ -31,17 +31,15 @@ const (
 
 // init check DBUS_SESSION_BUS_ADDRESS first and then try to discovery it.
 // if DBUS_SESSION_BUS_ADDRESS is found, do nothing, go-dbus will not create daemon-dbus,
-// if not, then create daemon-dbus, and set DBUS_SESSION_BUS_ADDRESS env and record the pid
+// if not, set an invalid env, so god-bus will not start daemon-dbus process
 // so can we kill the created process when cdc command is stopped
+// TODO: remove this file after pulsar client is removed
 func init() {
 	if address := os.Getenv(dbusSessionEnvName); address != "" && address != "autolaunch:" {
 		return
 	} else if canDiscoverDbusSessionBusAddress() {
 		return
 	}
-	// can not find and discovery DBUS_SESSION_BUS_ADDRESS, set an invalid env,
-	// so godbus will not start daemon-dbus process
-	// TODO: remove this file after pulsar client is removed
 	os.Setenv(dbusSessionEnvName, "/tmp/cdc.dbus.invalid")
 }
 
