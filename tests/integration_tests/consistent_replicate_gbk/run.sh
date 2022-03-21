@@ -87,7 +87,7 @@ function run() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_sql "create table consistent_replicate_gbk.GBKTABLE2 like consistent_replicate_gbk.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_gbk.GBKTABLE2 select * from consistent_replicate_s3.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_gbk.GBKTABLE2 select * from consistent_replicate_gbk.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 5
