@@ -75,3 +75,5 @@ issues:
         - errcheck
         - gosec
         - makezero
+run:
+  go: 1.18
