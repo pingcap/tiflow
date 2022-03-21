@@ -15,12 +15,10 @@ package main
 
 import (
 	_ "github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tiflow/cmd/cdc/hack"
+	_ "github.com/pingcap/tiflow/cmd/cdc/hack"
 	"github.com/pingcap/tiflow/pkg/cmd"
 )
 
 func main() {
-	// todo: remove this after pulsar is removed
-	defer hack.TryClearDbusDaemon()
 	cmd.Run()
 }

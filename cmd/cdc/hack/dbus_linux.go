@@ -17,30 +17,16 @@
 package hack
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"os/user"
 	"path"
-	"strconv"
 	"strings"
-	"sync"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 const (
-	dbusSessionEnvName    = "DBUS_SESSION_BUS_ADDRESS"
-	dbusSessionBusPidItem = "DBUS_SESSION_BUS_PID"
-)
-
-var (
-	execCommand = exec.Command
-	pid         int
-	once        sync.Once
+	dbusSessionEnvName = "DBUS_SESSION_BUS_ADDRESS"
 )
 
 // init check DBUS_SESSION_BUS_ADDRESS first and then try to discovery it.
@@ -53,47 +39,10 @@ func init() {
 	} else if canDiscoverDbusSessionBusAddress() {
 		return
 	}
-
-	cmd := execCommand("dbus-launch")
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		return
-	}
-
-	// the output is something like
-	// DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-18tPZg6i5m,guid=aae98bb29cd89d5f6d98d8cc6232d272
-	// DBUS_SESSION_BUS_PID=2520491
-	firstIndex := bytes.IndexByte(b, '=')
-	lastIndex := bytes.IndexByte(b, '\n')
-
-	if firstIndex == -1 || lastIndex == -1 || firstIndex > lastIndex {
-		return
-	}
-
-	env, addr := string(b[0:firstIndex]), string(b[firstIndex+1:lastIndex])
-	// set DBUS_SESSION_BUS_ADDRESS env to avoid godbus create a new daemon-dubs process
-	os.Setenv(env, addr)
-	firstIndex = bytes.Index(b, []byte(dbusSessionBusPidItem))
-	if firstIndex == -1 {
-		log.Warn("can not parse daemon-dbus process id", zap.String("output", string(b)))
-		return
-	}
-	pid, _ = strconv.Atoi(strings.TrimSpace(string(b[firstIndex+len(dbusSessionBusPidItem)+1:])))
-	log.Info("daemon-dbus is started", zap.Int("pid", pid))
-}
-
-// TryClearDbusDaemon kill the created daemon-dbus process
-func TryClearDbusDaemon() {
-	once.Do(func() {
-		if pid > 0 {
-			proc, err := os.FindProcess(pid)
-			if err == nil {
-				// Kill the process
-				log.Info("killing daemon-dbus process", zap.Int("pid", pid))
-				_ = proc.Kill()
-			}
-		}
-	})
+	// can not find and discovery DBUS_SESSION_BUS_ADDRESS, set an invalid env,
+	// so godbus will not start daemon-dbus process
+	// TODO: remove this file after pulsar client is removed
+	os.Setenv(dbusSessionEnvName, "/tmp/cdc.dbus.invalid")
 }
 
 // canDiscoverDbusSessionBusAddress check if we can discover an existing dbus session
