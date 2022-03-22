@@ -83,8 +83,6 @@ const CreateTaskConfig: React.FC<{
 
   const handleSubmit = async (taskData: TaskFormData) => {
     const isEditing = Boolean(data)
-    const key = 'createTask-' + Date.now()
-    message.loading({ content: t('requesting'), key })
     const payload = { ...taskData }
     const startAfterSaved = payload.start_after_saved
     if (payload.shard_mode === TaskShardMode.NONE) {
@@ -105,12 +103,14 @@ const CreateTaskConfig: React.FC<{
       )
     }
     const handler = isEditing ? updateTask : createTask
+    const key = 'createTask-' + Date.now()
+    message.loading({ content: t('requesting'), key })
     try {
       await handler({ task: payload as Task }).unwrap()
-      message.success({ content: t('request success'), key })
       if (startAfterSaved) {
         await startTask({ taskName: payload.name }).unwrap()
       }
+      message.success({ content: t('request success'), key })
       navigate('/migration/task')
     } catch (e) {
       message.destroy(key)
@@ -131,7 +131,7 @@ const CreateTaskConfig: React.FC<{
   useEffect(() => {
     if (data) {
       setTaskData(
-        merge({}, defaultValue, omit(data, 'status_list'), {
+        merge({}, omit(data, 'status_list'), {
           binlog_filter_rule_array: Object.entries(
             data?.binlog_filter_rule ?? {}
           ).map(([name, value]) => ({ name, ...value })),
