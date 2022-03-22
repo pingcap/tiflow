@@ -283,9 +283,9 @@ func (vw *validateWorker) getErrorRows() []*validateFailedRow {
 func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		vals := make([]string, 0, len(table.pkIndices))
-		for _, idx := range table.pkIndices {
-			vals = append(vals, genColData(r.Data[idx]))
+		vals := make([]string, 0, len(table.PrimaryKey.Columns))
+		for _, col := range table.PrimaryKey.Columns {
+			vals = append(vals, genColData(r.Data[col.Offset]))
 		}
 		pkValues = append(pkValues, vals)
 	}
@@ -407,9 +407,10 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 		if err != nil {
 			return nil, err
 		}
-		pkValues := make([]string, 0, len(cond.Table.pkIndices))
-		for _, idx := range cond.Table.pkIndices {
-			pkValues = append(pkValues, rowData[idx].String)
+		pkCols := cond.Table.PrimaryKey.Columns
+		pkValues := make([]string, 0, len(pkCols))
+		for _, col := range pkCols {
+			pkValues = append(pkValues, rowData[col.Offset].String)
 		}
 		pk := genRowKey(pkValues)
 		result[pk] = rowData

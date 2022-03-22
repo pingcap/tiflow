@@ -60,7 +60,6 @@ type validateTableInfo struct {
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	Target     *filter.Table // target table after route
-	pkIndices  []int         // TODO: can we use offset of in indexColumn? may remove this field in that case
 }
 
 type rowChangeType int
@@ -596,11 +595,6 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*valida
 	for _, col := range tableInfo.Columns {
 		columnMap[col.Name.O] = col
 	}
-	pkIndices := make([]int, len(primaryIdx.Columns))
-	for i, col := range primaryIdx.Columns {
-		pkIndices[i] = columnMap[col.Name.O].Offset
-	}
-	table.pkIndices = pkIndices
 
 	return table, nil
 }
@@ -670,18 +664,19 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	for i := 0; i < len(ev.Rows); i += step {
 		row := ev.Rows[i]
-		pkValue := make([]string, len(table.pkIndices))
-		for _, idx := range table.pkIndices {
-			pkValue[idx] = genColData(row[idx])
+		pkCols := table.PrimaryKey.Columns
+		pkValue := make([]string, len(pkCols))
+		for idx, col := range pkCols {
+			pkValue[idx] = genColData(row[col.Offset])
 		}
 		key := genRowKey(pkValue)
 
 		if changeType == rowUpdated {
 			afterRowChangeType := changeType
 			afterRow := ev.Rows[i+1]
-			afterPkValue := make([]string, len(table.pkIndices))
-			for _, idx := range table.pkIndices {
-				afterPkValue[idx] = genColData(afterRow[idx])
+			afterPkValue := make([]string, len(pkCols))
+			for idx, col := range pkCols {
+				afterPkValue[idx] = genColData(afterRow[col.Offset])
 			}
 			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {

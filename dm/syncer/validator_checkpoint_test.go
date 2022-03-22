@@ -23,6 +23,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	"github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -30,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
@@ -61,7 +62,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.schemaLoaded.Store(true)
-	syncerObj.tableRouter, err = router.NewRouter(cfg.CaseSensitive, []*router.TableRule{})
+	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
 	currLoc := binlog.NewLocation(cfg.Flavor)
 	currLoc.Position = mysql.Position{
