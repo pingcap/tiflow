@@ -7,6 +7,7 @@ require (
 	github.com/axw/gocov v1.0.0
 	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/tinylib/msgp v1.1.6
 	github.com/golang/mock v1.6.0
 	github.com/golangci/golangci-lint v1.44.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
