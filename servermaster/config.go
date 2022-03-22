@@ -26,6 +26,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
@@ -60,7 +61,9 @@ var (
 // NewConfig creates a config for dm-master.
 func NewConfig() *Config {
 	cfg := &Config{
-		Etcd: &etcdutils.ConfigParams{},
+		Etcd:          &etcdutils.ConfigParams{},
+		FrameMetaConf: NewFrameMetaConfig(),
+		UserMetaConf:  NewDefaultUserMetaConfig(),
 	}
 	cfg.flagSet = flag.NewFlagSet("dm-master", flag.ContinueOnError)
 	fs := cfg.flagSet
@@ -77,6 +80,13 @@ func NewConfig() *Config {
 
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
+
+	var endpoints string
+	fs.StringVar(&endpoints, "frame-meta-endpoints", "", `framework metastore endpoints`)
+	cfg.FrameMetaConf.SetEndpoints(endpoints)
+	fs.StringVar(&endpoints, "user-meta-endpoints", "", `user metastore endpoints`)
+	cfg.UserMetaConf.SetEndpoints(endpoints)
+
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
 	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
 	fs.StringVar(&cfg.Etcd.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)
@@ -102,6 +112,9 @@ type Config struct {
 	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutils.ConfigParams `toml:"etcd" json:"etcd"`
+
+	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness

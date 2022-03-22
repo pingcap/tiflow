@@ -9,7 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -18,7 +18,7 @@ type BaseJobMaster interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	OnError(err error)
-	MetaKVClient() metadata.MetaKV
+	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
 	Workload() model.RescUnit
@@ -93,7 +93,7 @@ func NewBaseJobMaster(
 	}
 }
 
-func (d *DefaultBaseJobMaster) MetaKVClient() metadata.MetaKV {
+func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
 }
 

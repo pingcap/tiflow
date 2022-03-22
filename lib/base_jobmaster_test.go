@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -129,7 +129,8 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 	params := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          metadata.NewMetaMock(),
+		MetaKVClient:          mockkv.NewMetaMock(),
+		UserRawKVClient:       mockkv.NewMetaMock(),
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    &client.MockServerMasterClient{},
 	}

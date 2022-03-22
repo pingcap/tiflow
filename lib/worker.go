@@ -19,8 +19,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
 
 type Worker interface {
@@ -62,7 +65,7 @@ type BaseWorker interface {
 	Poll(ctx context.Context) error
 	Close(ctx context.Context) error
 	ID() runtime.RunnableID
-	MetaKVClient() metadata.MetaKV
+	MetaKVClient() metaclient.KVClient
 	UpdateStatus(ctx context.Context, status WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
@@ -76,8 +79,11 @@ type DefaultBaseWorker struct {
 
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	metaKVClient          metadata.MetaKV
-	resourceBroker        broker.Broker
+	// framework metastore prefix kvclient
+	metaKVClient metaclient.KVClient
+	// user metastore raw kvclient
+	userRawKVClient extKV.KVClientEx
+	resourceBroker  broker.Broker
 
 	masterClient *masterClient
 	masterID     MasterID
@@ -99,6 +105,10 @@ type DefaultBaseWorker struct {
 	cancelPool    context.CancelFunc
 
 	clock clock.Clock
+
+	// user metastore prefix kvclient
+	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
+	userMetaKVClient metaclient.KVClient
 }
 
 type workerParams struct {
@@ -106,7 +116,8 @@ type workerParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extKV.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -127,6 +138,7 @@ func NewBaseWorker(
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		metaKVClient:          params.MetaKVClient,
+		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
 		masterID:      masterID,
@@ -137,6 +149,8 @@ func NewBaseWorker(
 
 		errCh: make(chan error, 1),
 		clock: clock.New(),
+		// [TODO] use tenantID if support multi-tenant
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
 	}
 }
 
@@ -290,8 +304,8 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 	return w.id
 }
 
-func (w *DefaultBaseWorker) MetaKVClient() metadata.MetaKV {
-	return w.metaKVClient
+func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
+	return w.userMetaKVClient
 }
 
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatus) error {
@@ -454,7 +468,7 @@ type masterClient struct {
 	workerID WorkerID
 
 	messageSender           p2p.MessageSender
-	metaKVClient            metadata.MetaKV
+	metaKVClient            metaclient.KVClient
 	lastMasterAckedPingTime clock.MonotonicTime
 
 	timeoutConfig TimeoutConfig
@@ -466,7 +480,7 @@ func newMasterClient(
 	masterID MasterID,
 	workerID WorkerID,
 	messageRouter p2p.MessageSender,
-	metaKV metadata.MetaKV,
+	metaKV metaclient.KVClient,
 	initTime clock.MonotonicTime,
 	onMasterFailOver func() error,
 ) *masterClient {

@@ -36,12 +36,18 @@ func prepareServerEnv(t *testing.T, name string) (string, *Config, func()) {
 	cfgTpl := `
 master-addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
+[frame-metastore-conf]
+store-id = "root"
+endpoints = ["127.0.0.1:%d"]
+[user-metastore-conf]
+store-id = "default"
+endpoints = ["127.0.0.1:%d"]
 [etcd]
 name = "%s"
 data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "%s=http://127.0.0.1:%d"`
-	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], name, dir, ports[1], name, ports[1])
+	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], name, dir, ports[1], name, ports[1])
 	cfg := NewConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
@@ -86,12 +92,18 @@ func TestStartGrpcSrvCancelable(t *testing.T) {
 	cfgTpl := `
 master-addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
+[frame-metastore-conf]
+store-id = "root"
+endpoints = ["127.0.0.1:%d"]
+[user-metastore-conf]
+store-id = "default"
+endpoints = ["127.0.0.1:%d"]
 [etcd]
 name = "server-master-1"
 data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "server-master-1=http://127.0.0.1:%d,server-master-2=http://127.0.0.1:%d"`
-	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], dir, ports[1], ports[1], ports[2])
+	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], dir, ports[1], ports[1], ports[2])
 	cfg := NewConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
@@ -204,6 +216,8 @@ func TestRunLeaderService(t *testing.T) {
 	defer cancel()
 	s, err := NewServer(cfg, nil)
 	require.Nil(t, err)
+
+	s.registerMetaStore()
 
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)

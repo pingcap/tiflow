@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -12,7 +12,7 @@ func TestMasterMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	metaKVClient := metadata.NewMetaMock()
+	metaKVClient := mockkv.NewMetaMock()
 	meta := []*MasterMetaKVData{
 		{
 			ID: JobManagerUUID,
@@ -45,7 +45,7 @@ func TestStoreMasterMetadata(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx          = context.Background()
-		metaKVClient = metadata.NewMetaMock()
+		metaKVClient = mockkv.NewMetaMock()
 		addr1        = "127.0.0.1:10000"
 		addr2        = "127.0.0.1:10001"
 		meta         = &MasterMetaKVData{
@@ -76,7 +76,7 @@ func TestStoreMasterMetadata(t *testing.T) {
 func TestLoadAllWorkers(t *testing.T) {
 	t.Parallel()
 
-	metaKVClient := metadata.NewMetaMock()
+	metaKVClient := mockkv.NewMetaMock()
 	workerMetaClient := NewWorkerMetadataClient("master-1", metaKVClient)
 
 	// Using context.Background() since there is no risk that

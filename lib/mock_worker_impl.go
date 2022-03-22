@@ -9,7 +9,9 @@ import (
 	"go.uber.org/dig"
 
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -22,7 +24,7 @@ type mockWorkerImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         *p2p.MockMessageSender
-	metaKVClient          *metadata.MetaMock
+	metaKVClient          *mockkv.MetaMock
 
 	failoverCount atomic.Int64
 }
@@ -32,7 +34,8 @@ type workerParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -45,7 +48,7 @@ func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
 	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret).DefaultBaseWorker
 	ret.messageHandlerManager = ret.DefaultBaseWorker.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseWorker.messageSender.(*p2p.MockMessageSender)
-	ret.metaKVClient = ret.DefaultBaseWorker.metaKVClient.(*metadata.MetaMock)
+	ret.metaKVClient = ret.DefaultBaseWorker.metaKVClient.(*mockkv.MetaMock)
 	return ret
 }
 

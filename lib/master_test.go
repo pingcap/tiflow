@@ -9,11 +9,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -33,7 +32,7 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV) {
+func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfo := &MasterMetaKVData{
 		ID:         masterName,
@@ -59,9 +58,8 @@ func TestMasterInit(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	rawResp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
+	resp, err := master.metaKVClient.Get(ctx, adapter.MasterMetaKey.Encode(masterName))
 	require.NoError(t, err)
-	resp := rawResp.(*clientv3.GetResponse)
 	require.Len(t, resp.Kvs, 1)
 
 	var masterData MasterMetaKVData

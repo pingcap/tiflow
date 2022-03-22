@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
@@ -33,9 +35,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/epoch"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
 	"github.com/hanfei1991/microcosm/servermaster/cluster"
@@ -80,12 +84,19 @@ type Server struct {
 	rpcLogRL        *rate.Limiter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 
+	metaStoreManager MetaStoreManager
+
 	initialized atomic.Bool
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
 
 	testCtx *test.Context
+
+	// framework metastore prefix kvclient
+	metaKVClient metaclient.KVClient
+	// user metastore kvclient
+	userMetaKVClient extKV.KVClientEx
 }
 
 func (s *Server) PersistResource(ctx context.Context, request *pb.PersistResourceRequest) (*pb.PersistResourceResponse, error) {
@@ -144,16 +155,17 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
-		id:              id,
-		cfg:             cfg,
-		info:            info,
-		executorManager: executorManager,
-		initialized:     *atomic.NewBool(false),
-		testCtx:         ctx,
-		leader:          atomic.Value{},
-		p2pMsgRouter:    p2pMsgRouter,
-		rpcLogRL:        rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		metrics:         newServerMasterMetric(),
+		id:               id,
+		cfg:              cfg,
+		info:             info,
+		executorManager:  executorManager,
+		initialized:      *atomic.NewBool(false),
+		testCtx:          ctx,
+		leader:           atomic.Value{},
+		p2pMsgRouter:     p2pMsgRouter,
+		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:          newServerMasterMetric(),
+		metaStoreManager: NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	return server, nil
@@ -339,9 +351,12 @@ func (s *Server) QueryMetaStore(
 			Address: s.cfg.AdvertiseAddr,
 		}, nil
 	case pb.StoreType_SystemMetaStore:
-		// TODO: independent system metastore
 		return &pb.QueryMetaStoreResponse{
-			Address: s.cfg.AdvertiseAddr,
+			Address: s.cfg.FrameMetaConf.Endpoints[0],
+		}, nil
+	case pb.StoreType_AppMetaStore:
+		return &pb.QueryMetaStoreResponse{
+			Address: s.cfg.UserMetaConf.Endpoints[0],
 		}, nil
 	default:
 		return &pb.QueryMetaStoreResponse{
@@ -396,15 +411,26 @@ func (s *Server) Stop() {
 	if s.etcd != nil {
 		s.etcd.Close()
 	}
+	if s.metaKVClient != nil {
+		s.metaKVClient.Close()
+	}
+	if s.userMetaKVClient != nil {
+		s.userMetaKVClient.Close()
+	}
 }
 
-// Run the master-server.
+// Run the server master.
 func (s *Server) Run(ctx context.Context) (err error) {
 	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)
 	}
 
 	registerMetrics()
+
+	err = s.registerMetaStore()
+	if err != nil {
+		return err
+	}
 
 	err = s.startGrpcSrv(ctx)
 	if err != nil {
@@ -439,6 +465,33 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	})
 
 	return wg.Wait()
+}
+
+func (s *Server) registerMetaStore() error {
+	// register metastore for framework
+	cfg := s.cfg
+	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
+		log.L().Error("register framework metastore fail", zap.Any("metastore", cfg.FrameMetaConf), zap.Error(err))
+		return err
+	}
+	if err := kvclient.CheckAccessForMetaStore(cfg.FrameMetaConf); err != nil {
+		log.L().Error("check access for frame metastore fail", zap.Any("metastore", cfg.FrameMetaConf), zap.Error(err))
+		return err
+	}
+	log.L().Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+
+	// register metastore for user
+	err := s.metaStoreManager.Register(cfg.UserMetaConf.StoreID, cfg.UserMetaConf)
+	if err != nil {
+		return err
+	}
+	if err := kvclient.CheckAccessForMetaStore(cfg.UserMetaConf); err != nil {
+		log.L().Error("check access for user metastore fail", zap.Any("metastore", cfg.UserMetaConf), zap.Error(err))
+		return err
+	}
+	log.L().Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
+
+	return nil
 }
 
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
@@ -555,6 +608,26 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+
+	storeConf := s.metaStoreManager.GetMetaStore(metaclient.FrameMetaID)
+	if storeConf == nil {
+		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
+	}
+	frameCliEx, err := kvclient.NewKVClient(storeConf)
+	if err != nil {
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		return err
+	}
+	// [TODO] use FrameTenantID if support multi-tenant
+	s.metaKVClient = kvclient.NewPrefixKVClient(frameCliEx, tenant.DefaultUserTenantID)
+
+	// job manager user framework metastore as user metastore
+	s.userMetaKVClient, err = kvclient.NewKVClient(storeConf)
+	if err != nil {
+		log.L().Error("failed to connect to framework metastore", zap.Any("store-conf", storeConf), zap.Error(err))
+		return err
+	}
+
 	masterMeta := &lib.MasterMetaKVData{
 		ID: lib.JobManagerUUID,
 		Tp: lib.JobManager,
@@ -566,8 +639,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.MasterMetaBytes = masterMetaBytes
 
 	dp := deps.NewDeps()
-	if err := dp.Provide(func() metadata.MetaKV {
-		return metadata.NewMetaEtcd(s.etcdClient)
+	if err := dp.Provide(func() metaclient.KVClient {
+		return s.metaKVClient
+	}); err != nil {
+		return err
+	}
+
+	if err := dp.Provide(func() extKV.KVClientEx {
+		return s.userMetaKVClient
 	}); err != nil {
 		return err
 	}
@@ -597,7 +676,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID, epoch.NewEpochGenerator(s.etcdClient))
 	if err != nil {
 		return
 	}

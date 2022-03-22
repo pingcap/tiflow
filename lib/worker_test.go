@@ -9,7 +9,7 @@ import (
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -20,7 +20,7 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metadata.MetaKV, metaData *MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *MasterMetaKVData) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)

@@ -5,11 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/require"
 )
 
 func newExampleWorker() *exampleWorker {
@@ -50,9 +48,8 @@ func TestExampleWorker(t *testing.T) {
 
 	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)
 	require.NoError(t, err)
-	etcdResp := resp.(*clientv3.GetResponse)
-	require.Len(t, etcdResp.Kvs, 1)
-	require.Equal(t, "2", string(etcdResp.Kvs[0].Value))
+	require.Len(t, resp.Kvs, 1)
+	require.Equal(t, "2", string(resp.Kvs[0].Value))
 
 	lib.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*lib.BaseWorkerForTesting).DefaultBaseWorker, testTopic, testMsg)
 	err = worker.Close(ctx)

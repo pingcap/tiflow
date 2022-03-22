@@ -24,8 +24,11 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
@@ -70,7 +73,8 @@ const (
 )
 
 type BaseMaster interface {
-	MetaKVClient() metadata.MetaKV
+	// MetaKVClient return user metastore kv client
+	MetaKVClient() metaclient.KVClient
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	MasterMeta() *MasterMetaKVData
@@ -89,7 +93,10 @@ type DefaultBaseMaster struct {
 	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	metaKVClient          metadata.MetaKV
+	// framework metastore prefix kvclient
+	metaKVClient metaclient.KVClient
+	// user metastore raw kvclient
+	userRawKVClient       extKV.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 	pool                  workerpool.AsyncPool
@@ -114,6 +121,10 @@ type DefaultBaseMaster struct {
 	timeoutConfig TimeoutConfig
 	masterMeta    *MasterMetaKVData
 
+	// user metastore prefix kvclient
+	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
+	userMetaKVClient metaclient.KVClient
+
 	// components for easier unit testing
 	uuidGen uuid.Generator
 
@@ -129,7 +140,10 @@ type masterParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	// framework metastore prefix kvclient
+	MetaKVClient metaclient.KVClient
+	// user metastore raw kvclient
+	UserRawKVClient       extKV.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -165,6 +179,7 @@ func NewBaseMaster(
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		metaKVClient:          params.MetaKVClient,
+		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
 		pool:                  workerpool.NewDefaultAsyncPool(4),
@@ -183,12 +198,14 @@ func NewBaseMaster(
 		advertiseAddr: advertiseAddr,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		deps:              ctx.Deps(),
+		// [TODO] use tenantID if support muliti-tenant
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
+		deps:             ctx.Deps(),
 	}
 }
 
-func (m *DefaultBaseMaster) MetaKVClient() metadata.MetaKV {
-	return m.metaKVClient
+func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
+	return m.userMetaKVClient
 }
 
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
@@ -396,7 +413,6 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		}
 
 		for _, workerInfo := range offlinedWorkers {
-			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
 			status, ok := m.workerManager.GetStatus(workerInfo.ID)
 			if !ok {
 				log.L().Panic(
@@ -404,6 +420,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 					zap.Any("worker-info", workerInfo),
 				)
 			}
+			log.L().Info("worker is offline", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo), zap.Any("worker-status", status))
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			var offlineError error
 			switch status.Code {
@@ -435,8 +452,11 @@ func (m *DefaultBaseMaster) OnError(err error) {
 	}
 }
 
+// refreshMetadata load and update metadata by current nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
-// fileds to the current value, including epoch, nodeID and advertiseAddr.
+// fileds to the current value, including nodeID and advertiseAddr.
+// NOTICE: We break the integrity of masterMeta and move the epoch update logic to job manager
+// since we can't get the increasing epoch here. Be careful if you want to update some information in masterMeta future.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 
@@ -444,16 +464,11 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	if err != nil {
 		return false, 0, err
 	}
-
-	epoch, err = metaClient.GenerateEpoch(ctx)
-	if err != nil {
-		return false, 0, errors.Trace(err)
-	}
+	epoch = masterMeta.Epoch
 
 	// We should update the master data to reflect our current information
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
-	masterMeta.Epoch = epoch
 
 	if err := metaClient.Store(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)

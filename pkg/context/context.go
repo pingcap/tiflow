@@ -19,7 +19,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
@@ -101,7 +102,8 @@ func (c *Context) L() log.Logger {
 type RuntimeDependencies struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageRouter         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extKV.KVClientEx
 	ExecutorClientManager *client.Manager
 	ServerMasterClient    client.MasterClient
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/pkg/clock"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -27,7 +27,7 @@ func TestStatusSender(t *testing.T) {
 	}()
 
 	msgSender := p2p.NewMockMessageSender()
-	metaClient := metadata.NewMetaMock()
+	metaClient := mockkv.NewMetaMock()
 
 	masterClient := newMasterClient(masterName, workerID1, msgSender, metaClient, clock.MonoNow(), func() error {
 		return nil
@@ -133,7 +133,7 @@ func TestStatusReceiver(t *testing.T) {
 		_ = pool.Run(ctx)
 	}()
 
-	metaClient := metadata.NewMetaMock()
+	metaClient := mockkv.NewMetaMock()
 	workerMetaClient := NewWorkerMetadataClient(masterName, metaClient)
 	mockMsgHandlerManager := p2p.NewMockMessageHandlerManager()
 	mockClock := clock.NewMock()

@@ -1,3 +1,4 @@
+// Deprecated: This file is outdated
 package jobmaster
 
 import (

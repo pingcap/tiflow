@@ -13,26 +13,11 @@ import (
 // We will make follow abstracts and implement for KVClient
 //				NewEtcdKVClient(KVClient)
 //					/			\
-//				prefixKV	 etcdClientCloser
+//				prefixKV	    |
 //					|			|
 //					KV		   Closer
 //					\			/
 //					   etcdIml(KVClient)
-
-// etcdClientCloser is the etcd implement of Closer interface
-type etcdClientCloser struct {
-	cli *etcdImpl
-}
-
-func (c *etcdClientCloser) Close() error {
-	return c.cli.Close()
-}
-
-func NewEtcdClientCloser(c *etcdImpl) *etcdClientCloser {
-	return &etcdClientCloser{
-		cli: c,
-	}
-}
 
 // etcdImpl is the etcd implement of KVClient interface
 // Since we always get the latest data, we will set etcd-server with autocompact parameters
@@ -43,10 +28,9 @@ type etcdImpl struct {
 	closeMu sync.Mutex
 }
 
-func NewEtcdImpl(config *metaclient.Config) (*etcdImpl, error) {
-	conf := config.Clone()
+func NewEtcdImpl(config *metaclient.StoreConfigParams) (*etcdImpl, error) {
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: conf.Endpoints,
+		Endpoints: config.Endpoints,
 		// [TODO] TLS
 		// Username: conf.Auth.Username,
 		// Password: conf.Auth.Password,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -32,7 +33,7 @@ type digParamList struct {
 
 	MessageSender         p2p.MessageSender
 	MessageHandlerManager p2p.MessageHandlerManager
-	MetaClient            metadata.MetaKV
+	MetaClient            metaclient.KVClient
 	Pool                  workerpool.AsyncPool
 }
 
@@ -58,7 +59,7 @@ func newWorkerManagerTestSuite(ctx context.Context) *workerManagerTestSuite {
 		digParamList: digParamList{
 			MessageSender:         p2p.NewMockMessageSender(),
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
-			MetaClient:            metadata.NewMetaMock(),
+			MetaClient:            mockkv.NewMetaMock(),
 			Pool:                  pool,
 		},
 		wg:     wg,

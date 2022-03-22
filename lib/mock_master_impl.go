@@ -16,7 +16,9 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -36,7 +38,8 @@ type MockMasterImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
-	metaKVClient          *metadata.MetaMock
+	metaKVClient          *mockkv.MetaMock
+	userRawKVClient       *mockkv.MetaMock
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
 }
@@ -51,16 +54,12 @@ func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
-	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*metadata.MetaMock)
+	ret.metaKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
+	ret.userRawKVClient = ret.DefaultBaseMaster.metaKVClient.(*mockkv.MetaMock)
 	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
 	return ret
-}
-
-func (m *MockMasterImpl) OverrideMetaKVClient(cli metadata.MetaKV) {
-	m.DefaultBaseMaster.metaKVClient = cli
-	m.metaKVClient = cli.(*metadata.MetaMock)
 }
 
 type masterParamListForTest struct {
@@ -68,7 +67,8 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metadata.MetaKV
+	MetaKVClient          metaclient.KVClient
+	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -88,6 +88,7 @@ func (m *MockMasterImpl) Reset() {
 			MessageHandlerManager: m.messageHandlerManager,
 			MessageSender:         m.messageSender,
 			MetaKVClient:          m.metaKVClient,
+			UserRawKVClient:       m.userRawKVClient,
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
 			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),

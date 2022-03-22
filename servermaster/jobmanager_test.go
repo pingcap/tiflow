@@ -7,8 +7,9 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/epoch"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
 		uuidGen:    uuid.NewGenerator(),
+		epochGen:   epoch.NewMockEpochGenerator(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -115,20 +117,20 @@ func TestJobManagerQueryJob(t *testing.T) {
 			pb.QueryJobResponse_stopped,
 		},
 	}
-	metaKVClient := metadata.NewMetaMock()
+
+	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
 	for _, tc := range testCases {
-		cli := lib.NewMasterMetadataClient(tc.meta.ID, metaKVClient)
+		cli := lib.NewMasterMetadataClient(tc.meta.ID, mockMaster.MetaKVClient())
 		err := cli.Store(ctx, tc.meta)
 		require.Nil(t, err)
 	}
 
-	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
-	mockMaster.OverrideMetaKVClient(metaKVClient)
 	mgr := &JobManagerImplV2{
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
+		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, mockMaster.MetaKVClient()),
+		epochGen:         epoch.NewMockEpochGenerator(),
 	}
 
 	for _, tc := range testCases {
@@ -157,6 +159,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
 		uuidGen:    uuid.NewGenerator(),
+		epochGen:   epoch.NewMockEpochGenerator(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -185,8 +188,8 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// prepare metadata with two job masters
-	metaKVClient := metadata.NewMetaMock()
+	// prepare mockvk with two job masters
+	metaKVClient := mockkv.NewMetaMock()
 	meta := []*lib.MasterMetaKVData{
 		{
 			ID: "master-1",
@@ -208,6 +211,7 @@ func TestJobManagerRecover(t *testing.T) {
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
+		epochGen:         epoch.NewMockEpochGenerator(),
 		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
 	}
 	err := mgr.OnMasterRecovered(ctx)

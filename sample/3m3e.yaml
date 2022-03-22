@@ -22,6 +22,9 @@ services:
                         - "http://server-master-0:8291"
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
+                depends_on:
+                        - "frame-etcd-standalone"
+                        - "user-etcd-standalone"
         server-master-1:
                 image: dataflow:test
                 ports:
@@ -44,6 +47,9 @@ services:
                         - "http://server-master-1:8291"
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
+                depends_on:
+                        - "frame-etcd-standalone"
+                        - "user-etcd-standalone"
         server-master-2:
                 image: dataflow:test
                 ports:
@@ -66,6 +72,9 @@ services:
                         - "http://server-master-2:8291"
                         - "--initial-cluster"
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
+                depends_on:
+                        - "frame-etcd-standalone"
+                        - "user-etcd-standalone"
         server-executor-0:
                 image: dataflow:test
                 volumes:
@@ -132,3 +141,27 @@ services:
                 restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
+        frame-etcd-standalone:
+                image: quay.io/coreos/etcd
+                container_name: frame-etcd-standalone
+                volumes:
+                        - ./config/etcd.yml:/etcd.yml
+                command:
+                        - "etcd"
+                        - "--config-file"
+                        - "/etcd.yml"
+                ports:
+                        - "12379:2379"
+                        - "12380:2380"
+        user-etcd-standalone:
+                image: quay.io/coreos/etcd
+                container_name: user-etcd-standalone
+                volumes:
+                        - ./config/etcd.yml:/etcd.yml
+                command:
+                        - "etcd"
+                        - "--config-file"
+                        - "/etcd.yml"
+                ports:
+                        - "12479:2379"
+                        - "12480:2380"

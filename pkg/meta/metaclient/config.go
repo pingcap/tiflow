@@ -1,28 +1,29 @@
 package metaclient
 
-type Config struct {
-	// Endpoints is a list of URLs.
-	Endpoints []string `json:"endpoints"`
-	Auth      AuthConf
-	Log       LogConf
+import "strings"
+
+const (
+	FrameMetaID       = "root"
+	DefaultUserMetaID = "default"
+
+	DefaultFrameMetaEndpoints = "127.0.0.1:12379"
+	DefaultUserMetaEndpoints  = "127.0.0.1:12479"
+)
+
+type AuthConfParams struct {
+	User   string `toml:"user" json:"user"`
+	Passwd string `toml:"passwd" json:"passwd"`
 }
 
-type AuthConf struct {
-	// [TODO] TLS holds the client secure credentials, if any.
-
-	// Username is a user name for authentication.
-	Username string `json:"username"`
-
-	// Password is a password for authentication.
-	Password string `json:"password"`
+type StoreConfigParams struct {
+	// storeID is the unique readable identifier for a store
+	StoreID   string         `toml:"store-id" json:"store-id"`
+	Endpoints []string       `toml:"endpoints" json:"endpoints"`
+	Auth      AuthConfParams `toml:"auth" json:"auth"`
 }
 
-type LogConf struct {
-	File  string
-	Level int
-}
-
-func (cf *Config) Clone() *Config {
-	newConf := *cf
-	return &newConf
+func (s *StoreConfigParams) SetEndpoints(endpoints string) {
+	if endpoints != "" {
+		s.Endpoints = strings.Split(endpoints, ",")
+	}
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -70,7 +70,7 @@ type workerManagerImpl struct {
 
 	messageSender        p2p.MessageSender
 	messageHandleManager p2p.MessageHandlerManager
-	metaClient           metadata.MetaKV
+	metaClient           metaclient.KVClient
 	pool                 workerpool.AsyncPool
 }
 
@@ -79,7 +79,7 @@ type workerManagerParams struct {
 
 	MessageSender        p2p.MessageSender
 	MessageHandleManager p2p.MessageHandlerManager
-	MetaClient           metadata.MetaKV
+	MetaClient           metaclient.KVClient
 	Pool                 workerpool.AsyncPool
 }
 

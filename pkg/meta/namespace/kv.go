@@ -20,7 +20,7 @@ import (
 	"context"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/internal"
+	"github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
@@ -37,13 +37,13 @@ func (p *prefixError) Error() string {
 }
 
 type kvPrefix struct {
-	internal.KVEx
+	extension.KVEx
 	pfx string
 }
 
 // NewPrefixKV wraps a KVEx instance so that all requests
 // are prefixed with a given string.
-func NewPrefixKV(kv internal.KVEx, prefix string) metaclient.KV {
+func NewPrefixKV(kv extension.KVEx, prefix string) metaclient.KV {
 	return &kvPrefix{kv, prefix}
 }
 

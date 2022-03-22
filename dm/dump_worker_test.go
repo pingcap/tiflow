@@ -14,7 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/metadata"
+	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
 // nolint: unused
@@ -63,7 +63,7 @@ func mockWorkerConfig() []byte {
 func putMasterMeta(
 	ctx context.Context,
 	t *testing.T,
-	metaClient metadata.MetaKV,
+	metaClient metaclient.KVClient,
 	metaData *lib.MasterMetaKVData,
 ) {
 	masterKey := adapter.MasterInfoKey.Encode(masterID)
