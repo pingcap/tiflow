@@ -482,8 +482,10 @@ var (
 	)
 	ErrInvalidChangefeedID = errors.Normalize(
 		fmt.Sprintf("%s, %s, %s, %s,",
-			"bad changefeed id", `please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$"`,
-			"the length should no more than %d", `eg, "simple-changefeed-task"`),
+			"bad changefeed id",
+			`please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$"`,
+			"the length should no more than %d",
+			`eg, "simple-changefeed-task"`),
 		errors.RFCCodeText("CDC:ErrInvalidChangefeedID"),
 	)
 	ErrInvalidEtcdKey = errors.Normalize(
