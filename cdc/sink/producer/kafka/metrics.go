@@ -323,11 +323,13 @@ func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
 }
 
 func (sm *saramaMetricsMonitor) collectBrokers() {
+	start := time.Now()
 	brokers, _, err := sm.admin.DescribeCluster()
 	if err != nil {
 		log.Warn("kafka cluster unreachable, use historical brokers to collect kafka broker level metrics",
 			zap.String("changefeed", sm.changefeedID),
-			zap.Any("role", sm.role))
+			zap.Any("role", sm.role),
+			zap.Duration("duration", time.Since(start)))
 		return
 	}
 
