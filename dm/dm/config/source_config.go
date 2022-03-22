@@ -62,7 +62,7 @@ type PurgeConfig struct {
 
 // SourceConfig is the configuration for source.
 type SourceConfig struct {
-	Enable      bool   `yaml:"enable" toml:"enable" json:"enable"`
+	Enable      bool   `yaml:"enable" toml:"enable,omitempty" json:"enable,omitempty"`
 	EnableGTID  bool   `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
