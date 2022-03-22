@@ -195,8 +195,7 @@ func (a *agentImpl) FinishTableOperation(
 	topic := model.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
-			log.L().Info("Delay sending FinishTableOperation "+
-				"due to pending sync",
+			log.L().Info("Delay sending FinishTableOperation due to pending sync",
 				zap.String("changefeedID", a.changeFeed),
 				zap.String("ownerID", a.ownerCaptureID),
 				zap.Int64("tableID", tableID),
@@ -366,6 +365,9 @@ func (a *agentImpl) OnOwnerChanged(
 	newOwnerCaptureID model.CaptureID,
 	newOwnerRev int64,
 ) {
+	// The BaseAgent will notify us of an owner change if an AnnounceOwner is received.
+	// However, we need to filter out the event if we already learned of this owner directly
+	// from Etcd.
 	if a.ownerCaptureID == newOwnerCaptureID && a.ownerRevision == newOwnerRev {
 		return
 	}
