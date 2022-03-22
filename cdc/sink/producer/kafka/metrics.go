@@ -286,7 +286,8 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
 const flushMetricsInterval = 5 * time.Second
 
 func runSaramaMetricsMonitor(ctx context.Context, registry metrics.Registry, changefeedID string,
-	role util.Role, admin kafka.ClusterAdminClient) {
+	role util.Role, admin kafka.ClusterAdminClient,
+) {
 	monitor := &saramaMetricsMonitor{
 		changefeedID: changefeedID,
 		role:         role,
