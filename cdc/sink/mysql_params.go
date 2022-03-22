@@ -52,6 +52,7 @@ const (
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
 	defaultTxnIsolationRC      = "READ-COMMITTED"
+	defaultCharacterSet        = "utf8mb4"
 )
 
 var defaultParams = &sinkParams{
@@ -297,6 +298,9 @@ func generateDSNByParams(
 	} else {
 		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 	}
+
+	// equals to executing "SET NAMES utf8mb4"
+	dsnCfg.Params["charset"] = defaultCharacterSet
 
 	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
 	if err != nil {
