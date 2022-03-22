@@ -41,6 +41,12 @@ import (
 
 const batchResolvedSize = 100
 
+type mockPullerInit struct{}
+
+func (*mockPullerInit) IsInitialized() bool {
+	return true
+}
+
 type mockChangeDataService2 struct {
 	b        *testing.B
 	ch       chan *cdcpb.ChangeDataEvent

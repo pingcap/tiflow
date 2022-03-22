@@ -34,7 +34,7 @@ type GrpcPool interface {
 	// ReleaseConn is called when a gRPC stream is released
 	ReleaseConn(sc *sharedConn, target string)
 
-	// Recycle recycles idle connections periodically
+	// RecycleConn recycles idle connections periodically
 	RecycleConn(ctx context.Context)
 
 	// Close tears down all ClientConns maintained in pool
