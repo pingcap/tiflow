@@ -81,11 +81,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
 
-	var endpoints string
-	fs.StringVar(&endpoints, "frame-meta-endpoints", "", `framework metastore endpoints`)
-	cfg.FrameMetaConf.SetEndpoints(endpoints)
-	fs.StringVar(&endpoints, "user-meta-endpoints", "", `user metastore endpoints`)
-	cfg.UserMetaConf.SetEndpoints(endpoints)
+	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", metaclient.DefaultFrameMetaEndpoints, `framework metastore endpoints`)
+	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metaclient.DefaultUserMetaEndpoints, `user metastore endpoints`)
 
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
 	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")

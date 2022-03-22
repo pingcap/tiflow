@@ -92,6 +92,7 @@ var (
 	ErrRuntimeInitQueuingTimeOut  = errors.Normalize("a task has waited too long to be initialized", errors.RFCCodeText("DFLOW:ErrRuntimeInitQueuingTimeOut"))
 	ErrRuntimeDuplicateTaskID     = errors.Normalize("trying to add a task with the same ID as an existing one", errors.RFCCodeText("DFLOW:ErrRuntimeDuplicateTaskID %s"))
 	ErrRuntimeClosed              = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeClosed"))
+	ErrExecutorEtcdConnFail       = errors.Normalize("executor conn inner etcd fail", errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))
