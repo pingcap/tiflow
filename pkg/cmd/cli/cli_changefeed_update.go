@@ -189,6 +189,8 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
+		case "sync-point-upstream-dsn":
+			newInfo.SyncPointUpstreamDSN = o.commonChangefeedOptions.syncPointUpstreamDSN
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
 		case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":

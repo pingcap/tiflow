@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -35,6 +34,18 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockery --name=ModuleVerifier --inpackage
+type ModuleVerifier interface {
+	// SentTrackData sent the track data to verification
+	SentTrackData(ctx context.Context, module Module, data []TrackData)
+	// Verify run the module level consistency check base on the time range [startTs, endTs]
+	Verify(ctx context.Context, startTs, endTs string) error
+	// GC clean the checked trackData
+	GC(ctx context.Context, endTs string) error
+	// Close clean related resource
+	Close() error
+}
+
 type Module uint32
 
 //go:generate stringer -type=Module
@@ -49,18 +60,6 @@ const (
 	// write batch size should be larger than block size to save CPU.
 	writeBatchSizeFactor = 16
 )
-
-//go:generate mockery --name=ModuleVerifier --inpackage
-type ModuleVerifier interface {
-	// SentTrackData sent the track data to verification
-	SentTrackData(ctx context.Context, module Module, data []TrackData)
-	// Verify run the module level consistency check base on the time range [startTs, endTs]
-	Verify(ctx context.Context, startTs, endTs string) error
-	// GC clean the checked trackData
-	GC(ctx context.Context, endTs string) error
-	// Close clean related resource
-	Close() error
-}
 
 type ModuleVerification struct {
 	cfg *ModuleVerificationConfig
@@ -159,10 +158,6 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 			m.commitData()
 		}
 	}
-}
-
-func (m *ModuleVerification) generatePreTsKey(module Module) string {
-	return fmt.Sprintf("%s_%d", m.cfg.ChangefeedID, module)
 }
 
 func (m *ModuleVerification) commitData() {

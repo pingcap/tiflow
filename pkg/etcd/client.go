@@ -232,7 +232,7 @@ func (c *Client) Watch(
 	return watchCh
 }
 
-// WatchWithChan maintains a WatchCh and sends all msg from the WatchCh to outCh
+// WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchResponse,
 	key string, role string, opts ...clientV3.OpOption) {
 	defer func() {
