@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,7 +51,8 @@ type kafkaSaramaProducer struct {
 	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock    sync.RWMutex
+	clientLock sync.RWMutex
+	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
 	client        sarama.Client
 	asyncProducer sarama.AsyncProducer
@@ -60,8 +60,6 @@ type kafkaSaramaProducer struct {
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
-	topic             string
-	partitionNum      int32
 
 	// It is used to count the number of messages sent out and messages received when flushing data.
 	mu struct {
@@ -89,7 +87,9 @@ type kafkaProducerClosingFlag = int32
 // Do not try to call AsyncSendMessage and Flush functions in different threads,
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (k *kafkaSaramaProducer) AsyncSendMessage(
+	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 
@@ -114,7 +114,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	})
 
 	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
+		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
@@ -134,13 +134,15 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(
+	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
-	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
-	for i := 0; i < int(k.partitionNum); i++ {
+	msgs := make([]*sarama.ProducerMessage, partitionsNum)
+	for i := 0; i < int(partitionsNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
-			Topic:     k.topic,
+			Topic:     topic,
 			Key:       sarama.ByteEncoder(message.Key),
 			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
@@ -186,10 +188,6 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	case <-down:
 		return nil
 	}
-}
-
-func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
-	return k.partitionNum
 }
 
 // stop closes the closeCh to signal other routines to exit
@@ -318,22 +316,18 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, saramaConfig *sarama.Config, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(
+	ctx context.Context,
+	client sarama.Client,
+	admin kafka.ClusterAdminClient,
+	config *Config,
+	saramaConfig *sarama.Config,
+	errCh chan error,
+) (*kafkaSaramaProducer, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	role := util.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
 		zap.String("changefeed", changefeedID), zap.Any("role", role))
-
-	// this admin mainly used by `metricsMonitor` to fetch broker info.
-	admin, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
@@ -345,16 +339,11 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config, s
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	k := &kafkaSaramaProducer{
 		admin:         admin,
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		topic:         topic,
-		partitionNum:  config.PartitionNum,
 		closeCh:       make(chan struct{}),
 		failpointCh:   make(chan error, 1),
 		closing:       kafkaProducerRunning,
@@ -476,41 +465,6 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
 		log.Warn("partition-num is not set, use the default partition count",
 			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
 	}
-	return nil
-}
-
-// CreateTopic create the topic by `topicConfig`.
-func CreateTopic(admin kafka.ClusterAdminClient, config *topicConfig) error {
-	topics, err := admin.ListTopics()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if _, ok := topics[config.name]; ok {
-		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
-		if config.autoCreate {
-			log.Warn("topic already exist, TiCDC will not create the topic", zap.String("topic", config.name))
-		}
-		return nil
-	}
-
-	if !config.autoCreate {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack("`auto-create-topic` is false, and topic not found")
-	}
-
-	err = admin.CreateTopic(config.name, &sarama.TopicDetail{
-		NumPartitions:     config.partitionNum,
-		ReplicationFactor: config.replicationFactor,
-	}, false)
-	// TODO identify the cause of "Topic with this name already exists"
-	if err != nil && !strings.Contains(err.Error(), "already exists") {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	log.Info("TiCDC create the topic",
-		zap.Int32("partition-num", config.partitionNum),
-		zap.Int16("replication-factor", config.replicationFactor))
-
 	return nil
 }
 

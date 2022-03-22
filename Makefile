@@ -6,7 +6,7 @@
 PROJECT=tiflow
 P=3
 
-FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
+FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -32,7 +32,7 @@ LINUX := "Linux"
 MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
-PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock'
+PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
 PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
@@ -226,7 +226,7 @@ check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
-	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	tools/bin/goveralls -parallel -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -235,7 +235,7 @@ else
 endif
 
 unit_test_coverage:
-	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 
@@ -261,7 +261,7 @@ dm-master:
 
 dm-master-with-webui:
 	@echo "build webui first"
-	cd dm/ui && yarn && yarn build
+	cd dm/ui && yarn --ignore-scripts && yarn build
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -tags dm_webui -o bin/dm-master ./dm/cmd/dm-master
 
 dm-worker:
@@ -416,7 +416,7 @@ tools/bin/statik: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt/gofumports
+	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
 
 tools/bin/shfmt: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/shfmt mvdan.cc/sh/v3/cmd/shfmt

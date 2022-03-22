@@ -449,13 +449,11 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14"),
 			nil,
 		}, {
-
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:2-6"),
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1"),
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-6"),
 			nil,
 		}, {
-
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-6"),
 			getGSetFromString(c, "53bfca22-690d-11e7-8a62-18ded7a37b78:1-495"),
 			getGSetFromString(c, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-6,53bfca22-690d-11e7-8a62-18ded7a37b78:1-495"),

@@ -104,20 +104,30 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	saramaConfig, err := NewSaramaConfig(ctx, config)
 	c.Assert(err, check.IsNil)
 	saramaConfig.Producer.Flush.MaxMessages = 1
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	c.Assert(err, check.IsNil)
-	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		config,
+		saramaConfig,
+		errCh,
+	)
+	c.Assert(err, check.IsNil)
 
 	for i := 0; i < 100; i++ {
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(0))
+		})
 		c.Assert(err, check.IsNil)
-		err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(1), &codec.MQMessage{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
-		}, int32(1))
+		})
 		c.Assert(err, check.IsNil)
 	}
 
@@ -138,7 +148,7 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	c.Assert(producer.mu.inflight, check.Equals, int64(0))
 	producer.mu.Unlock()
 
-	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
 		Key:   []byte("test-broadcast"),
 		Value: nil,
 	})
@@ -152,14 +162,14 @@ func (s *kafkaSuite) TestNewSaramaProducer(c *check.C) {
 	cancel()
 
 	// check send messages when context is canceled or producer closed
-	err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+	err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
-	}, int32(0))
+	})
 	if err != nil {
 		c.Assert(err, check.Equals, context.Canceled)
 	}
-	err = producer.SyncBroadcastMessage(ctx, &codec.MQMessage{
+	err = producer.SyncBroadcastMessage(ctx, topic, 2, &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
@@ -323,39 +333,6 @@ func (s *kafkaSuite) TestAdjustConfigMinInsyncReplicas(c *check.C) {
 	)
 }
 
-func (s *kafkaSuite) TestCreateTopic(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
-
-	// `auto-create-topic` enable, topic exist
-	config := NewConfig()
-	topicConfig := config.DeriveTopicConfig(adminClient.GetDefaultMockTopicName())
-	err := CreateTopic(adminClient, topicConfig)
-	c.Assert(err, check.IsNil)
-
-	// `auto-create-topic` enable, topic not exist
-	topicConfig = config.DeriveTopicConfig("not-exist-topic-1")
-	err = CreateTopic(adminClient, topicConfig)
-	c.Assert(err, check.IsNil)
-
-	topics, err := adminClient.ListTopics()
-	c.Assert(err, check.IsNil)
-	_, ok := topics["not-exist-topic-1"]
-	c.Assert(ok, check.IsTrue)
-
-	// `auto-create-topic` disable, topic not exist
-	config.AutoCreate = false
-	topicConfig = config.DeriveTopicConfig("not-exist-topic-2")
-	err = CreateTopic(adminClient, topicConfig)
-	c.Assert(errors.Cause(err),
-		check.ErrorMatches,
-		".*auto-create-topic` is false, and topic not found.*")
-}
-
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	config := NewConfig()
@@ -402,7 +379,18 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	saramaConfig.Producer.Retry.Max = 2
 	saramaConfig.Producer.MaxMessageBytes = 8
 
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		config,
+		saramaConfig,
+		errCh,
+	)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)
@@ -417,10 +405,10 @@ func (s *kafkaSuite) TestProducerSendMessageFailed(c *check.C) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
-			err = producer.AsyncSendMessage(ctx, &codec.MQMessage{
+			err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
-			}, int32(0))
+			})
 			c.Assert(err, check.IsNil)
 		}
 	}()
@@ -472,7 +460,18 @@ func (s *kafkaSuite) TestProducerDoubleClose(c *check.C) {
 	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(context.Background(), config)
 	c.Assert(err, check.IsNil)
-	producer, err := NewKafkaSaramaProducer(ctx, topic, config, saramaConfig, errCh)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	c.Assert(err, check.IsNil)
+	producer, err := NewKafkaSaramaProducer(
+		ctx,
+		client,
+		adminClient,
+		config,
+		saramaConfig,
+		errCh,
+	)
 	defer func() {
 		err := producer.Close()
 		c.Assert(err, check.IsNil)

@@ -33,13 +33,11 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-func makeTestSystem(name string, t interface {
-	Fatalf(format string, args ...interface{})
-}) (*System, *Router) {
+func makeTestSystem(name string) (*System, *Router) {
 	return NewSystemBuilder(name).
 		WorkerNumber(2).
 		handleFatal(func(s string, i ID) {
-			t.Fatalf("%s actorID: %d", s, i)
+			panic(fmt.Sprintf("%s actorID: %d", s, i))
 		}).
 		Build()
 }
@@ -145,33 +143,30 @@ func wait(t *testing.T, f func()) {
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
-	err := sys.Stop()
-	require.Nil(t, err)
+	sys.Stop()
 }
 
 func TestSystemSpawnDuplicateActor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := 1
-	fa := &forwardActor{}
+	fa := &forwardActor{ch: make(chan<- message.Message, 1)}
 	mb := NewMailbox(ID(id), 1)
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type forwardActor struct {
 	contextAware bool
 
+	id ID
 	ch chan<- message.Message
 }
 
@@ -189,10 +184,12 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
+func (f *forwardActor) OnClose() {}
+
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	// Send to a non-existing actor.
@@ -221,10 +218,7 @@ func TestActorSendReceive(t *testing.T) {
 		t.Fatal("Timed out")
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func testBroadcast(t *testing.T, actorNum, workerNum int) {
@@ -232,7 +226,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	sys, router := NewSystemBuilder("test").WorkerNumber(workerNum).Build()
 	sys.Start(ctx)
 
-	ch := make(chan message.Message, 1)
+	ch := make(chan message.Message, actorNum)
 
 	for id := 0; id < actorNum; id++ {
 		fa := &forwardActor{
@@ -243,7 +237,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	}
 
 	// Broadcase tick to actors.
-	router.Broadcast(message.TickMessage())
+	router.Broadcast(context.TODO(), message.TickMessage())
 	for i := 0; i < actorNum; i++ {
 		select {
 		case msg := <-ch:
@@ -258,10 +252,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestBroadcast(t *testing.T) {
@@ -276,12 +267,13 @@ func TestBroadcast(t *testing.T) {
 func TestSystemStopCancelActors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
 	ch := make(chan message.Message, 1)
 	fa := &forwardActor{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
@@ -292,6 +284,7 @@ func TestSystemStopCancelActors(t *testing.T) {
 
 	id = ID(778)
 	fa = &forwardActor{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
@@ -303,16 +296,13 @@ func TestSystemStopCancelActors(t *testing.T) {
 	// Do not receive ch.
 	_ = ch
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestActorManyMessageOneSchedule(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -355,10 +345,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type flipflopActor struct {
@@ -388,6 +375,8 @@ func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	}
 	return true
 }
+
+func (f *flipflopActor) OnClose() {}
 
 // An actor can only be polled by one goroutine at the same time.
 func TestConcurrentPollSameActor(t *testing.T) {
@@ -419,10 +408,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		case acc := <-ch:
 			require.Equal(t, total, acc)
 		case <-timer:
-			wait(t, func() {
-				err := sys.Stop()
-				require.Nil(t, err)
-			})
+			wait(t, sys.Stop)
 			return
 		}
 	}
@@ -440,9 +426,11 @@ func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return false
 }
 
+func (c *closedActor) OnClose() {}
+
 func TestPollStoppedActor(t *testing.T) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -464,16 +452,13 @@ func TestPollStoppedActor(t *testing.T) {
 	case <-ch:
 		t.Fatal("must timeout")
 	}
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -502,10 +487,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type slowActor struct {
@@ -519,6 +501,8 @@ func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return false
 }
 
+func (c *slowActor) OnClose() {}
+
 // Test router send during actor poll and before close.
 //
 //  ----------------------> time
@@ -528,7 +512,7 @@ func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
 func TestSendBeforeClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -566,10 +550,7 @@ func TestSendBeforeClose(t *testing.T) {
 	// Let send and close race
 	// sys.rd.Lock()
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 // Test router send after close and before enqueue.
@@ -582,7 +563,7 @@ func TestSendBeforeClose(t *testing.T) {
 func TestSendAfterClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem(t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -639,9 +620,60 @@ func TestSendAfterClose(t *testing.T) {
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
+	wait(t, sys.Stop)
+}
+
+type stopActor struct {
+	wait *int64
+}
+
+func (s *stopActor) Poll(ctx context.Context, msgs []message.Message) bool {
+	return true
+}
+
+func (s *stopActor) OnClose() {
+	atomic.AddInt64(s.wait, 1)
+}
+
+func TestStopSystem(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sys, _ := makeTestSystem(t.Name())
+	sys.Start(ctx)
+
+	w := new(int64)
+	for i := 0; i < 20_000; i++ {
+		mb := NewMailbox(ID(i), 1)
+		require.Nil(t, sys.Spawn(mb, &stopActor{w}))
+	}
+
+	wait(t, sys.Stop)
+	require.EqualValues(t, 20_000, atomic.LoadInt64(w))
+}
+
+func TestSendAfterMailboxClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	router := NewRouter(t.Name())
+
+	id := ID(1)
+	cap := 1
+	mb := NewMailbox(id, cap)
+	router.InsertMailbox4Test(mb.ID(), mb)
+
+	val, _ := router.procs.Load(id)
+	proc := val.(*proc)
+	msg := message.TickMessage()
+	// To avoid racing between send and close, fill mailbox first,
+	// so later Send and SendB always return actor stop.
+	require.Nil(t, router.Send(id, msg))
+	proc.onSystemStop()
+	require.EqualValues(t, errActorStopped, router.Send(id, msg))
+	require.EqualValues(t, errActorStopped, router.SendB(ctx, id, msg))
 	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
+		router.Broadcast(ctx, msg)
 	})
 }
 
@@ -649,7 +681,7 @@ func TestSendAfterClose(t *testing.T) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem(b.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
@@ -682,16 +714,14 @@ func BenchmarkActorSendReceive(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }
 
 // Run the benchmark
 // go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem(b.Name())
 	sys.Start(ctx)
 
 	actorCount := int(math.Exp2(15))
@@ -730,7 +760,5 @@ func BenchmarkPollActor(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }

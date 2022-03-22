@@ -26,6 +26,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// DDLDispatchRule is the dispatch rule for DDL event.
+type DDLDispatchRule int
+
+const (
+	// PartitionAll means the DDL event will be broadcast to all the partitions.
+	PartitionAll DDLDispatchRule = -1
+	// PartitionZero means the DDL event will be dispatched to partition 0.
+	// NOTICE: Only for canal and canal-json protocol.
+	PartitionZero = 0
+)
+
 type partitionDispatchRule int
 
 const (
@@ -107,13 +118,58 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 	}, nil
 }
 
-// DispatchRowChangedEvent returns the target topic and partition.
-func (s *EventRouter) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (string, int32) {
-	topicDispatcher, partitionDispatcher := s.matchDispatcher(row.Table.Schema, row.Table.Table)
-	topic := topicDispatcher.DispatchRowChangedEvent(row)
-	partition := partitionDispatcher.DispatchRowChangedEvent(row, partitionNum)
+// GetTopicForRowChange returns the target topic for row changes.
+func (s *EventRouter) GetTopicForRowChange(row *model.RowChangedEvent) string {
+	topicDispatcher, _ := s.matchDispatcher(row.Table.Schema, row.Table.Table)
+	return topicDispatcher.Substitute(row.Table.Schema, row.Table.Table)
+}
 
-	return topic, partition
+// GetTopicForDDL returns the target topic for DDL.
+// FIXME: Now we can't handle rename tables because
+// we are missing the old and new tables information.
+func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
+	var schema, table string
+	if ddl.PreTableInfo != nil {
+		if ddl.PreTableInfo.Table == "" {
+			return s.defaultTopic
+		}
+		schema = ddl.PreTableInfo.Schema
+		table = ddl.PreTableInfo.Table
+	} else {
+		if ddl.TableInfo.Table == "" {
+			return s.defaultTopic
+		}
+		schema = ddl.TableInfo.Schema
+		table = ddl.TableInfo.Table
+	}
+
+	topicDispatcher, _ := s.matchDispatcher(schema, table)
+	return topicDispatcher.Substitute(schema, table)
+}
+
+// GetPartitionForRowChange returns the target partition for row changes.
+func (s *EventRouter) GetPartitionForRowChange(
+	row *model.RowChangedEvent,
+	partitionNum int32,
+) int32 {
+	_, partitionDispatcher := s.matchDispatcher(
+		row.Table.Schema, row.Table.Table,
+	)
+
+	return partitionDispatcher.DispatchRowChangedEvent(
+		row, partitionNum,
+	)
+}
+
+// GetDLLDispatchRuleByProtocol returns the DDL
+// distribution rule according to the protocol.
+func (s *EventRouter) GetDLLDispatchRuleByProtocol(
+	protocol config.Protocol,
+) DDLDispatchRule {
+	if protocol == config.ProtocolCanal || protocol == config.ProtocolCanalJSON {
+		return PartitionZero
+	}
+	return PartitionAll
 }
 
 // GetActiveTopics returns a list of the corresponding topics
@@ -143,6 +199,11 @@ func (s *EventRouter) GetActiveTopics(activeTables []model.TableName) []string {
 	}
 
 	return topics
+}
+
+// GetDefaultTopic returns the default topic name.
+func (s *EventRouter) GetDefaultTopic() string {
+	return s.defaultTopic
 }
 
 // matchDispatcher returns the target topic dispatcher and partition dispatcher if a
@@ -197,5 +258,5 @@ func getTopicDispatcher(ruleConfig *config.DispatchRule, defaultTopic string) (t
 	if err != nil {
 		return nil, err
 	}
-	return topic.NewDynamicTopicDispatcher(defaultTopic, topicExpr), nil
+	return topic.NewDynamicTopicDispatcher(topicExpr), nil
 }
