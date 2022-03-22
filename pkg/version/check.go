@@ -73,7 +73,9 @@ func removeVAndHash(v string) string {
 // CheckClusterVersion check TiKV and PD version.
 // need only one PD alive and match the cdc version.
 func CheckClusterVersion(
-	ctx context.Context, client pd.Client, pdAddrs []string, credential *security.Credential, errorTiKVIncompat bool) error {
+	ctx context.Context, client pd.Client, pdAddrs []string,
+	credential *security.Credential, errorTiKVIncompat bool,
+) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
 		if errorTiKVIncompat {

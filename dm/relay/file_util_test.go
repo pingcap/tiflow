@@ -299,7 +299,8 @@ func (t *testFileUtilSuite) TestGetTxnPosGTIDMariaDB(c *check.C) {
 }
 
 func (t *testFileUtilSuite) testGetTxnPosGTIDs(c *check.C, filename, flavor, previousGTIDSetStr,
-	latestGTIDStr1, latestGTIDStr2, expectedGTIDsStr1, expectedGTIDsStr2 string) {
+	latestGTIDStr1, latestGTIDStr2, expectedGTIDsStr1, expectedGTIDsStr2 string,
+) {
 	parser2 := parser.New()
 
 	// different SIDs in GTID set
