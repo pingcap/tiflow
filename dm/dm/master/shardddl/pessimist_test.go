@@ -994,7 +994,8 @@ func (t *testPessimistSuite) TestMeetEtcdCompactError() {
 
 func (t *testPessimistSuite) putDoneForSource(
 	ctx context.Context, task, source string, info pessimism.Info, exec bool,
-	watchRev int64, watchTimeout time.Duration) {
+	watchRev int64, watchTimeout time.Duration,
+) {
 	t.T().Helper()
 	var (
 		wg            sync.WaitGroup

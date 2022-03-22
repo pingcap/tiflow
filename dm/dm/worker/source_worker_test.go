@@ -297,7 +297,8 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 }
 
 func (t *testWorkerFunctionalities) testEnableRelay(c *C, w *SourceWorker, etcdCli *clientv3.Client,
-	sourceCfg *config.SourceConfig, cfg *Config) {
+	sourceCfg *config.SourceConfig, cfg *Config,
+) {
 	c.Assert(w.EnableRelay(false), IsNil)
 
 	c.Assert(w.relayEnabled.Load(), IsTrue)
@@ -327,7 +328,8 @@ func (t *testWorkerFunctionalities) testDisableRelay(c *C, w *SourceWorker) {
 }
 
 func (t *testWorkerFunctionalities) testEnableHandleSubtasks(c *C, w *SourceWorker, etcdCli *clientv3.Client,
-	subtaskCfg config.SubTaskConfig, sourceCfg *config.SourceConfig) {
+	subtaskCfg config.SubTaskConfig, sourceCfg *config.SourceConfig,
+) {
 	c.Assert(w.EnableHandleSubtasks(), IsNil)
 	c.Assert(w.subTaskEnabled.Load(), IsTrue)
 
