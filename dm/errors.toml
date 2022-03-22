@@ -796,6 +796,12 @@ description = ""
 workaround = ""
 tags = ["internal", "low"]
 
+[error.DM-functional-11128]
+message = "fail to resolve adding not fully dropped columns for optimistic shard ddl lock %s: %s"
+description = ""
+workaround = "Please use `binlog skip` command to skip this error."
+tags = ["internal", "medium"]
+
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
 description = ""
@@ -2424,6 +2430,12 @@ tags = ["internal", "high"]
 
 [error.DM-dm-master-38057]
 message = "invalid cluster id: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-master-38058]
+message = "can not start task: %s reason: %s"
 description = ""
 workaround = ""
 tags = ["internal", "high"]

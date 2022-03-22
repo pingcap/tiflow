@@ -484,8 +484,8 @@ func TestReaderOutputIterEvents(t *testing.T) {
 			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1))
 		iter.Seek([]byte{})
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
-		hasReadLastNext, exhaustedRTs, err :=
-			r.outputIterEvents(iter, cs.hasReadNext, buf, cs.maxResolvedTs)
+		hasReadLastNext, exhaustedRTs, err := r.outputIterEvents(
+			iter, cs.hasReadNext, buf, cs.maxResolvedTs)
 		require.Nil(t, err, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
 		for _, k := range buf.deleteKeys {

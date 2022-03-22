@@ -194,6 +194,7 @@ const (
 
 	// pkg/shardddl/optimism.
 	codeShardDDLOptimismNeedSkipAndRedirect
+	codeShardDDLOptimismAddNotFullyDroppedColumn
 )
 
 // Config related error code list.
@@ -506,6 +507,7 @@ const (
 	codeMasterOptimisticTableInfobeforeNotExist
 	codeMasterOptimisticDownstreamMetaNotFound
 	codeMasterInvalidClusterID
+	codeMasterStartTask
 )
 
 // DM-worker error code.
@@ -866,7 +868,8 @@ var (
 	ErrBinlogNotLogColumn = New(codeBinlogNotLogColumn, ClassBinlogOp, ScopeUpstream, LevelHigh, "upstream didn't log enough columns in binlog", "Please check if session `binlog_row_image` variable is not FULL, restart task to the location from where FULL binlog_row_image is used.")
 
 	// pkg/shardddl/optimism.
-	ErrShardDDLOptimismNeedSkipAndRedirect = New(codeShardDDLOptimismNeedSkipAndRedirect, ClassFunctional, ScopeInternal, LevelLow, "receive conflict DDL for the optimistic shard ddl lock %s: %s", "")
+	ErrShardDDLOptimismNeedSkipAndRedirect      = New(codeShardDDLOptimismNeedSkipAndRedirect, ClassFunctional, ScopeInternal, LevelLow, "receive conflict DDL for the optimistic shard ddl lock %s: %s", "")
+	ErrShardDDLOptimismAddNotFullyDroppedColumn = New(codeShardDDLOptimismAddNotFullyDroppedColumn, ClassFunctional, ScopeInternal, LevelMedium, "fail to resolve adding not fully dropped columns for optimistic shard ddl lock %s: %s", "Please use `binlog skip` command to skip this error.")
 
 	// Config related error.
 	ErrConfigCheckItemNotSupport    = New(codeConfigCheckItemNotSupport, ClassConfig, ScopeInternal, LevelMedium, "checking item %s is not supported\n%s", "Please check `ignore-checking-items` config in task configuration file, which can be set including `all`/`dump_privilege`/`replication_privilege`/`version`/`binlog_enable`/`binlog_format`/`binlog_row_image`/`table_schema`/`schema_of_shard_tables`/`auto_increment_ID`.")
@@ -1167,6 +1170,7 @@ var (
 	ErrMasterOptimisticTableInfoBeforeNotExist = New(codeMasterOptimisticTableInfobeforeNotExist, ClassDMMaster, ScopeInternal, LevelHigh, "table-info-before not exist in optimistic ddls: %v", "")
 	ErrMasterOptimisticDownstreamMetaNotFound  = New(codeMasterOptimisticDownstreamMetaNotFound, ClassDMMaster, ScopeInternal, LevelHigh, "downstream database config and meta for task %s not found", "")
 	ErrMasterInvalidClusterID                  = New(codeMasterInvalidClusterID, ClassDMMaster, ScopeInternal, LevelHigh, "invalid cluster id: %v", "")
+	ErrMasterStartTask                         = New(codeMasterStartTask, ClassDMMaster, ScopeInternal, LevelHigh, "can not start task: %s reason: %s", "")
 
 	// DM-worker error.
 	ErrWorkerParseFlagSet            = New(codeWorkerParseFlagSet, ClassDMWorker, ScopeInternal, LevelMedium, "parse dm-worker config flag set", "")

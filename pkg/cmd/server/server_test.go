@@ -179,7 +179,7 @@ func TestParseCfg(t *testing.T) {
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:     false,
+			EnableDBSorter:     true,
 			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
@@ -463,7 +463,7 @@ cert-allowed-cn = ["dd","ee"]
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:     false,
+			EnableDBSorter:     true,
 			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
@@ -523,7 +523,7 @@ unknown3 = 3
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableDBSorter:     false,
+		EnableDBSorter:     true,
 		EnableNewScheduler: true,
 		DB: &config.DBConfig{
 			Count:                       8,
