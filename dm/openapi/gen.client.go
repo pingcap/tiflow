@@ -1142,6 +1142,7 @@ func NewDMAPIGetSourceListRequest(server string, params *DMAPIGetSourceListParam
 	queryValues := queryURL.Query()
 
 	if params.WithStatus != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1153,9 +1154,11 @@ func NewDMAPIGetSourceListRequest(server string, params *DMAPIGetSourceListParam
 				}
 			}
 		}
+
 	}
 
 	if params.EnableRelay != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "enable_relay", runtime.ParamLocationQuery, *params.EnableRelay); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1167,6 +1170,7 @@ func NewDMAPIGetSourceListRequest(server string, params *DMAPIGetSourceListParam
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -1248,6 +1252,7 @@ func NewDMAPIDeleteSourceRequest(server string, sourceName string, params *DMAPI
 	queryValues := queryURL.Query()
 
 	if params.Force != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "force", runtime.ParamLocationQuery, *params.Force); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1259,6 +1264,7 @@ func NewDMAPIDeleteSourceRequest(server string, sourceName string, params *DMAPI
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -1300,6 +1306,7 @@ func NewDMAPIGetSourceRequest(server string, sourceName string, params *DMAPIGet
 	queryValues := queryURL.Query()
 
 	if params.WithStatus != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1311,6 +1318,7 @@ func NewDMAPIGetSourceRequest(server string, sourceName string, params *DMAPIGet
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -1757,6 +1765,7 @@ func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (
 	queryValues := queryURL.Query()
 
 	if params.WithStatus != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1768,9 +1777,11 @@ func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (
 				}
 			}
 		}
+
 	}
 
 	if params.Stage != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "stage", runtime.ParamLocationQuery, *params.Stage); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1782,9 +1793,11 @@ func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (
 				}
 			}
 		}
+
 	}
 
 	if params.SourceNameList != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "source_name_list", runtime.ParamLocationQuery, *params.SourceNameList); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -1796,6 +1809,7 @@ func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -2126,6 +2140,7 @@ func NewDMAPIDeleteTaskRequest(server string, taskName string, params *DMAPIDele
 	queryValues := queryURL.Query()
 
 	if params.Force != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "force", runtime.ParamLocationQuery, *params.Force); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2137,6 +2152,7 @@ func NewDMAPIDeleteTaskRequest(server string, taskName string, params *DMAPIDele
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -2178,6 +2194,7 @@ func NewDMAPIGetTaskRequest(server string, taskName string, params *DMAPIGetTask
 	queryValues := queryURL.Query()
 
 	if params.WithStatus != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2189,6 +2206,7 @@ func NewDMAPIGetTaskRequest(server string, taskName string, params *DMAPIGetTask
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -2284,6 +2302,7 @@ func NewDMAPIGetTaskMigrateTargetsRequest(server string, taskName string, source
 	queryValues := queryURL.Query()
 
 	if params.SchemaPattern != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "schema_pattern", runtime.ParamLocationQuery, *params.SchemaPattern); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2295,9 +2314,11 @@ func NewDMAPIGetTaskMigrateTargetsRequest(server string, taskName string, source
 				}
 			}
 		}
+
 	}
 
 	if params.TablePattern != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "table_pattern", runtime.ParamLocationQuery, *params.TablePattern); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2309,6 +2330,7 @@ func NewDMAPIGetTaskMigrateTargetsRequest(server string, taskName string, source
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -2664,6 +2686,7 @@ func NewDMAPIGetTaskStatusRequest(server string, taskName string, params *DMAPIG
 	queryValues := queryURL.Query()
 
 	if params.SourceNameList != nil {
+
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "source_name_list", runtime.ParamLocationQuery, *params.SourceNameList); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
@@ -2675,6 +2698,7 @@ func NewDMAPIGetTaskStatusRequest(server string, taskName string, params *DMAPIG
 				}
 			}
 		}
+
 	}
 
 	queryURL.RawQuery = queryValues.Encode()
@@ -4385,6 +4409,7 @@ func ParseDMAPIGetClusterInfoResponse(rsp *http.Response) (*DMAPIGetClusterInfoR
 			return nil, err
 		}
 		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -4443,6 +4468,7 @@ func ParseDMAPIOfflineMasterNodeResponse(rsp *http.Response) (*DMAPIOfflineMaste
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4501,6 +4527,7 @@ func ParseDMAPIOfflineWorkerNodeResponse(rsp *http.Response) (*DMAPIOfflineWorke
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4558,6 +4585,7 @@ func ParseDMAPIGetSourceListResponse(rsp *http.Response) (*DMAPIGetSourceListRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -4616,6 +4644,7 @@ func ParseDMAPIDeleteSourceResponse(rsp *http.Response) (*DMAPIDeleteSourceRespo
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4641,6 +4670,7 @@ func ParseDMAPIGetSourceResponse(rsp *http.Response) (*DMAPIGetSourceResponse, e
 			return nil, err
 		}
 		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -4699,6 +4729,7 @@ func ParseDMAPIDisableSourceResponse(rsp *http.Response) (*DMAPIDisableSourceRes
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4724,6 +4755,7 @@ func ParseDMAPIEnableSourceResponse(rsp *http.Response) (*DMAPIEnableSourceRespo
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4749,6 +4781,7 @@ func ParseDMAPIDisableRelayResponse(rsp *http.Response) (*DMAPIDisableRelayRespo
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4774,6 +4807,7 @@ func ParseDMAPIEnableRelayResponse(rsp *http.Response) (*DMAPIEnableRelayRespons
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4799,6 +4833,7 @@ func ParseDMAPIPurgeRelayResponse(rsp *http.Response) (*DMAPIPurgeRelayResponse,
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4923,6 +4958,7 @@ func ParseDMAPITransferSourceResponse(rsp *http.Response) (*DMAPITransferSourceR
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5146,6 +5182,7 @@ func ParseDMAPIDeleteTaskTemplateResponse(rsp *http.Response) (*DMAPIDeleteTaskT
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5237,6 +5274,7 @@ func ParseDMAPIDeleteTaskResponse(rsp *http.Response) (*DMAPIDeleteTaskResponse,
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5262,6 +5300,7 @@ func ParseDMAPIGetTaskResponse(rsp *http.Response) (*DMAPIGetTaskResponse, error
 			return nil, err
 		}
 		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -5419,6 +5458,7 @@ func ParseDMAPIDeleteTableStructureResponse(rsp *http.Response) (*DMAPIDeleteTab
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5477,6 +5517,7 @@ func ParseDMAPIOperateTableStructureResponse(rsp *http.Response) (*DMAPIOperateT
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5502,6 +5543,7 @@ func ParseDMAPIStartTaskResponse(rsp *http.Response) (*DMAPIStartTaskResponse, e
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -5560,6 +5602,7 @@ func ParseDMAPIStopTaskResponse(rsp *http.Response) (*DMAPIStopTaskResponse, err
 			return nil, err
 		}
 		response.JSON400 = &dest
+
 	}
 
 	return response, nil

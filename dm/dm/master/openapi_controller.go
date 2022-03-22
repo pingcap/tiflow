@@ -653,9 +653,22 @@ func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTas
 		if err := taskCfg.RawDecode(*req.TaskConfigFile); err != nil {
 			return nil, nil, err
 		}
+		// clear extra config in MySQLInstance, use cfg.xxConfigName instead otherwise adjust will fail/
+		for _, cfg := range taskCfg.MySQLInstances {
+			cfg.Mydumper = nil
+			cfg.Loader = nil
+			cfg.Syncer = nil
+		}
+		if adjustErr := taskCfg.Adjust(); adjustErr != nil {
+			return nil, nil, adjustErr
+		}
 		sourceCfgMap := make(map[string]*config.SourceConfig, len(taskCfg.MySQLInstances))
 		for _, source := range taskCfg.MySQLInstances {
-			sourceCfgMap[source.SourceID] = s.scheduler.GetSourceCfgByID(source.SourceID)
+			sourceCfg := s.scheduler.GetSourceCfgByID(source.SourceID)
+			if sourceCfg == nil {
+				return nil, nil, terror.ErrConfigSourceIDNotFound.Generate(source.SourceID)
+			}
+			sourceCfgMap[source.SourceID] = sourceCfg
 		}
 		task, err := config.TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		if err != nil {
@@ -669,7 +682,11 @@ func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTas
 	}
 	sourceCfgMap := make(map[string]*config.SourceConfig, len(task.SourceConfig.SourceConf))
 	for _, cfg := range task.SourceConfig.SourceConf {
-		sourceCfgMap[cfg.SourceName] = s.scheduler.GetSourceCfgByID(cfg.SourceName)
+		sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName)
+		if sourceCfg == nil {
+			return nil, nil, terror.ErrConfigSourceIDNotFound.Generate(cfg.SourceName)
+		}
+		sourceCfgMap[sourceCfg.SourceID] = sourceCfg
 	}
 	taskCfg, err := config.OpenAPITaskToTaskConfig(task, sourceCfgMap)
 	if err != nil {
