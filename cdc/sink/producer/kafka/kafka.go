@@ -37,9 +37,6 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
-
-	// flushMetricsInterval specifies the interval of refresh sarama metrics.
-	flushMetricsInterval = 5 * time.Second
 )
 
 const (
@@ -255,8 +252,6 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
-
 	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
@@ -278,8 +273,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	ticker := time.NewTicker(flushMetricsInterval)
-	defer ticker.Stop()
 	for {
 		var ack *sarama.ProducerMessage
 		select {
@@ -287,14 +280,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
-		case <-ticker.C:
-			// if error returned, it means the kafka broker clusters is unreachable,
-			// it's ok to return error. Most of the time, this only happen when no
-			// data sending, since if there is any data sending to the kafka,
-			// `ErrKafkaAsyncSendMessage` would have a higher chance to be triggered.
-			if err := k.metricsMonitor.CollectMetrics(); err != nil {
-				return cerror.WrapError(cerror.ErrKafkaCollectSaramaMetrics, err)
-			}
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
@@ -348,6 +333,8 @@ func NewKafkaSaramaProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	runSaramaMetricsMonitor(ctx, saramaConfig.MetricRegistry, changefeedID, role, admin)
+
 	k := &kafkaSaramaProducer{
 		admin:         admin,
 		client:        client,
@@ -359,9 +346,6 @@ func NewKafkaSaramaProducer(
 
 		id:   changefeedID,
 		role: role,
-
-		metricsMonitor: newSaramaMetricsMonitor(
-			saramaConfig.MetricRegistry, changefeedID, role, admin),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
