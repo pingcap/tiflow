@@ -92,10 +92,12 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	}
 
 	if d.getStatusCode() == lib.WorkerStatusStopped {
+		d.setStatusCode(lib.WorkerStatusStopped)
 		return d.Exit(ctx, d.Status(), nil)
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
+		d.setStatusCode(lib.WorkerStatusFinished)
 		return d.Exit(ctx, d.Status(), nil)
 	}
 

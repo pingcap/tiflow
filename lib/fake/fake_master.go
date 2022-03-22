@@ -171,10 +171,12 @@ func (m *Master) Tick(ctx context.Context) error {
 
 	if m.getStatusCode() == lib.WorkerStatusStopped {
 		log.L().Info("FakeMaster: received pause command, stop now")
+		m.setStatusCode(lib.WorkerStatusStopped)
 		return m.Exit(ctx, m.Status(), nil)
 	}
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.L().Info("FakeMaster: all worker finished, job master exits now")
+		m.setStatusCode(lib.WorkerStatusFinished)
 		return m.Exit(ctx, m.Status(), nil)
 	}
 

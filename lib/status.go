@@ -24,6 +24,11 @@ const (
 	senderFSMSending
 )
 
+const (
+	safeSendStatusTimeout  = 10 * time.Second
+	safeSendStatusInterval = 10 * time.Millisecond
+)
+
 // StatusSender is used for a worker to send its status to its master.
 type StatusSender struct {
 	workerID WorkerID
@@ -77,7 +82,7 @@ func (s *StatusSender) Tick(ctx context.Context) error {
 	}
 
 	if s.fsmState.Load() == senderFSMPending {
-		if err := s.sendStatus(ctx); err != nil {
+		if err := s.sendStatus(ctx, true /*needPersistStatus*/); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -97,19 +102,47 @@ func (s *StatusSender) setLastUnsentStatus(status *WorkerStatus) {
 	s.lastUnsentStatus = status
 }
 
-// SafeSendStatus persists status before sending it
+// SafeSendStatus persists status before sending it, it will try to send status
+// until successfully.
 func (s *StatusSender) SafeSendStatus(ctx context.Context, status WorkerStatus) error {
-	if err := s.workerMetaClient.Store(ctx, s.workerID, &status); err != nil {
-		return err
+	cctx, cancel := context.WithTimeout(ctx, safeSendStatusTimeout)
+	defer cancel()
+	for {
+		select {
+		case <-cctx.Done():
+			return errors.Trace(cctx.Err())
+		default:
+		}
+		err := s.SyncSendStatus(cctx, status)
+		if err == nil {
+			return nil
+		}
+		if derror.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+			time.Sleep(safeSendStatusInterval)
+			continue
+		}
+		return errors.Trace(err)
 	}
-	return s.SendStatus(ctx, status)
 }
 
-// SendStatus is used by the business logic in a worker to notify its master
+// AsyncSendStatus wraps sendStatusWrapper with asyncPersist=true
+func (s *StatusSender) AsyncSendStatus(ctx context.Context, status WorkerStatus) error {
+	return s.sendStatusWrapper(ctx, status, true)
+}
+
+// SyncSendStatus wraps sendStatusWrapper with asyncPersist=false
+func (s *StatusSender) SyncSendStatus(ctx context.Context, status WorkerStatus) error {
+	return s.sendStatusWrapper(ctx, status, false)
+}
+
+// sendStatusWrapper is used by the business logic in a worker to notify its master
 // of a status change.
-// This function is non-blocking and if any error occurred during or after network IO,
-// the subsequent Tick will return an error.
-func (s *StatusSender) SendStatus(ctx context.Context, status WorkerStatus) error {
+// - If asyncPersist is true, this function is non-blocking and if any error
+//   occurred occurred during or after network IO, the subsequent Tick will
+//   return an error.
+// - If asyncPersist is false, the worker status will be persisted synchronously,
+//   but sending worker status to peer is still asynchronous.
+func (s *StatusSender) sendStatusWrapper(ctx context.Context, status WorkerStatus, asyncPersist bool) error {
 	if s.fsmState.Load() != senderFSMIdle {
 		return derror.ErrWorkerUpdateStatusTryAgain.GenWithStackByArgs()
 	}
@@ -118,21 +151,28 @@ func (s *StatusSender) SendStatus(ctx context.Context, status WorkerStatus) erro
 		log.L().Panic("StatusSender: unexpected fsm state",
 			zap.Int32("old-fsm-state", old))
 	}
-	if err := s.sendStatus(ctx); err != nil {
+	if !asyncPersist {
+		if err := s.workerMetaClient.Store(ctx, s.workerID, &status); err != nil {
+			return err
+		}
+	}
+	if err := s.sendStatus(ctx, asyncPersist); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (s *StatusSender) sendStatus(ctx context.Context) error {
+func (s *StatusSender) sendStatus(ctx context.Context, needPersistStatus bool) error {
 	err := s.pool.Go(ctx, func() {
 		if !s.fsmState.CAS(senderFSMPending, senderFSMSending) {
 			return
 		}
 
 		status := s.getLastUnsentStatus()
-		if err := s.workerMetaClient.Store(ctx, s.workerID, status); err != nil {
-			s.onError(err)
+		if needPersistStatus {
+			if err := s.workerMetaClient.Store(ctx, s.workerID, status); err != nil {
+				s.onError(err)
+			}
 		}
 
 		ok, err := s.messageSender.SendToNode(
