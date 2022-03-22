@@ -395,7 +395,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 		return "", err
 	}
 	s.From.Password = cipher
-
+	c.omitDefaultVals()
 	return s.Yaml()
 }
 
@@ -448,6 +448,13 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		CaseSensitive:   sourceCfg.CaseSensitive,
 		Filters:         sourceCfg.Filters,
 	}
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SourceConfig) omitDefaultVals() {
+	c.Enable = false
 }
 
 // Yaml returns YAML format representation of the config.
