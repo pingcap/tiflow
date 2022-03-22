@@ -176,11 +176,6 @@ error = '''
 codec decode error
 '''
 
-["CDC:ErrCollectSaramaMetrics"]
-error = '''
-collect sarama metrics failed
-'''
-
 ["CDC:ErrConsistentLevel"]
 error = '''
 consistent level (%s) not support
