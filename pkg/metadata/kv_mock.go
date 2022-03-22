@@ -34,8 +34,15 @@ func (t *Txn) Then(ops ...clientv3.Op) clientv3.Txn {
 }
 
 func (t *Txn) Commit() (*clientv3.TxnResponse, error) {
+	var err error
 	for _, op := range t.ops {
-		_, err := t.m.Put(context.Background(), string(op.KeyBytes()), string(op.ValueBytes()))
+		switch {
+		case op.IsDelete():
+			_, err = t.m.Delete(context.Background(), string(op.KeyBytes()))
+		case op.IsPut():
+			_, err = t.m.Put(context.Background(), string(op.KeyBytes()), string(op.ValueBytes()))
+		default:
+		}
 		if err != nil {
 			return nil, err
 		}

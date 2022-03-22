@@ -21,8 +21,15 @@ func (t *mockTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 
 // [TODO] refine
 func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
+	var err metaclient.Error
 	for _, op := range t.ops {
-		_, err := t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
+		switch {
+		case op.IsPut():
+			_, err = t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
+		case op.IsDelete():
+			_, err = t.m.Delete(t.c, string(op.KeyBytes()))
+		default:
+		}
 		if err != nil {
 			return nil, err
 		}
