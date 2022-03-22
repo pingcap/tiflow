@@ -83,6 +83,8 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		etcdClient:   etcdCli,
 		etcdKVClient: KVCli,
 
+		// We use the channel size 2 because in the design of these tests,
+		// no situation with more than 2 pending messages can occur.
 		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 2),
 		syncCh:             make(chan *model.SyncMessage, 2),
 		checkpointCh:       make(chan *model.CheckpointMessage, 2),
