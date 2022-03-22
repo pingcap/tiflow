@@ -199,7 +199,8 @@ func (conn *DBConn) resetConn(tctx *tcontext.Context) error {
 
 func createConns(tctx *tcontext.Context, cfg *config.SubTaskConfig,
 	name, sourceID string,
-	workerCount int) (*conn.BaseDB, []*DBConn, error) {
+	workerCount int,
+) (*conn.BaseDB, []*DBConn, error) {
 	baseDB, err := conn.DefaultDBProvider.Apply(&cfg.To)
 	if err != nil {
 		return nil, nil, terror.WithScope(err, terror.ScopeDownstream)

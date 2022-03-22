@@ -220,8 +220,9 @@ func (s *EventRouter) matchDispatcher(schema, table string) (topic.Dispatcher, p
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(ruleConfig *config.DispatchRule,
-	enableOldValue bool) partition.Dispatcher {
+func getPartitionDispatcher(
+	ruleConfig *config.DispatchRule, enableOldValue bool,
+) partition.Dispatcher {
 	var (
 		d    partition.Dispatcher
 		rule partitionDispatchRule
