@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/clock"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,6 +54,7 @@ func TestTaskRunnerBasics(t *testing.T) {
 	}, 1*time.Second, 100*time.Millisecond)
 
 	cancel()
+	wg.Wait()
 }
 
 func TestTaskRunnerInitBlocked(t *testing.T) {
@@ -95,4 +98,42 @@ func TestTaskRunnerInitBlocked(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	cancel()
+	wg.Wait()
+}
+
+func TestTaskRunnerSubmitTime(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tr := NewTaskRunner(10, 10)
+
+	mockClock := clock.NewMock()
+	tr.clock = mockClock
+	submitTime := time.Unix(0, 1)
+	mockClock.Set(submitTime)
+
+	// We call AddTask before calling Run to make sure that the submitTime
+	// is recorded during the execution of the AddTask call.
+	worker := newDummyWorker("my-worker")
+	err := tr.AddTask(worker)
+	require.NoError(t, err)
+
+	// Advance the internal clock
+	mockClock.Add(time.Hour)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := tr.Run(ctx)
+		require.Error(t, err)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	require.Eventually(t, func() bool {
+		return worker.SubmitTime() == submitTime
+	}, 1*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
 }

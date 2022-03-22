@@ -3,10 +3,13 @@ package worker
 import (
 	"context"
 	"sync"
+	"time"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
 )
 
 type dummyWorker struct {
@@ -17,11 +20,14 @@ type dummyWorker struct {
 	blockMu   sync.Mutex
 	blockCond *sync.Cond
 	blocked   bool
+
+	submitTime atomic.Time
 }
 
 func newDummyWorker(id RunnableID) *dummyWorker {
 	ret := &dummyWorker{
-		id: id,
+		id:         id,
+		submitTime: *atomic.NewTime(time.Time{}),
 	}
 	ret.blockCond = sync.NewCond(&ret.blockMu)
 	return ret
@@ -33,6 +39,12 @@ func (d *dummyWorker) Init(ctx context.Context) error {
 		d.blockCond.Wait()
 	}
 	d.blockMu.Unlock()
+
+	rctx, ok := ToRuntimeCtx(ctx)
+	if !ok {
+		log.L().Panic("A RuntimeContext is expected to be used in unit tests")
+	}
+	d.submitTime.Store(rctx.SubmitTime())
 
 	return nil
 }
@@ -73,4 +85,8 @@ func (d *dummyWorker) UnblockInit() {
 
 	d.blocked = false
 	d.blockCond.Broadcast()
+}
+
+func (d *dummyWorker) SubmitTime() time.Time {
+	return d.submitTime.Load()
 }

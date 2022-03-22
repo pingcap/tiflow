@@ -5,14 +5,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/executor/worker/internal"
-	"github.com/hanfei1991/microcosm/model"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/hanfei1991/microcosm/executor/worker/internal"
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/clock"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
 
 // Re-export types for public use
@@ -24,7 +26,7 @@ type (
 )
 
 type TaskRunner struct {
-	inQueue       chan Runnable
+	inQueue       chan *internal.RunnableContainer
 	initQuotaSema *semaphore.Weighted
 	tasks         sync.Map
 	wg            sync.WaitGroup
@@ -33,6 +35,8 @@ type TaskRunner struct {
 	canceled bool
 
 	taskCount atomic.Int64
+
+	clock clock.Clock
 }
 
 const (
@@ -64,14 +68,16 @@ func (e *taskEntry) EventLoop(ctx context.Context) error {
 
 func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 	return &TaskRunner{
-		inQueue:       make(chan Runnable, inQueueSize),
+		inQueue:       make(chan *internal.RunnableContainer, inQueueSize),
 		initQuotaSema: semaphore.NewWeighted(int64(initConcurrency)),
+		clock:         clock.New(),
 	}
 }
 
 func (r *TaskRunner) AddTask(task Runnable) error {
+	wrappedTask := internal.WrapRunnable(task, r.clock.Now())
 	select {
-	case r.inQueue <- task:
+	case r.inQueue <- wrappedTask:
 		return nil
 	default:
 	}
@@ -136,7 +142,7 @@ func (r *TaskRunner) cancelAll() {
 	r.wg.Wait()
 }
 
-func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
+func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableContainer) (ret error) {
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, defaultInitQueuingTimeout)
 	defer cancelTimeout()
 
@@ -156,9 +162,11 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 
 	taskCtx, cancel := context.WithCancel(context.Background())
 	t := &taskEntry{
-		RunnableContainer: internal.WrapRunnable(task),
+		RunnableContainer: task,
 		cancel:            cancel,
 	}
+
+	rctx := newRuntimeCtx(taskCtx, task.Info())
 
 	r.cancelMu.RLock()
 	defer r.cancelMu.RUnlock()
@@ -195,7 +203,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 		defer r.taskCount.Dec()
 
 		defer func() {
-			err := t.Close(ctx)
+			err := t.Close(rctx)
 			log.L().Info("Task Closed",
 				zap.String("id", t.ID()),
 				zap.Error(err),
@@ -207,7 +215,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 			}
 		}()
 
-		if err := runInit(taskCtx); err != nil {
+		if err := runInit(rctx); err != nil {
 			log.L().Warn("Task init returned error", zap.String("id", t.ID()), zap.Error(err))
 			return
 		}
@@ -216,7 +224,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task Runnable) (ret error) {
 			zap.String("id", t.ID()),
 			zap.Int64("runtime-task-count", r.taskCount.Load()))
 
-		err := t.EventLoop(ctx)
+		err := t.EventLoop(rctx)
 		log.L().Info("Task stopped", zap.String("id", t.ID()), zap.Error(err))
 	}()
 

@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
@@ -39,17 +40,23 @@ const (
 type RunnableContainer struct {
 	Runnable
 	status atomic.Int32
+	info   RuntimeInfo
 }
 
-func WrapRunnable(runnable Runnable) *RunnableContainer {
+func WrapRunnable(runnable Runnable, submitTime time.Time) *RunnableContainer {
 	return &RunnableContainer{
 		Runnable: runnable,
 		status:   *atomic.NewInt32(TaskSubmitted),
+		info:     RuntimeInfo{SubmitTime: submitTime},
 	}
 }
 
 func (c *RunnableContainer) Status() RunnableStatus {
 	return c.status.Load()
+}
+
+func (c *RunnableContainer) Info() RuntimeInfo {
+	return c.info
 }
 
 func (c *RunnableContainer) OnInitialized() {
