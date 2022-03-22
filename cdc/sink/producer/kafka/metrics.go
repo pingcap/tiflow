@@ -14,7 +14,9 @@
 package kafka
 
 import (
+	"context"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -183,17 +185,10 @@ type saramaMetricsMonitor struct {
 	brokers map[int32]struct{}
 }
 
-// CollectMetrics collect all monitored metrics
-func (sm *saramaMetricsMonitor) CollectMetrics() error {
+// collectMetrics collect all monitored metrics
+func (sm *saramaMetricsMonitor) collectMetrics() {
 	sm.collectProducerMetrics()
-	if err := sm.collectBrokerMetrics(); err != nil {
-		log.Warn("collect broker metrics failed",
-			zap.Error(err),
-			zap.String("changefeed", sm.changefeedID),
-			zap.Any("role", sm.role))
-		return err
-	}
-	return nil
+	sm.collectBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
@@ -222,15 +217,11 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
-func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
-	brokers, _, err := sm.admin.DescribeCluster()
-	if err != nil {
-		return err
-	}
+func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
+	sm.collectBrokers()
 
-	for _, b := range brokers {
-		sm.brokers[b.ID()] = struct{}{}
-		brokerID := strconv.Itoa(int(b.ID()))
+	for id := range sm.brokers {
+		brokerID := strconv.Itoa(int(id))
 
 		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
@@ -272,22 +263,40 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 			responseSizeGauge.WithLabelValues(sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 	}
-	return nil
 }
 
-func newSaramaMetricsMonitor(registry metrics.Registry, changefeedID string,
-	role util.Role, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
-	return &saramaMetricsMonitor{
+// flushMetricsInterval specifies the interval of refresh sarama metrics.
+const flushMetricsInterval = 5 * time.Second
+
+func runSaramaMetricsMonitor(ctx context.Context, registry metrics.Registry, changefeedID string,
+	role util.Role, admin kafka.ClusterAdminClient) {
+	monitor := &saramaMetricsMonitor{
 		changefeedID: changefeedID,
 		role:         role,
 		registry:     registry,
 		admin:        admin,
 		brokers:      make(map[int32]struct{}),
 	}
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	go func() {
+		defer func() {
+			ticker.Stop()
+			monitor.cleanup()
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				monitor.collectMetrics()
+			}
+		}
+	}()
 }
 
-// Cleanup called when the changefeed / processor stop the kafka sink.
-func (sm *saramaMetricsMonitor) Cleanup() {
+// cleanup called when the changefeed / processor stop the kafka sink.
+func (sm *saramaMetricsMonitor) cleanup() {
 	sm.cleanUpProducerMetrics()
 	sm.cleanUpBrokerMetrics()
 }
@@ -300,8 +309,7 @@ func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
 }
 
 func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
-	brokerIDs := sm.getBrokerIDs()
-	for _, id := range brokerIDs {
+	for id := range sm.brokers {
 		brokerID := strconv.Itoa(int(id))
 		incomingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		outgoingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
@@ -314,23 +322,16 @@ func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
 	}
 }
 
-func (sm *saramaMetricsMonitor) getBrokerIDs() []int32 {
-	result := make([]int32, 0, len(sm.brokers))
+func (sm *saramaMetricsMonitor) collectBrokers() {
 	brokers, _, err := sm.admin.DescribeCluster()
 	if err != nil {
-		// kafka cluster is unreachable, use historical brokers
-		log.Warn("kafka cluster unreachable,"+
-			" use historical broker information to clean up metrics",
+		log.Warn("kafka cluster unreachable, use historical brokers to collect kafka broker level metrics",
 			zap.String("changefeed", sm.changefeedID),
 			zap.Any("role", sm.role))
-		for id := range sm.brokers {
-			result = append(result, id)
-		}
-		return result
+		return
 	}
 
 	for _, b := range brokers {
-		result = append(result, b.ID())
+		sm.brokers[b.ID()] = struct{}{}
 	}
-	return result
 }
