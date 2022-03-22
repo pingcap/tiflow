@@ -79,9 +79,9 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 		var err error
 		verifier, err = verification.NewModuleVerification(ctxC,
 			&verification.ModuleVerificationConfig{
-				ChangeFeedID: n.changefeed,
+				ChangefeedID: n.changefeed,
 				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
-			})
+			}, ctx.GlobalVars().EtcdClient.Client)
 		if err != nil {
 			log.Error("newModuleVerification fail", zap.String("changefeed", n.changefeed), zap.Error(err), zap.String("module", "puller"))
 		}

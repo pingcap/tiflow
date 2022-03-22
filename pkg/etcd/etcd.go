@@ -48,6 +48,8 @@ const (
 	TaskPositionKeyPrefix = TaskKeyPrefix + "/position"
 	// JobKeyPrefix is the prefix of job keys
 	JobKeyPrefix = EtcdKeyBase + "/job"
+	// VerificationKeyPrefix is the prefix of verification keys
+	VerificationKeyPrefix = EtcdKeyBase + "/verification"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -78,6 +80,11 @@ func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 // GetEtcdKeyJob returns the key for a job status
 func GetEtcdKeyJob(changeFeedID string) string {
 	return JobKeyPrefix + "/" + changeFeedID
+}
+
+// GetEtcdKeyVerification returns the key for a job status
+func GetEtcdKeyVerification(changeFeedID string) string {
+	return VerificationKeyPrefix + "/" + changeFeedID
 }
 
 // CDCEtcdClient is a wrap of etcd client

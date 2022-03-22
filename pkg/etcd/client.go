@@ -31,6 +31,21 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 )
 
+//go:generate mockery --name=EtcdClient --inpackage
+type EtcdClient interface {
+	Unwrap() *clientV3.Client
+	Put(ctx context.Context, key, val string, opts ...clientV3.OpOption) (resp *clientV3.PutResponse, err error)
+	Get(ctx context.Context, key string, opts ...clientV3.OpOption) (resp *clientV3.GetResponse, err error)
+	Delete(ctx context.Context, key string, opts ...clientV3.OpOption) (resp *clientV3.DeleteResponse, err error)
+	Txn(ctx context.Context, cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op) (resp *clientV3.TxnResponse, err error)
+	Grant(ctx context.Context, ttl int64) (resp *clientV3.LeaseGrantResponse, err error)
+	Revoke(ctx context.Context, id clientV3.LeaseID) (resp *clientV3.LeaseRevokeResponse, err error)
+	TimeToLive(ctx context.Context, lease clientV3.LeaseID, opts ...clientV3.LeaseOption) (resp *clientV3.LeaseTimeToLiveResponse, err error)
+	Watch(ctx context.Context, key string, role string, opts ...clientV3.OpOption) clientV3.WatchChan
+	WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchResponse, key string, role string, opts ...clientV3.OpOption)
+	RequestProgress(ctx context.Context) error
+}
+
 // etcd operation names
 const (
 	EtcdPut    = "Put"
@@ -217,7 +232,7 @@ func (c *Client) Watch(
 	return watchCh
 }
 
-// WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
+// WatchWithChan maintains a WatchCh and sends all msg from the WatchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchResponse,
 	key string, role string, opts ...clientV3.OpOption) {
 	defer func() {

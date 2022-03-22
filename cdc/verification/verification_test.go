@@ -22,11 +22,13 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/goleak"
 )
@@ -46,37 +48,36 @@ func TestNewVerification(t *testing.T) {
 		openDB = origin
 	}()
 
-	err := NewVerification(ctx, nil)
+	cli := clientv3.NewCtxClient(ctx)
+	cli.KV = &etcd.MockClient{}
+	etcdCli := etcd.NewCDCEtcdClient(ctx, cli)
+	stdCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{EtcdClient: &etcdCli})
+	err := NewVerification(stdCtx, nil)
 	require.NotNil(t, err)
 
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
 		db, _, err := sqlmock.New()
 		return db, err
 	}
-	err = NewVerification(ctx, &Config{CheckInterval: time.Minute})
+	err = NewVerification(stdCtx, &Config{CheckInterval: time.Minute})
 	require.Nil(t, err)
 
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
 		db, _, _ := sqlmock.New()
 		return db, errors.New("openDB err")
 	}
-	err = NewVerification(ctx, &Config{})
+	err = NewVerification(stdCtx, &Config{})
 	require.EqualError(t, err, "openDB err")
 
 	db, _, err := sqlmock.New()
 	require.Nil(t, err)
-	mockModuleVerifier := &MockModuleVerifier{}
-	mockModuleVerifier.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	mockModuleVerifier.On("GC", mock.Anything, mock.Anything).Return(errors.New("oh no"))
-	mockModuleVerifier.On("Close").Return(cerror.WrapError(cerror.ErrPebbleDBError, errors.New("who care")))
 	v := &TiDBVerification{
 		config: &Config{
 			CheckInterval: 10 * time.Millisecond,
 		},
-		running:            *atomic.NewBool(true),
-		upstreamChecker:    newChecker(db),
-		downstreamChecker:  newChecker(db),
-		moduleVerification: mockModuleVerifier,
+		running:           *atomic.NewBool(true),
+		upstreamChecker:   newChecker(db),
+		downstreamChecker: newChecker(db),
 	}
 	ctx, cancel = context.WithTimeout(ctx, time.Millisecond*30)
 	defer cancel()
@@ -479,5 +480,36 @@ func TestVerify(t *testing.T) {
 		require.Equal(t, tt.wantEts, ets, tt.name)
 		require.Equal(t, tt.wantStopNow, stopNow)
 		compareCheckSum = origin
+	}
+}
+
+func TestTiDBVerificationPutVerificationTask(t *testing.T) {
+	type args struct {
+		task *taskInfo
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr error
+	}{
+		{
+			name: "h",
+			args: args{task: &taskInfo{StartTs: "1", EndTs: "2"}},
+		},
+		{
+			name:    "put err",
+			args:    args{task: &taskInfo{StartTs: "1", EndTs: "2"}},
+			wantErr: errors.New("xx"),
+		},
+	}
+	for _, tt := range tests {
+		mockEtcdCli := &etcd.MockEtcdClient{}
+		mockEtcdCli.On("Put", mock.Anything, etcd.GetEtcdKeyVerification("1"), mock.Anything).Return(nil, tt.wantErr)
+		v := &TiDBVerification{
+			etcdClient: mockEtcdCli,
+			config:     &Config{ChangefeedID: "1"},
+		}
+		err := v.putVerificationTask(context.Background(), tt.args.task)
+		require.True(t, errors.ErrorEqual(err, tt.wantErr), tt.name)
 	}
 }

@@ -22,34 +22,58 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientV3 "go.etcd.io/etcd/client/v3"
 )
 
 func TestNewModuleVerification(t *testing.T) {
-	_, err := NewModuleVerification(context.Background(), nil)
+	_, err := NewModuleVerification(context.Background(), nil, nil)
 	require.NotNil(t, err)
 
-	m1, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "1"})
-	defer m1.Close()
-	require.Nil(t, err)
-	m1.SentTrackData(context.Background(), Puller, []TrackData{{[]byte("1"), 1}})
+	_, err = NewModuleVerification(context.Background(), &ModuleVerificationConfig{}, nil)
+	require.NotNil(t, err)
 
-	m2, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "1"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockEtcdCli := &etcd.MockEtcdClient{}
+	mockEtcdCli.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	m1, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "1"}, mockEtcdCli)
+	m1.SentTrackData(ctx, Puller, []TrackData{{[]byte("1"), 1}})
+
+	m2, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "1"}, mockEtcdCli)
 	require.Nil(t, err)
 	require.Equal(t, m1, m2)
-	m3, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "2"})
-	m3.Close()
-	require.Nil(t, err)
-	require.NotSame(t, m1, m3)
 
-	m4, err := NewModuleVerification(context.Background(), &ModuleVerificationConfig{ChangeFeedID: "2"})
-	defer m4.Close()
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	m3, err := NewModuleVerification(ctx1, &ModuleVerificationConfig{ChangefeedID: "2"}, mockEtcdCli)
+	require.Nil(t, err)
+	cancel1()
+	require.NotSame(t, m1, m3)
+	time.Sleep(time.Millisecond * 3)
+
+	m4, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "2"}, mockEtcdCli)
 	require.Nil(t, err)
 	require.NotSame(t, m4, m3)
 
-	err = m4.GC(context.Background(), "")
+	err = m4.GC(ctx, "")
 	require.Nil(t, err)
+
+	ch := make(chan clientV3.WatchResponse, 1)
+	task := &taskInfo{StartTs: "1", EndTs: "2"}
+	v, err := task.Marshal()
+	require.Nil(t, err)
+	ch <- clientV3.WatchResponse{Events: []*clientV3.Event{{Kv: &mvccpb.KeyValue{Value: v}}}}
+	close(ch)
+	mockEtcdCli1 := &etcd.MockEtcdClient{}
+	mockEtcdCli1.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(clientV3.WatchChan(ch))
+	_, err = NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "111"}, mockEtcdCli1)
+	require.Nil(t, nil)
+	time.Sleep(time.Millisecond * 5)
 }
 
 func TestModuleVerification_SentTrackData(t *testing.T) {
@@ -141,11 +165,11 @@ func TestModuleVerification_Verify(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Debug.DB
 	cfg.Count = 1
 
-	pebble, err := db.OpenPebble(context.Background(), 1, t.TempDir(), 0, cfg)
+	pebble, err := db.OpenPebble(context.Background(), db.Verification, 1, t.TempDir(), 0, cfg)
 	require.Nil(t, err)
 	wb := pebble.Batch(0)
 
-	//cfg.BlockSize = 0
+	// cfg.BlockSize = 0
 	m := &ModuleVerification{
 		db:  pebble,
 		wb:  wb,
@@ -189,5 +213,4 @@ func TestModuleVerification_Verify(t *testing.T) {
 	ret = m.Verify(context.Background(), "1", "431834667399774209")
 	t.Log(ret.Error())
 	require.NotNil(t, ret)
-
 }

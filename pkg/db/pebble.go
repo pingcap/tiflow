@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -32,22 +31,25 @@ import (
 	"go.uber.org/zap"
 )
 
-type pebbleLogger struct{ id int }
+type pebbleLogger struct {
+	id  int
+	tag SystemTag
+}
 
 var _ pebble.Logger = (*pebbleLogger)(nil)
 
 func (logger *pebbleLogger) Infof(format string, args ...interface{}) {
 	// Do not output low-level pebble log to TiCDC log.
-	log.Debug(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
+	log.Debug(fmt.Sprintf(format, args...), zap.Int("db", logger.id), zap.String("tag", logger.tag.String()))
 }
 
 func (logger *pebbleLogger) Fatalf(format string, args ...interface{}) {
-	log.Panic(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
+	log.Panic(fmt.Sprintf(format, args...), zap.Int("db", logger.id), zap.String("tag", logger.tag.String()))
 }
 
 // TODO: Update DB config once we switch to pebble,
 //       as some configs are not applicable to pebble.
-func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Options, *writeStall) {
+func buildPebbleOption(tag SystemTag, id int, memInByte int, cfg *config.DBConfig) (pebble.Options, *writeStall) {
 	var option pebble.Options
 	option.ErrorIfExists = true
 	option.DisableWAL = false // Delete range requires WAL.
@@ -78,7 +80,7 @@ func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Opti
 	option.EnsureDefaults()
 
 	// Event listener for logging and metrics.
-	option.EventListener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id})
+	option.EventListener = pebble.MakeLoggingEventListener(&pebbleLogger{id: id, tag: tag})
 	ws := &writeStall{}
 	var stallTimeStamp int64
 	option.EventListener.WriteStallBegin = func(_ pebble.WriteStallBeginInfo) {
@@ -98,11 +100,10 @@ func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Opti
 }
 
 // OpenPebble opens a pebble.
-func OpenPebble(
-	ctx context.Context, id int, path string, memInByte int, cfg *config.DBConfig,
-) (DB, error) {
-	option, ws := buildPebbleOption(id, memInByte, cfg)
-	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
+func OpenPebble(ctx context.Context, tag SystemTag, id int, path string, memInByte int, cfg *config.DBConfig) (DB, error) {
+	option, ws := buildPebbleOption(tag, id, memInByte, cfg)
+	// TODO: incompatible change, if cdc support between version deployment before this feature rollout, need change this also
+	dbDir := filepath.Join(path, fmt.Sprintf("%s-%04d", tag, id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
 		if err1 != nil {
@@ -124,6 +125,7 @@ func OpenPebble(
 	return &pebbleDB{
 		db:               db,
 		metricWriteStall: ws,
+		tag:              tag,
 	}, nil
 }
 
@@ -136,6 +138,7 @@ type writeStall struct {
 type pebbleDB struct {
 	db               *pebble.DB
 	metricWriteStall *writeStall
+	tag              SystemTag
 }
 
 var _ DB = (*pebbleDB)(nil)
@@ -170,15 +173,17 @@ func (p *pebbleDB) Close() error {
 func (p *pebbleDB) CollectMetrics(i int) {
 	db := p.db
 	stats := db.Metrics()
-	id := strconv.Itoa(i)
+	id := fmt.Sprintf("%s-%d", p.tag, i)
 	sum := 0
 	for i := range stats.Levels {
 		sum += int(stats.Levels[i].Size)
 	}
-	sorter.OnDiskDataSizeGauge.
-		WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
-	sorter.InMemoryDataSizeGauge.
-		WithLabelValues(id).Set(float64(stats.BlockCache.Size))
+	if p.tag == Sorter {
+		sorter.OnDiskDataSizeGauge.
+			WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
+		sorter.InMemoryDataSizeGauge.
+			WithLabelValues(id).Set(float64(stats.BlockCache.Size))
+	}
 	dbIteratorGauge.
 		WithLabelValues(id).Set(float64(stats.TableIters))
 	dbWriteDelayCount.

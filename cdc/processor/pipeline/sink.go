@@ -108,11 +108,12 @@ func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
 	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
 	if ctx.ChangefeedVars().Info.SyncPointEnabled {
-		v, err := verification.NewModuleVerification(context.Background(),
+		v, err := verification.NewModuleVerification(ctx,
 			&verification.ModuleVerificationConfig{
-				ChangeFeedID: ctx.ChangefeedVars().ID,
+				ChangefeedID: ctx.ChangefeedVars().ID,
 				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
-			})
+			},
+			ctx.GlobalVars().EtcdClient.Client)
 		if err != nil {
 			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "sink"))
 		}

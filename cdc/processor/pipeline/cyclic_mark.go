@@ -55,23 +55,25 @@ func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	return n.InitTableActor(ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID,
-		ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID,
-		false,
-		ctx.ChangefeedVars().Info.SyncPointEnabled,
-		ctx.ChangefeedVars().ID)
+	return n.InitTableActor(ctx, false)
 }
 
-func (n *cyclicMarkNode) InitTableActor(localReplicaID uint64, filterReplicaID []uint64, isTableActorMode, syncPointEnabled bool, changefeedID string) error {
-	if syncPointEnabled {
-		verifier, err := verification.NewModuleVerification(context.Background(), &verification.ModuleVerificationConfig{ChangeFeedID: changefeedID, CyclicEnable: true})
+func (n *cyclicMarkNode) InitTableActor(ctx pipeline.NodeContext, isTableActorMode bool) error {
+	if ctx.ChangefeedVars().Info.SyncPointEnabled {
+		verifier, err := verification.NewModuleVerification(ctx,
+			&verification.ModuleVerificationConfig{
+				ChangefeedID: ctx.ChangefeedVars().ID,
+				CyclicEnable: true,
+			},
+			ctx.GlobalVars().EtcdClient.Client)
 		if err != nil {
-			log.Error("newModuleVerification fail", zap.String("changefeed", changefeedID), zap.Error(err), zap.String("module", "cyclic"))
+			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "cyclic"))
 		}
 		n.verifier = verifier
 	}
-	n.localReplicaID = localReplicaID
+	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
+	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
 	}

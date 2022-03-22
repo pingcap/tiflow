@@ -33,6 +33,7 @@ const (
 
 	changefeedInfoKey = "/changefeed/info"
 	jobKey            = "/job"
+	verificationKey   = "/verification"
 )
 
 // CDCKeyType is the type of etcd key
@@ -48,6 +49,7 @@ const (
 	CDCKeyTypeTaskPosition
 	CDCKeyTypeTaskStatus
 	CDCKeyTypeTaskWorkload
+	CDCKeyTypeVerification
 )
 
 // CDCKey represents a etcd key which is defined by TiCDC
@@ -112,6 +114,11 @@ func (k *CDCKey) Parse(key string) error {
 		k.CaptureID = ""
 		k.ChangefeedID = key[len(jobKey)+1:]
 		k.OwnerLeaseID = ""
+	case strings.HasPrefix(key, verificationKey):
+		k.Tp = CDCKeyTypeVerification
+		k.CaptureID = ""
+		k.ChangefeedID = key[len(verificationKey)+1:]
+		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, taskStatusKey):
 		splitKey := strings.SplitN(key[len(taskStatusKey)+1:], "/", 2)
 		if len(splitKey) != 2 {
@@ -158,6 +165,8 @@ func (k *CDCKey) String() string {
 		return EtcdKeyBase + changefeedInfoKey + "/" + k.ChangefeedID
 	case CDCKeyTypeChangeFeedStatus:
 		return EtcdKeyBase + jobKey + "/" + k.ChangefeedID
+	case CDCKeyTypeVerification:
+		return EtcdKeyBase + verificationKey + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskPosition:
 		return EtcdKeyBase + taskPositionKey + "/" + k.CaptureID + "/" + k.ChangefeedID
 	case CDCKeyTypeTaskStatus:

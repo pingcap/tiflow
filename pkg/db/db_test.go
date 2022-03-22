@@ -43,7 +43,7 @@ func TestDB(t *testing.T) {
 	require.Nil(t, err)
 	testDB(t, db)
 
-	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), 0, cfg)
+	db, err = OpenPebble(ctx, Sorter, 1, filepath.Join(t.TempDir(), "2"), 0, cfg)
 	require.Nil(t, err)
 	testDB(t, db)
 }
@@ -125,7 +125,7 @@ func TestPebbleMetrics(t *testing.T) {
 	cfg.Count = 1
 
 	id := 1
-	option, ws := buildPebbleOption(id, 0, cfg)
+	option, ws := buildPebbleOption(Sorter, id, 0, cfg)
 	db, err := pebble.Open(t.TempDir(), &option)
 	require.Nil(t, err)
 	pdb := &pebbleDB{
@@ -205,7 +205,7 @@ func BenchmarkNext(b *testing.B) {
 		name: "pebble",
 		dbfn: func(name string) DB {
 			gb := 1024 * 1024 * 1024
-			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), gb, cfg)
+			db, err := OpenPebble(ctx, Sorter, 1, filepath.Join(b.TempDir(), name), gb, cfg)
 			require.Nil(b, err)
 			return db
 		},

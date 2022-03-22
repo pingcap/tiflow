@@ -16,6 +16,7 @@ package verification
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -23,7 +24,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/multierr"
@@ -51,11 +54,11 @@ type Config struct {
 }
 
 type TiDBVerification struct {
-	config             *Config
-	upstreamChecker    *checker
-	downstreamChecker  *checker
-	moduleVerification ModuleVerifier
-	running            atomic.Bool
+	etcdClient        etcd.EtcdClient
+	config            *Config
+	upstreamChecker   *checker
+	downstreamChecker *checker
+	running           atomic.Bool
 }
 
 const (
@@ -69,7 +72,7 @@ const (
 )
 
 // NewVerification start the verification process if no error
-func NewVerification(ctx context.Context, config *Config) error {
+func NewVerification(ctx cdcContext.Context, config *Config) error {
 	if config == nil {
 		return cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("Config can not be nil"))
 	}
@@ -86,15 +89,11 @@ func NewVerification(ctx context.Context, config *Config) error {
 	if config.CheckInterval == 0 {
 		config.CheckInterval = defaultCheckInterval
 	}
-	m, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangeFeedID: config.ChangefeedID})
-	if err != nil {
-		return err
-	}
 	v := &TiDBVerification{
-		config:             config,
-		upstreamChecker:    newChecker(upstreamDB),
-		downstreamChecker:  newChecker(downstreamDB),
-		moduleVerification: m,
+		config:            config,
+		upstreamChecker:   newChecker(upstreamDB),
+		downstreamChecker: newChecker(downstreamDB),
+		etcdClient:        ctx.GlobalVars().EtcdClient.Client,
 	}
 	go v.runVerify(ctx)
 
@@ -111,11 +110,11 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("runVerify ctx cancel", zap.Error(ctx.Err()))
-			err := v.Close()
-			if err != nil {
-				log.Error("runVerify Close fail", zap.Error(err))
+			log.Info("runVerify ctx cancel", zap.String("changefeed", v.config.ChangefeedID), zap.Error(ctx.Err()))
+			if err := v.Close(); err != nil {
+				log.Error("runVerify Close fail", zap.String("changefeed", v.config.ChangefeedID), zap.Error(err))
 			}
+
 			return
 		case <-ticker.C:
 			// TODO:
@@ -127,6 +126,7 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 					zap.String("startTs", startTs),
 					zap.String("endTs", endTs),
 					zap.Error(err))
+
 				continue
 			}
 			log.Info("e2e verify ret",
@@ -136,22 +136,54 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 				zap.Bool("enoughCheck", enoughCheck))
 
 			if !enoughCheck {
-				err = v.moduleVerification.Verify(ctx, startTs, endTs)
-				if err != nil {
-					log.Error("module verify ret",
+				if err = v.putVerificationTask(ctx, &taskInfo{StartTs: startTs, EndTs: endTs}); err != nil {
+					log.Error("putVerificationTask fail",
 						zap.String("changefeed", v.config.ChangefeedID),
 						zap.String("startTs", startTs),
 						zap.String("endTs", endTs),
 						zap.Error(err))
+					continue
 				}
-			}
-			// just run module level gc, e2e gc is taking care of at syncPoint side
-			err = v.moduleVerification.GC(ctx, endTs)
-			if err != nil {
-				log.Warn("module verify gc fail", zap.Error(err))
+
+				log.Info("putVerificationTask",
+					zap.String("changefeed", v.config.ChangefeedID),
+					zap.String("startTs", startTs),
+					zap.String("endTs", endTs))
 			}
 		}
 	}
+}
+
+type taskInfo struct {
+	StartTs string `json:"startTs"`
+	EndTs   string `json:"endTs"`
+}
+
+// Marshal using json.Marshal.
+func (c *taskInfo) Marshal() ([]byte, error) {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrMarshalFailed, err)
+	}
+
+	return data, nil
+}
+
+// Unmarshal from binary data.
+func (c *taskInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, c)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, errors.Annotatef(err, "unmarshal data: %v", data))
+}
+
+func (v *TiDBVerification) putVerificationTask(ctx context.Context, task *taskInfo) error {
+	key := etcd.GetEtcdKeyVerification(v.config.ChangefeedID)
+	value, err := task.Marshal()
+	if err != nil {
+		return err
+	}
+
+	_, err = v.etcdClient.Put(ctx, key, string(value))
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // Verify implement Verify api,
@@ -334,6 +366,5 @@ func (v *TiDBVerification) getTS(ctx context.Context) (tsPair, error) {
 
 func (v *TiDBVerification) Close() error {
 	err := multierr.Append(v.upstreamChecker.db.Close(), v.downstreamChecker.db.Close())
-	err = multierr.Append(cerror.WrapError(cerror.ErrMySQLConnectionError, err), v.moduleVerification.Close())
-	return err
+	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

@@ -29,6 +29,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
@@ -44,7 +46,7 @@ const (
 )
 
 const (
-	// Write batch size should be larger than block size to save CPU.
+	// write batch size should be larger than block size to save CPU.
 	writeBatchSizeFactor = 16
 )
 
@@ -68,10 +70,11 @@ type ModuleVerification struct {
 	commitMu     sync.Mutex
 	deleteCount  uint64
 	nextDeleteTs time.Time
+	etcdClient   etcd.EtcdClient
 }
 
 type ModuleVerificationConfig struct {
-	ChangeFeedID        string
+	ChangefeedID        string
 	DBConfig            *config.DBConfig
 	MaxMemoryPercentage int
 	CyclicEnable        bool
@@ -83,15 +86,18 @@ var (
 )
 
 // NewModuleVerification return the module level verification per changefeed
-func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig) (*ModuleVerification, error) {
+func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, etcdCli etcd.EtcdClient) (*ModuleVerification, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("ModuleVerificationConfig can not be nil"))
+	}
+	if etcdCli == nil {
+		return nil, cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("etcdCli can not be nil"))
 	}
 
 	initLock.Lock()
 	defer initLock.Unlock()
 
-	if v, ok := verifications[cfg.ChangeFeedID]; ok {
+	if v, ok := verifications[cfg.ChangefeedID]; ok {
 		return v, nil
 	}
 
@@ -105,23 +111,25 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig) (
 	memPercentage := float64(cfg.MaxMemoryPercentage) / 100
 	memInByte := float64(totalMemory) * memPercentage
 
-	dir := filepath.Join(config.GetDefaultServerConfig().DataDir, config.DefaultVerificationDir, cfg.ChangeFeedID)
+	dir := filepath.Join(config.GetDefaultServerConfig().DataDir, config.DefaultVerificationDir, cfg.ChangefeedID)
 	if cfg.DBConfig == nil {
 		cfg.DBConfig = config.GetDefaultServerConfig().Debug.DB
 	}
-	// TODO: meaningful id value?
-	pebble, err := db.OpenPebble(ctx, 0, dir, int(memInByte), cfg.DBConfig)
+	pebble, err := db.OpenPebble(ctx, db.Verification, 0, dir, int(memInByte), cfg.DBConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPebbleDBError, err)
 	}
 
+	pebble.CollectMetrics(0)
 	wb := pebble.Batch(0)
 	m := &ModuleVerification{
-		cfg: cfg,
-		db:  pebble,
-		wb:  wb,
+		cfg:        cfg,
+		db:         pebble,
+		wb:         wb,
+		etcdClient: etcdCli,
 	}
-	verifications[cfg.ChangeFeedID] = m
+	verifications[cfg.ChangefeedID] = m
+	go m.runVerify(ctx)
 
 	return m, nil
 }
@@ -154,7 +162,7 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 }
 
 func (m *ModuleVerification) generatePreTsKey(module Module) string {
-	return fmt.Sprintf("%s_%d", m.cfg.ChangeFeedID, module)
+	return fmt.Sprintf("%s_%d", m.cfg.ChangefeedID, module)
 }
 
 func (m *ModuleVerification) commitData() {
@@ -188,6 +196,46 @@ func decodeKey(key []byte) (Module, uint64, []byte) {
 	return Module(module), commitTs, k
 }
 
+func (m *ModuleVerification) runVerify(ctx context.Context) {
+	outChan := m.etcdClient.Watch(ctx, etcd.GetEtcdKeyVerification(m.cfg.ChangefeedID), "", clientv3.WithKeysOnly())
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("module runVerify ctx cancel", zap.String("changefeed", m.cfg.ChangefeedID), zap.Error(ctx.Err()))
+			if err := m.Close(); err != nil {
+				log.Error("module runVerify Close fail", zap.String("changefeed", m.cfg.ChangefeedID), zap.Error(err))
+			}
+
+			return
+		case ret := <-outChan:
+			for _, event := range ret.Events {
+				info := &taskInfo{}
+				if err := info.Unmarshal(event.Kv.Value); err != nil {
+					log.Error("module verify unmarshal fail",
+						zap.String("changefeed", m.cfg.ChangefeedID),
+						zap.Error(err))
+
+					continue
+				}
+				if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
+					log.Error("module verify ret",
+						zap.String("changefeed", m.cfg.ChangefeedID),
+						zap.String("startTs", info.StartTs),
+						zap.String("endTs", info.EndTs),
+						zap.Error(err))
+				}
+				if err := m.GC(ctx, info.EndTs); err != nil {
+					log.Error("module verify gc fail",
+						zap.String("changefeed", m.cfg.ChangefeedID),
+						zap.String("startTs", info.StartTs),
+						zap.String("endTs", info.EndTs),
+						zap.Error(err))
+				}
+			}
+		}
+	}
+}
+
 // Verify implement Verify api, only verify data is not lost during transfer.
 // the data transfer: puller -> sorter -> (cyclic) -> sink
 func (m *ModuleVerification) Verify(ctx context.Context, startTs, endTs string) error {
@@ -205,7 +253,7 @@ func (m *ModuleVerification) Verify(ctx context.Context, startTs, endTs string) 
 	ret := m.moduleDataEqual(Puller, Sink, startTs, endTs)
 	if ret {
 		log.Info("module verify ret pass",
-			zap.String("changefeed", m.cfg.ChangeFeedID),
+			zap.String("changefeed", m.cfg.ChangefeedID),
 			zap.String("startTs", startTs),
 			zap.String("endTs", endTs))
 		return nil
@@ -364,6 +412,6 @@ func (m *ModuleVerification) Close() error {
 	initLock.Lock()
 	defer initLock.Unlock()
 
-	delete(verifications, m.cfg.ChangeFeedID)
+	delete(verifications, m.cfg.ChangefeedID)
 	return cerror.WrapError(cerror.ErrPebbleDBError, m.db.Close())
 }

@@ -98,7 +98,12 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 	var verifier verification.ModuleVerifier
 	if syncPointEnabled {
 		var err error
-		verifier, err = verification.NewModuleVerification(stdCtx, &verification.ModuleVerificationConfig{ChangeFeedID: ctx.ChangefeedVars().ID, CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled()})
+		verifier, err = verification.NewModuleVerification(stdCtx,
+			&verification.ModuleVerificationConfig{
+				ChangefeedID: ctx.ChangefeedVars().ID,
+				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
+			},
+			ctx.GlobalVars().EtcdClient.Client)
 		if err != nil {
 			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "sorter"))
 		}

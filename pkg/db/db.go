@@ -48,3 +48,13 @@ type Iterator interface {
 	Error() error
 	Release() error
 }
+
+// SystemTag defines db is used by which system to separate the data from different systems stored in db,
+// e.g. Sorter
+type SystemTag int
+
+//go:generate stringer -type=SystemTag
+const (
+	Sorter SystemTag = iota
+	Verification
+)

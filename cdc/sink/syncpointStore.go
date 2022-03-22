@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 )
@@ -37,7 +38,11 @@ type SyncpointStore interface {
 }
 
 // NewSyncpointStore creates a new Spyncpoint sink with the sink-uri
-func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, sourceURIStr string, interval time.Duration, filter *filter.Filter) (SyncpointStore, error) {
+func NewSyncpointStore(ctx cdcContext.Context, changefeedID model.ChangeFeedID,
+	sinkURIStr string,
+	sourceURIStr string,
+	interval time.Duration,
+	filter *filter.Filter) (SyncpointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
