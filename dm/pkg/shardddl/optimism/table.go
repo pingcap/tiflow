@@ -65,7 +65,8 @@ func emptyTargetTable() TargetTable {
 
 // newTargetTable returns a TargetTable instance.
 func newTargetTable(task, source, downSchema, downTable string,
-	upTables map[string]map[string]struct{}) TargetTable {
+	upTables map[string]map[string]struct{},
+) TargetTable {
 	return TargetTable{
 		Task:       task,
 		Source:     source,
@@ -152,6 +153,54 @@ func (st *SourceTables) RemoveTable(upSchema, upTable, downSchema, downTable str
 	return true
 }
 
+// RouteTable represents a table in upstream/downstream.
+type RouteTable struct {
+	UpSchema   string
+	UpTable    string
+	DownSchema string
+	DownTable  string
+}
+
+func (st *SourceTables) toRouteTable() map[RouteTable]struct{} {
+	tables := make(map[RouteTable]struct{})
+	for downSchema, downTables := range st.Tables {
+		for downTable, upSchemas := range downTables {
+			for upSchema, upTables := range upSchemas {
+				for upTable := range upTables {
+					t := RouteTable{
+						UpSchema:   upSchema,
+						UpTable:    upTable,
+						DownSchema: downSchema,
+						DownTable:  downTable,
+					}
+					tables[t] = struct{}{}
+				}
+			}
+		}
+	}
+	return tables
+}
+
+func DiffSourceTables(oldST, newST SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
+	oldTables := oldST.toRouteTable()
+	newTables := newST.toRouteTable()
+
+	droppedTables := make(map[RouteTable]struct{})
+	addedTables := make(map[RouteTable]struct{})
+	for table := range oldTables {
+		if _, ok := newTables[table]; !ok {
+			droppedTables[table] = struct{}{}
+		} else {
+			delete(newTables, table)
+		}
+	}
+
+	for table := range newTables {
+		addedTables[table] = struct{}{}
+	}
+	return addedTables, droppedTables
+}
+
 // TargetTable returns a TargetTable instance for a specified downstream table,
 // returns an empty TargetTable instance if no tables exist.
 func (st *SourceTables) TargetTable(downSchema, downTable string) TargetTable {
@@ -229,7 +278,8 @@ func GetAllSourceTables(cli *clientv3.Client) (map[string]map[string]SourceTable
 // WatchSourceTables watches PUT & DELETE operations for source tables.
 // This function should often be called by DM-master.
 func WatchSourceTables(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- SourceTables, errCh chan<- error) {
+	outCh chan<- SourceTables, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.ShardDDLOptimismSourceTablesKeyAdapter.Path(),

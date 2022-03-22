@@ -362,8 +362,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
-	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context,
-		serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(math.MaxUint64-1))
@@ -373,8 +374,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	require.Nil(t, err)
 
 	// add a failed changefeed, it must not trigger update GC safepoint.
-	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context,
-		serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
 		t.Fatal("must not update")
 		return 0, nil
 	}
@@ -394,8 +396,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	// switch the state of changefeed to normal, it must update GC safepoint to
 	// 1 (checkpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
-	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context,
-		serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(1))
@@ -432,8 +435,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
 		})
 	tester.MustApplyPatches()
-	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context,
-		serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(19))

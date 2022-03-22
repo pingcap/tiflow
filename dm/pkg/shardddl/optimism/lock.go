@@ -288,20 +288,36 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 // try to support this if needed later.
 // NOTE: if no table exists in the lock after removed the table,
 // it's the caller's responsibility to decide whether remove the lock or not.
-func (l *Lock) TryRemoveTable(source, schema, table string) bool {
+func (l *Lock) TryRemoveTable(source, schema, table string) []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if _, ok := l.tables[source]; !ok {
-		return false
+		return nil
 	}
 	if _, ok := l.tables[source][schema]; !ok {
-		return false
+		return nil
 	}
 
 	ti, ok := l.tables[source][schema][table]
 	if !ok {
-		return false
+		return nil
+	}
+
+	// delete drop columns
+	dropColumns := make([]string, 0)
+	for col, sourceColumns := range l.columns {
+		if schemaColumns, ok := sourceColumns[source]; ok {
+			if tableColumn, ok := schemaColumns[schema]; ok {
+				if _, ok := tableColumn[table]; ok {
+					dropColumns = append(dropColumns, col)
+					delete(tableColumn, table)
+					if len(tableColumn) == 0 {
+						delete(schemaColumns, schema)
+					}
+				}
+			}
+		}
 	}
 
 	delete(l.tables[source][schema], table)
@@ -314,7 +330,7 @@ func (l *Lock) TryRemoveTable(source, schema, table string) bool {
 	log.L().Info("table removed from the lock", zap.String("lock", l.ID),
 		zap.String("source", source), zap.String("schema", schema), zap.String("table", table),
 		zap.Stringer("table info", ti))
-	return true
+	return dropColumns
 }
 
 // TryRemoveTable tries to remove tables in the lock by sources.
@@ -520,42 +536,51 @@ func (l *Lock) tryRevertDone(source, schema, table string) {
 	l.done[source][schema][table] = false
 }
 
+// AddTable create a table in lock.
+func (l *Lock) AddTable(source, schema, table string, needLock bool) {
+	if needLock {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
+	if _, ok := l.tables[source]; !ok {
+		l.tables[source] = make(map[string]map[string]schemacmp.Table)
+		l.finalTables[source] = make(map[string]map[string]schemacmp.Table)
+		l.done[source] = make(map[string]map[string]bool)
+		l.versions[source] = make(map[string]map[string]int64)
+	}
+	if _, ok := l.tables[source][schema]; !ok {
+		l.tables[source][schema] = make(map[string]schemacmp.Table)
+		l.finalTables[source][schema] = make(map[string]schemacmp.Table)
+		l.done[source][schema] = make(map[string]bool)
+		l.versions[source][schema] = make(map[string]int64)
+	}
+	if _, ok := l.tables[source][schema][table]; !ok {
+		ti, err := l.FetchTableInfos(l.Task, source, schema, table)
+		if err != nil {
+			log.L().Error("source table info not found, use init table info instead", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), log.ShortError(err))
+			l.tables[source][schema][table] = l.initTable
+			l.finalTables[source][schema][table] = l.initTable
+		} else {
+			t := schemacmp.Encode(ti)
+			log.L().Debug("get source table info", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
+			l.tables[source][schema][table] = t
+			l.finalTables[source][schema][table] = t
+		}
+		l.done[source][schema][table] = false
+		l.versions[source][schema][table] = 0
+		log.L().Info("table added to the lock", zap.String("lock", l.ID),
+			zap.String("source", source), zap.String("schema", schema), zap.String("table", table),
+			zap.Stringer("table info", l.initTable))
+	}
+}
+
 // addTables adds any not-existing tables into the lock.
 // For a new table, try to fetch table info from downstream.
 func (l *Lock) addTables(tts []TargetTable) {
 	for _, tt := range tts {
-		if _, ok := l.tables[tt.Source]; !ok {
-			l.tables[tt.Source] = make(map[string]map[string]schemacmp.Table)
-			l.finalTables[tt.Source] = make(map[string]map[string]schemacmp.Table)
-			l.done[tt.Source] = make(map[string]map[string]bool)
-			l.versions[tt.Source] = make(map[string]map[string]int64)
-		}
 		for schema, tables := range tt.UpTables {
-			if _, ok := l.tables[tt.Source][schema]; !ok {
-				l.tables[tt.Source][schema] = make(map[string]schemacmp.Table)
-				l.finalTables[tt.Source][schema] = make(map[string]schemacmp.Table)
-				l.done[tt.Source][schema] = make(map[string]bool)
-				l.versions[tt.Source][schema] = make(map[string]int64)
-			}
 			for table := range tables {
-				if _, ok := l.tables[tt.Source][schema][table]; !ok {
-					ti, err := l.FetchTableInfos(tt.Task, tt.Source, schema, table)
-					if err != nil {
-						log.L().Error("source table info not found, use init table info instead", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), log.ShortError(err))
-						l.tables[tt.Source][schema][table] = l.initTable
-						l.finalTables[tt.Source][schema][table] = l.initTable
-					} else {
-						t := schemacmp.Encode(ti)
-						log.L().Debug("get source table info", zap.String("task", tt.Task), zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
-						l.tables[tt.Source][schema][table] = t
-						l.finalTables[tt.Source][schema][table] = t
-					}
-					l.done[tt.Source][schema][table] = false
-					l.versions[tt.Source][schema][table] = 0
-					log.L().Info("table added to the lock", zap.String("lock", l.ID),
-						zap.String("source", tt.Source), zap.String("schema", schema), zap.String("table", table),
-						zap.Stringer("table info", l.initTable))
-				}
+				l.AddTable(tt.Source, schema, table, false)
 			}
 		}
 	}

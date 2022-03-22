@@ -83,7 +83,8 @@ type LogInfo struct {
 
 // NewInfo creates a new Info instance.
 func NewInfo(task, source, upSchema, upTable, downSchema, downTable string,
-	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo) Info {
+	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo,
+) Info {
 	return Info{
 		Task:            task,
 		Source:          source,
@@ -221,7 +222,8 @@ func GetAllInfo(cli *clientv3.Client) (map[string]map[string]map[string]map[stri
 // WatchInfo watches PUT & DELETE operations for info.
 // This function should often be called by DM-master.
 func WatchInfo(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- Info, errCh chan<- error) {
+	outCh chan<- Info, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// NOTE: WithPrevKV used to get a valid `ev.PrevKv` for deletion.

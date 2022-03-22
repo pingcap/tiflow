@@ -60,7 +60,7 @@ const BasicInfo: StepCompnent = ({ initialValues, isEditing }) => {
           </div>
         }
       >
-        <Select placeholder={TaskShardMode.NONE}>
+        <Select placeholder={TaskShardMode.PESSIMISTIC}>
           {Object.values(TaskShardMode).map(mode => (
             <Select.Option key={mode} value={mode}>
               {mode}

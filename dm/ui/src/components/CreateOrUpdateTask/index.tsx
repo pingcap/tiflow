@@ -8,6 +8,7 @@ import {
   OnDuplicateBehavior,
   Task,
   TaskFormData,
+  TaskMode,
   TaskShardMode,
   useDmapiCreateTaskMutation,
   useDmapiStartTaskMutation,
@@ -25,6 +26,8 @@ const { Step } = Steps
 
 const defaultValue: Partial<TaskFormData> = {
   name: '',
+  task_mode: TaskMode.ALL,
+  shard_mode: TaskShardMode.PESSIMISTIC,
   meta_schema: '',
   enhance_online_schema_change: true,
   on_duplicate: OnDuplicateBehavior.REPLACE,

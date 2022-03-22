@@ -218,7 +218,8 @@ func WatchOperationDelete(ctx context.Context, cli *clientv3.Client, task, sourc
 // watchOperation watches PUT or DELETE operations for DDL lock operation.
 func watchOperation(ctx context.Context, cli *clientv3.Client, watchType mvccpb.Event_EventType,
 	task, source string, revision int64,
-	outCh chan<- Operation, errCh chan<- error) {
+	outCh chan<- Operation, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var ch clientv3.WatchChan
