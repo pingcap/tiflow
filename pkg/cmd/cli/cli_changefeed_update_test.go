@@ -38,14 +38,14 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 
 	// Test normal update.
 	oldInfo := &model.ChangeFeedInfo{SinkURI: "blackhole://"}
-	c.Assert(cmd.ParseFlags([]string{"--sync-point-upstream-dsn=mysql://root@downstream-tidb:4000"}), check.IsNil)
+	c.Assert(cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}), check.IsNil)
 	newInfo, err := o.applyChanges(oldInfo, cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(newInfo.SinkURI, check.Equals, "mysql://root@downstream-tidb:4000")
 
 	// Test normal update.
 	oldInfo = &model.ChangeFeedInfo{SyncPointUpstreamDSN: "mysql://"}
-	c.Assert(cmd.ParseFlags([]string{"--sink-uri=tidb://root@downstream-tidb:4000"}), check.IsNil)
+	c.Assert(cmd.ParseFlags([]string{"--sync-point-upstream-dsn=tidb://root@downstream-tidb:4000"}), check.IsNil)
 	newInfo, err = o.applyChanges(oldInfo, cmd)
 	c.Assert(err, check.IsNil)
 	c.Assert(newInfo.SyncPointUpstreamDSN, check.Equals, "tidb://root@downstream-tidb:4000")
