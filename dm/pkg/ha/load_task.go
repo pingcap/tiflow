@@ -93,7 +93,8 @@ func GetAllLoadTask(cli *clientv3.Client) (map[string]map[string]string, int64, 
 // WatchLoadTask watches PUT & DELETE operations for worker in load stage.
 // This function should often be called by DM-master.
 func WatchLoadTask(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- LoadTask, errCh chan<- error) {
+	outCh chan<- LoadTask, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// NOTE: WithPrevKV used to get a valid `ev.PrevKv` for deletion.

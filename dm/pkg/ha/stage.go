@@ -286,7 +286,8 @@ func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stag
 // WatchRelayStage watches PUT & DELETE operations for the relay stage.
 // for the DELETE stage, it returns an empty stage.
 func WatchRelayStage(ctx context.Context, cli *clientv3.Client,
-	source string, revision int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, revision int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageRelayKeyAdapter.Encode(source), clientv3.WithRev(revision))
@@ -296,7 +297,8 @@ func WatchRelayStage(ctx context.Context, cli *clientv3.Client,
 // WatchSubTaskStage watches PUT & DELETE operations for the subtask stage.
 // for the DELETE stage, it returns an empty stage.
 func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
-	source string, revision int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, revision int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(revision))
@@ -304,7 +306,8 @@ func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
 }
 
 func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
-	source string, rev int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, rev int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
@@ -382,7 +385,8 @@ func getStagesFromResp(source, task string, resp *clientv3.GetResponse) (map[str
 // watchStage watches PUT & DELETE operations for the stage.
 // nolint:dupl
 func watchStage(ctx context.Context, watchCh clientv3.WatchChan,
-	stageFromKey func(key string) (Stage, error), outCh chan<- Stage, errCh chan<- error) {
+	stageFromKey func(key string) (Stage, error), outCh chan<- Stage, errCh chan<- error,
+) {
 	for {
 		select {
 		case <-ctx.Done():

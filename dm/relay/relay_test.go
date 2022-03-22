@@ -623,7 +623,8 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 }
 
 func (t *testRelaySuite) verifyMetadata(c *C, r *Relay, uuidExpected string,
-	posExpected gmysql.Position, gsStrExpected string, uuidsExpected []string) {
+	posExpected gmysql.Position, gsStrExpected string, uuidsExpected []string,
+) {
 	uuid, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
 	gsExpected, err := gtid.ParserGTID(gmysql.MySQLFlavor, gsStrExpected)

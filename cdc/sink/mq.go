@@ -339,7 +339,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error) (*mqSink, error) {
+	opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -431,7 +432,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s

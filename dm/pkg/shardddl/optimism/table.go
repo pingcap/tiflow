@@ -65,7 +65,8 @@ func emptyTargetTable() TargetTable {
 
 // newTargetTable returns a TargetTable instance.
 func newTargetTable(task, source, downSchema, downTable string,
-	upTables map[string]map[string]struct{}) TargetTable {
+	upTables map[string]map[string]struct{},
+) TargetTable {
 	return TargetTable{
 		Task:       task,
 		Source:     source,
@@ -277,7 +278,8 @@ func GetAllSourceTables(cli *clientv3.Client) (map[string]map[string]SourceTable
 // WatchSourceTables watches PUT & DELETE operations for source tables.
 // This function should often be called by DM-master.
 func WatchSourceTables(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- SourceTables, errCh chan<- error) {
+	outCh chan<- SourceTables, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.ShardDDLOptimismSourceTablesKeyAdapter.Path(),
