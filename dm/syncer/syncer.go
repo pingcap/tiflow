@@ -42,6 +42,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
+	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -54,7 +56,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
@@ -164,7 +165,7 @@ type Syncer struct {
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
 
-	tableRouter     *router.RouteTable
+	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
 	columnMapping   *cm.Mapping
 	baList          *filter.Filter
@@ -2526,7 +2527,7 @@ func (qec *queryEventContext) String() string {
 }
 
 // generateExtendColumn generate extended columns by extractor.
-func generateExtendColumn(data [][]interface{}, r *router.RouteTable, table *filter.Table, sourceID string) [][]interface{} {
+func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, table *filter.Table, sourceID string) [][]interface{} {
 	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
 		return nil
@@ -3077,7 +3078,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist            bool
 		shouldTableExistNum          int  // tableNames[:shouldTableExistNum] should exist
 		shouldRefTableExistNum       int  // tableNames[1:shouldTableExistNum] should exist, since first one is "caller table"
-		tryFetchDownstreamTable      bool // to make sure if not exists will execute correctly
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
@@ -3103,7 +3103,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist = true
 		// for CREATE TABLE LIKE/AS, the reference tables should exist
 		shouldRefTableExistNum = len(srcTables)
-		tryFetchDownstreamTable = true
 	case *ast.DropTableStmt:
 		shouldExecDDLOnSchemaTracker = true
 		shouldReTrackDownstreamIndex = true
@@ -3163,11 +3162,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		if _, err := s.getTableInfo(ec.tctx, srcTables[i], targetTables[i]); err != nil {
 			return err
 		}
-	}
-
-	if tryFetchDownstreamTable {
-		// ignore table not exists error, just try to fetch table from downstream.
-		_, _ = s.getTableInfo(ec.tctx, srcTables[0], targetTables[0])
 	}
 
 	if shouldExecDDLOnSchemaTracker {
@@ -3259,7 +3253,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 }
 
 func (s *Syncer) genRouter() error {
-	s.tableRouter, _ = router.NewRouter(s.cfg.CaseSensitive, []*router.TableRule{})
+	s.tableRouter, _ = regexprrouter.NewRegExprRouter(s.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range s.cfg.RouteRules {
 		err := s.tableRouter.AddRule(rule)
 		if err != nil {
@@ -3622,7 +3616,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *router.RouteTable
+		oldTableRouter   *regexprrouter.RouteTable
 		oldBinlogFilter  *bf.BinlogEvent
 		oldColumnMapping *cm.Mapping
 	)
@@ -3654,7 +3648,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update route
 	oldTableRouter = s.tableRouter
-	s.tableRouter, err = router.NewRouter(cfg.CaseSensitive, cfg.RouteRules)
+	s.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrSyncerUnitGenTableRouter.Delegate(err)
 	}

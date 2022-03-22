@@ -112,7 +112,8 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 
 // OpenAPITaskToSubTaskConfigs generates sub task configs by openapi.Task.
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCfgMap map[string]*SourceConfig) (
-	[]*SubTaskConfig, error) {
+	[]*SubTaskConfig, error,
+) {
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {
@@ -495,15 +496,20 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	filterRuleMap := openapi.Task_BinlogFilterRule{}
 	for sourceName, ruleList := range filterMap {
 		for idx, rule := range ruleList {
+			binlogFilterRule := openapi.TaskBinLogFilterRule{}
 			var events []string
-			if len(rule.Events) > 0 {
-				for _, event := range rule.Events {
-					events = append(events, string(event))
-				}
+			for _, event := range rule.Events {
+				events = append(events, string(event))
 			}
-			filterRuleMap.Set(genFilterRuleName(sourceName, idx), openapi.TaskBinLogFilterRule{
-				IgnoreEvent: &events, IgnoreSql: &rule.SQLPattern,
-			})
+			if len(events) > 0 {
+				binlogFilterRule.IgnoreEvent = &events
+			}
+			var ignoreSQL []string
+			ignoreSQL = append(ignoreSQL, rule.SQLPattern...)
+			if len(ignoreSQL) > 0 {
+				binlogFilterRule.IgnoreSql = &ignoreSQL
+			}
+			filterRuleMap.Set(genFilterRuleName(sourceName, idx), binlogFilterRule)
 		}
 	}
 	// set table migrate rules

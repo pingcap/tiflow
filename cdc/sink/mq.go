@@ -49,8 +49,6 @@ const (
 	// Depend on this size, `resolvedBuffer` will take
 	// approximately 2 KiB memory.
 	defaultResolvedTsEventBufferSize = 128
-	// -1 means broadcast to all partitions, it's the default for the default open protocol.
-	defaultDDLDispatchPartition = -1
 )
 
 type mqSink struct {
@@ -151,16 +149,21 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 				zap.Any("role", k.role))
 			continue
 		}
-		topic := k.eventRouter.GetTopic(row)
+		topic := k.eventRouter.GetTopicForRowChange(row)
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		partition := k.eventRouter.GetPartition(row, partitionNum)
+		partition := k.eventRouter.GetPartitionForRowChange(row, partitionNum)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case k.flushWorker.msgChan <- mqEvent{row: row, partition: partition}:
+		case k.flushWorker.msgChan <- mqEvent{
+			row: row,
+			key: topicPartitionKey{
+				topic: topic, partition: partition,
+			},
+		}:
 		}
 		rowsCount++
 	}
@@ -220,8 +223,7 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error
 	return nil
 }
 
-func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, _ []model.TableName) error {
-	// TODO(hi-rustin): Broadcast it to multiple tables after topic manager is ready.
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
@@ -230,9 +232,35 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, _ []model.Tabl
 	if msg == nil {
 		return nil
 	}
-	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
-	err = k.writeToProducer(ctx, msg, -1)
-	return errors.Trace(err)
+	// NOTICE: When there is no table sync,
+	// we need to send checkpoint ts to the default topic. T
+	// This will be compatible with the old behavior.
+	if len(tables) == 0 {
+		topic := k.eventRouter.GetDefaultTopic()
+		partitionNum, err := k.topicManager.Partitions(topic)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("emit checkpointTs to default topic",
+			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		return errors.Trace(err)
+	}
+	topics := k.eventRouter.GetActiveTopics(tables)
+	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
+	for _, topic := range topics {
+		partitionNum, err := k.topicManager.Partitions(topic)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("emit checkpointTs to active topic",
+			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -253,25 +281,25 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	if msg == nil {
 		return nil
 	}
 
-	var partition int32 = defaultDDLDispatchPartition
-	// for Canal-JSON / Canal-PB, send to partition 0.
-	if _, ok := encoder.(*codec.CanalFlatEventBatchEncoder); ok {
-		partition = 0
-	}
-	if _, ok := encoder.(*codec.CanalEventBatchEncoder); ok {
-		partition = 0
-	}
-
+	topic := k.eventRouter.GetTopicForDDL(ddl)
+	partitionRule := k.eventRouter.GetDLLDispatchRuleByProtocol(k.protocol)
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event",
 		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
-	err = k.writeToProducer(ctx, msg, partition)
+	if partitionRule == dispatcher.PartitionAll {
+		partitionNum, err := k.topicManager.Partitions(topic)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		return errors.Trace(err)
+	}
+	err = k.asyncFlushToPartitionZero(ctx, topic, msg)
 	return errors.Trace(err)
 }
 
@@ -297,21 +325,22 @@ func (k *mqSink) run(ctx context.Context) error {
 	return wg.Wait()
 }
 
-func (k *mqSink) writeToProducer(ctx context.Context, message *codec.MQMessage, partition int32) error {
-	if partition >= 0 {
-		err := k.mqProducer.AsyncSendMessage(ctx, message, partition)
-		if err != nil {
-			return err
-		}
-		return k.mqProducer.Flush(ctx)
+// asyncFlushToPartitionZero writes message to
+// partition zero asynchronously and flush it immediately.
+func (k *mqSink) asyncFlushToPartitionZero(
+	ctx context.Context, topic string, message *codec.MQMessage,
+) error {
+	err := k.mqProducer.AsyncSendMessage(ctx, topic, dispatcher.PartitionZero, message)
+	if err != nil {
+		return err
 	}
-
-	return k.mqProducer.SyncBroadcastMessage(ctx, message)
+	return k.mqProducer.Flush(ctx)
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error) (*mqSink, error) {
+	opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -377,7 +406,6 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		client,
 		adminClient,
-		topic,
 		baseConfig,
 		saramaConfig,
 		errCh,
@@ -404,7 +432,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s

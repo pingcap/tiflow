@@ -323,7 +323,7 @@ function test_expression_filter() {
 }
 
 function test_regexpr_router() {
-	echo "[$(date)] <<<<<< start test_regexpr_router >>>>>>"
+	echo "[$(date)] <<<<<< start test_regexpr_router $1 >>>>>>"
 	cleanup_process
 	cleanup_data all_mode
 	cleanup_data test2animal
@@ -353,19 +353,19 @@ function test_regexpr_router() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-	cp $cur/conf/regexpr-task.yaml $WORK_DIR/regexpr-task.yaml
-	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/regexpr-task.yaml
+	cp $cur/conf/$1 $WORK_DIR/$1
+	sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/$1
 
 	# error config
 	# there should be a error message like "Incorrect argument type to variable 'tidb_retry_limit'"
 	# but different TiDB version output different message. so we only roughly match here
-	sed -i 's/tidb_retry_limit: "10"/tidb_retry_limit: "fjs"/g' $WORK_DIR/regexpr-task.yaml
+	sed -i 's/tidb_retry_limit: "10"/tidb_retry_limit: "fjs"/g' $WORK_DIR/$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $WORK_DIR/regexpr-task.yaml --remove-meta" \
+		"start-task $WORK_DIR/$1 --remove-meta" \
 		"tidb_retry_limit" 1
 
-	sed -i 's/tidb_retry_limit: "fjs"/tidb_retry_limit: "10"/g' $WORK_DIR/regexpr-task.yaml
-	dmctl_start_task "$WORK_DIR/regexpr-task.yaml" "--remove-meta"
+	sed -i 's/tidb_retry_limit: "fjs"/tidb_retry_limit: "10"/g' $WORK_DIR/$1
+	dmctl_start_task "$WORK_DIR/$1" "--remove-meta"
 
 	check_sync_diff $WORK_DIR $cur/conf/regexpr_diff_config.toml
 
@@ -374,7 +374,7 @@ function test_regexpr_router() {
 	cleanup_data test4s_2022
 	cleanup_data_upstream test2animal
 	cleanup_data_upstream test4s_2022
-	echo "[$(date)] <<<<<< finish test_regexpr_router >>>>>>"
+	echo "[$(date)] <<<<<< finish test_regexpr_router $1 >>>>>>"
 }
 
 function run() {
@@ -386,7 +386,8 @@ function run() {
 	test_session_config
 	test_query_timeout
 	test_stop_task_before_checkpoint
-	test_regexpr_router
+	test_regexpr_router regexpr-task.yaml
+	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
@@ -590,6 +591,7 @@ function run() {
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
 }
 
+cleanup_data_upstream all_mode
 cleanup_data all_mode
 # also cleanup dm processes in case of last run failed
 cleanup_process $*

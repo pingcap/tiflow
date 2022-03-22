@@ -198,6 +198,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// and we need to use the latest table names.
 	if c.currentTableNames == nil {
 		c.currentTableNames = c.schema.AllTableNames()
+		log.Debug("changefeed current table names updated",
+			zap.String("changefeed", c.id),
+			zap.Any("tables", c.currentTableNames),
+		)
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 	barrierTs, err := c.handleBarrier(ctx)
@@ -654,6 +658,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	restoreFlags |= format.RestoreKeyWordUppercase
 	// wrap string with single quote
 	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}

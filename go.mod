@@ -48,11 +48,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66
-	github.com/pingcap/kvproto v0.0.0-20220303025110-d5eb908517b2
+	github.com/pingcap/kvproto v0.0.0-20220314103629-10e688307221
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220309003348-b9bd5a7d7e4d
+	github.com/pingcap/tidb v1.1.0-beta.0.20220316031552-d981c0e06a13
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220317013353-dfc5146f4746+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220309003348-b9bd5a7d7e4d
+	github.com/pingcap/tidb/parser v0.0.0-20220316172753-46c43febcac0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -66,10 +66,10 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.1-0.20220302130440-46d649305eee
+	github.com/tikv/client-go/v2 v2.0.1-0.20220311043619-5042c6f2aaa6
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
-	github.com/tikv/pd/client v0.0.0-20220216080339-1b8f82378ee7
-	github.com/tinylib/msgp v1.1.0
+	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
+	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
@@ -81,13 +81,14 @@ require (
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.9.0
 	go.uber.org/goleak v1.1.12
-	go.uber.org/multierr v1.7.0
-	go.uber.org/zap v1.20.0
+	go.uber.org/multierr v1.8.0
+	go.uber.org/zap v1.21.0
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
+	golang.org/x/sys v0.0.0-20220318055525-2edf467146b5
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	golang.org/x/tools v0.1.10 // indirect
 	google.golang.org/genproto v0.0.0-20210825212027-de86158e7fda
 	google.golang.org/grpc v1.43.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -193,13 +194,13 @@ require (
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef // indirect
 	github.com/opentracing/basictracer-go v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/pingcap/badger v1.5.1-0.20210831093107-2f6cb8008145 // indirect
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4 // indirect
-	github.com/pingcap/tipb v0.0.0-20220110031732-29e23c62eeac // indirect
+	github.com/pingcap/tipb v0.0.0-20220215045658-d12dec7a7609 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -254,7 +255,6 @@ require (
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect
 	golang.org/x/oauth2 v0.0.0-20210805134026-6f1e6394065a // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
-	golang.org/x/tools v0.1.8 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.54.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

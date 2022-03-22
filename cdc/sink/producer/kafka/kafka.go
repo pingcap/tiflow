@@ -60,8 +60,6 @@ type kafkaSaramaProducer struct {
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
-	topic             string
-	partitionNum      int32
 
 	// It is used to count the number of messages sent out and messages received when flushing data.
 	mu struct {
@@ -89,7 +87,9 @@ type kafkaProducerClosingFlag = int32
 // Do not try to call AsyncSendMessage and Flush functions in different threads,
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (k *kafkaSaramaProducer) AsyncSendMessage(
+	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 
@@ -114,7 +114,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	})
 
 	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
+		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
@@ -134,13 +134,15 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(
+	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
-	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
-	for i := 0; i < int(k.partitionNum); i++ {
+	msgs := make([]*sarama.ProducerMessage, partitionsNum)
+	for i := 0; i < int(partitionsNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
-			Topic:     k.topic,
+			Topic:     topic,
 			Key:       sarama.ByteEncoder(message.Key),
 			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
@@ -186,10 +188,6 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	case <-down:
 		return nil
 	}
-}
-
-func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
-	return k.partitionNum
 }
 
 // stop closes the closeCh to signal other routines to exit
@@ -322,7 +320,6 @@ func NewKafkaSaramaProducer(
 	ctx context.Context,
 	client sarama.Client,
 	admin kafka.ClusterAdminClient,
-	topic string,
 	config *Config,
 	saramaConfig *sarama.Config,
 	errCh chan error,
@@ -347,8 +344,6 @@ func NewKafkaSaramaProducer(
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		topic:         topic,
-		partitionNum:  config.PartitionNum,
 		closeCh:       make(chan struct{}),
 		failpointCh:   make(chan error, 1),
 		closing:       kafkaProducerRunning,
@@ -393,8 +388,9 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // AdjustConfig adjust the `Config` and `sarama.Config` by condition.
-func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
-	saramaConfig *sarama.Config, topic string) error {
+func AdjustConfig(
+	admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string,
+) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -473,8 +469,10 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
 	return nil
 }
 
-func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
-	topics map[string]sarama.TopicDetail, topic string, replicationFactor int) error {
+func validateMinInsyncReplicas(
+	admin kafka.ClusterAdminClient,
+	topics map[string]sarama.TopicDetail, topic string, replicationFactor int,
+) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
 		if exists {

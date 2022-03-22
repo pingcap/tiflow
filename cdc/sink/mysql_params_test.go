@@ -74,9 +74,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
 			"transaction_isolation=%22READ-COMMITTED%22",
+			"charset=utf8mb4",
+			"tidb_placement_mode=%22ignore%22",
 		}
 		for _, param := range expectedParams {
-			require.True(t, strings.Contains(dsnStr, param))
+			require.Contains(t, dsnStr, param)
 		}
 		require.False(t, strings.Contains(dsnStr, "time_zone"))
 	}
@@ -145,6 +147,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
 		)
 		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
+		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
+			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
 		expectedParams := []string{
@@ -164,6 +171,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
 			sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
 		)
+		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
+			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
 		expectedParams = []string{

@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -209,6 +209,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@./scripts/check-diff-line-width.sh
 endif
 
+generate-msgp-code: tools/bin/msgp
+	@echo "generate-msgp-code"
+	./scripts/generate-msgp-code.sh
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -226,7 +230,7 @@ check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
-	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/entry/schema_test_helper.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	tools/bin/goveralls -parallel -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -235,7 +239,7 @@ else
 endif
 
 unit_test_coverage:
-	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 
@@ -438,6 +442,9 @@ tools/bin/errdoc-gen: tools/check/go.mod
 
 tools/bin/swag: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
+
+tools/bin/msgp: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp 
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
