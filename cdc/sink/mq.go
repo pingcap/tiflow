@@ -247,6 +247,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		return errors.Trace(err)
 	}
 	topics := k.eventRouter.GetActiveTopics(tables)
+	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
@@ -255,7 +256,9 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		log.Debug("emit checkpointTs to active topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
-		return errors.Trace(err)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
@@ -336,7 +339,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error) (*mqSink, error) {
+	opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -428,7 +432,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
