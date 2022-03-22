@@ -73,8 +73,6 @@ type kafkaSaramaProducer struct {
 
 	role util.Role
 	id   model.ChangeFeedID
-
-	metricsMonitor *saramaMetricsMonitor
 }
 
 type kafkaProducerClosingFlag = int32

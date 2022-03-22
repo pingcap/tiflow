@@ -224,10 +224,6 @@ var (
 		"new sarama producer",
 		errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"),
 	)
-	ErrKafkaCollectSaramaMetrics = errors.Normalize(
-		"collect sarama metrics failed",
-		errors.RFCCodeText("CDC:ErrCollectSaramaMetrics"),
-	)
 	ErrKafkaInvalidClientID = errors.Normalize(
 		"invalid kafka client ID '%s'",
 		errors.RFCCodeText("CDC:ErrKafkaInvalidClientID"),
