@@ -217,6 +217,23 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
+func (sm *saramaMetricsMonitor) collectBrokers() {
+	start := time.Now()
+	brokers, _, err := sm.admin.DescribeCluster()
+	if err != nil {
+		log.Warn("kafka cluster unreachable, "+
+			"use historical brokers to collect kafka broker level metrics",
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role),
+			zap.Duration("duration", time.Since(start)))
+		return
+	}
+
+	for _, b := range brokers {
+		sm.brokers[b.ID()] = struct{}{}
+	}
+}
+
 func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
 	sm.collectBrokers()
 
@@ -319,21 +336,5 @@ func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
 		requestsInFlightGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		responseRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		responseSizeGauge.DeleteLabelValues(sm.changefeedID, brokerID)
-	}
-}
-
-func (sm *saramaMetricsMonitor) collectBrokers() {
-	start := time.Now()
-	brokers, _, err := sm.admin.DescribeCluster()
-	if err != nil {
-		log.Warn("kafka cluster unreachable, use historical brokers to collect kafka broker level metrics",
-			zap.String("changefeed", sm.changefeedID),
-			zap.Any("role", sm.role),
-			zap.Duration("duration", time.Since(start)))
-		return
-	}
-
-	for _, b := range brokers {
-		sm.brokers[b.ID()] = struct{}{}
 	}
 }
