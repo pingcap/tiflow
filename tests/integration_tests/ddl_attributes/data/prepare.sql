@@ -21,4 +21,9 @@ RENAME TABLE attributes_t1_back TO attributes_t1_new;
 ALTER TABLE attributes_t2 DROP PARTITION p0;
 ALTER TABLE attributes_t2 TRUNCATE PARTITION p1;
 
+DROP PLACEMENT POLICY IF EXISTS placement1;
+CREATE PLACEMENT POLICY placement1 followers=2;
+CREATE TABLE placement_t1 (id BIGINT NOT NULL PRIMARY KEY auto_increment, b varchar(255)) PLACEMENT POLICY=placement1;
+CREATE TABLE `placement_t2` (id BIGINT NOT NULL PRIMARY KEY auto_increment) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin /*T![placement] PLACEMENT POLICY=`placement1` */;
 CREATE TABLE finish_mark(a INT PRIMARY KEY);
+
