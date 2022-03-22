@@ -150,6 +150,7 @@ type DataValidator struct {
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	errorRowCounts       []atomic.Int64
+	lastFlushTime        time.Time
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChange
@@ -401,7 +402,6 @@ func (v *DataValidator) doValidate() {
 		}
 	}()
 
-	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
 	// when gtid is enabled:
 	// gtid of currLoc need to be updated when meet gtid event, so we can compare with syncer
 	// gtid of locationForFlush is updated when we meet xid event, if error happened, we start sync from this location
@@ -409,8 +409,9 @@ func (v *DataValidator) doValidate() {
 	// some events maybe processed again, but it doesn't matter for validation
 	// todo: maybe we can use curStartLocation/curEndLocation in locationRecorder
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
+	// we don't flush checkpoint&data on exist, since checkpoint and pending data may not correspond with each other.
 	locationForFlush := currLoc.Clone()
-	lastFlushCheckpointTime := time.Now()
+	v.lastFlushTime = time.Now()
 	for {
 		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
@@ -486,11 +487,13 @@ func (v *DataValidator) doValidate() {
 				v.errChan <- terror.Annotate(err, "failed to set gtid")
 				return
 			}
-			// TODO: if this routine block on get event, should make sure checkpoint is flushed normally
-			if time.Since(lastFlushCheckpointTime) > metaFlushInterval {
-				lastFlushCheckpointTime = time.Now()
-				if err = v.flushCheckpointAndData(locationForFlush); err != nil {
-					v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+			if err = v.checkAndFlushCheckpoint(locationForFlush); err != nil {
+				v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
+				return
+			}
+		case *replication.GenericEvent:
+			if e.Header.EventType == replication.HEARTBEAT_EVENT {
+				if err = v.checkAndFlushCheckpoint(locationForFlush); err != nil {
 					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
 					return
 				}
@@ -705,6 +708,18 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 				Tp:    changeType,
 			})
 			v.processedRowCounts[changeType].Inc()
+		}
+	}
+	return nil
+}
+
+func (v *DataValidator) checkAndFlushCheckpoint(loc binlog.Location) error {
+	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
+	if time.Since(v.lastFlushTime) > metaFlushInterval {
+		v.lastFlushTime = time.Now()
+		if err := v.flushCheckpointAndData(loc); err != nil {
+			v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+			return err
 		}
 	}
 	return nil
