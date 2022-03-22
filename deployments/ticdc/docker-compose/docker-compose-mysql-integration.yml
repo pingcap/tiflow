@@ -11,3 +11,4 @@ services:
       - make integration_test_mysql CASE="${CASE}" START_AT="${START_AT}" & tail -f /dev/null
     volumes:
       - ./logs/tidb_cdc_test:/tmp/tidb_cdc_test
+      - ../../../tests:/go/src/github.com/pingcap/tiflow/tests
