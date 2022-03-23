@@ -45,6 +45,9 @@ const (
 	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
 	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
 	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
+	// ConflictError indicates an error happened when we try to sync the DDLs
+	// in this stage, DM-worker should retry and can skip ddls for this error.
+	ConflictError ConflictStage = "error"
 )
 
 // Operation represents a shard DDL coordinate operation.
@@ -72,7 +75,8 @@ type Operation struct {
 
 // NewOperation creates a new Operation instance.
 func NewOperation(id, task, source, upSchema, upTable string,
-	ddls []string, conflictStage ConflictStage, conflictMsg string, done bool, cols []string) Operation {
+	ddls []string, conflictStage ConflictStage, conflictMsg string, done bool, cols []string,
+) Operation {
 	return Operation{
 		ID:            id,
 		Task:          task,
@@ -236,7 +240,8 @@ func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Oper
 // This function can be called by DM-worker and DM-master.
 func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 	task, source, upSchema, upTable string, revision int64,
-	outCh chan<- Operation, errCh chan<- error) {
+	outCh chan<- Operation, errCh chan<- error,
+) {
 	var ch clientv3.WatchChan
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -26,7 +27,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// AdjustPath adjust rawURL, add uniqueId as path suffix.
+// AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path and will not change rawURL.
+// This function supports both local dir or s3 path. It can be used like the following:
+// 1. adjust subtask's `LoaderConfig.Dir`, uniqueID like `.test-mysql01`.
+// 2. add Lightning checkpoint's fileName to rawURL, uniqueID like `/tidb_lightning_checkpoint.pb`.
 func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
@@ -37,19 +41,40 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
-		// avoid duplicate add uniqueID
-		if !strings.HasSuffix(rawURL, uniqueID) {
-			return rawURL + "." + uniqueID, nil
+		// avoid duplicate add uniqueID, and trim suffix '/' like './dump_data/'
+		trimPath := strings.TrimRight(rawURL, string(filepath.Separator))
+		if !strings.HasSuffix(trimPath, uniqueID) {
+			return trimPath + uniqueID, nil
 		}
 		return rawURL, nil
 	}
 	// u.Path is an unescaped string and can be used as normal
-	if !strings.HasSuffix(u.Path, uniqueID) {
-		u.Path = u.Path + "." + uniqueID
+	trimPath := strings.TrimRight(u.Path, string(filepath.Separator))
+	if !strings.HasSuffix(trimPath, uniqueID) {
+		u.Path = trimPath + uniqueID
 		// u.String will return escaped url and can be used safely in other steps
 		return u.String(), err
 	}
 	return rawURL, nil
+}
+
+// TrimPath trims rawURL suffix which is uniqueID, supports local and s3.
+func TrimPath(rawURL string, uniqueID string) (string, error) {
+	if rawURL == "" || uniqueID == "" {
+		return rawURL, nil
+	}
+	u, err := bstorage.ParseRawURL(rawURL)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	// not url format, we don't use url library to avoid being escaped or unescaped
+	if u.Scheme == "" {
+		return strings.TrimSuffix(rawURL, uniqueID), nil
+	}
+	// u.Path is an unescaped string and can be used as normal
+	u.Path = strings.TrimSuffix(u.Path, uniqueID)
+	// u.String will return escaped url and can be used safely in other steps
+	return u.String(), err
 }
 
 // isS3Path judges if rawURL is s3 path.

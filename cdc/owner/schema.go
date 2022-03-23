@@ -40,8 +40,10 @@ type schemaWrap4Owner struct {
 	id model.ChangeFeedID
 }
 
-func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts,
-	config *config.ReplicaConfig, id model.ChangeFeedID) (*schemaWrap4Owner, error) {
+func newSchemaWrap4Owner(
+	kvStorage tidbkv.Storage, startTs model.Ts,
+	config *config.ReplicaConfig, id model.ChangeFeedID,
+) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
@@ -107,18 +109,23 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
+			zap.String("changefeed", s.id), zap.Stringer("job", job),
+			zap.Any("ddlHandledTs", s.ddlHandledTs))
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
-		log.Error("handle DDL failed", zap.String("DDL", job.Query),
+		log.Error("handle DDL failed", zap.String("changefeed", s.id),
+			zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
+			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job),
-		zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
+	log.Info("handle DDL", zap.String("changefeed", s.id),
+		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
 	return nil
@@ -132,6 +139,7 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 	ddlEvent := new(model.DDLEvent)
 	preTableInfo, err := s.schemaSnapshot.PreTableInfo(job)
 	if err != nil {
+		log.Error("build DDL event fail", zap.Reflect("job", job), zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	err = s.schemaSnapshot.FillSchemaName(job)
