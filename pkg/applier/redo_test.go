@@ -145,6 +145,10 @@ func TestApplyDMLs(t *testing.T) {
 					sqlmock.NewRows(columns).
 						AddRow("tidb_placement_mode", "IGNORE"),
 				)
+			mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+				"where character_set_name = 'gbk';").WillReturnRows(
+				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+			)
 			mock.ExpectClose()
 			return db, nil
 		}

@@ -14,10 +14,13 @@
 package kafka
 
 import (
+	"context"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -174,17 +177,18 @@ const (
 
 type saramaMetricsMonitor struct {
 	changefeedID string
+	role         util.Role
 
 	registry metrics.Registry
 	admin    kafka.ClusterAdminClient
+
+	brokers map[int32]struct{}
 }
 
-// CollectMetrics collect all monitored metrics
-func (sm *saramaMetricsMonitor) CollectMetrics() {
+// collectMetrics collect all monitored metrics
+func (sm *saramaMetricsMonitor) collectMetrics() {
 	sm.collectProducerMetrics()
-	if err := sm.collectBrokerMetrics(); err != nil {
-		log.Warn("collect broker metrics failed", zap.Error(err))
-	}
+	sm.collectBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
@@ -213,14 +217,28 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
-func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
+func (sm *saramaMetricsMonitor) collectBrokers() {
+	start := time.Now()
 	brokers, _, err := sm.admin.DescribeCluster()
 	if err != nil {
-		return err
+		log.Warn("kafka cluster unreachable, "+
+			"use historical brokers to collect kafka broker level metrics",
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role),
+			zap.Duration("duration", time.Since(start)))
+		return
 	}
 
 	for _, b := range brokers {
-		brokerID := strconv.Itoa(int(b.ID()))
+		sm.brokers[b.ID()] = struct{}{}
+	}
+}
+
+func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
+	sm.collectBrokers()
+
+	for id := range sm.brokers {
+		brokerID := strconv.Itoa(int(id))
 
 		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
@@ -262,22 +280,43 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
 			responseSizeGauge.WithLabelValues(sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 	}
-	return nil
 }
 
-func newSaramaMetricsMonitor(registry metrics.Registry, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
-	return &saramaMetricsMonitor{
+// flushMetricsInterval specifies the interval of refresh sarama metrics.
+const flushMetricsInterval = 5 * time.Second
+
+func runSaramaMetricsMonitor(ctx context.Context, registry metrics.Registry, changefeedID string,
+	role util.Role, admin kafka.ClusterAdminClient,
+) {
+	monitor := &saramaMetricsMonitor{
 		changefeedID: changefeedID,
+		role:         role,
 		registry:     registry,
 		admin:        admin,
+		brokers:      make(map[int32]struct{}),
 	}
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	go func() {
+		defer func() {
+			ticker.Stop()
+			monitor.cleanup()
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				monitor.collectMetrics()
+			}
+		}
+	}()
 }
 
-func (sm *saramaMetricsMonitor) Cleanup() {
+// cleanup called when the changefeed / processor stop the kafka sink.
+func (sm *saramaMetricsMonitor) cleanup() {
 	sm.cleanUpProducerMetrics()
-	if err := sm.cleanUpBrokerMetrics(); err != nil {
-		log.Warn("clean up broker metrics failed", zap.Error(err))
-	}
+	sm.cleanUpBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
@@ -287,15 +326,9 @@ func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
 	compressionRatioGauge.DeleteLabelValues(sm.changefeedID)
 }
 
-func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
-	brokers, _, err := sm.admin.DescribeCluster()
-	if err != nil {
-		return err
-	}
-
-	for _, b := range brokers {
-		brokerID := strconv.Itoa(int(b.ID()))
-
+func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
+	for id := range sm.brokers {
+		brokerID := strconv.Itoa(int(id))
 		incomingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		outgoingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		requestRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
@@ -305,5 +338,4 @@ func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
 		responseRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 		responseSizeGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 	}
-	return nil
 }
