@@ -247,6 +247,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		return errors.Trace(err)
 	}
 	topics := k.eventRouter.GetActiveTopics(tables)
+	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
@@ -255,7 +256,9 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 		log.Debug("emit checkpointTs to active topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
-		return errors.Trace(err)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
