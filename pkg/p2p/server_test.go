@@ -25,9 +25,10 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tiflow/proto/p2p"
 )
 
 const (
