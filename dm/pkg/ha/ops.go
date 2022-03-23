@@ -99,7 +99,8 @@ func DeleteSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, st
 
 // operateSubtask puts/deletes KVs for the subtask in one txn.
 func operateSubtask(cli *clientv3.Client, evType mvccpb.Event_EventType, cfgs []config.SubTaskConfig, stages []Stage,
-	validatorStages []Stage) (int64, error) {
+	validatorStages []Stage,
+) (int64, error) {
 	var (
 		ops1         []clientv3.Op
 		ops2         []clientv3.Op

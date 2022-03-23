@@ -1091,7 +1091,8 @@ func (s *Server) getTaskSourceNameList(taskName string) []string {
 
 // getStatusFromWorkers does RPC request to get status from dm-workers.
 func (s *Server) getStatusFromWorkers(
-	ctx context.Context, sources []string, taskName string, specifiedSource bool) []*pb.QueryStatusResponse {
+	ctx context.Context, sources []string, taskName string, specifiedSource bool,
+) []*pb.QueryStatusResponse {
 	workerReq := &workerrpc.Request{
 		Type:        workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{Name: taskName},

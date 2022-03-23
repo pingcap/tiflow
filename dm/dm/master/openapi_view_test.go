@@ -954,7 +954,8 @@ func setupTestServer(ctx context.Context, t *testing.T) *Server {
 
 // nolint:unparam
 func mockRelayQueryStatus(
-	mockWorkerClient *pbmock.MockWorkerClient, sourceName, workerName string, stage pb.Stage) {
+	mockWorkerClient *pbmock.MockWorkerClient, sourceName, workerName string, stage pb.Stage,
+) {
 	queryResp := &pb.QueryStatusResponse{
 		Result: true,
 		SourceStatus: &pb.SourceStatus{
@@ -982,7 +983,8 @@ func mockPurgeRelay(mockWorkerClient *pbmock.MockWorkerClient) {
 }
 
 func mockTaskQueryStatus(
-	mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceName, workerName string, needError bool) {
+	mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceName, workerName string, needError bool,
+) {
 	var queryResp *pb.QueryStatusResponse
 	if needError {
 		queryResp = &pb.QueryStatusResponse{

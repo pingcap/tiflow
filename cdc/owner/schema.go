@@ -40,8 +40,10 @@ type schemaWrap4Owner struct {
 	id model.ChangeFeedID
 }
 
-func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts,
-	config *config.ReplicaConfig, id model.ChangeFeedID) (*schemaWrap4Owner, error) {
+func newSchemaWrap4Owner(
+	kvStorage tidbkv.Storage, startTs model.Ts,
+	config *config.ReplicaConfig, id model.ChangeFeedID,
+) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
