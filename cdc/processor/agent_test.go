@@ -83,11 +83,11 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		etcdClient:   etcdCli,
 		etcdKVClient: KVCli,
 
-		// We use the channel size 2 because in the design of these tests,
-		// no situation with more than 2 pending messages can occur.
-		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 2),
-		syncCh:             make(chan *model.SyncMessage, 2),
-		checkpointCh:       make(chan *model.CheckpointMessage, 2),
+		// The channel sizes 1024 should be more than sufficient for these tests.
+		// Full channels will result in panics to make the cases fail.
+		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 1024),
+		syncCh:             make(chan *model.SyncMessage, 1024),
+		checkpointCh:       make(chan *model.CheckpointMessage, 1024),
 
 		ownerMessageClient: ownerMessageClient,
 
@@ -100,7 +100,11 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
 			require.IsType(t, &model.DispatchTableResponseMessage{}, msg)
-			ret.dispatchResponseCh <- msg.(*model.DispatchTableResponseMessage)
+			select {
+			case ret.dispatchResponseCh <- msg.(*model.DispatchTableResponseMessage):
+			default:
+				require.FailNow(t, "full channel")
+			}
 			return nil
 		},
 	)
@@ -117,7 +121,12 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 
 			require.Equal(t, processorCaptureID, senderID)
 			require.IsType(t, &model.SyncMessage{}, msg)
-			ret.syncCh <- msg.(*model.SyncMessage)
+
+			select {
+			case ret.syncCh <- msg.(*model.SyncMessage):
+			default:
+				require.FailNow(t, "full channel")
+			}
 			return nil
 		},
 	)
@@ -128,7 +137,12 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
 			require.IsType(t, &model.CheckpointMessage{}, msg)
-			ret.checkpointCh <- msg.(*model.CheckpointMessage)
+
+			select {
+			case ret.checkpointCh <- msg.(*model.CheckpointMessage):
+			default:
+				require.FailNow(t, "full channel")
+			}
 			return nil
 		},
 	)
