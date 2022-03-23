@@ -493,6 +493,56 @@ func TestWorkerTimedOut(t *testing.T) {
 	suite.Close()
 }
 
+func TestWorkerTerminate(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
+
+	suite := newWorkerManagerTestSuite(ctx)
+
+	manager := newWorkerManager(
+		suite.BuildDepsContext(t),
+		masterName,
+		true,
+		1,
+		&defaultTimeoutConfig,
+	).(*workerManagerImpl)
+
+	manager.clock = clock.NewMock()
+	manager.clock.(*clock.Mock).Set(time.Now())
+
+	err := safeAddWorker(manager, workerID1, executorNodeID1)
+	require.NoError(t, err)
+
+	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+		SendTime:     manager.clock.Mono(),
+		FromWorkerID: workerID1,
+		Epoch:        1,
+	}, executorNodeID1)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		offlined, onlined := manager.Tick(ctx)
+		require.Empty(t, offlined)
+		return len(onlined) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	// update worker status, set it finished
+	status := manager.statusReceivers[workerID1]
+	status.statusMu.Lock()
+	status.statusCache.Code = WorkerStatusFinished
+	status.statusMu.Unlock()
+
+	offlined, onlined := manager.Tick(ctx)
+	require.Len(t, offlined, 1)
+	require.Empty(t, onlined)
+	require.Len(t, manager.tombstones, 1)
+
+	cancel()
+	suite.Close()
+}
+
 func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	t.Parallel()
 

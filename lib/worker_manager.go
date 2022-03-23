@@ -280,9 +280,9 @@ func (m *workerManagerImpl) Tick(
 			onlinedWorkers = append(onlinedWorkers, workerInfo)
 		}
 
-		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) {
+		status := m.statusReceivers[workerID].Status()
+		if workerInfo.hasTimedOut(m.clock, &m.timeoutConfig) || status.InTerminateState() {
 			offlinedWorkers = append(offlinedWorkers, workerInfo)
-			status := m.statusReceivers[workerID].Status()
 			m.tombstones[workerID] = &status
 			delete(m.workerInfos, workerID)
 		}

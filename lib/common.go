@@ -98,6 +98,17 @@ type WorkerStatus struct {
 	ExtBytes []byte `json:"ext-bytes"`
 }
 
+// InTerminateState returns whether worker is in a terminate state, including
+// finished, stopped, error.
+func (s *WorkerStatus) InTerminateState() bool {
+	switch s.Code {
+	case WorkerStatusFinished, WorkerStatusStopped, WorkerStatusError:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *WorkerStatus) Marshal() ([]byte, error) {
 	return json.Marshal(s)
 }
