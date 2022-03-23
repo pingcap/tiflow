@@ -189,11 +189,8 @@ func (w *flushWorker) asyncSend(
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) (retErr error) {
 	defer func() {
-		select {
-		case w.errCh <- retErr:
-		default:
-			log.Warn("flushWorker error is dropped due to a previous error", zap.Error(retErr))
-		}
+		// Note that errCh is sent to exactly once.
+		w.errCh <- retErr
 		close(w.errCh)
 		// TODO: log changefeed ID here
 		log.Info("flushWorker exited", zap.Error(retErr))
