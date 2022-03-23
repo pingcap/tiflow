@@ -42,7 +42,8 @@ func NewSyncpointStore(ctx cdcContext.Context, changefeedID model.ChangeFeedID,
 	sinkURIStr string,
 	sourceURIStr string,
 	interval time.Duration,
-	filter *filter.Filter) (SyncpointStore, error) {
+	filter *filter.Filter,
+) (SyncpointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {

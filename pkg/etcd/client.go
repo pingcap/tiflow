@@ -241,7 +241,8 @@ func (c *Client) Watch(
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchResponse,
-	key string, role string, opts ...clientV3.OpOption) {
+	key string, role string, opts ...clientV3.OpOption,
+) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
