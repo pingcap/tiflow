@@ -144,9 +144,8 @@ func TestMySQLBinlogRowImageChecker(t *testing.T) {
 			version:   "5.6.1-log",
 			state:     StateSuccess,
 			needCheck: false,
-			rowImage:  "full",
+			rowImage:  "",
 		},
-
 		// mysql >= 5.6.2  need check - success
 		{
 			version:   "5.6.2-log",
@@ -167,7 +166,7 @@ func TestMySQLBinlogRowImageChecker(t *testing.T) {
 			version:   "10.1.5-MariaDB-1~wheezy",
 			state:     StateSuccess,
 			needCheck: false,
-			rowImage:  "full",
+			rowImage:  "",
 		},
 
 		// mariadb >= 10.1.6  need check - success
