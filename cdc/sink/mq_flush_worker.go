@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -52,6 +54,12 @@ type flushWorker struct {
 	ticker        *time.Ticker
 	needSyncFlush bool
 
+	// errCh is used to store one error if `run` exits unexpectedly.
+	// After sending an error to errCh, errCh must be closed so that
+	// subsequent callers to addEvent will always know that the flushWorker
+	// is NOT running normally.
+	errCh chan error
+
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
 	statistics *Statistics
@@ -61,6 +69,7 @@ type flushWorker struct {
 func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer, statistics *Statistics) *flushWorker {
 	w := &flushWorker{
 		msgChan:    make(chan mqEvent),
+		errCh:      make(chan error, 1), // must be buffered chan
 		ticker:     time.NewTicker(flushInterval),
 		encoder:    encoder,
 		producer:   producer,
@@ -177,7 +186,17 @@ func (w *flushWorker) asyncSend(
 
 // run starts a loop that keeps collecting, sorting and sending messages
 // until it encounters an error or is interrupted.
-func (w *flushWorker) run(ctx context.Context) error {
+func (w *flushWorker) run(ctx context.Context) (retErr error) {
+	defer func() {
+		select {
+		case w.errCh <- retErr:
+		default:
+			log.L().Warn("flushWorker error is dropped due to a previous erro", zap.Error(retErr))
+		}
+		close(w.errCh)
+		// TODO: log changefeed ID here
+		log.Info("flushWorker exited", zap.Error(retErr))
+	}()
 	defer w.ticker.Stop()
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
@@ -194,5 +213,21 @@ func (w *flushWorker) run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+}
+
+// addEvent is used to add one event to the flushWorker.
+// It will return an ErrMQWorkerClosed if the flushWorker has exited.
+func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err, ok := <-w.errCh:
+		if !ok {
+			return cerror.ErrMQWorkerClosed.GenWithStackByArgs()
+		}
+		return err
+	case w.msgChan <- event:
+		return nil
 	}
 }
