@@ -503,7 +503,7 @@ unknown '%s' protocol for Message Queue sink
 
 ["CDC:ErrMQWorkerClosed"]
 error = '''
-MQ flush worker has closed
+MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]

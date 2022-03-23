@@ -17,13 +17,12 @@ import (
 	"context"
 	"time"
 
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/producer"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -68,9 +67,11 @@ type flushWorker struct {
 // newFlushWorker creates a new flush worker.
 func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer, statistics *Statistics) *flushWorker {
 	w := &flushWorker{
-		msgChan:    make(chan mqEvent),
-		errCh:      make(chan error, 1), // must be buffered chan
-		ticker:     time.NewTicker(flushInterval),
+		msgChan: make(chan mqEvent),
+		ticker:  time.NewTicker(flushInterval),
+		// errCh must be a buffered channel, or otherwise sending error to it will
+		// almost certainly go to the default branch, making errCh useless.
+		errCh:      make(chan error, 1),
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,

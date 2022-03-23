@@ -433,7 +433,7 @@ func TestAbort(t *testing.T) {
 func TestProducerError(t *testing.T) {
 	t.Parallel()
 
-	worker, _ := newTestWorker()
+	worker, prod := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -446,7 +446,7 @@ func TestProducerError(t *testing.T) {
 		require.Regexp(t, ".*fake.*", err.Error())
 	}()
 
-	worker.producer.(*mockProducer).InjectError(errors.New("fake"))
+	prod.InjectError(errors.New("fake"))
 	err := worker.addEvent(ctx, mqEvent{
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
