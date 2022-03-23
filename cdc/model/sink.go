@@ -377,10 +377,11 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Name  string         `json:"name" msg:"name"`
-	Type  byte           `json:"type" msg:"type"`
-	Flag  ColumnFlagType `json:"flag" msg:"-"`
-	Value interface{}    `json:"value" msg:"value"`
+	Name    string         `json:"name" msg:"name"`
+	Type    byte           `json:"type" msg:"type"`
+	Charset string         `json:"charset" msg:"charset"`
+	Flag    ColumnFlagType `json:"flag" msg:"-"`
+	Value   interface{}    `json:"value" msg:"value"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`

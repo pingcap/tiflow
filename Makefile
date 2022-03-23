@@ -49,8 +49,8 @@ FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v5.4.0-master
-	release_version_regex := ^v5\..*$$
+	RELEASE_VERSION := v6.0.0-master
+	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
 		# If we are in release branch, try to use tag version.
@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -208,6 +208,10 @@ ifneq ($(shell echo $(RELEASE_VERSION) | grep master),)
 	@echo "check-file-width"
 	@./scripts/check-diff-line-width.sh
 endif
+
+generate-msgp-code: tools/bin/msgp
+	@echo "generate-msgp-code"
+	./scripts/generate-msgp-code.sh
 
 vet:
 	@echo "vet"
@@ -438,6 +442,9 @@ tools/bin/errdoc-gen: tools/check/go.mod
 
 tools/bin/swag: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/swag github.com/swaggo/swag/cmd/swag
+
+tools/bin/msgp: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
