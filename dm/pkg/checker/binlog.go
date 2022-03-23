@@ -105,6 +105,7 @@ func (pc *MySQLBinlogFormatChecker) Name() string {
 }
 
 /*****************************************************/
+
 var (
 	mysqlBinlogRowImageRequired   MySQLVersion = [3]uint{5, 6, 2}
 	mariaDBBinlogRowImageRequired MySQLVersion = [3]uint{10, 1, 6}
