@@ -381,7 +381,8 @@ func (m *MessageServer) AddHandler(
 	ctx context.Context,
 	topic string,
 	tpi typeInformation,
-	fn func(string, interface{}) error) (chan struct{}, <-chan error, error) {
+	fn func(string, interface{}) error,
+) (chan struct{}, <-chan error, error) {
 	tp := reflect.TypeOf(tpi)
 
 	metricsServerRepeatedMessageCount := serverRepeatedMessageCount.MustCurryWith(prometheus.Labels{
@@ -528,8 +529,8 @@ func (m *MessageServer) handlePendingMessages(ctx context.Context, topic string)
 func (m *MessageServer) registerPeer(
 	ctx context.Context,
 	sender *streamHandle,
-	clientIP string) error {
-
+	clientIP string,
+) error {
 	streamMeta := sender.GetStreamMeta()
 
 	log.Info("peer connection received",

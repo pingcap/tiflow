@@ -44,7 +44,8 @@ func TestIsS3(t *testing.T) {
 		"s3:///bucket/more/prefix",
 		"s3://bucket2/prefix",
 		"s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
-		"s3://bucket4/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+		// git secrets will report error when it's a real AK, so we use a truncated one
+		"s3://bucket4/prefix/path?access-key=NXN7IOSAAKDEEOLF&secret-access-key=nRE/7Dt+PaIbYKrK/ExCiX=XMLPNw",
 	}
 
 	testIsS3Results := []bool{
@@ -57,7 +58,7 @@ func TestIsS3(t *testing.T) {
 	}
 }
 
-func TestIsS3AndAdjustS3Path(t *testing.T) {
+func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 	testPaths := []struct {
 		isURLFormat bool
 		rawPath     string
@@ -66,16 +67,19 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 		{true, "file:///tmp/storage", "file:///tmp/storage_placeholder"},
 		{false, "/tmp/storage", "/tmp/storage_placeholder"},
 		{false, "./tmp/storage", "./tmp/storage_placeholder"},
+		{false, "./tmp/storage/", "./tmp/storage_placeholder"},
 		{false, "tmp/storage", "tmp/storage_placeholder"},
 		{true, "s3:///bucket/more/prefix", "s3:///bucket/more/prefix_placeholder"},
 		{true, "s3://bucket2/prefix", "s3://bucket2/prefix_placeholder"},
+		{true, "s3://bucket2/prefix/", "s3://bucket2/prefix_placeholder"},
 		{
 			true, "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
 			"s3://bucket3/prefix/path_placeholder?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
 		},
 		{
-			true, "s3://bucket3/prefix/path?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt+PaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
-			"s3://bucket3/prefix/path_placeholder?access-key=NXN7IPIOSAAKDEEOLMAF&secret-access-key=nREY/7Dt%2BPaIbYKrKlEEMMF/ExCiJEX=XMLPUANw",
+			// git secrets will report error when it's a real AK, so we use a truncated one
+			true, "s3://bucket3/prefix/path?access-key=NXN7IOSAAKDEEOLF&secret-access-key=nRE/7Dt+PaIbYKrK/ExCiX=XMLPNw",
+			"s3://bucket3/prefix/path_placeholder?access-key=NXN7IOSAAKDEEOLF&secret-access-key=nRE/7Dt%2BPaIbYKrK/ExCiX=XMLPNw",
 		},
 	}
 
@@ -123,6 +127,10 @@ func TestIsS3AndAdjustS3Path(t *testing.T) {
 				res, err = AdjustPath(expectPath, testSeparator+testUniqueID.test)
 				require.NoError(t, err)
 				require.Equal(t, expectPath, res)
+				// trim
+				res, err = TrimPath(expectPath, testSeparator+testUniqueID.test)
+				require.NoError(t, err)
+				require.Equal(t, strings.ReplaceAll(testPath.expectPath, "_placeholder", ""), res)
 			}
 		}
 	}

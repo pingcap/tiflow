@@ -37,9 +37,6 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
-
-	// flushMetricsInterval specifies the interval of refresh sarama metrics.
-	flushMetricsInterval = 5 * time.Second
 )
 
 const (
@@ -60,8 +57,6 @@ type kafkaSaramaProducer struct {
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
-	topic             string
-	partitionNum      int32
 
 	// It is used to count the number of messages sent out and messages received when flushing data.
 	mu struct {
@@ -78,8 +73,6 @@ type kafkaSaramaProducer struct {
 
 	role util.Role
 	id   model.ChangeFeedID
-
-	metricsMonitor *saramaMetricsMonitor
 }
 
 type kafkaProducerClosingFlag = int32
@@ -89,7 +82,9 @@ type kafkaProducerClosingFlag = int32
 // Do not try to call AsyncSendMessage and Flush functions in different threads,
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (k *kafkaSaramaProducer) AsyncSendMessage(
+	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
 
@@ -114,7 +109,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	})
 
 	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
+		Topic:     topic,
 		Key:       sarama.ByteEncoder(message.Key),
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partition,
@@ -134,13 +129,15 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, message *cod
 	return nil
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(
+	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
-	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
-	for i := 0; i < int(k.partitionNum); i++ {
+	msgs := make([]*sarama.ProducerMessage, partitionsNum)
+	for i := 0; i < int(partitionsNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
-			Topic:     k.topic,
+			Topic:     topic,
 			Key:       sarama.ByteEncoder(message.Key),
 			Value:     sarama.ByteEncoder(message.Value),
 			Partition: int32(i),
@@ -188,10 +185,6 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	}
 }
 
-func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
-	return k.partitionNum
-}
-
 // stop closes the closeCh to signal other routines to exit
 // It SHOULD NOT be called under `clientLock`.
 func (k *kafkaSaramaProducer) stop() {
@@ -213,6 +206,9 @@ func (k *kafkaSaramaProducer) Close() error {
 	if k.producersReleased {
 		// We need to guard against double closing the clients,
 		// which could lead to panic.
+		log.Warn("kafka producer already released",
+			zap.String("changefeed", k.id),
+			zap.Any("role", k.role))
 		return nil
 	}
 	k.producersReleased = true
@@ -254,8 +250,6 @@ func (k *kafkaSaramaProducer) Close() error {
 			zap.String("changefeed", k.id), zap.Any("role", k.role))
 	}
 
-	k.metricsMonitor.Cleanup()
-
 	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
 	start = time.Now()
 	if err := k.admin.Close(); err != nil {
@@ -277,8 +271,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	ticker := time.NewTicker(flushMetricsInterval)
-	defer ticker.Stop()
 	for {
 		var ack *sarama.ProducerMessage
 		select {
@@ -286,8 +278,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
-		case <-ticker.C:
-			k.metricsMonitor.CollectMetrics()
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("changefeed", k.id), zap.Any("role", k.role))
@@ -322,7 +312,6 @@ func NewKafkaSaramaProducer(
 	ctx context.Context,
 	client sarama.Client,
 	admin kafka.ClusterAdminClient,
-	topic string,
 	config *Config,
 	saramaConfig *sarama.Config,
 	errCh chan error,
@@ -342,22 +331,19 @@ func NewKafkaSaramaProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	runSaramaMetricsMonitor(ctx, saramaConfig.MetricRegistry, changefeedID, role, admin)
+
 	k := &kafkaSaramaProducer{
 		admin:         admin,
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		topic:         topic,
-		partitionNum:  config.PartitionNum,
 		closeCh:       make(chan struct{}),
 		failpointCh:   make(chan error, 1),
 		closing:       kafkaProducerRunning,
 
 		id:   changefeedID,
 		role: role,
-
-		metricsMonitor: newSaramaMetricsMonitor(
-			saramaConfig.MetricRegistry, changefeedID, admin),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -393,8 +379,9 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // AdjustConfig adjust the `Config` and `sarama.Config` by condition.
-func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
-	saramaConfig *sarama.Config, topic string) error {
+func AdjustConfig(
+	admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string,
+) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -473,8 +460,10 @@ func AdjustConfig(admin kafka.ClusterAdminClient, config *Config,
 	return nil
 }
 
-func validateMinInsyncReplicas(admin kafka.ClusterAdminClient,
-	topics map[string]sarama.TopicDetail, topic string, replicationFactor int) error {
+func validateMinInsyncReplicas(
+	admin kafka.ClusterAdminClient,
+	topics map[string]sarama.TopicDetail, topic string, replicationFactor int,
+) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
 		if exists {
