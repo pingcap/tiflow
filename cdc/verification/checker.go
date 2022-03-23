@@ -205,7 +205,7 @@ var compareCheckSum = func(ctx context.Context, upstreamChecker, downstreamCheck
 			if !ok {
 				log.Warn("cannot find checker at sink, it may eligible to replicate",
 					zap.String("tableName", k),
-					zap.String("source checker", v))
+					zap.String("sourceChecker", v))
 				continue
 			}
 			if v != target {
