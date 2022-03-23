@@ -70,7 +70,7 @@ func canDiscoverDbusSessionBusAddress() bool {
 			if f, err := ioutil.ReadFile(runUserSessionDbusFile); err == nil {
 				fileContent := string(f)
 
-				prefix := "DBUS_SESSION_BUS_ADDRESS="
+				prefix := fmt.Sprintf("%s=", dbusSessionEnvName)
 
 				if strings.HasPrefix(fileContent, prefix) {
 					address := strings.TrimRight(strings.TrimPrefix(fileContent, prefix), "\n\r")
