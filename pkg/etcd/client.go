@@ -111,7 +111,7 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 func (c *Client) Put(
 	ctx context.Context, key, val string, opts ...clientV3.OpOption,
 ) (resp *clientV3.PutResponse, err error) {
-  putCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	putCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
@@ -125,7 +125,7 @@ func (c *Client) Put(
 func (c *Client) Get(
 	ctx context.Context, key string, opts ...clientV3.OpOption,
 ) (resp *clientV3.GetResponse, err error) {
-  getCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	getCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
@@ -153,7 +153,7 @@ func (c *Client) Delete(
 func (c *Client) Txn(
 	ctx context.Context, cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op,
 ) (resp *clientV3.TxnResponse, err error) {
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	txnCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
 		var inErr error
@@ -167,7 +167,7 @@ func (c *Client) Txn(
 func (c *Client) Grant(
 	ctx context.Context, ttl int64,
 ) (resp *clientV3.LeaseGrantResponse, err error) {
-  grantCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	grantCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
@@ -203,7 +203,7 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 func (c *Client) Revoke(
 	ctx context.Context, id clientV3.LeaseID,
 ) (resp *clientV3.LeaseRevokeResponse, err error) {
-  revokeCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	revokeCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
@@ -217,7 +217,7 @@ func (c *Client) Revoke(
 func (c *Client) TimeToLive(
 	ctx context.Context, lease clientV3.LeaseID, opts ...clientV3.LeaseOption,
 ) (resp *clientV3.LeaseTimeToLiveResponse, err error) {
-  timeToLiveCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	timeToLiveCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
