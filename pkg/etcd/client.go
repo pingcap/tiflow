@@ -32,7 +32,8 @@ import (
 )
 
 //go:generate mockery --name=EtcdClient --inpackage
-type EtcdClient interface {
+// Cli ...
+type Cli interface {
 	Unwrap() *clientV3.Client
 	Put(ctx context.Context, key, val string, opts ...clientV3.OpOption) (resp *clientV3.PutResponse, err error)
 	Get(ctx context.Context, key string, opts ...clientV3.OpOption) (resp *clientV3.GetResponse, err error)

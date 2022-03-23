@@ -43,6 +43,7 @@ func TestNewModuleVerification(t *testing.T) {
 	mockEtcdCli.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	m1, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "1"}, mockEtcdCli)
+	require.Nil(t, err)
 	m1.SentTrackData(ctx, Puller, []TrackData{{[]byte("1"), 1}})
 
 	m2, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "1"}, mockEtcdCli)
@@ -72,7 +73,7 @@ func TestNewModuleVerification(t *testing.T) {
 	mockEtcdCli1 := &etcd.MockEtcdClient{}
 	mockEtcdCli1.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(clientV3.WatchChan(ch))
 	_, err = NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "111"}, mockEtcdCli1)
-	require.Nil(t, nil)
+	require.Nil(t, err)
 	time.Sleep(time.Millisecond * 5)
 }
 

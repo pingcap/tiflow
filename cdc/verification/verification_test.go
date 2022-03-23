@@ -22,13 +22,14 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/goleak"
 )
@@ -48,38 +49,45 @@ func TestNewVerification(t *testing.T) {
 		openDB = origin
 	}()
 
-	cli := clientv3.NewCtxClient(ctx)
-	cli.KV = &etcd.MockClient{}
-	etcdCli := etcd.NewCDCEtcdClient(ctx, cli)
-	stdCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{EtcdClient: &etcdCli})
-	err := NewVerification(stdCtx, nil)
+	mockEtcdCli := &etcd.MockEtcdClient{}
+	mockEtcdCli.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	stdCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
+	err := NewVerification(stdCtx, nil, mockEtcdCli)
 	require.NotNil(t, err)
 
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
 		db, _, err := sqlmock.New()
 		return db, err
 	}
-	err = NewVerification(stdCtx, &Config{CheckInterval: time.Minute})
+	ctx1 := cdcContext.WithChangefeedVars(stdCtx, &cdcContext.ChangefeedVars{
+		ID:   "1",
+		Info: &model.ChangeFeedInfo{Config: &config.ReplicaConfig{Cyclic: &config.CyclicConfig{}}},
+	})
+	err = NewVerification(ctx1, &Config{CheckInterval: time.Minute}, mockEtcdCli)
 	require.Nil(t, err)
 
 	openDB = func(ctx context.Context, dsn string) (*sql.DB, error) {
 		db, _, _ := sqlmock.New()
 		return db, errors.New("openDB err")
 	}
-	err = NewVerification(stdCtx, &Config{})
+	err = NewVerification(stdCtx, &Config{}, mockEtcdCli)
 	require.EqualError(t, err, "openDB err")
 
 	db, _, err := sqlmock.New()
 	require.Nil(t, err)
+	mockModuleVerifier := &MockModuleVerifier{}
+	mockModuleVerifier.On("GC", mock.Anything, mock.Anything).Return(errors.New("xxx"))
 	v := &TiDBVerification{
 		config: &Config{
 			CheckInterval: 10 * time.Millisecond,
+			ChangefeedID:  "xxx",
 		},
-		running:           *atomic.NewBool(true),
-		upstreamChecker:   newChecker(db),
-		downstreamChecker: newChecker(db),
+		running:            *atomic.NewBool(true),
+		upstreamChecker:    newChecker(db),
+		downstreamChecker:  newChecker(db),
+		moduleVerification: mockModuleVerifier,
 	}
-	ctx, cancel = context.WithTimeout(ctx, time.Millisecond*30)
+	ctx, cancel = context.WithTimeout(ctx, time.Millisecond*15)
 	defer cancel()
 	require.NotPanics(t, func() {
 		v.runVerify(ctx)

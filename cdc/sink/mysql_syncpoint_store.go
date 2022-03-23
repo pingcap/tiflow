@@ -82,7 +82,7 @@ func newMySQLSyncpointStore(ctx cdcContext.Context, id string, sinkURI *url.URL,
 			TableName:     syncpointTableName,
 			ChangefeedID:  id,
 		}
-		err = verification.NewVerification(ctx, &cfg)
+		err = verification.NewVerification(ctx, &cfg, ctx.GlobalVars().EtcdClient.Client)
 		if err != nil {
 			log.Warn("Start verification fail", zap.Error(err))
 			return nil, err

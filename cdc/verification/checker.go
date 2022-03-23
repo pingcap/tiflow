@@ -165,6 +165,7 @@ func (c *checker) doChecksum(ctx context.Context, columns []columnInfo, database
 	// ref: https://www.percona.com/doc/percona-toolkit/LATEST/pt-table-checksum.html
 	// TODO: hash function as a option
 	concat := fmt.Sprintf("CONCAT_WS(',', %s, %s)", a, b)
+	// nolint:gosec
 	query := fmt.Sprintf("SELECT BIT_XOR(CAST(crc32(%s) AS UNSIGNED)) AS checksum FROM %s", concat, tableName)
 
 	log.Debug("do checkSum",

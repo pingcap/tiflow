@@ -22,11 +22,13 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// MockClient ...
 type MockClient struct {
 	clientv3.KV
 	getOK bool
 }
 
+// Get ...
 func (m *MockClient) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.GetResponse, err error) {
 	if m.getOK {
 		m.getOK = true
@@ -35,10 +37,12 @@ func (m *MockClient) Get(ctx context.Context, key string, opts ...clientv3.OpOpt
 	return &clientv3.GetResponse{}, nil
 }
 
+// Put ...
 func (m *MockClient) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
 	return nil, errors.New("mock error")
 }
 
+// Txn ...
 func (m *MockClient) Txn(ctx context.Context) clientv3.Txn {
 	return &mockTxn{ctx: ctx}
 }
@@ -48,6 +52,7 @@ type mockTxn struct {
 	mode int
 }
 
+// If ...
 func (txn *mockTxn) If(cs ...clientv3.Cmp) clientv3.Txn {
 	if cs != nil {
 		txn.mode += 1
@@ -55,6 +60,7 @@ func (txn *mockTxn) If(cs ...clientv3.Cmp) clientv3.Txn {
 	return txn
 }
 
+// Then ...
 func (txn *mockTxn) Then(ops ...clientv3.Op) clientv3.Txn {
 	if ops != nil {
 		txn.mode += 1 << 1
@@ -62,6 +68,7 @@ func (txn *mockTxn) Then(ops ...clientv3.Op) clientv3.Txn {
 	return txn
 }
 
+// Else ...
 func (txn *mockTxn) Else(ops ...clientv3.Op) clientv3.Txn {
 	if ops != nil {
 		txn.mode += 1 << 2
@@ -69,6 +76,7 @@ func (txn *mockTxn) Else(ops ...clientv3.Op) clientv3.Txn {
 	return txn
 }
 
+// Commit ...
 func (txn *mockTxn) Commit() (*clientv3.TxnResponse, error) {
 	switch txn.mode {
 	case 0:
@@ -92,6 +100,7 @@ type mockWatcher struct {
 	rev          *int64
 }
 
+// Watch ...
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	atomic.AddInt32(m.resetCount, 1)
 	op := &clientv3.Op{}
@@ -102,6 +111,7 @@ func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpO
 	return m.watchCh
 }
 
+// RequestProgress ...
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
 	atomic.AddInt32(m.requestCount, 1)
 	return nil

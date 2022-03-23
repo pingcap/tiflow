@@ -35,6 +35,7 @@ import (
 )
 
 //go:generate mockery --name=ModuleVerifier --inpackage
+// ModuleVerifier define the interface for module verification
 type ModuleVerifier interface {
 	// SentTrackData sent the track data to verification
 	SentTrackData(ctx context.Context, module Module, data []TrackData)
@@ -46,6 +47,7 @@ type ModuleVerifier interface {
 	Close() error
 }
 
+// Module define the module const
 type Module uint32
 
 //go:generate stringer -type=Module
@@ -61,6 +63,7 @@ const (
 	writeBatchSizeFactor = 16
 )
 
+// ModuleVerification is for module level verification
 type ModuleVerification struct {
 	cfg *ModuleVerificationConfig
 	db  db.DB
@@ -69,9 +72,10 @@ type ModuleVerification struct {
 	commitMu     sync.Mutex
 	deleteCount  uint64
 	nextDeleteTs time.Time
-	etcdClient   etcd.EtcdClient
+	etcdClient   etcd.Cli
 }
 
+// ModuleVerificationConfig is the config for ModuleVerification
 type ModuleVerificationConfig struct {
 	ChangefeedID        string
 	DBConfig            *config.DBConfig
@@ -85,7 +89,7 @@ var (
 )
 
 // NewModuleVerification return the module level verification per changefeed
-func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, etcdCli etcd.EtcdClient) (*ModuleVerification, error) {
+func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, etcdCli etcd.Cli) (*ModuleVerification, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("ModuleVerificationConfig can not be nil"))
 	}
@@ -133,6 +137,7 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, e
 	return m, nil
 }
 
+// TrackData is used to store track data transfer between cdc modules
 type TrackData struct {
 	TrackID  []byte
 	CommitTs uint64
@@ -396,7 +401,7 @@ func keyEqual(key1, key2 []byte) bool {
 		zap.String("module", m2.String()),
 		zap.Uint64("commitTs", c2),
 		zap.ByteString("key2", k2))
-	if c1 == c2 && bytes.Compare(k1, k2) == 0 {
+	if c1 == c2 && bytes.Equal(k1, k2) {
 		return true
 	}
 	return false

@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Verifier define the interface for e2e verification
 type Verifier interface {
 	// Verify run the e2e consistency check, return false and the (startTs, endTs] time range of broken data, if check fail
 	// return true means no need to run next step, endTs is returned for GC
@@ -41,6 +42,7 @@ type Verifier interface {
 	Close() error
 }
 
+// Config is the config for TiDBVerification6
 type Config struct {
 	CheckInterval      time.Duration
 	ResourceLimitation string
@@ -53,12 +55,14 @@ type Config struct {
 	ChangefeedID string
 }
 
+// TiDBVerification define the TiDB verification
 type TiDBVerification struct {
-	etcdClient        etcd.EtcdClient
-	config            *Config
-	upstreamChecker   *checker
-	downstreamChecker *checker
-	running           atomic.Bool
+	etcdClient         etcd.Cli
+	config             *Config
+	upstreamChecker    *checker
+	downstreamChecker  *checker
+	moduleVerification ModuleVerifier
+	running            atomic.Bool
 }
 
 const (
@@ -72,7 +76,7 @@ const (
 )
 
 // NewVerification start the verification process if no error
-func NewVerification(ctx cdcContext.Context, config *Config) error {
+func NewVerification(ctx cdcContext.Context, config *Config, etcdCli etcd.Cli) error {
 	if config == nil {
 		return cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("Config can not be nil"))
 	}
@@ -89,11 +93,20 @@ func NewVerification(ctx cdcContext.Context, config *Config) error {
 	if config.CheckInterval == 0 {
 		config.CheckInterval = defaultCheckInterval
 	}
+	m, err := NewModuleVerification(ctx, &ModuleVerificationConfig{
+		ChangefeedID: config.ChangefeedID,
+		CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
+	},
+		etcdCli)
+	if err != nil {
+		return err
+	}
 	v := &TiDBVerification{
-		config:            config,
-		upstreamChecker:   newChecker(upstreamDB),
-		downstreamChecker: newChecker(downstreamDB),
-		etcdClient:        ctx.GlobalVars().EtcdClient.Client,
+		config:             config,
+		upstreamChecker:    newChecker(upstreamDB),
+		downstreamChecker:  newChecker(downstreamDB),
+		etcdClient:         etcdCli,
+		moduleVerification: m,
 	}
 	go v.runVerify(ctx)
 
@@ -135,21 +148,30 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 				zap.String("endTs", endTs),
 				zap.Bool("enoughCheck", enoughCheck))
 
-			if !enoughCheck {
-				if err = v.putVerificationTask(ctx, &taskInfo{StartTs: startTs, EndTs: endTs}); err != nil {
-					log.Error("putVerificationTask fail",
+			if enoughCheck {
+				if err := v.moduleVerification.GC(ctx, endTs); err != nil {
+					log.Error("module verify gc fail",
 						zap.String("changefeed", v.config.ChangefeedID),
 						zap.String("startTs", startTs),
 						zap.String("endTs", endTs),
 						zap.Error(err))
-					continue
 				}
+				continue
+			}
 
-				log.Info("putVerificationTask",
+			if err = v.putVerificationTask(ctx, &taskInfo{StartTs: startTs, EndTs: endTs}); err != nil {
+				log.Error("putVerificationTask fail",
 					zap.String("changefeed", v.config.ChangefeedID),
 					zap.String("startTs", startTs),
-					zap.String("endTs", endTs))
+					zap.String("endTs", endTs),
+					zap.Error(err))
+				continue
 			}
+
+			log.Info("putVerificationTask",
+				zap.String("changefeed", v.config.ChangefeedID),
+				zap.String("startTs", startTs),
+				zap.String("endTs", endTs))
 		}
 	}
 }
@@ -287,7 +309,7 @@ func (v *TiDBVerification) updateCheckResult(ctx context.Context, t tsPair, chec
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-
+	// nolint:gosec
 	query := fmt.Sprintf("update %s.%s set result=? where primary_ts=? and secondary_ts=? and cf=?", v.config.DataBaseName, v.config.TableName)
 	_, err = tx.ExecContext(ctx, query, checkRet, t.primaryTs, t.secondaryTs, t.cf)
 	if err != nil {
@@ -327,6 +349,7 @@ type tsPair struct {
 
 func (v *TiDBVerification) getPreviousTS(ctx context.Context, cf, pts string) (tsPair, error) {
 	var t tsPair
+	// nolint:gosec
 	query := fmt.Sprintf("select cf, primary_ts, secondary_ts, result from %s.%s where cf=? and primary_ts<? order by primary_ts desc limit 1", v.config.DataBaseName, v.config.TableName)
 	p, err := strconv.Atoi(pts)
 	if err != nil {
@@ -343,6 +366,7 @@ func (v *TiDBVerification) getPreviousTS(ctx context.Context, cf, pts string) (t
 
 func (v *TiDBVerification) getTS(ctx context.Context) (tsPair, error) {
 	var ts tsPair
+	// nolint:gosec
 	query := fmt.Sprintf("select max(primary_ts) as primary_ts from %s.%s where cf=?", v.config.DataBaseName, v.config.TableName)
 	row := v.downstreamChecker.db.QueryRowContext(ctx, query, v.config.ChangefeedID)
 	if row.Err() != nil {
@@ -364,6 +388,7 @@ func (v *TiDBVerification) getTS(ctx context.Context) (tsPair, error) {
 	return ts, nil
 }
 
+// Close implement Close api
 func (v *TiDBVerification) Close() error {
 	err := multierr.Append(v.upstreamChecker.db.Close(), v.downstreamChecker.db.Close())
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
