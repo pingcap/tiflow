@@ -236,9 +236,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Filter == nil {
 		info.Config.Filter = defaultConfig.Filter
 	}
-	if info.Config.Mounter == nil {
-		info.Config.Mounter = defaultConfig.Mounter
-	}
 	if info.Config.Sink == nil {
 		info.Config.Sink = defaultConfig.Sink
 	}

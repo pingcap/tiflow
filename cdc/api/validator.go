@@ -86,9 +86,6 @@ func verifyCreateChangefeedConfig(
 	// init replicaConfig
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.ForceReplicate = changefeedConfig.ForceReplicate
-	if changefeedConfig.MounterWorkerNum != 0 {
-		replicaConfig.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
-	}
 	if changefeedConfig.SinkConfig != nil {
 		replicaConfig.Sink = changefeedConfig.SinkConfig
 	}
@@ -179,10 +176,6 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 
 	if len(changefeedConfig.IgnoreTxnStartTs) != 0 {
 		newInfo.Config.Filter.IgnoreTxnStartTs = changefeedConfig.IgnoreTxnStartTs
-	}
-
-	if changefeedConfig.MounterWorkerNum != 0 {
-		newInfo.Config.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
 	}
 
 	if changefeedConfig.SinkConfig != nil {

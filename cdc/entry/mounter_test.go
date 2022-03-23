@@ -291,7 +291,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(scheamStorage, 1, false).(*mounterImpl)
+	mounter := NewMounter(scheamStorage, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 

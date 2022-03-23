@@ -33,9 +33,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
-	Mounter: &MounterConfig{
-		WorkerNum: 16,
-	},
 	Sink: &SinkConfig{},
 	Cyclic: &CyclicConfig{
 		Enable: false,
@@ -61,7 +58,6 @@ type replicaConfig struct {
 	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	Filter           *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Scheduler        *SchedulerConfig  `toml:"scheduler" json:"scheduler"`

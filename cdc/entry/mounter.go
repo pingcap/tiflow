@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -34,14 +33,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-)
-
-const (
-	// The buffer size of input channel of each mounter worker.
-	// 16 is large enough, because a channel exclusively belongs to a worker.
-	defaultInputChanSize = 16
 )
 
 type baseKVEntry struct {
@@ -69,55 +62,44 @@ type rowKVEntry struct {
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
-	// AddEntry accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
+	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-	// It also close `model.PolymorphicEvent.finished` channel to notify callers
-	// that decoding is done.
-	AddEntry(ctx context.Context, event *model.PolymorphicEvent) error
+	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounterImpl struct {
-	schemaStorage    SchemaStorage
-	rawRowChangedChs []chan *model.PolymorphicEvent
-	tz               *time.Location
-	workerNum        int
-	enableOldValue   bool
+	schemaStorage  SchemaStorage
+	tz             *time.Location
+	workerNum      int
+	enableOldValue bool
 
 	// index is an atomic variable to dispatch input events to workers.
 	index int64
+
+	metricMountDuration        prometheus.Observer
+	metricTotalRows            prometheus.Gauge
+	metricMounterInputChanSize prometheus.Gauge
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool) Mounter {
-	if workerNum <= 0 {
-		workerNum = defaultMounterWorkerNum
-	}
-	chs := make([]chan *model.PolymorphicEvent, workerNum)
-	for i := 0; i < workerNum; i++ {
-		chs[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
-	}
+func NewMounter(schemaStorage SchemaStorage, enableOldValue bool) Mounter {
 	return &mounterImpl{
-		schemaStorage:    schemaStorage,
-		rawRowChangedChs: chs,
-		workerNum:        workerNum,
-		enableOldValue:   enableOldValue,
+		schemaStorage:  schemaStorage,
+		enableOldValue: enableOldValue,
 	}
 }
 
-const defaultMounterWorkerNum = 32
-
 func (m *mounterImpl) Run(ctx context.Context) error {
 	m.tz = util.TimezoneFromCtx(ctx)
-	errg, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < m.workerNum; i++ {
-		index := i
-		errg.Go(func() error {
-			return m.codecWorker(ctx, index)
-		})
-	}
 
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(changefeedID)
+	m.metricMountDuration = mountDuration.WithLabelValues(changefeedID)
+	m.metricTotalRows = totalRowsCountGauge.WithLabelValues(changefeedID)
+	m.metricMounterInputChanSize = mounterInputChanSizeGauge.WithLabelValues(changefeedID)
+	defer func() {
+		mountDuration.DeleteLabelValues(changefeedID)
+		totalRowsCountGauge.DeleteLabelValues(changefeedID)
+	}()
 
 	flushMetricsInterval := 15 * time.Second
 	timer := time.NewTimer(flushMetricsInterval)
@@ -126,60 +108,35 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		select {
 		// ctx.Done returns when parent ctx done or error occurs in errg.
 		case <-ctx.Done():
-			return errg.Wait()
+			return ctx.Err()
 		case <-timer.C:
-			chSize := 0
-			for _, ch := range m.rawRowChangedChs {
-				chSize += len(ch)
-			}
-			metricMounterInputChanSize.Set(float64(chSize))
 			timer.Reset(flushMetricsInterval)
 		}
 	}
 }
 
-func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(changefeedID)
-	metricTotalRows := totalRowsCountGauge.WithLabelValues(changefeedID)
+func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
+	m.metricMounterInputChanSize.Inc()
+	m.metricTotalRows.Inc()
 	defer func() {
-		mountDuration.DeleteLabelValues(changefeedID)
-		totalRowsCountGauge.DeleteLabelValues(changefeedID)
+		m.metricMounterInputChanSize.Dec()
 	}()
-
-	for {
-		var pEvent *model.PolymorphicEvent
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case pEvent = <-m.rawRowChangedChs[index]:
-		}
-		if pEvent.RawKV.OpType == model.OpTypeResolved {
-			pEvent.PrepareFinished()
-			continue
-		}
-		startTime := time.Now()
-		rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		pEvent.Row = rowEvent
-		pEvent.RawKV.Value = nil
-		pEvent.RawKV.OldValue = nil
-		pEvent.PrepareFinished()
-		metricMountDuration.Observe(time.Since(startTime).Seconds())
-		metricTotalRows.Inc()
-	}
-}
-
-func (m *mounterImpl) AddEntry(ctx context.Context, event *model.PolymorphicEvent) error {
-	index := atomic.AddInt64(&m.index, 1) % int64(m.workerNum)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case m.rawRowChangedChs[index] <- event:
+	if pEvent.RawKV.OpType == model.OpTypeResolved {
 		return nil
 	}
+	start := time.Now()
+	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	pEvent.Row = rowEvent
+	pEvent.RawKV.Value = nil
+	pEvent.RawKV.OldValue = nil
+	duration := time.Since(start)
+	if duration > time.Second {
+		m.metricMountDuration.Observe(duration.Seconds())
+	}
+	return nil
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {

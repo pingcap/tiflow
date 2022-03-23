@@ -462,7 +462,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
+	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.EnableOldValue)
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

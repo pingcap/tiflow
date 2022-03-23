@@ -34,7 +34,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.CaseSensitive = false
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
-	conf.Mounter.WorkerNum = 3
 	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
@@ -57,11 +56,8 @@ func TestReplicaConfigClone(t *testing.T) {
 	conf.CaseSensitive = false
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
-	conf.Mounter.WorkerNum = 3
 	conf2 := conf.Clone()
 	require.Equal(t, conf, conf2)
-	conf2.Mounter.WorkerNum = 4
-	require.Equal(t, 3, conf.Mounter.WorkerNum)
 }
 
 func TestReplicaConfigOutDated(t *testing.T) {
@@ -74,7 +70,6 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.CaseSensitive = false
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
-	conf.Mounter.WorkerNum = 3
 	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, PartitionRule: "r1"},
