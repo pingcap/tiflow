@@ -95,9 +95,8 @@ func (o *Optimist) Start(pCtx context.Context, etcdCli *clientv3.Client) error {
 // Close closes the Optimist instance.
 func (o *Optimist) Close() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	if o.closed {
+		o.mu.Unlock()
 		return
 	}
 
@@ -106,8 +105,11 @@ func (o *Optimist) Close() {
 		o.cancel = nil
 	}
 
-	o.wg.Wait()
 	o.closed = true // closed now.
+	o.mu.Unlock()
+	// unlock before wg.Wait() to avoid deadlock because other goroutines acquire the lock.
+	// such as https://github.com/pingcap/tiflow/blob/92fc4c4/dm/dm/master/shardddl/optimist.go#L686
+	o.wg.Wait()
 	o.logger.Info("the shard DDL optimist has closed")
 }
 
@@ -520,7 +522,8 @@ func (o *Optimist) recoverLocks(
 
 // watchSourceInfoOperation watches the etcd operation for source tables, shard DDL infos and shard DDL operations.
 func (o *Optimist) watchSourceInfoOperation(
-	pCtx context.Context, revSource, revInfo, revOperation int64) error {
+	pCtx context.Context, revSource, revInfo, revOperation int64,
+) error {
 	ctx, cancel := context.WithCancel(pCtx)
 	var wg sync.WaitGroup
 	defer func() {
@@ -593,9 +596,30 @@ func (o *Optimist) handleSourceTables(ctx context.Context, sourceCh <-chan optim
 			if !ok {
 				return
 			}
-			updated := o.tk.Update(st)
-			o.logger.Info("receive source tables", zap.Stringer("source tables", st),
-				zap.Bool("is deleted", st.IsDeleted), zap.Bool("updated", updated))
+			o.mu.Lock()
+			addedTable, droppedTable := o.tk.Update(st)
+			// handle create table
+			for routeTable := range addedTable {
+				lock := o.lk.FindLock(utils.GenDDLLockID(st.Task, routeTable.DownSchema, routeTable.DownTable))
+				if lock != nil {
+					lock.AddTable(st.Source, routeTable.UpSchema, routeTable.UpTable, true)
+				}
+			}
+			// handle drop table
+			for routeTable := range droppedTable {
+				lock := o.lk.FindLock(utils.GenDDLLockID(st.Task, routeTable.DownSchema, routeTable.DownTable))
+				if lock != nil {
+					cols := lock.TryRemoveTable(st.Source, routeTable.UpSchema, routeTable.UpTable)
+					if !lock.HasTables() {
+						o.lk.RemoveLock(lock.ID)
+					}
+					_, err := optimism.DeleteInfosOperationsTablesByTable(o.cli, st.Task, st.Source, routeTable.UpSchema, routeTable.UpTable, lock.ID, cols)
+					if err != nil {
+						o.logger.Error("failed to delete etcd meta data for table", zap.String("lockID", lock.ID), zap.String("schema", routeTable.UpSchema), zap.String("table", routeTable.UpTable))
+					}
+				}
+			}
+			o.mu.Unlock()
 		}
 	}
 }
@@ -612,27 +636,14 @@ func (o *Optimist) handleInfoPut(ctx context.Context, infoCh <-chan optimism.Inf
 			}
 			o.logger.Info("receive a shard DDL info", zap.Stringer("info", info), zap.Bool("is deleted", info.IsDeleted))
 
-			// avoid new ddl added while previous ddl resolved and remove lock
-			// change lock granularity if needed
-			o.mu.Lock()
 			if info.IsDeleted {
-				lock := o.lk.FindLockByInfo(info)
-				if lock == nil {
-					// this often happen after the lock resolved.
-					o.logger.Debug("lock for info not found", zap.String("info", info.ShortString()))
-					o.mu.Unlock()
-					continue
-				}
-				// handle `DROP TABLE`, need to remove the table schema from the lock,
-				// and remove the table name from table keeper.
-				removed := lock.TryRemoveTable(info.Source, info.UpSchema, info.UpTable)
-				o.logger.Debug("the table name remove from the table keeper", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-				removed = o.tk.RemoveTable(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-				o.logger.Debug("a table removed for info from the lock", zap.Bool("removed", removed), zap.String("info", info.ShortString()))
-				o.mu.Unlock()
+				// this often happen after the lock resolved.
 				continue
 			}
 
+			// avoid new ddl added while previous ddl resolved and remove lock
+			// change lock granularity if needed
+			o.mu.Lock()
 			// put operation for the table. we don't set `skipDone=true` now,
 			// because in optimism mode, one table may execute/done multiple DDLs but other tables may do nothing.
 			_ = o.handleInfo(info, false)
@@ -739,13 +750,20 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
 			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	case err != nil:
-		if terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err) {
+		switch {
+		case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
 			cfStage = optimism.ConflictSkipWaitRedirect
-			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
-		} else {
-			cfStage = optimism.ConflictDetected // we treat any errors returned from `TrySync` as conflict detected now.
 			cfMsg = err.Error()
-			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
+			o.logger.Warn("Please make sure all sharding tables execute this DDL in order", log.ShortError(err))
+		case terror.ErrShardDDLOptimismTrySyncFail.Equal(err):
+			cfStage = optimism.ConflictDetected
+			cfMsg = err.Error()
+			o.logger.Warn("conflict occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
+				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
+		default:
+			cfStage = optimism.ConflictError // we treat any errors returned from `TrySync` as conflict detected now.
+			cfMsg = err.Error()
+			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL error happened",
 				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 		}
 	default:

@@ -40,7 +40,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	tableActorSystem.Start(ctx)
 	defer func() {
 		cancel()
-		_ = tableActorSystem.Stop()
+		tableActorSystem.Stop()
 	}()
 
 	tbl := &tableActor{
@@ -57,7 +57,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
-	require.Nil(t, tableActorSystem.Stop())
+	tableActorSystem.Stop()
 	require.True(t, tbl.AsyncStop(1))
 }
 
@@ -100,7 +100,7 @@ func TestTableActorCancel(t *testing.T) {
 	tableActorSystem.Start(ctx)
 	defer func() {
 		cancel()
-		_ = tableActorSystem.Stop()
+		tableActorSystem.Stop()
 	}()
 
 	tbl := &tableActor{
@@ -247,8 +247,9 @@ func TestPollDataFailed(t *testing.T) {
 			BarrierTs: 1,
 		}
 	}
-	var dp asyncMessageProcessorFunc = func(ctx context.Context,
-		msg pipeline.Message) (bool, error) {
+	var dp asyncMessageProcessorFunc = func(
+		ctx context.Context, msg pipeline.Message,
+	) (bool, error) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
@@ -322,7 +323,7 @@ func TestNewTableActor(t *testing.T) {
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
-	require.Nil(t, sys.Stop())
+	sys.Stop()
 }
 
 func TestTableActorStart(t *testing.T) {
@@ -338,7 +339,7 @@ func TestTableActorStart(t *testing.T) {
 		cancel()
 		startPuller = realStartPullerFunc
 		startSorter = realStartSorterFunc
-		_ = sys.Stop()
+		sys.Stop()
 	}()
 	startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
