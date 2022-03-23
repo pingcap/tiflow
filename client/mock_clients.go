@@ -28,7 +28,7 @@ type MockServerMasterClient struct {
 	mock.Mock
 }
 
-func (c *MockServerMasterClient) UpdateClients(ctx context.Context, urls []string) {
+func (c *MockServerMasterClient) UpdateClients(ctx context.Context, urls []string, _ string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

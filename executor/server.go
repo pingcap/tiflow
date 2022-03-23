@@ -49,7 +49,7 @@ type Server struct {
 	tcpServer   tcpserver.TCPServer
 	grpcSrv     *grpc.Server
 	cli         client.MasterClient
-	cliUpdateCh chan []string
+	cliUpdateCh chan cliUpdateInfo
 	sch         *runtime.Runtime
 	workerRtm   *worker.TaskRunner
 	msgServer   *p2p.MessageRPCService
@@ -75,7 +75,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
 		cfg:         cfg,
 		testCtx:     ctx,
-		cliUpdateCh: make(chan []string),
+		cliUpdateCh: make(chan cliUpdateInfo),
 	}
 	return &s
 }
@@ -567,7 +567,12 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 	return nil
 }
 
-// TODO: Right now heartbeat maintainace is too simple. We should look into
+type cliUpdateInfo struct {
+	leaderURL string
+	urls      []string
+}
+
+// TODO: Right now heartbeat maintainable is too simple. We should look into
 // what other frameworks do or whether we can use grpc heartbeat.
 func (s *Server) keepHeartbeat(ctx context.Context) error {
 	ticker := time.NewTicker(s.cfg.KeepAliveInterval)
@@ -626,8 +631,13 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// update master client could cost long time, we make it a background
 			// job and if there is running update task, we ignore once since more
 			// heartbeats will be called later.
+
+			info := cliUpdateInfo{
+				leaderURL: resp.Leader,
+				urls:      resp.Addrs,
+			}
 			select {
-			case s.cliUpdateCh <- resp.Addrs:
+			case s.cliUpdateCh <- info:
 			default:
 			}
 		}
@@ -686,8 +696,8 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case urls := <-s.cliUpdateCh:
-			s.cli.UpdateClients(ctx, urls)
+		case info := <-s.cliUpdateCh:
+			s.cli.UpdateClients(ctx, info.urls, info.leaderURL)
 		}
 	}
 }
