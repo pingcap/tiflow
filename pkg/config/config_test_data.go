@@ -108,7 +108,7 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": false,
+    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },
