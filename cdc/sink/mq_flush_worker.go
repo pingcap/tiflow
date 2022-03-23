@@ -192,7 +192,7 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		select {
 		case w.errCh <- retErr:
 		default:
-			log.L().Warn("flushWorker error is dropped due to a previous erro", zap.Error(retErr))
+			log.Warn("flushWorker error is dropped due to a previous error", zap.Error(retErr))
 		}
 		close(w.errCh)
 		// TODO: log changefeed ID here
