@@ -1,4 +1,3 @@
-enable: true
 enable-gtid: true
 auto-fix-gtid: false
 relay-dir: relay-dir

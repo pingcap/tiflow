@@ -74,6 +74,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
 			"transaction_isolation=%22READ-COMMITTED%22",
+			"charset=utf8mb4",
 			"tidb_placement_mode=%22ignore%22",
 		}
 		for _, param := range expectedParams {
