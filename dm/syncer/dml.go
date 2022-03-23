@@ -129,7 +129,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandleCache)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -203,7 +203,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandleCache)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -257,7 +257,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandleCache)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 

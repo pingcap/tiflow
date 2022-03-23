@@ -14,6 +14,7 @@
 package sqlmodel
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -62,7 +63,6 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 		}
 		// use downstream columns to check NOT NULL constraint
 		if ret.UniqueNotNullIdx == nil && allColsNotNull(idx, target.Columns) {
-			// TODO: considering cardinality
 			ret.UniqueNotNullIdx = rewritten
 			continue
 		}
@@ -127,10 +127,11 @@ func allColsNotNull(idx *model.IndexInfo, cols []*model.ColumnInfo) bool {
 // may be
 // - a PK, or
 // - an UNIQUE index whose columns are all NOT NULL, or
-// - an UNIQUE index and the data is all NOT NULL.
+// - an UNIQUE index and the data are all NOT NULL.
 // For the last case, last used index is swapped to front.
 func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
 	if h == nil {
+		log.L().DPanic("WhereHandle is nil")
 		return nil
 	}
 	if h.UniqueNotNullIdx != nil {

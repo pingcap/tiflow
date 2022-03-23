@@ -774,7 +774,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	c.Assert(dti, NotNil)
-	c.Assert(dti.WhereHandleCache.UniqueNotNullIdx, NotNil)
+	c.Assert(dti.WhereHandle.UniqueNotNullIdx, NotNil)
 	delete(tracker.dsTracker.tableInfos, tableID)
 }
 

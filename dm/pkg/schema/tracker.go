@@ -78,8 +78,8 @@ type downstreamTracker struct {
 
 // DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
-	TableInfo        *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	WhereHandleCache *sqlmodel.WhereHandle
+	TableInfo   *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
+	WhereHandle *sqlmodel.WhereHandle
 }
 
 // NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
@@ -440,8 +440,8 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 		}
 
 		dti = &DownstreamTableInfo{
-			TableInfo:        downstreamTI,
-			WhereHandleCache: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+			TableInfo:   downstreamTI,
+			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
 		}
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
