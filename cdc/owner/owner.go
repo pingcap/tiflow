@@ -244,6 +244,7 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 // AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	o.cleanStaleMetrics()
 }
 
 func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
