@@ -14,10 +14,13 @@
 package kafka
 
 import (
+	"context"
 	"strconv"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
@@ -31,7 +34,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_batch_size",
 			Help:      "the number of bytes sent per partition per request for all topics",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 
 	// meter mark by total records count
 	recordSendRateGauge = prometheus.NewGaugeVec(
@@ -40,7 +43,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_record_send_rate",
 			Help:      "Records/second sent to all topics",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 
 	// records-per-request
 	// histogram update by all records count.
@@ -50,7 +53,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_records_per_request",
 			Help:      "the number of records sent per request for all topics",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 
 	// histogram update by `compression-ratio`.
 	compressionRatioGauge = prometheus.NewGaugeVec(
@@ -59,7 +62,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_compression_ratio",
 			Help:      "the compression ratio times 100 of record batches for all topics",
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed"})
 
 	// metrics for outgoing events
 	// meter mark for each request's size in bytes
@@ -69,7 +72,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_outgoing_byte_rate",
 			Help:      "Bytes/second written off all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// meter mark by 1 for each request
 	requestRateGauge = prometheus.NewGaugeVec(
@@ -78,7 +81,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_rate",
 			Help:      "Requests/second sent to all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// meter mark for each request's size in bytes
 	requestSizeGauge = prometheus.NewGaugeVec(
@@ -87,7 +90,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_size",
 			Help:      "the request size in bytes for all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// histogram update for each received response, requestLatency := time.Since(response.requestTime)
 	requestLatencyInMsGauge = prometheus.NewGaugeVec(
@@ -96,7 +99,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_latency",
 			Help:      "the request latency in ms for all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// counter inc by 1 once a request send, dec by 1 for a response received.
 	requestsInFlightGauge = prometheus.NewGaugeVec(
@@ -105,7 +108,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_in_flight_requests",
 			Help:      "the current number of in-flight requests awaiting a response for all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// metrics for incoming events
 	// meter mark for each received response's size in bytes
@@ -115,7 +118,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_incoming_byte_rate",
 			Help:      "Bytes/second read off all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// meter mark by 1 once a response received.
 	responseRateGauge = prometheus.NewGaugeVec(
@@ -124,7 +127,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_response_rate",
 			Help:      "Responses/second received from all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 
 	// meter mark by each read response size
 	responseSizeGauge = prometheus.NewGaugeVec(
@@ -133,7 +136,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_response_size",
 			Help:      "the response size in bytes for all brokers",
-		}, []string{"capture", "changefeed", "broker"})
+		}, []string{"changefeed", "broker"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -173,40 +176,40 @@ const (
 )
 
 type saramaMetricsMonitor struct {
-	captureAddr  string
 	changefeedID string
+	role         util.Role
 
 	registry metrics.Registry
 	admin    kafka.ClusterAdminClient
+
+	brokers map[int32]struct{}
 }
 
-// CollectMetrics collect all monitored metrics
-func (sm *saramaMetricsMonitor) CollectMetrics() {
+// collectMetrics collect all monitored metrics
+func (sm *saramaMetricsMonitor) collectMetrics() {
 	sm.collectProducerMetrics()
-	if err := sm.collectBrokerMetrics(); err != nil {
-		log.Warn("collect broker metrics failed", zap.Error(err))
-	}
+	sm.collectBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
 	batchSizeMetric := sm.registry.Get(batchSizeMetricName)
 	if histogram, ok := batchSizeMetric.(metrics.Histogram); ok {
-		batchSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
+		batchSizeGauge.WithLabelValues(sm.changefeedID).Set(histogram.Snapshot().Mean())
 	}
 
 	recordSendRateMetric := sm.registry.Get(recordSendRateMetricName)
 	if meter, ok := recordSendRateMetric.(metrics.Meter); ok {
-		recordSendRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(meter.Snapshot().Rate1())
+		recordSendRateGauge.WithLabelValues(sm.changefeedID).Set(meter.Snapshot().Rate1())
 	}
 
 	recordPerRequestMetric := sm.registry.Get(recordPerRequestMetricName)
 	if histogram, ok := recordPerRequestMetric.(metrics.Histogram); ok {
-		recordPerRequestGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
+		recordPerRequestGauge.WithLabelValues(sm.changefeedID).Set(histogram.Snapshot().Mean())
 	}
 
 	compressionRatioMetric := sm.registry.Get(compressionRatioMetricName)
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
-		compressionRatioGauge.WithLabelValues(sm.captureAddr, sm.changefeedID).Set(histogram.Snapshot().Mean())
+		compressionRatioGauge.WithLabelValues(sm.changefeedID).Set(histogram.Snapshot().Mean())
 	}
 }
 
@@ -214,98 +217,125 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
-func (sm *saramaMetricsMonitor) collectBrokerMetrics() error {
+func (sm *saramaMetricsMonitor) collectBrokers() {
+	start := time.Now()
 	brokers, _, err := sm.admin.DescribeCluster()
 	if err != nil {
-		return err
+		log.Warn("kafka cluster unreachable, "+
+			"use historical brokers to collect kafka broker level metrics",
+			zap.String("changefeed", sm.changefeedID),
+			zap.Any("role", sm.role),
+			zap.Duration("duration", time.Since(start)))
+		return
 	}
 
 	for _, b := range brokers {
-		brokerID := strconv.Itoa(int(b.ID()))
+		sm.brokers[b.ID()] = struct{}{}
+	}
+}
+
+func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
+	sm.collectBrokers()
+
+	for id := range sm.brokers {
+		brokerID := strconv.Itoa(int(id))
 
 		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
-			incomingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+			incomingByteRateGauge.WithLabelValues(sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		outgoingByteRateMetric := sm.registry.Get(getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
-			outgoingByteRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+			outgoingByteRateGauge.WithLabelValues(sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		requestRateMetric := sm.registry.Get(getBrokerMetricName(requestRateMetricNamePrefix, brokerID))
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
-			requestRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+			requestRateGauge.WithLabelValues(sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		requestSizeMetric := sm.registry.Get(getBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
 		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
-			requestSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+			requestSizeGauge.WithLabelValues(sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 
 		requestLatencyMetric := sm.registry.Get(getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-			requestLatencyInMsGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+			requestLatencyInMsGauge.WithLabelValues(sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 
 		requestsInFlightMetric := sm.registry.Get(getBrokerMetricName(requestsInFlightMetricNamePrefix, brokerID))
 		if counter, ok := requestsInFlightMetric.(metrics.Counter); ok {
-			requestsInFlightGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(float64(counter.Snapshot().Count()))
+			requestsInFlightGauge.WithLabelValues(sm.changefeedID, brokerID).Set(float64(counter.Snapshot().Count()))
 		}
 
 		responseRateMetric := sm.registry.Get(getBrokerMetricName(responseRateMetricNamePrefix, brokerID))
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
-			responseRateGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
+			responseRateGauge.WithLabelValues(sm.changefeedID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		responseSizeMetric := sm.registry.Get(getBrokerMetricName(responseSizeMetricNamePrefix, brokerID))
 		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
-			responseSizeGauge.WithLabelValues(sm.captureAddr, sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
+			responseSizeGauge.WithLabelValues(sm.changefeedID, brokerID).Set(histogram.Snapshot().Mean())
 		}
 	}
-	return nil
 }
 
-func newSaramaMetricsMonitor(registry metrics.Registry, captureAddr, changefeedID string, admin kafka.ClusterAdminClient) *saramaMetricsMonitor {
-	return &saramaMetricsMonitor{
-		captureAddr:  captureAddr,
+// flushMetricsInterval specifies the interval of refresh sarama metrics.
+const flushMetricsInterval = 5 * time.Second
+
+func runSaramaMetricsMonitor(ctx context.Context, registry metrics.Registry, changefeedID string,
+	role util.Role, admin kafka.ClusterAdminClient,
+) {
+	monitor := &saramaMetricsMonitor{
 		changefeedID: changefeedID,
+		role:         role,
 		registry:     registry,
 		admin:        admin,
+		brokers:      make(map[int32]struct{}),
 	}
+
+	ticker := time.NewTicker(flushMetricsInterval)
+	go func() {
+		defer func() {
+			ticker.Stop()
+			monitor.cleanup()
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				monitor.collectMetrics()
+			}
+		}
+	}()
 }
 
-func (sm *saramaMetricsMonitor) Cleanup() {
+// cleanup called when the changefeed / processor stop the kafka sink.
+func (sm *saramaMetricsMonitor) cleanup() {
 	sm.cleanUpProducerMetrics()
-	if err := sm.cleanUpBrokerMetrics(); err != nil {
-		log.Warn("clean up broker metrics failed", zap.Error(err))
-	}
+	sm.cleanUpBrokerMetrics()
 }
 
 func (sm *saramaMetricsMonitor) cleanUpProducerMetrics() {
-	batchSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	recordSendRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	recordPerRequestGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
-	compressionRatioGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID)
+	batchSizeGauge.DeleteLabelValues(sm.changefeedID)
+	recordSendRateGauge.DeleteLabelValues(sm.changefeedID)
+	recordPerRequestGauge.DeleteLabelValues(sm.changefeedID)
+	compressionRatioGauge.DeleteLabelValues(sm.changefeedID)
 }
 
-func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() error {
-	brokers, _, err := sm.admin.DescribeCluster()
-	if err != nil {
-		return err
+func (sm *saramaMetricsMonitor) cleanUpBrokerMetrics() {
+	for id := range sm.brokers {
+		brokerID := strconv.Itoa(int(id))
+		incomingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		outgoingByteRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		requestRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		requestSizeGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		requestLatencyInMsGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		requestsInFlightGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		responseRateGauge.DeleteLabelValues(sm.changefeedID, brokerID)
+		responseSizeGauge.DeleteLabelValues(sm.changefeedID, brokerID)
 	}
-
-	for _, b := range brokers {
-		brokerID := strconv.Itoa(int(b.ID()))
-
-		incomingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		outgoingByteRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		requestRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		requestSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		requestLatencyInMsGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		requestsInFlightGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		responseRateGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-		responseSizeGauge.DeleteLabelValues(sm.captureAddr, sm.changefeedID, brokerID)
-	}
-	return nil
 }

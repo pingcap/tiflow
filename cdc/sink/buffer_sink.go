@@ -68,16 +68,15 @@ type runState struct {
 
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	advertiseAddr := util.CaptureAddrFromCtx(ctx)
 	state := runState{
-		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush"),
-		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow"),
-		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID),
+		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(changefeedID, "Flush"),
+		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(changefeedID, "EmitRow"),
+		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 	defer func() {
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
-		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+		flushRowChangedDuration.DeleteLabelValues(changefeedID, "Flush")
+		flushRowChangedDuration.DeleteLabelValues(changefeedID, "EmitRow")
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
 
 	for {

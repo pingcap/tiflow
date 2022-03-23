@@ -66,7 +66,8 @@ type task struct {
 
 // newTask creates a new task instance.
 func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema string,
-	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig) (*task, error) {
+	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig,
+) (*task, error) {
 	var taskCfg config2.TaskConfig
 	err := taskCfg.DecodeFile(taskFile)
 	if err != nil {
@@ -183,7 +184,7 @@ func (t *task) run() error {
 func (t *task) stopPreviousTask() error {
 	t.logger.Info("stopping previous task")
 	resp, err := t.cli.OperateTask(t.ctx, &pb.OperateTaskRequest{
-		Op:   pb.TaskOp_Stop,
+		Op:   pb.TaskOp_Delete,
 		Name: t.taskCfg.Name,
 	})
 	if err != nil {

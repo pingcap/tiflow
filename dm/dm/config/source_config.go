@@ -47,11 +47,11 @@ const (
 
 var getAllServerIDFunc = utils.GetAllServerID
 
-// SampleConfigFile is sample config file of source.
+// SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
 // can only match regular files in the current directory and subdirectories.
 //go:embed source.yaml
-var SampleConfigFile string
+var SampleSourceConfig string
 
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
@@ -62,6 +62,7 @@ type PurgeConfig struct {
 
 // SourceConfig is the configuration for source.
 type SourceConfig struct {
+	Enable      bool   `yaml:"enable" toml:"enable" json:"enable"`
 	EnableGTID  bool   `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
@@ -105,6 +106,7 @@ func NewSourceConfig() *SourceConfig {
 // NewSourceConfig creates a new base config without adjust.
 func newSourceConfig() *SourceConfig {
 	c := &SourceConfig{
+		Enable: true,
 		Purge: PurgeConfig{
 			Interval:    60 * 60,
 			Expires:     0,
@@ -167,6 +169,18 @@ func ParseYaml(content string) (*SourceConfig, error) {
 		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
 	}
 	c.adjust()
+	return c, nil
+}
+
+// ParseYamlAndVerify does ParseYaml and Verify.
+func ParseYamlAndVerify(content string) (*SourceConfig, error) {
+	c, err := ParseYaml(content)
+	if err != nil {
+		return nil, err
+	}
+	if err = c.Verify(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -348,19 +362,11 @@ func (c *SourceConfig) AdjustServerID(ctx context.Context, db *sql.DB) error {
 
 // LoadFromFile loads config from file.
 func LoadFromFile(path string) (*SourceConfig, error) {
-	c := newSourceConfig()
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, terror.ErrConfigReadCfgFromFile.Delegate(err, path)
 	}
-	if err = yaml.UnmarshalStrict(content, c); err != nil {
-		return nil, terror.ErrConfigYamlTransform.Delegate(err, "decode source config")
-	}
-	c.adjust()
-	if err = c.Verify(); err != nil {
-		return nil, err
-	}
-	return c, nil
+	return ParseYaml(string(content))
 }
 
 func (c *SourceConfig) check(metaData *toml.MetaData, err error) error {
@@ -389,7 +395,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 		return "", err
 	}
 	s.From.Password = cipher
-
+	s.omitDefaultVals()
 	return s.Yaml()
 }
 
@@ -397,6 +403,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type SourceConfigForDowngrade struct {
+	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
 	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
@@ -421,6 +428,7 @@ type SourceConfigForDowngrade struct {
 // NewSourceConfigForDowngrade creates a new base config for downgrade.
 func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngrade {
 	return &SourceConfigForDowngrade{
+		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
 		AutoFixGTID:     sourceCfg.AutoFixGTID,
 		RelayDir:        sourceCfg.RelayDir,
@@ -440,6 +448,13 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		CaseSensitive:   sourceCfg.CaseSensitive,
 		Filters:         sourceCfg.Filters,
 	}
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SourceConfigForDowngrade) omitDefaultVals() {
+	c.Enable = false
 }
 
 // Yaml returns YAML format representation of the config.

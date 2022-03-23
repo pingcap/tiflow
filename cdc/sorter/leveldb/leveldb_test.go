@@ -50,7 +50,7 @@ func TestMaybeWrite(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Empty batch
@@ -78,6 +78,7 @@ func TestMaybeWrite(t *testing.T) {
 	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -99,7 +100,7 @@ func TestCompact(t *testing.T) {
 	compactMB := actor.NewMailbox(actor.ID(id), 1)
 	compactRouter.InsertMailbox4Test(compactMB.ID(), compactMB)
 	compact := NewCompactScheduler(compactRouter)
-	ldb, _, err := NewDBActor(id, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(id, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Empty task must not trigger compact.
@@ -125,6 +126,7 @@ func TestCompact(t *testing.T) {
 	// Close db.
 	closed := !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -144,8 +146,11 @@ func makeTask(writes map[message.Key][]byte, rg [][]byte) ([]actormsg.Message, c
 	if len(rg) != 0 {
 		iterCh = make(chan *message.LimitedIterator, 1)
 		iterReq = &message.IterRequest{
-			Range:  [2][]byte{rg[0], rg[1]},
-			IterCh: iterCh,
+			Range: [2][]byte{rg[0], rg[1]},
+			IterCallback: func(iter *message.LimitedIterator) {
+				iterCh <- iter
+				close(iterCh)
+			},
 		}
 	}
 	return []actormsg.Message{actormsg.SorterMessage(message.Task{
@@ -165,7 +170,7 @@ func TestPutReadDelete(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Put only.
@@ -219,6 +224,7 @@ func TestPutReadDelete(t *testing.T) {
 	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -235,7 +241,7 @@ func TestAcquireIterators(t *testing.T) {
 	// Set max iterator count to 1.
 	cfg.Concurrency = 1
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	// Poll two tasks.
@@ -270,6 +276,7 @@ func TestAcquireIterators(t *testing.T) {
 	// Close db.
 	closed = !ldb.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -320,7 +327,7 @@ func TestModelChecking(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	minKey := message.Key("")
@@ -408,13 +415,14 @@ func TestContextCancel(t *testing.T) {
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter(t.Name()))
-	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg, "")
+	ldb, _, err := NewDBActor(0, db, cfg, compact, closedWg)
 	require.Nil(t, err)
 
 	cancel()
 	tasks, _ := makeTask(map[message.Key][]byte{"key": {}}, [][]byte{{0x00}, {0xff}})
 	closed := !ldb.Poll(ctx, tasks)
 	require.True(t, closed)
+	ldb.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }

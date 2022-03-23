@@ -348,7 +348,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaCreateTopic"]
+error = '''
+kafka create topic failed
+'''
+
 ["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
@@ -484,6 +489,11 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
+'''
+
+["CDC:ErrMQCodecInvalidConfig"]
+error = '''
+MQ Codec invalid config
 '''
 
 ["CDC:ErrMQSinkUnknownProtocol"]
@@ -653,7 +663,7 @@ peer-to-peer message client has failed permanently, no need to reconnect: %s
 
 ["CDC:ErrPeerMessageDataLost"]
 error = '''
-peer-to-peer message data lost, topic: %s, seq: %s
+peer-to-peer message data lost, topic: %s, seq: %d
 '''
 
 ["CDC:ErrPeerMessageDecodeError"]
@@ -734,11 +744,6 @@ pending region cancelled due to stream disconnecting
 ["CDC:ErrPipelineTryAgain"]
 error = '''
 pipeline is full, please try again. Internal use only, report a bug if seen externally
-'''
-
-["CDC:ErrPrepareAvroFailed"]
-error = '''
-prepare avro failed
 '''
 
 ["CDC:ErrPrewriteNotMatch"]
@@ -1093,7 +1098,7 @@ file lock conflict: %s
 
 ["ErrRequestForwardErr"]
 error = '''
-request forward error, an request can only forward to owner one time 
+request forward error, an request can only forward to owner one time
 '''
 
 ["ErrSortDirLockError"]

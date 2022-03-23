@@ -16,23 +16,17 @@ package unified
 import (
 	"runtime"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type memoryBackendSuite struct{}
-
-var _ = check.SerialSuites(&memoryBackendSuite{})
-
-func (s *memoryBackendSuite) TestNoLeaking(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestNoLeaking(t *testing.T) {
 	bknd := newMemoryBackEnd()
 	wrtr, err := bknd.writer()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	var objCount int64
 	for i := 0; i < 10000; i++ {
@@ -42,17 +36,17 @@ func (s *memoryBackendSuite) TestNoLeaking(c *check.C) {
 			atomic.AddInt64(&objCount, -1)
 		})
 		err := wrtr.writeNext(event)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 	err = wrtr.flushAndClose()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	rdr, err := bknd.reader()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	for i := 0; i < 5000; i++ {
 		_, err := rdr.readNext()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	for i := 0; i < 10; i++ {
@@ -62,10 +56,10 @@ func (s *memoryBackendSuite) TestNoLeaking(c *check.C) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	c.Assert(atomic.LoadInt64(&objCount), check.LessEqual, int64(5000))
+	require.LessOrEqual(t, atomic.LoadInt64(&objCount), int64(5000))
 
 	err = rdr.resetAndClose()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	for i := 0; i < 10; i++ {
 		runtime.GC()
@@ -74,5 +68,5 @@ func (s *memoryBackendSuite) TestNoLeaking(c *check.C) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	c.Assert(atomic.LoadInt64(&objCount), check.Equals, int64(0))
+	require.Equal(t, int64(0), atomic.LoadInt64(&objCount))
 }

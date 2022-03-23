@@ -212,6 +212,12 @@ message ShowDDLLocksResponse {
   repeated DDLLock locks = 3; // all un-resolved DDL locks
 }
 
+enum UnlockDDLLockOp {
+    InvalidLockOp = 0;
+    SkipLock = 1;
+    ExecLock = 2;
+}
+
 // UnlockDDLLockRequest used to unlock (resolve) DDL lock manually
 // ID: DDL lock ID
 // replaceOwner: dm-worker used to replace the original DDL lock's owner
@@ -220,6 +226,10 @@ message UnlockDDLLockRequest {
   string ID = 1;
   string replaceOwner = 2;
   bool forceRemove = 3;
+  UnlockDDLLockOp op = 4;
+  repeated string sources = 5; // source ID list
+  string database = 6; // database name
+  string table = 7; // table name
 }
 
 message UnlockDDLLockResponse {
@@ -482,9 +492,8 @@ enum RelayOpV2 {
 message StartValidationRequest {
     string mode = 1;
     string fromTime = 2;
-    bool isAllTask = 3;
-    repeated string sources = 4;
-    string taskName = 5;
+    repeated string sources = 3;
+    string taskName = 4;
 }
 
 message StartValidationResponse {
@@ -494,9 +503,8 @@ message StartValidationResponse {
 }
 
 message StopValidationRequest {
-    bool isAllTask = 1;
-    repeated string sources = 2;
-    string taskName = 3;
+    repeated string sources = 1;
+    string taskName = 2;
 }
 
 message StopValidationResponse {

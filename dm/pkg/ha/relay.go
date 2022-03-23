@@ -17,8 +17,8 @@ import (
 	"context"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
@@ -195,7 +195,8 @@ func deleteRelayConfigOp(worker string) clientv3.Op {
 // WatchRelayConfig watches PUT & DELETE operations for the relay relationship of the specified DM-worker.
 // For the DELETE operations, it returns an nil source config.
 func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
-	worker string, revision int64, outCh chan<- RelaySource, errCh chan<- error) {
+	worker string, revision int64, outCh chan<- RelaySource, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithRev(revision))

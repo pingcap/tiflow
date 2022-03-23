@@ -20,7 +20,7 @@ type DB interface {
 	DeleteRange(start, end []byte) error
 	Compact(start, end []byte) error
 	Close() error
-	CollectMetrics(captureAddr string, id int)
+	CollectMetrics(id int)
 }
 
 // A Batch is a sequence of Puts and Deletes that Commit to DB.

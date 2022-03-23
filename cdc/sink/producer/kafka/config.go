@@ -97,9 +97,25 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-// CompleteConfigsAndOpts the kafka producer configuration, replication configuration and opts.
-func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaConfig *config.ReplicaConfig, opts map[string]string) error {
-	producerConfig.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+// AutoCreateTopicConfig is used to create topic configuration.
+type AutoCreateTopicConfig struct {
+	AutoCreate        bool
+	PartitionNum      int32
+	ReplicationFactor int16
+}
+
+// DeriveTopicConfig derive a `topicConfig` from the `Config`
+func (c *Config) DeriveTopicConfig() *AutoCreateTopicConfig {
+	return &AutoCreateTopicConfig{
+		AutoCreate:        c.AutoCreate,
+		PartitionNum:      c.PartitionNum,
+		ReplicationFactor: c.ReplicationFactor,
+	}
+}
+
+// Apply the sinkURI to update Config
+func (c *Config) Apply(sinkURI *url.URL) error {
+	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
@@ -107,9 +123,9 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.PartitionNum = int32(a)
-		if producerConfig.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(producerConfig.PartitionNum)
+		c.PartitionNum = int32(a)
+		if c.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
 		}
 	}
 
@@ -119,12 +135,12 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.ReplicationFactor = int16(a)
+		c.ReplicationFactor = int16(a)
 	}
 
 	s = params.Get("kafka-version")
 	if s != "" {
-		producerConfig.Version = s
+		c.Version = s
 	}
 
 	s = params.Get("max-message-bytes")
@@ -133,50 +149,44 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.MaxMessageBytes = a
-		opts["max-message-bytes"] = s
-	}
-
-	s = params.Get("max-batch-size")
-	if s != "" {
-		opts["max-batch-size"] = s
+		c.MaxMessageBytes = a
 	}
 
 	s = params.Get("compression")
 	if s != "" {
-		producerConfig.Compression = s
+		c.Compression = s
 	}
 
-	producerConfig.ClientID = params.Get("kafka-client-id")
+	c.ClientID = params.Get("kafka-client-id")
 
 	s = params.Get("ca")
 	if s != "" {
-		producerConfig.Credential.CAPath = s
+		c.Credential.CAPath = s
 	}
 
 	s = params.Get("cert")
 	if s != "" {
-		producerConfig.Credential.CertPath = s
+		c.Credential.CertPath = s
 	}
 
 	s = params.Get("key")
 	if s != "" {
-		producerConfig.Credential.KeyPath = s
+		c.Credential.KeyPath = s
 	}
 
 	s = params.Get("sasl-user")
 	if s != "" {
-		producerConfig.SaslScram.SaslUser = s
+		c.SaslScram.SaslUser = s
 	}
 
 	s = params.Get("sasl-password")
 	if s != "" {
-		producerConfig.SaslScram.SaslPassword = s
+		c.SaslScram.SaslPassword = s
 	}
 
 	s = params.Get("sasl-mechanism")
 	if s != "" {
-		producerConfig.SaslScram.SaslMechanism = s
+		c.SaslScram.SaslMechanism = s
 	}
 
 	s = params.Get("auto-create-topic")
@@ -185,24 +195,7 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.AutoCreate = autoCreate
-	}
-
-	s = params.Get(config.ProtocolKey)
-	if s != "" {
-		replicaConfig.Sink.Protocol = s
-	}
-
-	s = params.Get("enable-tidb-extension")
-	if s != "" {
-		_, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		if replicaConfig.Sink.Protocol != "canal-json" {
-			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("enable-tidb-extension only support canal-json protocol"))
-		}
-		opts["enable-tidb-extension"] = s
+		c.AutoCreate = autoCreate
 	}
 
 	s = params.Get("dial-timeout")
@@ -211,7 +204,7 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.DialTimeout = a
+		c.DialTimeout = a
 	}
 
 	s = params.Get("write-timeout")
@@ -220,7 +213,7 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.WriteTimeout = a
+		c.WriteTimeout = a
 	}
 
 	s = params.Get("read-timeout")
@@ -229,14 +222,14 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		if err != nil {
 			return err
 		}
-		producerConfig.ReadTimeout = a
+		c.ReadTimeout = a
 	}
 
 	return nil
 }
 
-// newSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
+// NewSaramaConfig return the default config and set the according version and metrics
+func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)

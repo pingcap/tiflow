@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tidb/util/memory"
 	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/pkg/actor"
-	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -49,6 +48,10 @@ type System struct {
 	dbs           []db.DB
 	dbSystem      *actor.System
 	DBRouter      *actor.Router
+	WriterSystem  *actor.System
+	WriterRouter  *actor.Router
+	ReaderSystem  *actor.System
+	ReaderRouter  *actor.Router
 	compactSystem *actor.System
 	compactRouter *actor.Router
 	compactSched  *lsorter.CompactScheduler
@@ -64,14 +67,26 @@ type System struct {
 
 // NewSystem returns a system.
 func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
+	// A system polles actors that read and write leveldb.
 	dbSystem, dbRouter := actor.NewSystemBuilder("sorter-db").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that compact leveldb, garbage collection.
 	compactSystem, compactRouter := actor.NewSystemBuilder("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
+	// A system polles actors that receive events from Puller and batch send
+	// writes to leveldb.
+	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
+	readerSystem, readerRouter := actor.NewSystemBuilder("sorter-reader").
+		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	compactSched := lsorter.NewCompactScheduler(compactRouter)
 	return &System{
 		dbSystem:      dbSystem,
 		DBRouter:      dbRouter,
+		WriterSystem:  writerSystem,
+		WriterRouter:  writerRouter,
+		ReaderSystem:  readerSystem,
+		ReaderRouter:  readerRouter,
 		compactSystem: compactSystem,
 		compactRouter: compactRouter,
 		compactSched:  compactSched,
@@ -85,8 +100,8 @@ func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System 
 	}
 }
 
-// ActorID returns an ActorID correspond with tableID.
-func (s *System) ActorID(tableID uint64) actor.ID {
+// DBActorID returns an DBActorID correspond with tableID.
+func (s *System) DBActorID(tableID uint64) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
 	binary.LittleEndian.PutUint64(b[:], tableID)
@@ -94,27 +109,9 @@ func (s *System) ActorID(tableID uint64) actor.ID {
 	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
 }
 
-// Router returns db actors router.
-func (s *System) Router() *actor.Router {
-	return s.DBRouter
-}
-
 // CompactScheduler returns compaction scheduler.
 func (s *System) CompactScheduler() *lsorter.CompactScheduler {
 	return s.compactSched
-}
-
-// broadcase messages to actors in the router.
-// Caveats it may lose messages quietly.
-func (s *System) broadcast(ctx context.Context, router *actor.Router, msg message.Message) {
-	dbCount := s.cfg.Count
-	for id := 0; id < dbCount; id++ {
-		err := router.SendB(ctx, actor.ID(id), msg)
-		if err != nil {
-			log.Warn("broadcast message failed",
-				zap.Int("ID", id), zap.Any("message", msg))
-		}
-	}
 }
 
 // Start starts a system.
@@ -131,7 +128,8 @@ func (s *System) Start(ctx context.Context) error {
 
 	s.compactSystem.Start(ctx)
 	s.dbSystem.Start(ctx)
-	captureAddr := config.GetGlobalServerConfig().AdvertiseAddr
+	s.WriterSystem.Start(ctx)
+	s.ReaderSystem.Start(ctx)
 	totalMemory, err := memory.MemTotal()
 	if err != nil {
 		return errors.Trace(err)
@@ -145,8 +143,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
-		compactor, cmb, err :=
-			lsorter.NewCompactActor(id, db, s.closedWg, s.cfg, captureAddr)
+		compactor, cmb, err := lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -155,8 +152,7 @@ func (s *System) Start(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		// Create and spawn db actor.
-		dbac, dbmb, err :=
-			lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg, captureAddr)
+		dbac, dbmb, err := lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -177,7 +173,7 @@ func (s *System) Start(ctx context.Context) error {
 			case <-s.closedCh:
 				return
 			case <-metricsTimer.C:
-				collectMetrics(s.dbs, captureAddr)
+				collectMetrics(s.dbs)
 				metricsTimer.Reset(defaultMetricInterval)
 			}
 		}
@@ -199,41 +195,30 @@ func (s *System) Stop() error {
 	}
 	s.state = sysStateStopped
 
-	// TODO caller should pass context.
-	deadline := time.Now().Add(1 * time.Second)
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	defer cancel()
-	// Close actors
-	s.broadcast(ctx, s.DBRouter, message.StopMessage())
-	s.broadcast(ctx, s.compactRouter, message.StopMessage())
+	// Stop all actors and system to release resource.
+	s.WriterSystem.Stop()
+	s.ReaderSystem.Stop()
+	// TODO: compact is not context-aware, it may block.
+	s.compactSystem.Stop()
+	s.dbSystem.Stop()
 	// Close metrics goroutine.
 	close(s.closedCh)
-	// Wait actors and metrics goroutine.
-	s.closedWg.Wait()
-
-	// Stop systems.
-	err := s.dbSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = s.compactSystem.Stop()
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	// Close dbs.
-	for _, db := range s.dbs {
-		err = db.Close()
+	for i, db := range s.dbs {
+		err := db.Close()
 		if err != nil {
-			log.Warn("db close error", zap.Error(err))
+			log.Warn("db close error", zap.Int("ID", i), zap.Error(err))
 		}
 	}
+	// Wait actors and metrics goroutine.
+	s.closedWg.Wait()
 	return nil
 }
 
-func collectMetrics(dbs []db.DB, captureAddr string) {
+func collectMetrics(dbs []db.DB) {
 	for i := range dbs {
 		db := dbs[i]
-		db.CollectMetrics(captureAddr, i)
+		db.CollectMetrics(i)
 	}
 }

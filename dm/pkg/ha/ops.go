@@ -14,8 +14,8 @@
 package ha
 
 import (
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -99,7 +99,8 @@ func DeleteSubTaskCfgStage(cli *clientv3.Client, cfgs []config.SubTaskConfig, st
 
 // operateSubtask puts/deletes KVs for the subtask in one txn.
 func operateSubtask(cli *clientv3.Client, evType mvccpb.Event_EventType, cfgs []config.SubTaskConfig, stages []Stage,
-	validatorStages []Stage) (int64, error) {
+	validatorStages []Stage,
+) (int64, error) {
 	var (
 		ops1         []clientv3.Op
 		ops2         []clientv3.Op

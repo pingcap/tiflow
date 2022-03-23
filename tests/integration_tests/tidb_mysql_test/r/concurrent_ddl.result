@@ -1,0 +1,5 @@
+CREATE TABLE t1 (id int);
+admin check table t1;
+
+admin check table t2;
+
