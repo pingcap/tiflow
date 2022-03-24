@@ -115,7 +115,7 @@ function exec_incremental_stage1() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c4) VALUES (104, '104', 104);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3) VALUES (113, '113', 113);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c4) VALUES (114, '114', 114);"
-	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (116, '116', 116);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (116, '116');"
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2) VALUES (101, '101');"
