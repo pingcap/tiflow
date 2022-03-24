@@ -40,7 +40,7 @@ function run() {
 	for i in $(seq 1 3); do
 		check_table_exists test.test${i} ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	done
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 200
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 300
 
 	cleanup_process $CDC_BINARY
 }
