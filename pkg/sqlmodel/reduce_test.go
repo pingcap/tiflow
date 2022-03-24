@@ -115,7 +115,7 @@ func (s *dpanicSuite) TestReduce() {
 		change1 := NewRowChange(source, nil, c.pre1, c.post1, sourceTI, nil, nil)
 		change2 := NewRowChange(source, nil, c.pre2, c.post2, sourceTI, nil, nil)
 		changeAfter := NewRowChange(source, nil, c.preAfter, c.postAfter, sourceTI, nil, nil)
-		changeAfter.lazyInitIdentityInfo()
+		changeAfter.lazyInitWhereHandle()
 
 		change2.Reduce(change1)
 		s.Equal(changeAfter, change2)

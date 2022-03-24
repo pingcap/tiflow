@@ -132,7 +132,7 @@ const (
     },
     "enable-new-scheduler": true,
     "messages": {
-      "client-max-batch-interval": 200000000,
+      "client-max-batch-interval": 10000000,
       "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,
