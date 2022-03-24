@@ -33,10 +33,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
-	Sink: &SinkConfig{},
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
+	Sink: &SinkConfig{},
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
