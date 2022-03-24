@@ -35,6 +35,7 @@ type checker struct {
 	db *sql.DB
 }
 
+// nolint:deadcode, will be used in next pr
 func newChecker(db *sql.DB) *checker {
 	return &checker{
 		db: db,
@@ -165,6 +166,7 @@ func (c *checker) doChecksum(ctx context.Context, columns []columnInfo, database
 	// ref: https://www.percona.com/doc/percona-toolkit/LATEST/pt-table-checksum.html
 	// TODO: hash function as a option
 	concat := fmt.Sprintf("CONCAT_WS(',', %s, %s)", a, b)
+	// nolint:gosec
 	query := fmt.Sprintf("SELECT BIT_XOR(CAST(crc32(%s) AS UNSIGNED)) AS checksum FROM %s", concat, tableName)
 
 	log.Debug("do checkSum",
@@ -204,8 +206,8 @@ var compareCheckSum = func(ctx context.Context, upstreamChecker, downstreamCheck
 			target, ok := sinkCheckSum[k]
 			if !ok {
 				log.Warn("cannot find checker at sink, it may eligible to replicate",
-					zap.String("tableName", k),
-					zap.String("sourceChecker", v))
+					zap.String("sourceChecker", v),
+					zap.String("tableName", k))
 				continue
 			}
 			if v != target {
