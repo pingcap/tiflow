@@ -30,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
@@ -73,6 +74,7 @@ type ModuleVerification struct {
 	deleteCount  uint64
 	nextDeleteTs time.Time
 	etcdClient   etcd.Cli
+	closed       atomic.Bool
 }
 
 // ModuleVerificationConfig is the config for ModuleVerification
@@ -150,6 +152,9 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 		log.Info("SentTrackData ctx cancel", zap.Error(ctx.Err()))
 		return
 	default:
+	}
+	if m.closed.Load() {
+		return
 	}
 
 	m.commitMu.Lock()
@@ -296,7 +301,7 @@ func (m *ModuleVerification) GC(ctx context.Context, endTs string) error {
 	default:
 	}
 
-	if endTs == "" {
+	if endTs == "" || m.closed.Load() {
 		return nil
 	}
 
@@ -411,6 +416,10 @@ func keyEqual(key1, key2 []byte) bool {
 func (m *ModuleVerification) Close() error {
 	initLock.Lock()
 	defer initLock.Unlock()
+	if m.closed.Load() {
+		return nil
+	}
+	defer m.closed.Store(true)
 
 	delete(verifications, m.cfg.ChangefeedID)
 	return cerror.WrapError(cerror.ErrPebbleDBError, m.db.Close())

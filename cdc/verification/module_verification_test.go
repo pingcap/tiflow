@@ -72,9 +72,15 @@ func TestNewModuleVerification(t *testing.T) {
 	close(ch)
 	mockEtcdCli1 := &etcd.MockEtcdClient{}
 	mockEtcdCli1.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(clientV3.WatchChan(ch))
-	_, err = NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "111"}, mockEtcdCli1)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	m, err := NewModuleVerification(ctx2, &ModuleVerificationConfig{ChangefeedID: "111"}, mockEtcdCli1)
 	require.Nil(t, err)
+	cancel2()
 	time.Sleep(time.Millisecond * 5)
+	err = m.Close()
+	require.Nil(t, err)
+	err = m.Close()
+	require.Nil(t, err)
 }
 
 func TestModuleVerification_SentTrackData(t *testing.T) {
