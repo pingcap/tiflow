@@ -34,24 +34,15 @@ type mockProducer struct {
 	mockErr chan error
 }
 
-<<<<<<< HEAD
 func (m *mockProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
-	if _, ok := m.mqEvent[partition]; !ok {
-		m.mqEvent[partition] = make([]*codec.MQMessage, 0)
-=======
-func (m *mockProducer) AsyncSendMessage(
-	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
-) error {
 	select {
 	case err := <-m.mockErr:
 		return err
 	default:
 	}
 
-	key := topicPartitionKey{
-		topic:     topic,
-		partition: partition,
->>>>>>> dc7ed579d (sink/mq(cdc): Fix mq flush worker deadlock (#4996))
+	if _, ok := m.mqEvent[partition]; !ok {
+		m.mqEvent[partition] = make([]*codec.MQMessage, 0)
 	}
 	m.mqEvent[partition] = append(m.mqEvent[partition], message)
 	return nil
@@ -80,12 +71,8 @@ func (m *mockProducer) InjectError(err error) {
 
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
-<<<<<<< HEAD
 		mqEvent: make(map[int32][]*codec.MQMessage),
-=======
-		mqEvent: make(map[topicPartitionKey][]*codec.MQMessage),
 		mockErr: make(chan error, 1),
->>>>>>> dc7ed579d (sink/mq(cdc): Fix mq flush worker deadlock (#4996))
 	}
 }
 
@@ -415,10 +402,7 @@ func TestProducerError(t *testing.T) {
 			Table:    &model.TableName{Schema: "a", Table: "b"},
 			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 		},
-		key: topicPartitionKey{
-			topic:     "test",
-			partition: 1,
-		},
+		partition: 1,
 	})
 	require.NoError(t, err)
 	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
