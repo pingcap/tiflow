@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { merge, omit } from 'lodash-es'
+import { omit } from 'lodash-es'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 import { Card, Form, Steps, message } from '~/uikit'
@@ -130,13 +130,12 @@ const CreateTaskConfig: React.FC<{
 
   useEffect(() => {
     if (data) {
-      setTaskData(
-        merge({}, omit(data, 'status_list'), {
-          binlog_filter_rule_array: Object.entries(
-            data?.binlog_filter_rule ?? {}
-          ).map(([name, value]) => ({ name, ...value })),
-        })
-      )
+      setTaskData({
+        ...omit(data, 'status_list'),
+        binlog_filter_rule_array: Object.entries(
+          data?.binlog_filter_rule ?? {}
+        ).map(([name, value]) => ({ name, ...value })),
+      })
     }
     setLoading(false)
   }, [data])
@@ -168,7 +167,7 @@ const CreateTaskConfig: React.FC<{
       <div className="mt-8">
         <Form.Provider
           onFormFinish={(formName, { values }) => {
-            const nextTaskData = merge({}, taskData, values)
+            const nextTaskData = { ...taskData, ...values }
             setTaskData(nextTaskData)
 
             if (currentStep === stepComponents.length - 1) {
