@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -29,9 +30,17 @@ import (
 type mockProducer struct {
 	mqEvent map[int32][]*codec.MQMessage
 	flushed bool
+
+	mockErr chan error
 }
 
 func (m *mockProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+	select {
+	case err := <-m.mockErr:
+		return err
+	default:
+	}
+
 	if _, ok := m.mqEvent[partition]; !ok {
 		m.mqEvent[partition] = make([]*codec.MQMessage, 0)
 	}
@@ -56,9 +65,14 @@ func (m *mockProducer) Close() error {
 	panic("Not used")
 }
 
+func (m *mockProducer) InjectError(err error) {
+	m.mockErr <- err
+}
+
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
 		mqEvent: make(map[int32][]*codec.MQMessage),
+		mockErr: make(chan error, 1),
 	}
 }
 
@@ -163,7 +177,8 @@ func TestBatch(t *testing.T) {
 
 			go func() {
 				for _, event := range test.events {
-					worker.msgChan <- event
+					err := worker.addEvent(context.Background(), event)
+					require.NoError(t, err)
 				}
 			}()
 			wg.Wait()
@@ -339,7 +354,8 @@ func TestFlush(t *testing.T) {
 	}()
 
 	for _, event := range events {
-		worker.msgChan <- event
+		err := worker.addEvent(context.Background(), event)
+		require.NoError(t, err)
 	}
 
 	wg.Wait()
@@ -361,4 +377,43 @@ func TestAbort(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestProducerError(t *testing.T) {
+	t.Parallel()
+
+	worker, prod := newTestWorker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := worker.run(ctx)
+		require.Error(t, err)
+		require.Regexp(t, ".*fake.*", err.Error())
+	}()
+
+	prod.InjectError(errors.New("fake"))
+	err := worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		},
+		partition: 1,
+	})
+	require.NoError(t, err)
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
+	require.NoError(t, err)
+	wg.Wait()
+
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 200})
+	require.Error(t, err)
+	require.Regexp(t, ".*fake.*", err.Error())
+
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 300})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }
