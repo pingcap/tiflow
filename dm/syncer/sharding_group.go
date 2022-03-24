@@ -239,7 +239,8 @@ func (sg *ShardingGroup) CheckSyncing(source string, location binlog.Location) (
 	if activeDDLItem == nil {
 		return true
 	}
-	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) > 0
+	// ddl position caculate use last_position's gtid, when last is a dml, it will be equal, but the dml should be synced.
+	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) >= 0
 }
 
 // UnresolvedGroupInfo returns pb.ShardingGroup if is unresolved, else returns nil.
