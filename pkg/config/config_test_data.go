@@ -26,6 +26,9 @@ const (
     "ignore-txn-start-ts": null,
     "ddl-allow-list": null
   },
+  "mounter": {
+    "worker-num": 3
+  },
   "sink": {
     "dispatch-rules": [
       {
@@ -151,6 +154,9 @@ const (
     ],
     "ignore-txn-start-ts": null
   },
+  "mounter": {
+    "worker-num": 3
+  },
   "sink": {
     "dispatchers": null,
     "protocol": "open-protocol",
@@ -195,6 +201,9 @@ const (
       "1.1"
     ],
     "ignore-txn-start-ts": null
+  },
+  "mounter": {
+    "worker-num": 3
   },
   "sink": {
     "dispatchers": null,
