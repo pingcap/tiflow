@@ -84,6 +84,18 @@ func (e *ErrorInfo) Error() string {
 }
 
 func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataRequest) (*pb.GenerateDataResponse, error) {
+	ready = make(chan struct{})
+	s.mu.Lock()
+	for _, bucket := range s.dbMap {
+		for _, db := range bucket {
+			err := db.Close()
+			if err != nil {
+				log.L().Error(err.Error())
+			}
+		}
+	}
+	s.dbMap = make(map[string]dbBuckets)
+	s.mu.Unlock()
 	log.L().Info("Start to generate data ...")
 
 	fileNum := int(req.FileNum)

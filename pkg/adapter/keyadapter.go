@@ -17,6 +17,7 @@ var (
 	JobKeyAdapter      KeyAdapter = keyHexEncoderDecoder("/data-flow/job/")
 	TaskKeyAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/task/")
 	WorkerKeyAdapter   KeyAdapter = keyHexEncoderDecoder("/data-flow/worker/")
+	UserKeyAdapter     KeyAdapter = keyHexEncoderDecoder("/data-flow/user/")
 
 	ResourceKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/resources/")
 

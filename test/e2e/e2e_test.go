@@ -149,6 +149,6 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,
 	})
-	require.Nil(t, err)
+	require.Nil(t, err, resp.JobIdStr)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }

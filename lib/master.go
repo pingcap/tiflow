@@ -403,7 +403,7 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 		// It is logical to call `OnWorkerOnline` first and then call `OnWorkerOffline`.
 		// In case that these two events for the same worker is detected in the same tick.
 		for _, workerInfo := range onlinedWorkers {
-			log.L().Info("worker is online", zap.Any("worker-info", workerInfo))
+			log.L().Info("worker is online", zap.Any("master-id", m.id), zap.Any("worker-info", workerInfo))
 
 			handle := m.workerManager.GetWorkerHandle(workerInfo.ID)
 			err := m.Impl.OnWorkerOnline(handle)
@@ -501,7 +501,7 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType WorkerType, config WorkerConfig,
-) (rawConfig []byte, workerID string, err error) {
+) (rawConfig []byte, workerID WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
 		masterMeta, ok := config.(*MasterMetaKVData)

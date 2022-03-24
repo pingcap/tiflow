@@ -106,7 +106,6 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
         server-executor-1:
@@ -128,7 +127,6 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
         server-executor-2:
@@ -150,7 +148,6 @@ services:
                         - "server-master-0"
                         - "server-master-2"
                         - "server-master-1"
-                restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
         frame-etcd-standalone:

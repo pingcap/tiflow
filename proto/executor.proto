@@ -18,6 +18,7 @@ message DispatchTaskRequest {
     bytes task_config = 2;
     string master_id = 3;
     string worker_id = 4;
+    string user_id = 5;
 }
 
 message DispatchTaskResponse {
