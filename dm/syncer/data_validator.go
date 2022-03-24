@@ -120,6 +120,8 @@ type DataValidator struct {
 	sync.RWMutex
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
+	// whether validator starts together with subtask
+	startWithSubtask bool
 
 	stage        pb.Stage
 	wg           sync.WaitGroup
@@ -156,11 +158,12 @@ type DataValidator struct {
 	loadedPendingChanges map[string]*tableChange
 }
 
-func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
+func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
 	v := &DataValidator{
-		cfg:    cfg,
-		syncer: syncerObj,
-		stage:  pb.Stage_Stopped,
+		cfg:              cfg,
+		syncer:           syncerObj,
+		startWithSubtask: startWithSubtask,
+		stage:            pb.Stage_Stopped,
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -324,7 +327,7 @@ func (v *DataValidator) errorProcessRoutine() {
 }
 
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
-	syncLoc := v.syncer.checkpoint.FlushedGlobalPoint()
+	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 	if cmp <= 0 {
 		return nil
@@ -336,7 +339,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
-			syncLoc = v.syncer.checkpoint.FlushedGlobalPoint()
+			syncLoc = v.syncer.getFlushedGlobalPoint()
 			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 			if cmp <= 0 {
 				return nil
@@ -347,7 +350,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 }
 
 func (v *DataValidator) waitSyncerRunning() error {
-	if v.syncer.IsSchemaLoaded() {
+	if v.syncer.IsRunning() {
 		return nil
 	}
 	v.L.Info("wait until syncer running")
@@ -356,7 +359,7 @@ func (v *DataValidator) waitSyncerRunning() error {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
-			if v.syncer.IsSchemaLoaded() {
+			if v.syncer.IsRunning() {
 				v.L.Info("syncer is running, wait finished")
 				return nil
 			}
@@ -378,13 +381,24 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	// todo: if validator starts on task start, we need to make sure the location we got is the init location of syncer
-	// todo: right now, there's change they have a gap
 	var location binlog.Location
 	if v.location != nil {
 		location = *v.location
 	} else {
-		location = v.syncer.checkpoint.FlushedGlobalPoint()
+		if v.startWithSubtask {
+			// in extreme case, this loc may still not be the first binlog location of this task:
+			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
+			location = v.syncer.getInitExecutedLoc()
+		} else {
+			location = v.syncer.getFlushedGlobalPoint()
+		}
+		// persist current location to make sure we start from the same location
+		// if fail-over happens before we flush checkpoint and data.
+		err := v.persistHelper.persist(location)
+		if err != nil {
+			v.errChan <- terror.Annotate(err, "failed to persist checkpoint")
+			return
+		}
 	}
 	// it's for test, some fields in streamerController is mocked, cannot call Start
 	if v.streamerController.IsClosed() {

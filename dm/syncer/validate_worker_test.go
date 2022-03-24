@@ -55,7 +55,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 		}()
 		syncerObj := NewSyncer(cfg, nil, nil)
-		validator := NewContinuousDataValidator(cfg, syncerObj)
+		validator := NewContinuousDataValidator(cfg, syncerObj, false)
 		validator.persistHelper.schemaInitialized.Store(true)
 		validator.Start(pb.Stage_Stopped)
 		defer validator.cancel()

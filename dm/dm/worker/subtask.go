@@ -228,7 +228,7 @@ func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, rela
 		return
 	}
 
-	st.StartValidator(expectValidatorStage)
+	st.StartValidator(expectValidatorStage, true)
 
 	if expectStage == pb.Stage_Running {
 		st.run()
@@ -260,7 +260,7 @@ func (st *SubTask) run() {
 	go cu.Process(ctx, pr)
 }
 
-func (st *SubTask) StartValidator(expect pb.Stage) {
+func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 	// when validator mode=none
 	if expect == pb.Stage_InvalidStage {
 		return
@@ -284,7 +284,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 
 	if st.validator == nil {
-		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
+		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj, startWithSubtask)
 	}
 	st.validator.Start(expect)
 }

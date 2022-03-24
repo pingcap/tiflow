@@ -88,7 +88,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
 	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)

@@ -108,7 +108,7 @@ func TestValidatorStartStop(t *testing.T) {
 	syncerObj := NewSyncer(cfg, nil, nil)
 
 	// validator already running
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.stage = pb.Stage_Running
 	validator.Start(pb.Stage_InvalidStage)
 	// if validator already running, Start will return immediately, so we check validator.ctx which has not initialized.
@@ -120,7 +120,7 @@ func TestValidatorStartStop(t *testing.T) {
 		Port: 3306,
 		User: "root",
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.Start(pb.Stage_Stopped)
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 	require.Len(t, validator.result.Errors, 1)
@@ -131,14 +131,14 @@ func TestValidatorStartStop(t *testing.T) {
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 	require.Len(t, validator.result.Errors, 0)
 
 	// normal start & stop
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
@@ -148,7 +148,7 @@ func TestValidatorStartStop(t *testing.T) {
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 
 	// stop before start, should not panic
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Stop()
 }
@@ -162,7 +162,7 @@ func TestValidatorFillResult(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
@@ -184,7 +184,7 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop()
@@ -221,7 +221,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	}()
 
 	currLoc := binlog.NewLocation(cfg.Flavor)
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
@@ -231,7 +231,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		Name: "mysql-bin.000001",
 		Pos:  100,
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.cancel()
@@ -245,7 +245,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		currLoc: binlog.NewLocation(cfg.Flavor),
 		nextLoc: currLoc,
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
@@ -260,19 +260,19 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.cancel()
 	require.Error(t, validator.waitSyncerRunning())
 
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	syncerObj.schemaLoaded.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	syncerObj.schemaLoaded.Store(false)
@@ -443,7 +443,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
 	require.NoError(t, err)
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
