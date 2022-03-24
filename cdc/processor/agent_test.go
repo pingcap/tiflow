@@ -66,6 +66,8 @@ type agentTestSuite struct {
 	blockSyncMu   sync.Mutex
 	blockSyncCond *sync.Cond
 	blockSync     bool
+
+	testMu sync.Mutex
 }
 
 func newAgentTestSuite(t *testing.T) *agentTestSuite {
@@ -497,6 +499,9 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		Return(model.Ts(1000), model.Ts(1000))
 
 	require.Never(t, func() bool {
+		suite.testMu.Lock()
+		defer suite.testMu.Unlock()
+
 		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 
@@ -514,6 +519,9 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	suite.UnblockSync()
 
 	require.Eventually(t, func() bool {
+		suite.testMu.Lock()
+		defer suite.testMu.Unlock()
+
 		select {
 		case <-suite.ctx.Done():
 			require.Fail(t, "context should not be canceled")
