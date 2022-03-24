@@ -86,6 +86,7 @@ func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceReque
 	if err != nil {
 		return nil, err
 	}
+	// TODO: refine relay logic https://github.com/pingcap/tiflow/issues/4985
 	if cfg.EnableRelay {
 		return &req.Source, s.enableRelay(ctx, req.Source.SourceName, openapi.EnableRelayRequest{})
 	}
@@ -653,7 +654,7 @@ func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTas
 		if err := taskCfg.RawDecode(*req.TaskConfigFile); err != nil {
 			return nil, nil, err
 		}
-		// clear extra config in MySQLInstance, use cfg.xxConfigName instead otherwise adjust will fail/
+		// clear extra config in MySQLInstance, use cfg.xxConfigName instead otherwise adjust will fail
 		for _, cfg := range taskCfg.MySQLInstances {
 			cfg.Mydumper = nil
 			cfg.Loader = nil
