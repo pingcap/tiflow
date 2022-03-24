@@ -274,6 +274,13 @@ func (l Location) Clone() Location {
 	return l.CloneWithFlavor("")
 }
 
+// Clone clones a same location, but reset suffix to 0.
+func (l Location) CloneWithoutSuffix() Location {
+	newLocation := l.Clone()
+	newLocation.ResetSuffix()
+	return newLocation
+}
+
 // CloneWithFlavor clones the location, and if the GTIDSet is nil, will create a GTIDSet with specified flavor.
 func (l Location) CloneWithFlavor(flavor string) Location {
 	var newGTIDSet gtid.Set

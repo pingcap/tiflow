@@ -104,8 +104,8 @@ func (b *binlogPoint) save(location binlog.Location, ti *model.TableInfo) error 
 		// support to save equal location, but not older location
 		return terror.ErrCheckpointSaveInvalidPos.Generate(location, b.savedPoint.location)
 	}
-
-	b.savedPoint.location = location
+	// location which is saved in savePoint needs to set suffix to 0
+	b.savedPoint.location = location.CloneWithoutSuffix()
 	b.savedPoint.ti = ti
 	return nil
 }
@@ -154,8 +154,8 @@ func (b *binlogPoint) outOfDate() bool {
 func (b *binlogPoint) outOfDateBy(pos binlog.Location) bool {
 	b.RLock()
 	defer b.RUnlock()
-
-	return binlog.CompareLocation(pos, b.flushedPoint.location, b.enableGTID) > 0
+	// locations in savedPoint have no suffix and may have same giid like handle-error, we can use position to check them
+	return binlog.CompareLocation(pos, b.flushedPoint.location, false) > 0
 }
 
 // MySQLLocation returns point as binlog.Location.
@@ -506,7 +506,8 @@ func (cp *RemoteCheckPoint) saveTablePoint(sourceTable *filter.Table, location b
 	}
 	point, ok := mSchema[sourceTable.Name]
 	if !ok {
-		mSchema[sourceTable.Name] = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
+		// location which is saved in savePoint needs to set suffix to 0
+		mSchema[sourceTable.Name] = newBinlogPoint(location.CloneWithoutSuffix(), binlog.NewLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
 	} else if err := point.save(location, ti); err != nil {
 		cp.logCtx.L().Error("fail to save table point", zap.Stringer("table", sourceTable), log.ShortError(err))
 	}
@@ -645,7 +646,8 @@ func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
 	defer cp.Unlock()
 
 	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
-	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	// location which is saved in savePoint needs to set suffix to 0
+	cp.globalPoint = newBinlogPoint(location.CloneWithoutSuffix(), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 }
 
 // FlushPointsExcept implements CheckPoint.FlushPointsExcept.

@@ -1974,6 +1974,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		startLocation = binlog.Location{}
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
+			startSuffix := currentLocation.Suffix
 			startLocation = binlog.InitLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -1981,12 +1982,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				},
 				lastLocation.GetGTID(),
 			)
-			startLocation.Suffix = currentLocation.Suffix
 
-			endSuffix := startLocation.Suffix
-			if s.isReplacingOrInjectingErr {
-				endSuffix++
-			}
 			currentLocation = binlog.InitLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -1994,7 +1990,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				},
 				lastLocation.GetGTID(),
 			)
-			currentLocation.Suffix = endSuffix
+
+			if s.isReplacingOrInjectingErr {
+				startLocation.Suffix = startSuffix
+				currentLocation.Suffix = startSuffix + 1
+			}
 
 			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
 				err = currentLocation.SetGTID(queryEvent.GSet)
@@ -2047,8 +2047,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 			// set endLocation.Suffix=0 of last replace or inject event
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
-				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
+				currentLocation.Suffix = 0
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
 					// replace operator need redirect to currentLocation
@@ -2316,14 +2316,6 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 		Name:   string(ev.Table.Table),
 	}
 	targetTable := s.route(sourceTable)
-
-	*ec.currentLocation = binlog.InitLocation(
-		mysql.Position{
-			Name: ec.lastLocation.Position.Name,
-			Pos:  ec.header.LogPos,
-		},
-		ec.lastLocation.GetGTID(),
-	)
 
 	if ec.shardingReSync != nil {
 		ec.shardingReSync.currLocation = *ec.currentLocation

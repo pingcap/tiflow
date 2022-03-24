@@ -215,7 +215,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 		}
 	}
 
-	h.logger.Info("match and apply a operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Stringer("operator", operator))
+	h.logger.Info("match and apply an operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Stringer("operator", operator))
 
 	return true, operator.op
 }
