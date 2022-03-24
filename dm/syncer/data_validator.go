@@ -392,6 +392,7 @@ func (v *DataValidator) doValidate() {
 	// gtid of locationForFlush is updated when we meet xid event, if error happened, we start sync from this location
 	//
 	// some events maybe processed again, but it doesn't matter for validation
+	// todo: maybe we can use curStartLocation/curEndLocation in locationRecorder
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
 	locationForFlush := currLoc.Clone()
 	lastFlushCheckpointTime := time.Now()
@@ -727,7 +728,7 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	if err != nil {
 		return err
 	}
-	// fix missing data
+	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	for _, tblChange := range v.loadedPendingChanges {
 		tblChange.table, err = v.genValidateTableInfo(tblChange.table.Source)
 		if err != nil {
