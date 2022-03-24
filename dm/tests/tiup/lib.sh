@@ -22,6 +22,7 @@ DB6=pes_sharding2
 TBL1=T1
 TBL2=t2
 TBL3=T3
+TBL4=T4
 TBL_LOWER1=t1
 TBL_LOWER3=t3
 
@@ -100,6 +101,8 @@ function exec_incremental_stage1() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2) VALUES (102, '102');"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2) VALUES (111, '111');"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2) VALUES (112, '112');"
+	exec_sql mysql1 3306 "CREATE TABLE $DB3.$TBL4(c1 INT PRIMARY KEY, c2 TEXT);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB3.$TBL4 (c1, c2) VALUES (115, '115');"
 
 	# optimistic shard ddls
 	exec_sql mysql1 3306 "ALTER TABLE $DB3.$TBL_LOWER1 ADD COLUMN c3 INT;"
@@ -112,6 +115,7 @@ function exec_incremental_stage1() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c4) VALUES (104, '104', 104);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3) VALUES (113, '113', 113);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c4) VALUES (114, '114', 114);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (116, '116', 116);"
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2) VALUES (101, '101');"
@@ -148,12 +152,15 @@ function exec_incremental_stage2() {
 	exec_sql mysql1 3306 "ALTER TABLE $DB3.$TBL2 ADD COLUMN c3 INT AFTER c2;"
 	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL2 ADD COLUMN c4 INT;"
 	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL_LOWER3 ADD COLUMN c3 INT AFTER c2;"
+	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL4 ADD COLUMN c4 INT;"
+	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL4 ADD COLUMN c3 INT AFTER c2;"
 
 	# prepare optimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL_LOWER1 (c1, c2, c3, c4) VALUES (203, '203', 203, 203);"
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (204, '204', 204, 204);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (213, '213', 213, 213);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (214, '214', 214, 214);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (215, '215', 215, 215);"
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (201, '201', 201);"
@@ -184,6 +191,7 @@ function exec_incremental_stage3() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (302, '302', 302, 302);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (311, '311', 311, 311);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (312, '312', 312, 312);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (313, '313', 313, 313);"
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (303, '303', 303);"
@@ -204,6 +212,7 @@ function exec_incremental_stage4() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (402, '402', 402, 402);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (411, '411', 411, 411);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (412, '412', 412, 412);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (413, '413', 413, 413);"
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (403, '403', 403);"
