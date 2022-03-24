@@ -101,8 +101,8 @@ function exec_incremental_stage1() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2) VALUES (102, '102');"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2) VALUES (111, '111');"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2) VALUES (112, '112');"
-	exec_sql mysql1 3306 "CREATE TABLE $DB3.$TBL4(c1 INT PRIMARY KEY, c2 TEXT);"
-	exec_sql mariadb2 3306 "INSERT INTO $DB3.$TBL4 (c1, c2) VALUES (115, '115');"
+	exec_sql mariadb2 3306 "CREATE TABLE $DB4.$TBL4(c1 INT PRIMARY KEY, c2 TEXT);"
+	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (115, '115');"
 
 	# optimistic shard ddls
 	exec_sql mysql1 3306 "ALTER TABLE $DB3.$TBL_LOWER1 ADD COLUMN c3 INT;"
