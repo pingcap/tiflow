@@ -156,11 +156,23 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		if err != nil {
 			return errors.Trace(err)
 		}
+<<<<<<< HEAD
 		partition := k.eventRouter.GetPartition(row, partitionNum)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case k.flushWorker.msgChan <- mqEvent{row: row, partition: partition}:
+=======
+		partition := k.eventRouter.GetPartitionForRowChange(row, partitionNum)
+		err = k.flushWorker.addEvent(ctx, mqEvent{
+			row: row,
+			key: topicPartitionKey{
+				topic: topic, partition: partition,
+			},
+		})
+		if err != nil {
+			return err
+>>>>>>> dc7ed579d (sink/mq(cdc): Fix mq flush worker deadlock (#4996))
 		}
 		rowsCount++
 	}
@@ -211,12 +223,14 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case k.flushWorker.msgChan <- mqEvent{resolvedTs: resolvedTs}:
+	if err := k.flushWorker.addEvent(ctx, mqEvent{resolvedTs: resolvedTs}); err != nil {
+		if errors.Cause(err) != context.Canceled {
+			log.Warn("failed to flush TS to worker", zap.Error(err))
+		} else {
+			log.Debug("flushing TS to worker has been canceled", zap.Error(err))
+		}
+		return err
 	}
-
 	return nil
 }
 
