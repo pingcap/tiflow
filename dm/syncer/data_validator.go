@@ -731,6 +731,8 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	for _, tblChange := range v.loadedPendingChanges {
 		tblChange.table, err = v.genValidateTableInfo(tblChange.table.Source)
+		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
+		// see https://github.com/pingcap/tiflow/pull/4881#discussion_r834093316
 		if err != nil {
 			return err
 		}
