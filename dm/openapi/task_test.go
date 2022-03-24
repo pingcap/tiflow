@@ -17,8 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = check.Suite(&taskSuite{})
@@ -35,10 +33,6 @@ func (t *taskSuite) TestTaskAdjust(c *check.C) {
 	task1 := &Task{MetaSchema: &meta, OnDuplicate: TaskOnDuplicateError}
 	c.Assert(task1.Adjust(), check.IsNil)
 	c.Assert(*task1.MetaSchema, check.Equals, meta)
-
-	// test error
-	task2 := &Task{}
-	c.Assert(terror.ErrOpenAPICommonError.Equal(task2.Adjust()), check.IsTrue)
 
 	// test default meta
 	task3 := &Task{OnDuplicate: TaskOnDuplicateError}

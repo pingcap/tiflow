@@ -151,10 +151,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	if c.tableActorSystem != nil {
-		err := c.tableActorSystem.Stop()
-		if err != nil {
-			log.Warn("stop table actor system failed", zap.Error(err))
-		}
+		c.tableActorSystem.Stop()
 	}
 	if conf.Debug.EnableTableActor {
 		c.tableActorSystem = system.NewSystem()
@@ -175,8 +172,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		memPercentage :=
-			float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
+		memPercentage := float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
@@ -551,10 +547,7 @@ func (c *Capture) AsyncClose() {
 		c.regionCache = nil
 	}
 	if c.tableActorSystem != nil {
-		err := c.tableActorSystem.Stop()
-		if err != nil {
-			log.Warn("stop table actor system failed", zap.Error(err))
-		}
+		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
 	if c.sorterSystem != nil {

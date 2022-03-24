@@ -35,7 +35,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -59,6 +62,10 @@ var (
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
+	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
+	// which then can be used to check RowChangedEvent dispatched correctness
+	eventRouterReplicaConfig *config.ReplicaConfig
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -66,10 +73,14 @@ var (
 )
 
 func init() {
-	var upstreamURIStr string
+	var (
+		upstreamURIStr string
+		configFile     string
+	)
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
@@ -161,13 +172,27 @@ func init() {
 	if s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
-			log.Fatal("invalid enable-tidb-extension of upstream-uri")
+			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
 		if protocol != config.ProtocolCanalJSON && b {
-			log.Fatal("enable-tidb-extension only work with canal-json")
+			log.Panic("enable-tidb-extension only work with canal-json")
 		}
 
 		enableTiDBExtension = b
+	}
+
+	if configFile != "" {
+		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
+		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
+		if err != nil {
+			log.Panic("invalid config file for kafka consumer",
+				zap.Error(err),
+				zap.String("config", configFile))
+		}
+		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+			log.Panic("verify rule failed", zap.Error(err))
+		}
 	}
 }
 
@@ -189,7 +214,9 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 	if !exist {
 		return 0, errors.Errorf("can not find topic %s", topic)
 	}
-	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+	log.Info("get partition number of topic",
+		zap.String("topic", topic),
+		zap.Int32("partitionNum", topicDetail.NumPartitions))
 	return topicDetail.NumPartitions, nil
 }
 
@@ -336,10 +363,13 @@ type Consumer struct {
 	ddlSink              sink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
+	// initialize to 0 by default
 	globalResolvedTs uint64
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+
+	eventRouter *dispatcher.EventRouter
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -361,6 +391,23 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
+
+	// this means user has input config file to enable dispatcher check
+	// some protocol does not provide enough information to check the
+	// dispatched partition match or not. such as `open-protocol`, which
+	// does not have `IndexColumn` info, then make the default dispatcher
+	// use different dispatch rule to the CDC side.
+	// when try to enable dispatcher check for any protocol and dispatch
+	// rule, make sure decoded `RowChangedEvent` contains information
+	// identical to the CDC side.
+	if eventRouterReplicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		c.eventRouter = eventRouter
+
+	}
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
@@ -418,7 +465,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		var (
 			decoder codec.EventBatchDecoder
 			err     error
@@ -454,16 +500,37 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			switch tp {
 			case model.MqMessageTypeDDL:
+				// for some protocol, DDL would be dispatched to all partitions,
+				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
+				// if we receive `a` from partition-1, which would be seemed as DDL regression,
+				// then cause the consumer panic, but it was a duplicate one.
+				// so we only handle DDL received from partition-0 should be enough.
+				// but all DDL event messages should be consumed.
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
-				c.appendDDL(ddl)
+				if partition == 0 {
+					c.appendDDL(ddl)
+				}
 			case model.MqMessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
+
+				if c.eventRouter != nil {
+					target := c.eventRouter.GetPartitionForRowChange(row, kafkaPartitionNum)
+					if partition != target {
+						log.Panic("RowChangedEvent dispatched to wrong partition",
+							zap.Int32("obtained", partition),
+							zap.Int32("expected", target),
+							zap.Int32("partitionNum", kafkaPartitionNum),
+							zap.Any("row", row),
+						)
+					}
+				}
+
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
 					log.Warn("RowChangedEvent fallback row, ignore it",
@@ -480,8 +547,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID =
-					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Panic("emit row changed event failed", zap.Error(err))
@@ -502,8 +568,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
-				} else if ts > resolvedTs {
-					log.Debug("update sink resolved ts",
+				}
+				if ts > resolvedTs {
+					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
@@ -523,23 +590,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	return nil
 }
 
+// append DDL wait to be handled, only consider the constraint among DDLs.
+// for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.CommitTs <= c.maxDDLReceivedTs {
-		log.Info("ignore ddl event", zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs), zap.Any("ddl", ddl))
+	// DDL CommitTs fallback, just crash it to indicate the bug.
+	if ddl.CommitTs < c.maxDDLReceivedTs {
+		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Any("DDL", ddl))
+	}
+
+	if ddl.CommitTs == c.maxDDLReceivedTs {
+		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+			zap.Any("DDL", ddl))
 		return
 	}
-	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.CommitTs < globalResolvedTs {
-		log.Panic("unexpected ddl event, commitTs < globalResolvedTs", zap.Any("ddl", ddl))
-	}
-	if ddl.CommitTs == globalResolvedTs {
-		log.Warn("ignore redundant ddl event, commitTs == globalResolvedTs", zap.Any("ddl", ddl))
-		return
-	}
+
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("ddl event received", zap.Any("ddl", ddl))
+	log.Info("DDL event received", zap.Any("DDL", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
@@ -574,9 +645,20 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 	return nil
 }
 
-// Run runs the Consumer
+func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
+	result = uint64(math.MaxUint64)
+	err = c.forEachSink(func(sink *partitionSink) error {
+		a := atomic.LoadUint64(&sink.resolvedTs)
+		if a < result {
+			result = a
+		}
+		return nil
+	})
+	return result, err
+}
+
+// Run the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	var lastGlobalResolvedTs uint64
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -585,58 +667,55 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
-		globalResolvedTs := uint64(math.MaxUint64)
-		err := c.forEachSink(func(sink *partitionSink) error {
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < globalResolvedTs {
-				globalResolvedTs = resolvedTs
-			}
-			return nil
-		})
+
+		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// handle ddl
+
+		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
+		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
-			err := c.forEachSink(func(sink *partitionSink) error {
+			if err := c.forEachSink(func(sink *partitionSink) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			})
-			if err != nil {
+			}); err != nil {
 				return errors.Trace(err)
 			}
 
-			// execute ddl
-			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-			if err != nil {
+			// DDL can be executed, do it first.
+			if err := c.ddlSink.EmitDDLEvent(ctx, todoDDL); err != nil {
 				return errors.Trace(err)
 			}
 			c.popDDL()
+
+			if todoDDL.CommitTs < minPartitionResolvedTs {
+				log.Info("update minPartitionResolvedTs by DDL",
+					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.Any("DDL", todoDDL))
+			}
+			minPartitionResolvedTs = todoDDL.CommitTs
+		}
+
+		// update global resolved ts
+		if c.globalResolvedTs > minPartitionResolvedTs {
+			log.Panic("global ResolvedTs fallback",
+				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
+		}
+
+		if c.globalResolvedTs == minPartitionResolvedTs {
 			continue
 		}
 
-		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
-			globalResolvedTs = todoDDL.CommitTs
-		}
-		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Any("lastGlobalResolvedTs", lastGlobalResolvedTs),
-				zap.Any("globalResolvedTs", globalResolvedTs))
-		}
+		c.globalResolvedTs = minPartitionResolvedTs
+		log.Info("update globalResolvedTs",
+			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
-		if globalResolvedTs > lastGlobalResolvedTs {
-			lastGlobalResolvedTs = globalResolvedTs
-			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
-
-			err = c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
+		if err := c.forEachSink(func(sink *partitionSink) error {
+			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+		}); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }

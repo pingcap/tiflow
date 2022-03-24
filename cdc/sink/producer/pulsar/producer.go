@@ -86,7 +86,9 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 }
 
 // AsyncSendMessage send key-value msg to target partition.
-func (p *Producer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
+func (p *Producer) AsyncSendMessage(
+	ctx context.Context, _ string, partition int32, message *codec.MQMessage,
+) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    message.Value,
 		Key:        string(message.Key),
@@ -107,7 +109,9 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 }
 
 // SyncBroadcastMessage send key-value msg to all partition.
-func (p *Producer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (p *Producer) SyncBroadcastMessage(
+	ctx context.Context, _ string, _ int32, message *codec.MQMessage,
+) error {
 	for partition := 0; partition < p.partitionNum; partition++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
 			Payload:    message.Value,

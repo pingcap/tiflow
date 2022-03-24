@@ -42,7 +42,6 @@ type Set interface {
 	// like truncating `00c04543-f584-11e9-a765-0242ac120002:1-100` with `00c04543-f584-11e9-a765-0242ac120002:40-60`
 	// should become `00c04543-f584-11e9-a765-0242ac120002:1-60`.
 	Truncate(end Set) error
-
 	String() string
 }
 
@@ -211,19 +210,23 @@ func (g *MySQLGTIDSet) Equal(other Set) bool {
 
 // Contain implements Set.Contain.
 func (g *MySQLGTIDSet) Contain(other Set) bool {
-	otherIsNil := other == nil
-	if !otherIsNil {
-		otherGs, ok := other.(*MySQLGTIDSet)
-		if !ok {
-			return false
-		}
-		otherIsNil = otherGs == nil
-	}
-	if otherIsNil {
+	if other == nil {
 		return true // any set (including nil) contains nil
-	} else if g == nil {
+	}
+
+	otherGS, ok := other.(*MySQLGTIDSet)
+	if !ok {
+		return false
+	}
+
+	if otherGS == nil {
+		return true // any set (including nil) contains nil
+	}
+
+	if g == nil {
 		return false // nil only contains nil
 	}
+
 	return g.set.Contain(other.Origin())
 }
 
@@ -381,19 +384,23 @@ func (m *MariadbGTIDSet) Equal(other Set) bool {
 
 // Contain implements Set.Contain.
 func (m *MariadbGTIDSet) Contain(other Set) bool {
-	otherIsNil := other == nil
-	if !otherIsNil {
-		otherGS, ok := other.(*MariadbGTIDSet)
-		if !ok {
-			return false
-		}
-		otherIsNil = otherGS == nil
-	}
-	if otherIsNil {
+	if other == nil {
 		return true // any set (including nil) contains nil
-	} else if m == nil {
+	}
+
+	otherGS, ok := other.(*MariadbGTIDSet)
+	if !ok {
+		return false
+	}
+
+	if otherGS == nil {
+		return true // any set (including nil) contains nil
+	}
+
+	if m == nil {
 		return false // nil only contains nil
 	}
+
 	return m.set.Contain(other.Origin())
 }
 

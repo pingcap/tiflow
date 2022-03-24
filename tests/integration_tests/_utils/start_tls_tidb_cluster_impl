@@ -46,6 +46,7 @@ key-path = "$TLS_DIR/server-key.pem"
 EOF
 
 echo "Starting TLS PD..."
+pd-server --version
 pd-server \
 	--client-urls https://${TLS_PD_HOST}:${TLS_PD_PORT} \
 	--peer-urls https://${TLS_PD_HOST}:${TLS_PD_PEER_PORT} \
@@ -102,7 +103,7 @@ cluster-ssl-key = "$TLS_DIR/server-key.pem"
 EOF
 
 echo "Starting TLS TiKV..."
-
+tikv-server --version
 # Uncomment to turn on grpc versbose log.
 # GRPC_VERBOSITY=debug \
 # GRPC_TRACE=server_channel,call_error,handshaker,tsi \
@@ -117,6 +118,7 @@ tikv-server \
 sleep 2
 
 echo "Starting TLS TiDB..."
+tidb-server -V
 tidb-server \
 	-P ${TLS_TIDB_PORT} \
 	-config "$OUT_DIR/tidb-config-tls.toml" \
