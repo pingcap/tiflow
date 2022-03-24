@@ -104,9 +104,9 @@ type TaskStatusChecker interface {
 // NewTaskStatusChecker is a TaskStatusChecker initializer.
 var NewTaskStatusChecker = NewRealTaskStatusChecker
 
-// AutoResumeTimes contains some Time and Backoff that are related to auto resume.
+// AutoResumeInfo contains some Time and Backoff that are related to auto resume.
 // This structure is exposed for DM as library.
-type AutoResumeTimes struct {
+type AutoResumeInfo struct {
 	Backoff          *backoff.Backoff
 	LatestPausedTime time.Time
 	LatestBlockTime  time.Time
@@ -126,17 +126,17 @@ type realTaskStatusChecker struct {
 	l   log.Logger
 	w   *SourceWorker
 
-	subtaskTimes map[string]*AutoResumeTimes
-	relayTimes   *AutoResumeTimes
+	subtaskAutoResume map[string]*AutoResumeInfo
+	relayAutoResume   *AutoResumeInfo
 }
 
 // NewRealTaskStatusChecker creates a new realTaskStatusChecker instance.
 func NewRealTaskStatusChecker(cfg config.CheckerConfig, w *SourceWorker) TaskStatusChecker {
 	tsc := &realTaskStatusChecker{
-		cfg:          cfg,
-		l:            log.With(zap.String("component", "task checker")),
-		w:            w,
-		subtaskTimes: map[string]*AutoResumeTimes{},
+		cfg:               cfg,
+		l:                 log.With(zap.String("component", "task checker")),
+		w:                 w,
+		subtaskAutoResume: map[string]*AutoResumeInfo{},
 	}
 	tsc.closed.Store(true)
 	return tsc
@@ -236,17 +236,16 @@ func isResumableError(err *pb.ProcessError) bool {
 	return true
 }
 
-// UpdateResumeStrategy updates times and returns ResumeStrategy for a subtask.
-// When ResumeDispatch and the subtask is successfully resumed, LatestResumeTime
-// and backoff should be updated.
+// CheckResumeSubtask updates info and returns ResumeStrategy for a subtask.
+// When ResumeDispatch and the subtask is successfully resumed at caller,
+// LatestResumeTime and backoff should be updated.
 // This function is exposed for DM as library.
-func UpdateResumeStrategy(
+func (i *AutoResumeInfo) CheckResumeSubtask(
 	stStatus *pb.SubTaskStatus,
-	times *AutoResumeTimes,
 	backoffRollback time.Duration,
 ) (strategy ResumeStrategy) {
 	defer func() {
-		updateTimes(strategy, times, backoffRollback)
+		i.update(strategy, backoffRollback)
 	}()
 
 	// task that is not paused or paused manually, just ignore it
@@ -266,20 +265,19 @@ func UpdateResumeStrategy(
 	}
 
 	// auto resume interval does not exceed backoff duration, skip this paused task
-	if time.Since(times.LatestResumeTime) < times.Backoff.Current() {
+	if time.Since(i.LatestResumeTime) < i.Backoff.Current() {
 		return ResumeSkip
 	}
 
 	return ResumeDispatch
 }
 
-func updateRelayResumeStrategy(
+func (i *AutoResumeInfo) checkResumeRelay(
 	relayStatus *pb.RelayStatus,
-	times *AutoResumeTimes,
 	backoffRollback time.Duration,
 ) (strategy ResumeStrategy) {
 	defer func() {
-		updateTimes(strategy, times, backoffRollback)
+		i.update(strategy, backoffRollback)
 	}()
 
 	// relay that is not paused or paused manually, just ignore it
@@ -293,68 +291,64 @@ func updateRelayResumeStrategy(
 		}
 	}
 
-	if time.Since(times.LatestResumeTime) < times.Backoff.Current() {
+	if time.Since(i.LatestResumeTime) < i.Backoff.Current() {
 		return ResumeSkip
 	}
 
 	return ResumeDispatch
 }
 
-func updateTimes(
-	strategy ResumeStrategy,
-	times *AutoResumeTimes,
-	backoffRollback time.Duration,
-) {
+func (i *AutoResumeInfo) update(strategy ResumeStrategy, backoffRollback time.Duration) {
 	switch strategy {
 	case ResumeIgnore:
-		if time.Since(times.LatestPausedTime) > backoffRollback {
-			times.Backoff.Rollback()
+		if time.Since(i.LatestPausedTime) > backoffRollback {
+			i.Backoff.Rollback()
 			// after each rollback, reset this timer
-			times.LatestPausedTime = time.Now()
+			i.LatestPausedTime = time.Now()
 		}
 	case ResumeNoSense:
 		// this strategy doesn't forward or rollback backoff
-		times.LatestPausedTime = time.Now()
-		if times.LatestBlockTime.IsZero() {
-			times.LatestBlockTime = time.Now()
+		i.LatestPausedTime = time.Now()
+		if i.LatestBlockTime.IsZero() {
+			i.LatestBlockTime = time.Now()
 		}
 	case ResumeSkip, ResumeDispatch:
-		times.LatestPausedTime = time.Now()
+		i.LatestPausedTime = time.Now()
 	}
 }
 
 func (tsc *realTaskStatusChecker) checkRelayStatus() {
 	relayStatus := tsc.w.relayHolder.Status(nil)
-	if tsc.relayTimes == nil {
+	if tsc.relayAutoResume == nil {
 		bf, _ := backoff.NewBackoff(
 			tsc.cfg.BackoffFactor,
 			tsc.cfg.BackoffJitter,
 			tsc.cfg.BackoffMin.Duration,
 			tsc.cfg.BackoffMax.Duration)
-		tsc.relayTimes = &AutoResumeTimes{
+		tsc.relayAutoResume = &AutoResumeInfo{
 			Backoff:          bf,
 			LatestResumeTime: time.Now(),
 			LatestPausedTime: time.Now(),
 		}
 	}
 
-	strategy := updateRelayResumeStrategy(relayStatus, tsc.relayTimes, tsc.cfg.BackoffRollback.Duration)
+	strategy := tsc.relayAutoResume.checkResumeRelay(relayStatus, tsc.cfg.BackoffRollback.Duration)
 	switch strategy {
 	case ResumeNoSense:
 		tsc.l.Warn("relay can't auto resume",
-			zap.Duration("paused duration", time.Since(tsc.relayTimes.LatestBlockTime)))
+			zap.Duration("paused duration", time.Since(tsc.relayAutoResume.LatestBlockTime)))
 	case ResumeSkip:
 		tsc.l.Warn("backoff skip auto resume relay",
-			zap.Time("latestResumeTime", tsc.relayTimes.LatestResumeTime),
-			zap.Duration("duration", tsc.relayTimes.Backoff.Current()))
+			zap.Time("latestResumeTime", tsc.relayAutoResume.LatestResumeTime),
+			zap.Duration("duration", tsc.relayAutoResume.Backoff.Current()))
 	case ResumeDispatch:
 		err := tsc.w.operateRelay(tsc.ctx, pb.RelayOp_ResumeRelay)
 		if err != nil {
 			tsc.l.Error("dispatch auto resume relay failed", zap.Error(err))
 		} else {
 			tsc.l.Info("dispatch auto resume relay")
-			tsc.relayTimes.LatestResumeTime = time.Now()
-			tsc.relayTimes.Backoff.BoundaryForward()
+			tsc.relayAutoResume.LatestResumeTime = time.Now()
+			tsc.relayAutoResume.Backoff.BoundaryForward()
 		}
 	}
 }
@@ -364,49 +358,49 @@ func (tsc *realTaskStatusChecker) checkTaskStatus() {
 
 	defer func() {
 		// cleanup outdated tasks
-		for taskName := range tsc.subtaskTimes {
+		for taskName := range tsc.subtaskAutoResume {
 			_, ok := allSubTaskStatus[taskName]
 			if !ok {
 				tsc.l.Debug("remove task from checker", zap.String("task", taskName))
-				delete(tsc.subtaskTimes, taskName)
+				delete(tsc.subtaskAutoResume, taskName)
 			}
 		}
 	}()
 
 	for taskName, stStatus := range allSubTaskStatus {
-		times, ok := tsc.subtaskTimes[taskName]
+		info, ok := tsc.subtaskAutoResume[taskName]
 		if !ok {
 			bf, _ := backoff.NewBackoff(
 				tsc.cfg.BackoffFactor,
 				tsc.cfg.BackoffJitter,
 				tsc.cfg.BackoffMin.Duration,
 				tsc.cfg.BackoffMax.Duration)
-			times = &AutoResumeTimes{
+			info = &AutoResumeInfo{
 				Backoff:          bf,
 				LatestPausedTime: time.Now(),
 				LatestResumeTime: time.Now(),
 			}
-			tsc.subtaskTimes[taskName] = times
+			tsc.subtaskAutoResume[taskName] = info
 		}
-		strategy := UpdateResumeStrategy(stStatus, times, tsc.cfg.BackoffRollback.Duration)
+		strategy := info.CheckResumeSubtask(stStatus, tsc.cfg.BackoffRollback.Duration)
 		switch strategy {
 		case ResumeNoSense:
 			tsc.l.Warn("task can't auto resume",
 				zap.String("task", taskName),
-				zap.Duration("paused duration", time.Since(times.LatestBlockTime)))
+				zap.Duration("paused duration", time.Since(info.LatestBlockTime)))
 		case ResumeSkip:
 			tsc.l.Warn("backoff skip auto resume task",
 				zap.String("task", taskName),
-				zap.Time("latestResumeTime", times.LatestResumeTime),
-				zap.Duration("duration", times.Backoff.Current()))
+				zap.Time("latestResumeTime", info.LatestResumeTime),
+				zap.Duration("duration", info.Backoff.Current()))
 		case ResumeDispatch:
 			err := tsc.w.OperateSubTask(taskName, pb.TaskOp_AutoResume)
 			if err != nil {
 				tsc.l.Error("dispatch auto resume task failed", zap.String("task", taskName), zap.Error(err))
 			} else {
 				tsc.l.Info("dispatch auto resume task", zap.String("task", taskName))
-				times.LatestResumeTime = time.Now()
-				times.Backoff.BoundaryForward()
+				info.LatestResumeTime = time.Now()
+				info.Backoff.BoundaryForward()
 			}
 		}
 	}

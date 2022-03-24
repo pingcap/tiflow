@@ -76,11 +76,11 @@ func (s *testTaskCheckerSuite) TestResumeStrategy(c *check.C) {
 			false,
 			tc.duration,
 			tc.duration)
-		rtsc.subtaskTimes[taskName] = &AutoResumeTimes{
+		rtsc.subtaskAutoResume[taskName] = &AutoResumeInfo{
 			Backoff:          bf,
 			LatestResumeTime: tc.latestResumeFn(tc.addition),
 		}
-		strategy := UpdateResumeStrategy(tc.status, rtsc.subtaskTimes[taskName], config.DefaultBackoffRollback)
+		strategy := rtsc.subtaskAutoResume[taskName].CheckResumeSubtask(tc.status, config.DefaultBackoffRollback)
 		c.Assert(strategy, check.Equals, tc.expected)
 	}
 }
@@ -123,7 +123,7 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	c.Assert(st.cfg.Adjust(false), check.IsNil)
 	rtsc.w.subTaskHolder.recordSubTask(st)
 	rtsc.check()
-	bf := rtsc.subtaskTimes[taskName].Backoff
+	bf := rtsc.subtaskAutoResume[taskName].Backoff
 
 	// test resume with paused task
 	st.stage = pb.Stage_Paused
@@ -152,11 +152,11 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		Errors:     []*pb.ProcessError{unsupportedModifyColumnError},
 	}
 	rtsc.check()
-	c.Assert(latestPausedTime.Before(rtsc.subtaskTimes[taskName].LatestPausedTime), check.IsTrue)
-	latestBlockTime = rtsc.subtaskTimes[taskName].LatestBlockTime
+	c.Assert(latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime), check.IsTrue)
+	latestBlockTime = rtsc.subtaskAutoResume[taskName].LatestBlockTime
 	time.Sleep(200 * time.Millisecond)
 	rtsc.check()
-	c.Assert(rtsc.subtaskTimes[taskName].LatestBlockTime, check.Equals, latestBlockTime)
+	c.Assert(rtsc.subtaskAutoResume[taskName].LatestBlockTime, check.Equals, latestBlockTime)
 	c.Assert(bf.Current(), check.Equals, current)
 
 	// test resume skip strategy
@@ -179,7 +179,7 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 	}
 	rtsc.w.subTaskHolder.recordSubTask(st)
 	rtsc.check()
-	bf = rtsc.subtaskTimes[taskName].Backoff
+	bf = rtsc.subtaskAutoResume[taskName].Backoff
 
 	st.stage = pb.Stage_Paused
 	st.result = &pb.ProcessResult{
@@ -187,14 +187,14 @@ func (s *testTaskCheckerSuite) TestCheck(c *check.C) {
 		Errors:     []*pb.ProcessError{unknownProcessError},
 	}
 	rtsc.check()
-	latestResumeTime = rtsc.subtaskTimes[taskName].LatestResumeTime
-	latestPausedTime = rtsc.subtaskTimes[taskName].LatestPausedTime
+	latestResumeTime = rtsc.subtaskAutoResume[taskName].LatestResumeTime
+	latestPausedTime = rtsc.subtaskAutoResume[taskName].LatestPausedTime
 	c.Assert(bf.Current(), check.Equals, 10*time.Second)
 	for i := 0; i < 10; i++ {
 		rtsc.check()
-		c.Assert(latestResumeTime, check.Equals, rtsc.subtaskTimes[taskName].LatestResumeTime)
-		c.Assert(latestPausedTime.Before(rtsc.subtaskTimes[taskName].LatestPausedTime), check.IsTrue)
-		latestPausedTime = rtsc.subtaskTimes[taskName].LatestPausedTime
+		c.Assert(latestResumeTime, check.Equals, rtsc.subtaskAutoResume[taskName].LatestResumeTime)
+		c.Assert(latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime), check.IsTrue)
+		latestPausedTime = rtsc.subtaskAutoResume[taskName].LatestPausedTime
 	}
 }
 
@@ -242,8 +242,8 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	}
 	rtsc.w.subTaskHolder.recordSubTask(st2)
 	rtsc.check()
-	c.Assert(len(rtsc.subtaskTimes), check.Equals, 2)
-	for _, times := range rtsc.subtaskTimes {
+	c.Assert(len(rtsc.subtaskAutoResume), check.Equals, 2)
+	for _, times := range rtsc.subtaskAutoResume {
 		c.Assert(times.LatestBlockTime.IsZero(), check.IsTrue)
 	}
 
@@ -271,26 +271,26 @@ func (s *testTaskCheckerSuite) TestCheckTaskIndependent(c *check.C) {
 	c.Assert(st2.cfg.Adjust(false), check.IsNil)
 	rtsc.w.subTaskHolder.recordSubTask(st2)
 
-	task1LatestResumeTime = rtsc.subtaskTimes[task1].LatestResumeTime
-	task2LatestResumeTime = rtsc.subtaskTimes[task2].LatestResumeTime
+	task1LatestResumeTime = rtsc.subtaskAutoResume[task1].LatestResumeTime
+	task2LatestResumeTime = rtsc.subtaskAutoResume[task2].LatestResumeTime
 	for i := 0; i < 10; i++ {
 		time.Sleep(backoffMin)
 		rtsc.check()
-		c.Assert(task1LatestResumeTime, check.Equals, rtsc.subtaskTimes[task1].LatestResumeTime)
-		c.Assert(task2LatestResumeTime.Before(rtsc.subtaskTimes[task2].LatestResumeTime), check.IsTrue)
-		c.Assert(rtsc.subtaskTimes[task1].LatestBlockTime.IsZero(), check.IsFalse)
-		c.Assert(rtsc.subtaskTimes[task2].LatestBlockTime.IsZero(), check.IsTrue)
+		c.Assert(task1LatestResumeTime, check.Equals, rtsc.subtaskAutoResume[task1].LatestResumeTime)
+		c.Assert(task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime), check.IsTrue)
+		c.Assert(rtsc.subtaskAutoResume[task1].LatestBlockTime.IsZero(), check.IsFalse)
+		c.Assert(rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero(), check.IsTrue)
 
-		task2LatestResumeTime = rtsc.subtaskTimes[task2].LatestResumeTime
+		task2LatestResumeTime = rtsc.subtaskAutoResume[task2].LatestResumeTime
 	}
 
 	// test task information cleanup in task status checker
 	rtsc.w.subTaskHolder.removeSubTask(task1)
 	time.Sleep(backoffMin)
 	rtsc.check()
-	c.Assert(task2LatestResumeTime.Before(rtsc.subtaskTimes[task2].LatestResumeTime), check.IsTrue)
-	c.Assert(len(rtsc.subtaskTimes), check.Equals, 1)
-	c.Assert(rtsc.subtaskTimes[task2].LatestBlockTime.IsZero(), check.IsTrue)
+	c.Assert(task2LatestResumeTime.Before(rtsc.subtaskAutoResume[task2].LatestResumeTime), check.IsTrue)
+	c.Assert(len(rtsc.subtaskAutoResume), check.Equals, 1)
+	c.Assert(rtsc.subtaskAutoResume[task2].LatestBlockTime.IsZero(), check.IsTrue)
 }
 
 func (s *testTaskCheckerSuite) TestIsResumableError(c *check.C) {
