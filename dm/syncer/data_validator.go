@@ -272,15 +272,21 @@ func (v *DataValidator) printStatusRoutine() {
 		case <-v.ctx.Done():
 			return
 		case <-time.After(validatorStatusInterval):
-			processed := []int64{v.processedRowCounts[rowInsert].Load(),
+			processed := []int64{
+				v.processedRowCounts[rowInsert].Load(),
 				v.processedRowCounts[rowUpdated].Load(),
-				v.processedRowCounts[rowDeleted].Load()}
-			pending := []int64{v.pendingRowCounts[rowInsert].Load(),
+				v.processedRowCounts[rowDeleted].Load(),
+			}
+			pending := []int64{
+				v.pendingRowCounts[rowInsert].Load(),
 				v.pendingRowCounts[rowUpdated].Load(),
-				v.pendingRowCounts[rowDeleted].Load()}
-			errorCounts := []int64{v.errorRowCounts[newValidateErrorRow].Load(),
+				v.pendingRowCounts[rowDeleted].Load(),
+			}
+			errorCounts := []int64{
+				v.errorRowCounts[newValidateErrorRow].Load(),
 				v.errorRowCounts[ignoredValidateErrorRow].Load(),
-				v.errorRowCounts[resolvedValidateErrorRow].Load()}
+				v.errorRowCounts[resolvedValidateErrorRow].Load(),
+			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),

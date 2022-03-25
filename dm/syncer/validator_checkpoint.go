@@ -454,28 +454,28 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 
 func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64, error) {
 	res := make(map[validateErrorStatus]int64)
-    sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-    rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
+	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    for rows.Next() {
-        var status int
-        var count int64
-        err = rows.Scan(&status, &count)
-        if err != nil {
-            return nil, err
-        }
-        res[validateErrorStatus(status)] = count
-    }
+	for rows.Next() {
+		var status int
+		var count int64
+		err = rows.Scan(&status, &count)
+		if err != nil {
+			return nil, err
+		}
+		res[validateErrorStatus(status)] = count
+	}
 
-    if err = rows.Err(); err != nil {
-        return nil, err
-    }
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
 	c.tctx.L().Info("error count loaded", zap.Reflect("counts", res))
-    return res, nil
+	return res, nil
 }
 
 func (c *validatorPersistHelper) setRevision(rev int64) {

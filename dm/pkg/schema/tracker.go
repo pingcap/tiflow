@@ -423,7 +423,7 @@ func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filt
 				zap.Stringer("table", tbl), log.ShortError(err))
 		}
 	}
-	for schemaName, _ := range tablesToCreate {
+	for schemaName := range tablesToCreate {
 		// TODO: Figure out how to recover from errors.
 		if err := tr.CreateSchemaIfNotExists(schemaName); err != nil {
 			logCtx.L().Error("failed to rollback schema on schema tracker: cannot create schema",
