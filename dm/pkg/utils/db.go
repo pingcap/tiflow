@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"reflect"
 
 	"github.com/coreos/go-semver/semver"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
@@ -133,27 +134,30 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 		| 1921680101 | athena    | 3306 | 192168011 |
 		+------------+-----------+------+-----------+
 	*/
-
-	var (
-		serverID  sql.NullInt64
-		host      sql.NullString
-		port      sql.NullInt64
-		masterID  sql.NullInt64
-		slaveUUID sql.NullString
-	)
+	type Server struct {
+		Server_id  int64
+		Host      string
+		Port      int64
+		Master_id  int64
+	}
 	serverIDs := make(map[uint32]struct{})
 	for rows.Next() {
-		if len(rowColumns) == 5 {
-			err = rows.Scan(&serverID, &host, &port, &masterID, &slaveUUID)
-		} else {
-			err = rows.Scan(&serverID, &host, &port, &masterID)
+		server := Server{}
+		pointers := make([]interface{}, len(rowColumns))
+		structVal := reflect.ValueOf(server)
+		for i, colName := range rowColumns {
+			fieldVal := structVal.FieldByName(strings.Title(colName))
+			if fieldVal.IsValid() {
+				pointers[i] = fieldVal.Addr().Interface()
+			}
 		}
+		err := rows.Scan(pointers...)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 		}
 
-		if serverID.Valid {
-			serverIDs[uint32(serverID.Int64)] = struct{}{}
+		if server.Server_id > 0 {
+			serverIDs[uint32(server.Server_id)] = struct{}{}
 		} else {
 			// should never happened
 			log.L().Warn("get invalid server_id when execute `SHOW SLAVE HOSTS;`")
