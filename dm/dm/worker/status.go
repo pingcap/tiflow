@@ -131,7 +131,7 @@ func (w *SourceWorker) GetValidateStatus(stName string, filterStatus string) []*
 	if len(sts) == 0 {
 		return res
 	}
-	sourceIp := w.cfg.DecryptPassword().From.Host
+	sourceIP := w.cfg.DecryptPassword().From.Host
 	for _, st := range sts {
 		if st.validator == nil || !st.validator.Started() {
 			continue
@@ -139,7 +139,7 @@ func (w *SourceWorker) GetValidateStatus(stName string, filterStatus string) []*
 		tblStats := st.validator.GetValidationStatus()
 		for _, stat := range tblStats {
 			if filterStatus == "" || strings.EqualFold(stat.ValidationStatus, filterStatus) {
-				stat.Source = sourceIp
+				stat.Source = sourceIP
 				res = append(res, stat)
 			}
 		}

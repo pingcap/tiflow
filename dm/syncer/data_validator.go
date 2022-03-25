@@ -229,7 +229,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	defer v.Unlock()
 	failpoint.Inject("MockValidationQuery", func() {
 		v.stage = pb.Stage_Running
-		return
+		failpoint.Return()
 	})
 
 	v.L.Info("starting")

@@ -151,6 +151,7 @@ syncers:
     worker-count: 16
     batch: 100
 `
+
 var taskCfg2 = `---
 name: new-task
 task-mode: all

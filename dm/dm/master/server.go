@@ -2735,7 +2735,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	}
 	handleError := func(err error, source, worker string) {
 		log.L().Error("query validation status error", zap.Error(err), zap.String("source", source), zap.String("worker", worker))
-		resp := &pb.GetValidationStatusResponse{
+		resp = &pb.GetValidationStatusResponse{
 			Result: false,
 			Msg:    err.Error(),
 		}
@@ -2759,8 +2759,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 				}
 				*newReq.GetValidationStatus = *req
 				newReq.GetValidationStatus.TaskName = taskName
-				w, _ := args[1].(*scheduler.Worker)
-				resp, err := w.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
+				resp, err := worker.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
 				if err != nil {
 					handleError(err, sourceID, worker.BaseInfo().Name)
 				} else {
@@ -2768,11 +2767,9 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 				}
 			}, func(args ...interface{}) {
 				defer wg.Done()
-				sourceID, _ := args[0].(string)
-				w, _ := args[1].(*scheduler.Worker)
-				workerName := w.BaseInfo().Name
+				workerName := worker.BaseInfo().Name
 				handleError(terror.ErrMasterNoEmitToken.Generate(sourceID), sourceID, workerName)
-			}, sourceID, worker)
+			})
 		}
 	}
 	wg.Wait()

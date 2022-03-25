@@ -367,6 +367,7 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 		return s.getSourceWorker(true) == nil
 	}), IsTrue)
 }
+
 func (t *testServer) TestServerQueryValidator(c *C) {
 	var (
 		masterAddr   = tempurl.Alloc()[len("http://"):]
