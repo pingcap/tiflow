@@ -23,9 +23,9 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 

@@ -17,7 +17,7 @@ import (
 	"reflect"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
