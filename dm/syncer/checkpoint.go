@@ -1116,6 +1116,7 @@ func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTra
 			if err := schemaTracker.CreateTableIfNotExists(&tbl, point.flushedPoint.ti); err != nil {
 				return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, cpSchema, cpTable)
 			}
+			cp.logCtx.L().Debug("init table info in schema tracker", zap.Stringer("table", &tbl))
 		}
 	}
 	return nil
