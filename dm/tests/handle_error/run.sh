@@ -410,7 +410,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 	run_sql_source1 "insert into ${db}.${tb1} values(1,1,1);"
 	run_sql_source2 "insert into ${db}.${tb1} values(2,2,2);"
 
-	# 12/22 first ddl	
+	# 12/22 first ddl
 	run_sql_source1 "alter table ${db}.${tb2} add column c int default 100 unique not null;"
 	run_sql_source2 "alter table ${db}.${tb2} add column c int default 100 unique not null;"
 	run_sql_source1 "insert into ${db}.${tb2} values(4,4,4);"
@@ -476,7 +476,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 		run_sql_source1 "alter table ${db}.${tb1} drop column c;"
 		run_sql_source2 "alter table ${db}.${tb1} drop column c;"
 		run_sql_source1 "insert into ${db}.${tb1} values(3,3);"
-		run_sql_source2 "insert into ${db}.${tb1} values(6,6);"		
+		run_sql_source2 "insert into ${db}.${tb1} values(6,6);"
 
 		# 12/22 second ddl
 		run_sql_source1 "alter table ${db}.${tb2} drop column c;"
@@ -624,7 +624,7 @@ function DM_INJECT_ERROR_MULTIPLE_CASE() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"Multiple primary key defined" 2
-	
+
 	# revert
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog revert test" \
@@ -650,7 +650,7 @@ function DM_INJECT_DDL_ERROR() {
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
      run_sql_source2 \"create table ${db}.${tb2} (a int unique, b int);\"" \
 		"clean_table" ""
-	
+
 	run_case INJECT_DDL_ERROR_SHARDING_BASE "double-source-pessimistic" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
      run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"" \
@@ -676,9 +676,9 @@ function DM_INJECT_DDL_ERROR() {
 	# TODO cross ddls and pessimistic will lost data
 	# run_case INJECT_DDL_ERROR_SHARDING_CROSS "double-source-pessimistic" \
 	# 	"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
-    #  run_sql_source1 \"create table ${db}.${tb2} (a int unique, b int);\"; \
-    #  run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"; \
-    #  run_sql_source2 \"create table ${db}.${tb2} (a int unique, b int);\"" \
+	#  run_sql_source1 \"create table ${db}.${tb2} (a int unique, b int);\"; \
+	#  run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"; \
+	#  run_sql_source2 \"create table ${db}.${tb2} (a int unique, b int);\"" \
 	# 	"clean_table" ""
 
 	run_case INJECT_ERROR_MULTIPLE "double-source-pessimistic" \
