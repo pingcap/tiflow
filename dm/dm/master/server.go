@@ -2723,10 +2723,6 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	}
 	// TODO: get validation status from worker
 	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
-	workerReq := &workerrpc.Request{
-		GetValidationStatus: req,
-		Type:                workerrpc.CmdGetValidationStatus,
-	}
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
 		workerRespMu sync.Mutex
@@ -2757,7 +2753,11 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 			go s.ap.Emit(ctx, 0, func(args ...interface{}) {
 				// send request in parallel
 				defer wg.Done()
-				newReq := workerReq
+				newReq := &workerrpc.Request{
+					GetValidationStatus: &pb.GetValidationStatusRequest{},
+					Type:                workerrpc.CmdGetValidationStatus,
+				}
+				*newReq.GetValidationStatus = *req
 				newReq.GetValidationStatus.TaskName = taskName
 				w, _ := args[1].(*scheduler.Worker)
 				resp, err := w.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
