@@ -582,9 +582,13 @@ func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
 
 func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*validateTableInfo, error) {
 	targetTable := v.syncer.route(sourceTable)
-	// todo: syncer will change schema in schemaTracker, will there be data race?
-	// todo: what if table is dropped while validator falls behind?
-	tableInfo, err := v.syncer.schemaTracker.GetTableInfo(sourceTable)
+	// there are 2 cases tracker may drop table:
+	// 1. checkpoint rollback, tracker may recreate tables and drop non-needed tables
+	// 2. when operate-schema
+	// in case 1, we add another layer synchronization to make sure we don't get a dropped table when recreation.
+	// 	for non-needed tables, we will not validate them.
+	// in case 2, validator should be paused
+	tableInfo, err := v.syncer.getTrackedTableInfo(sourceTable)
 	if err != nil {
 		return nil, err
 	}

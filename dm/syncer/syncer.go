@@ -3989,3 +3989,7 @@ func (s *Syncer) initInitExecutedLoc() {
 		s.initExecutedLoc = &p
 	}
 }
+
+func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
+	return s.schemaTracker.GetTableInfo(table)
+}
