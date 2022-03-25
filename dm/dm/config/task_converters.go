@@ -225,10 +225,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		for _, rule := range tableMigrateRuleMap[sourceCfg.SourceName] {
 			// route
 			if rule.Target != nil && (rule.Target.Schema != nil || rule.Target.Table != nil) {
-				tableRule := &router.TableRule{SchemaPattern: rule.Source.Schema}
-				if rule.Source.Table != "" {
-					tableRule.TablePattern = rule.Source.Table
-				}
+				tableRule := &router.TableRule{SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table}
 				if rule.Target.Schema != nil {
 					tableRule.TargetSchema = *rule.Target.Schema
 				}
@@ -560,7 +557,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			}
 			tableMigrateRule.BinlogFilterRule = &ruleNameList
 		}
-		ruleKey := fmt.Sprintf("%s-%s-%s", sourceName, schemaPattern, tablePattern)
+		ruleKey := strings.Join([]string{sourceName, schemaPattern, tablePattern}, "-")
 		if _, ok := ruleMap[ruleKey]; ok {
 			return
 		}
