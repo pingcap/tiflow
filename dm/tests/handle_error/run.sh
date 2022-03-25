@@ -454,7 +454,7 @@ function DM_CROSS_DDL_SHARDING_WITH_REPLACE_ERROR_CASE() {
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"binlog replace test -s mysql-replica-01 alter table ${db}.${tb2} add column c int;alter table ${db}.${tb2} add unique(c);" \
 			"\"result\": true" 2
-		
+
 		# replace 22 first ddl
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add column c int;alter table ${db}.${tb2} add unique(c);" \
