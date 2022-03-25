@@ -20,6 +20,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/dustin/go-humanize"
@@ -61,7 +62,9 @@ const (
 	ValidationFast = "fast"
 	ValidationFull = "full"
 
-	DefaultValidatorWorkerCount = 4
+	DefaultValidatorWorkerCount       = 4
+	DefaultValidatorRowErrorDelay     = 30 * time.Minute
+	DefaultValidatorMetaFlushInterval = 1 * time.Minute
 )
 
 // default config item values.
@@ -340,11 +343,13 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
 }
 
-func (v *ValidatorConfig) adjust() error {
+func (v *ValidatorConfig) Adjust() error {
 	if v.Mode == "" {
 		v.Mode = ValidationNone
 	}
@@ -353,6 +358,12 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.WorkerCount <= 0 {
 		v.WorkerCount = DefaultValidatorWorkerCount
+	}
+	if v.RowErrorDelay.Duration == 0 {
+		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
+	}
+	if v.MetaFlushInterval.Duration == 0 {
+		v.MetaFlushInterval.Duration = DefaultValidatorMetaFlushInterval
 	}
 	return nil
 }
@@ -610,7 +621,7 @@ func (c *TaskConfig) adjust() error {
 	}
 
 	for _, validatorCfg := range c.Validators {
-		if err := validatorCfg.adjust(); err != nil {
+		if err := validatorCfg.Adjust(); err != nil {
 			return err
 		}
 	}
