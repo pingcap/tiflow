@@ -91,6 +91,9 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("sorter-chunk-size-limit")
 	_ = cmd.Flags().MarkHidden("sorter-max-memory-percentage")
 	_ = cmd.Flags().MarkHidden("sorter-max-memory-consumption")
+
+	_ = cmd.Flags().MarkHidden("owner-flush-interval")
+	_ = cmd.Flags().MarkHidden("processor-flush-interval")
 }
 
 // run runs the server cmd.
