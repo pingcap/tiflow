@@ -86,6 +86,11 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 	_ = cmd.Flags().MarkHidden("sort-dir")
+	_ = cmd.Flags().MarkHidden("sorter-num-workerpool-goroutine")
+	_ = cmd.Flags().MarkHidden("sorter-num-concurrent-worker")
+	_ = cmd.Flags().MarkHidden("sorter-chunk-size-limit")
+	_ = cmd.Flags().MarkHidden("sorter-max-memory-percentage")
+	_ = cmd.Flags().MarkHidden("sorter-max-memory-consuption")
 }
 
 // run runs the server cmd.
