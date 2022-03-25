@@ -99,7 +99,7 @@ func buildPebbleOption(tag SystemTag, id int, memInByte int, cfg *config.DBConfi
 	return option, ws
 }
 
-// OpenPebble opens a pebble.
+// OpenPebble opens a pebble. previous data will be deleted once open the same dir
 func OpenPebble(ctx context.Context, tag SystemTag, id int, path string, memInByte int, cfg *config.DBConfig) (DB, error) {
 	option, ws := buildPebbleOption(tag, id, memInByte, cfg)
 	// TODO: incompatible change, if cdc support between version deployment before this feature rollout, need change this also

@@ -50,7 +50,6 @@ func TestNewVerification(t *testing.T) {
 	}()
 
 	mockEtcdCli := &etcd.MockEtcdClient{}
-	mockEtcdCli.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	stdCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{})
 	err := NewVerification(stdCtx, nil, mockEtcdCli)
 	require.NotNil(t, err)
@@ -75,17 +74,17 @@ func TestNewVerification(t *testing.T) {
 
 	db, _, err := sqlmock.New()
 	require.Nil(t, err)
-	mockModuleVerifier := &MockModuleVerifier{}
-	mockModuleVerifier.On("GC", mock.Anything, mock.Anything).Return(errors.New("xxx"))
+	mockEtcdCli.On("Put", mock.Anything, etcd.GetEtcdKeyVerification("xxx"), mock.Anything).Return(nil, nil)
+
 	v := &TiDBVerification{
 		config: &Config{
 			CheckInterval: 10 * time.Millisecond,
 			ChangefeedID:  "xxx",
 		},
-		running:            *atomic.NewBool(true),
-		upstreamChecker:    newChecker(db),
-		downstreamChecker:  newChecker(db),
-		moduleVerification: mockModuleVerifier,
+		running:           *atomic.NewBool(true),
+		upstreamChecker:   newChecker(db),
+		downstreamChecker: newChecker(db),
+		etcdClient:        mockEtcdCli,
 	}
 	ctx, cancel = context.WithTimeout(ctx, time.Millisecond*15)
 	defer cancel()
@@ -517,7 +516,7 @@ func TestTiDBVerificationPutVerificationTask(t *testing.T) {
 			etcdClient: mockEtcdCli,
 			config:     &Config{ChangefeedID: "1"},
 		}
-		err := v.putVerificationTask(context.Background(), tt.args.task)
+		err := v.sendVerificationTask(context.Background(), tt.args.task)
 		require.True(t, errors.ErrorEqual(err, tt.wantErr), tt.name)
 	}
 }

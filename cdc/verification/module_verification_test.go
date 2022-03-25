@@ -75,8 +75,8 @@ func TestNewModuleVerification(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	m, err := NewModuleVerification(ctx2, &ModuleVerificationConfig{ChangefeedID: "111"}, mockEtcdCli1)
 	require.Nil(t, err)
+	time.Sleep(time.Millisecond * 500)
 	cancel2()
-	time.Sleep(time.Millisecond * 5)
 	err = m.Close()
 	require.Nil(t, err)
 	err = m.Close()
@@ -153,8 +153,9 @@ func TestModuleVerification_GC(t *testing.T) {
 	for _, tt := range tests {
 		mockDB := &db.MockDB{}
 		mockDB.On("Compact", []byte{0x0}, bytes.Repeat([]byte{0xff}, 128)).Return(tt.dbErr)
-		mockDB.On("DeleteRange", []byte{}, encodeKey(Sink, 11+1, nil)).Return(nil)
-
+		for i := Puller; i <= Sink; i++ {
+			mockDB.On("DeleteRange", encodeKey(i, 0, nil), encodeKey(i, 11+1, nil)).Return(nil)
+		}
 		m := &ModuleVerification{
 			cfg:          &ModuleVerificationConfig{DBConfig: cfg},
 			db:           mockDB,

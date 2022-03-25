@@ -57,12 +57,11 @@ type Config struct {
 
 // TiDBVerification define the TiDB verification
 type TiDBVerification struct {
-	etcdClient         etcd.Cli
-	config             *Config
-	upstreamChecker    *checker
-	downstreamChecker  *checker
-	moduleVerification ModuleVerifier
-	running            atomic.Bool
+	etcdClient        etcd.Cli
+	config            *Config
+	upstreamChecker   *checker
+	downstreamChecker *checker
+	running           atomic.Bool
 }
 
 const (
@@ -93,20 +92,11 @@ func NewVerification(ctx cdcContext.Context, config *Config, etcdCli etcd.Cli) e
 	if config.CheckInterval == 0 {
 		config.CheckInterval = defaultCheckInterval
 	}
-	m, err := NewModuleVerification(ctx, &ModuleVerificationConfig{
-		ChangefeedID: config.ChangefeedID,
-		CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
-	},
-		etcdCli)
-	if err != nil {
-		return err
-	}
 	v := &TiDBVerification{
-		config:             config,
-		upstreamChecker:    newChecker(upstreamDB),
-		downstreamChecker:  newChecker(downstreamDB),
-		etcdClient:         etcdCli,
-		moduleVerification: m,
+		config:            config,
+		upstreamChecker:   newChecker(upstreamDB),
+		downstreamChecker: newChecker(downstreamDB),
+		etcdClient:        etcdCli,
 	}
 	go v.runVerify(ctx)
 
@@ -148,19 +138,8 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 				zap.String("endTs", endTs),
 				zap.Bool("enoughCheck", enoughCheck))
 
-			if enoughCheck {
-				if err := v.moduleVerification.GC(ctx, endTs); err != nil {
-					log.Error("module verify gc fail",
-						zap.String("changefeed", v.config.ChangefeedID),
-						zap.String("startTs", startTs),
-						zap.String("endTs", endTs),
-						zap.Error(err))
-				}
-				continue
-			}
-
-			if err = v.putVerificationTask(ctx, &taskInfo{StartTs: startTs, EndTs: endTs}); err != nil {
-				log.Error("putVerificationTask fail",
+			if err = v.sendVerificationTask(ctx, &taskInfo{StartTs: startTs, EndTs: endTs, EnoughCheck: enoughCheck}); err != nil {
+				log.Error("sendVerificationTask fail",
 					zap.String("changefeed", v.config.ChangefeedID),
 					zap.String("startTs", startTs),
 					zap.String("endTs", endTs),
@@ -168,7 +147,7 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 				continue
 			}
 
-			log.Info("putVerificationTask",
+			log.Info("sendVerificationTask",
 				zap.String("changefeed", v.config.ChangefeedID),
 				zap.String("startTs", startTs),
 				zap.String("endTs", endTs))
@@ -177,8 +156,9 @@ func (v *TiDBVerification) runVerify(ctx context.Context) {
 }
 
 type taskInfo struct {
-	StartTs string `json:"startTs"`
-	EndTs   string `json:"endTs"`
+	StartTs     string `json:"startTs"`
+	EndTs       string `json:"endTs"`
+	EnoughCheck bool   `json:"enoughCheck"`
 }
 
 // Marshal using json.Marshal.
@@ -197,7 +177,7 @@ func (c *taskInfo) Unmarshal(data []byte) error {
 	return cerror.WrapError(cerror.ErrUnmarshalFailed, errors.Annotatef(err, "unmarshal data: %v", data))
 }
 
-func (v *TiDBVerification) putVerificationTask(ctx context.Context, task *taskInfo) error {
+func (v *TiDBVerification) sendVerificationTask(ctx context.Context, task *taskInfo) error {
 	key := etcd.GetEtcdKeyVerification(v.config.ChangefeedID)
 	value, err := task.Marshal()
 	if err != nil {

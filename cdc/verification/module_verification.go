@@ -214,6 +214,7 @@ func (m *ModuleVerification) runVerify(ctx context.Context) {
 			return
 		case ret := <-outChan:
 			for _, event := range ret.Events {
+				log.Info("module verify event", zap.ByteString("key", event.Kv.Key), zap.ByteString("value", event.Kv.Value))
 				info := &taskInfo{}
 				if err := info.Unmarshal(event.Kv.Value); err != nil {
 					log.Error("module verify unmarshal fail",
@@ -222,12 +223,14 @@ func (m *ModuleVerification) runVerify(ctx context.Context) {
 
 					continue
 				}
-				if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
-					log.Error("module verify ret",
-						zap.String("changefeed", m.cfg.ChangefeedID),
-						zap.String("startTs", info.StartTs),
-						zap.String("endTs", info.EndTs),
-						zap.Error(err))
+				if !info.EnoughCheck {
+					if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
+						log.Error("module verify ret",
+							zap.String("changefeed", m.cfg.ChangefeedID),
+							zap.String("startTs", info.StartTs),
+							zap.String("endTs", info.EndTs),
+							zap.Error(err))
+					}
 				}
 				if err := m.GC(ctx, info.EndTs); err != nil {
 					log.Error("module verify gc fail",
@@ -288,9 +291,15 @@ func (m *ModuleVerification) deleteTrackData(endTs string) error {
 		return err
 	}
 	// delete all data <= endTs
-	end := encodeKey(Sink, ts+1, nil)
-	err = m.db.DeleteRange([]byte{}, end)
-	return cerror.WrapError(cerror.ErrPebbleDBError, err)
+	for i := Puller; i <= Sink; i++ {
+		start := encodeKey(i, 0, nil)
+		end := encodeKey(i, ts+1, nil)
+		err = m.db.DeleteRange(start, end)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrPebbleDBError, err)
+		}
+	}
+	return nil
 }
 
 // GC implement GC api
@@ -409,6 +418,13 @@ func keyEqual(key1, key2 []byte) bool {
 	if c1 == c2 && bytes.Equal(k1, k2) {
 		return true
 	}
+	log.Warn("keyEqual fail",
+		zap.String("module1", m1.String()),
+		zap.Uint64("commitTs1", c1),
+		zap.ByteString("key1", k1),
+		zap.String("module2", m2.String()),
+		zap.Uint64("commitTs2", c2),
+		zap.ByteString("key2", k2))
 	return false
 }
 
