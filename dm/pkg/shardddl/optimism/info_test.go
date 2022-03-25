@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -37,6 +37,7 @@ import (
 var etcdTestCli *clientv3.Client
 
 func TestInfo(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 
@@ -47,7 +48,7 @@ func TestInfo(t *testing.T) {
 
 // clear keys in etcd test cluster.
 func clearTestInfoOperation(c *C) {
-	c.Assert(ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -328,7 +329,8 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 }
 
 func newOldInfo(task, source, upSchema, upTable, downSchema, downTable string,
-	ddls []string, tableInfoBefore *model.TableInfo, tableInfoAfter *model.TableInfo) OldInfo {
+	ddls []string, tableInfoBefore *model.TableInfo, tableInfoAfter *model.TableInfo,
+) OldInfo {
 	return OldInfo{
 		Task:            task,
 		Source:          source,

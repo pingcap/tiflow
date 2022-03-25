@@ -20,8 +20,8 @@ import (
 
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser/model"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -83,7 +83,8 @@ type LogInfo struct {
 
 // NewInfo creates a new Info instance.
 func NewInfo(task, source, upSchema, upTable, downSchema, downTable string,
-	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo) Info {
+	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo,
+) Info {
 	return Info{
 		Task:            task,
 		Source:          source,
@@ -221,7 +222,8 @@ func GetAllInfo(cli *clientv3.Client) (map[string]map[string]map[string]map[stri
 // WatchInfo watches PUT & DELETE operations for info.
 // This function should often be called by DM-master.
 func WatchInfo(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- Info, errCh chan<- error) {
+	outCh chan<- Info, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// NOTE: WithPrevKV used to get a valid `ev.PrevKv` for deletion.
@@ -298,15 +300,14 @@ func deleteInfoOp(info Info) clientv3.Op {
 		info.Task, info.Source, info.UpSchema, info.UpTable))
 }
 
-// ClearTestInfoOperationSchema is used to clear all shard DDL information in optimism mode.
+// ClearTestInfoOperationColumns is used to clear all shard DDL information in optimism mode.
 // it only used for testing now.
-func ClearTestInfoOperationSchema(cli *clientv3.Client) error {
+func ClearTestInfoOperationColumn(cli *clientv3.Client) error {
 	clearSource := clientv3.OpDelete(common.ShardDDLOptimismSourceTablesKeyAdapter.Path(), clientv3.WithPrefix())
 	clearInfo := clientv3.OpDelete(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	clearOp := clientv3.OpDelete(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
-	clearISOp := clientv3.OpDelete(common.ShardDDLOptimismInitSchemaKeyAdapter.Path(), clientv3.WithPrefix())
 	clearColumns := clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Path(), clientv3.WithPrefix())
-	_, err := cli.Txn(context.Background()).Then(clearSource, clearInfo, clearOp, clearISOp, clearColumns).Commit()
+	_, err := cli.Txn(context.Background()).Then(clearSource, clearInfo, clearOp, clearColumns).Commit()
 	return err
 }
 

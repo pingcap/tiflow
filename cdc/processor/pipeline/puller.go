@@ -39,7 +39,7 @@ type pullerNode struct {
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName, changefeed string,
-) pipeline.Node {
+) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
@@ -61,15 +61,16 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.InitWithWaitGroup(ctx, new(errgroup.Group))
+	return n.start(ctx, new(errgroup.Group), false, nil)
 }
 
-func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Group) error {
+func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
+	ctxC = util.PutRoleInCtx(ctxC, util.RoleProcessor)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
@@ -95,7 +96,11 @@ func (n *pullerNode) InitWithWaitGroup(ctx pipeline.NodeContext, wg *errgroup.Gr
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
+				if isActorMode {
+					sorter.handleRawEvent(ctx, pEvent)
+				} else {
+					ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
+				}
 			}
 		}
 	})

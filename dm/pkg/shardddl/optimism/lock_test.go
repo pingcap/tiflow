@@ -14,16 +14,22 @@
 package optimism
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/integration"
+	"go.etcd.io/etcd/tests/v3/integration"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -34,6 +40,7 @@ type testLock struct{}
 var _ = Suite(&testLock{})
 
 func TestLock(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 
@@ -83,7 +90,7 @@ func (t *testLock) TestLockTrySyncNormal(c *C) {
 			newTargetTable(task, sources[1], downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			sources[0]: {
@@ -385,7 +392,7 @@ func (t *testLock) TestLockTrySyncIndex(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -469,7 +476,7 @@ func (t *testLock) TestLockTrySyncNullNotNull(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -540,7 +547,7 @@ func (t *testLock) TestLockTrySyncIntBigint(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -582,7 +589,7 @@ func (t *testLock) TestLockTrySyncNoDiff(c *C) {
 		p                = parser.New()
 		se               = mock.NewContext()
 		tblID      int64 = 111
-		DDLs1            = []string{"ALTER TABLE bar DROP COLUMN c1, ADD COLUMN c2 INT"}
+		DDLs1            = []string{"ALTER TABLE bar RENAME c1 TO c2"}
 		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
 		ti1              = createTableInfo(c, p, se, tblID,
 			`CREATE TABLE bar (id INT PRIMARY KEY, c2 INT)`) // `c1` dropped, `c2` added
@@ -593,7 +600,7 @@ func (t *testLock) TestLockTrySyncNoDiff(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -609,7 +616,7 @@ func (t *testLock) TestLockTrySyncNoDiff(c *C) {
 	// try sync for one table.
 	info := newInfoWithVersion(task, source, db, tbls[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
 	DDLs, cols, err := l.TrySync(info, tts)
-	c.Assert(terror.ErrShardDDLOptimismTrySyncFail.Equal(err), IsTrue)
+	c.Assert(terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err), IsTrue)
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
@@ -636,7 +643,7 @@ func (t *testLock) TestLockTrySyncNewTable(c *C) {
 
 		tables = map[string]map[string]struct{}{db1: {tbl1: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source1, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 		vers   = map[string]map[string]map[string]int64{
 			source1: {
 				db1: {tbl1: 0},
@@ -689,10 +696,10 @@ func (t *testLock) TestLockTrySyncNewTable(c *C) {
 	c.Assert(ready[source1], HasLen, 1)
 	c.Assert(ready[source1][db1], HasLen, 2)
 	c.Assert(ready[source1][db1][tbl1], IsTrue)
-	c.Assert(ready[source1][db1][tbl2], IsTrue)
+	c.Assert(ready[source1][db1][tbl2], IsFalse) // new table use ti0 as init table
 	c.Assert(ready[source2], HasLen, 1)
 	c.Assert(ready[source2][db2], HasLen, 2)
-	c.Assert(ready[source2][db2][tbl1], IsTrue)
+	c.Assert(ready[source2][db2][tbl1], IsFalse)
 	c.Assert(ready[source2][db2][tbl2], IsTrue)
 
 	info = newInfoWithVersion(task, source1, db1, tbl2, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
@@ -710,7 +717,7 @@ func (t *testLock) TestLockTrySyncNewTable(c *C) {
 	c.Assert(ready[source1][db1][tbl2], IsTrue)
 	c.Assert(ready[source2], HasLen, 1)
 	c.Assert(ready[source2][db2], HasLen, 2)
-	c.Assert(ready[source2][db2][tbl1], IsTrue)
+	c.Assert(ready[source2][db2][tbl1], IsFalse)
 	c.Assert(ready[source2][db2][tbl2], IsTrue)
 }
 
@@ -749,7 +756,7 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -773,10 +780,13 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 	ready := l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err := l.tables[source][db][tbls[0]].Compare(l.Joined())
+
+	joined, err := l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err := l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -805,10 +815,12 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -821,10 +833,12 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -854,10 +868,13 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -870,10 +887,13 @@ func (t *testLock) TestLockTrySyncRevert(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -914,7 +934,7 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -937,10 +957,12 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 	ready := l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err := l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err := l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err := l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -951,7 +973,9 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	// join table isn't updated
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
@@ -968,10 +992,12 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 	ready = l.Ready() // all table ready
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsTrue)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
 
@@ -982,7 +1008,9 @@ func (t *testLock) TestLockTrySyncConflictNonIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, DDLs2)
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
 	ready = l.Ready()
@@ -1036,7 +1064,7 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1060,10 +1088,12 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	ready := l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err := l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err := l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err := l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -1074,7 +1104,9 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	// join table isn't updated
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
@@ -1088,7 +1120,9 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -1099,7 +1133,9 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 	ready = l.Ready()
@@ -1112,7 +1148,9 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	c.Assert(DDLs, DeepEquals, DDLs)
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
 	t.checkLockSynced(c, l)
@@ -1129,10 +1167,12 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsTrue)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -1142,7 +1182,9 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	c.Assert(terror.ErrShardDDLOptimismTrySyncFail.Equal(err), IsTrue)
 	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 	c.Assert(l.versions, DeepEquals, vers)
@@ -1160,10 +1202,12 @@ func (t *testLock) TestLockTrySyncConflictIntrusive(c *C) {
 	ready = l.Ready()
 	c.Assert(ready[source][db][tbls[0]], IsFalse)
 	c.Assert(ready[source][db][tbls[1]], IsFalse)
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.Joined())
+	joined, err = l.Joined()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
-	cmp, err = l.tables[source][db][tbls[1]].Compare(l.Joined())
+	cmp, err = l.tables[source][db][tbls[1]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, -1)
 
@@ -1224,7 +1268,7 @@ func (t *testLock) TestLockTrySyncMultipleChangeDDL(c *C) {
 			newTargetTable(task, sources[1], downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			sources[0]: {
@@ -1245,13 +1289,13 @@ func (t *testLock) TestLockTrySyncMultipleChangeDDL(c *C) {
 	// inconsistent ddls and table infos
 	info := newInfoWithVersion(task, sources[0], dbs[0], tbls[0], downSchema, downTable, DDLs1[:1], ti0, []*model.TableInfo{ti1_1, ti1}, vers)
 	DDLs, cols, err := l.TrySync(info, tts)
-	c.Assert(DDLs, DeepEquals, DDLs1[:1])
+	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(terror.ErrMasterInconsistentOptimisticDDLsAndInfo.Equal(err), IsTrue)
 
 	info = newInfoWithVersion(task, sources[0], dbs[0], tbls[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
 	DDLs, cols, err = l.TrySync(info, tts)
-	c.Assert(DDLs, DeepEquals, DDLs1)
+	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(terror.ErrMasterInconsistentOptimisticDDLsAndInfo.Equal(err), IsTrue)
 
@@ -1367,7 +1411,7 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbl1: struct{}{}, tbl2: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1396,7 +1440,13 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsFalse)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	l.columns = map[string]map[string]map[string]map[string]DropColumnStage{
+		"col": {
+			source: {db: {tbl2: DropNotDone}},
+		},
+	}
+	col := l.TryRemoveTable(source, db, tbl2)
+	c.Assert(col, DeepEquals, []string{"col"})
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
@@ -1405,7 +1455,7 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl1], IsTrue)
 	c.Assert(l.versions, DeepEquals, vers)
 
-	// CASE: remove a table will not rebuild joined schema now.
+	// CASE: remove a table will rebuild joined schema now.
 	// TrySync to add the second back.
 	vers[source][db][tbl2] = 0
 	info = newInfoWithVersion(task, source, db, tbl2, downSchema, downTable, DDLs2, ti1, []*model.TableInfo{ti2}, vers)
@@ -1422,19 +1472,116 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsTrue)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	c.Assert(l.TryRemoveTable(source, db, tbl2), HasLen, 0)
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
 	c.Assert(ready[source], HasLen, 1)
 	c.Assert(ready[source][db], HasLen, 1)
-	c.Assert(ready[source][db][tbl1], IsFalse) // the joined schema is not rebuild.
+	c.Assert(ready[source][db][tbl1], IsTrue) // the joined schema is rebuild.
 	c.Assert(l.versions, DeepEquals, vers)
 
 	// CASE: try to remove for not-exists table.
-	c.Assert(l.TryRemoveTable(source, db, "not-exist"), IsFalse)
-	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), IsFalse)
-	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), IsFalse)
+	c.Assert(l.TryRemoveTable(source, db, "not-exist"), HasLen, 0)
+	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), HasLen, 0)
+	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), HasLen, 0)
+}
+
+func (t *testLock) TestTryRemoveTableWithSources(c *C) {
+	var (
+		ID               = "test_lock_try_remove_table-`foo`.`bar`"
+		task             = "test_lock_try_remove_table"
+		source1          = "mysql-replica-1"
+		source2          = "mysql-replica-2"
+		downSchema       = "foo"
+		downTable        = "bar"
+		db               = "foo"
+		tbl1             = "bar1"
+		tbl2             = "bar2"
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		DDLs1            = []string{"ALTER TABLE bar DROP COLUMN c1"}
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+
+		tables = map[string]map[string]struct{}{db: {tbl1: struct{}{}, tbl2: struct{}{}}}
+		tts    = []TargetTable{newTargetTable(task, source1, downSchema, downTable, tables), newTargetTable(task, source2, downSchema, downTable, tables)}
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
+
+		vers = map[string]map[string]map[string]int64{
+			source1: {
+				db: {tbl1: 0, tbl2: 0},
+			},
+			source2: {
+				db: {tbl1: 0, tbl2: 0},
+			},
+		}
+	)
+
+	// only one table exists before TrySync.
+	t.checkLockSynced(c, l)
+	t.checkLockNoDone(c, l)
+
+	// TrySync for the first table.
+	info := newInfoWithVersion(task, source1, db, tbl1, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
+	DDLs, cols, err := l.TrySync(info, tts)
+	c.Assert(err, IsNil)
+	c.Assert(DDLs, DeepEquals, []string{})
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.versions, DeepEquals, vers)
+	ready := l.Ready()
+	c.Assert(ready, HasLen, 2)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsFalse)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+	c.Assert(ready[source2], HasLen, 1)
+	c.Assert(ready[source2][db], HasLen, 2)
+	c.Assert(ready[source2][db][tbl1], IsTrue)
+	c.Assert(ready[source2][db][tbl2], IsTrue)
+
+	// TryRemoveTableBySources with nil
+	c.Assert(len(l.TryRemoveTableBySources(nil)), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 2)
+
+	// TryRemoveTableBySources with wrong source
+	tts = tts[:1]
+	c.Assert(len(l.TryRemoveTableBySources([]string{"hahaha"})), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 2)
+
+	// TryRemoveTableBySources with source2
+	c.Assert(len(l.TryRemoveTableBySources([]string{source2})), Equals, 0)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 1)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsFalse)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+	delete(vers, source2)
+	c.Assert(l.versions, DeepEquals, vers)
+	c.Assert(l.HasTables(), IsTrue)
+
+	// TrySync with second table
+	info = newInfoWithVersion(task, source1, db, tbl2, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
+	DDLs, cols, err = l.TrySync(info, tts)
+	c.Assert(err, IsNil)
+	c.Assert(DDLs, DeepEquals, DDLs1)
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.versions, DeepEquals, vers)
+	ready = l.Ready()
+	c.Assert(ready, HasLen, 1)
+	c.Assert(ready[source1], HasLen, 1)
+	c.Assert(ready[source1][db], HasLen, 2)
+	c.Assert(ready[source1][db][tbl1], IsTrue)
+	c.Assert(ready[source1][db][tbl2], IsTrue)
+
+	// TryRemoveTableBySources with source1,source2
+	cols = l.TryRemoveTableBySources([]string{source1})
+	c.Assert(cols, DeepEquals, []string{"c1"})
+	c.Assert(l.HasTables(), IsFalse)
 }
 
 func (t *testLock) TestLockTryMarkDone(c *C) {
@@ -1459,7 +1606,7 @@ func (t *testLock) TestLockTryMarkDone(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1567,7 +1714,7 @@ func (t *testLock) TestAddDifferentFieldLenColumns(c *C) {
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1604,12 +1751,12 @@ func (t *testLock) TestAddDifferentFieldLenColumns(c *C) {
 	info = newInfoWithVersion(task, source, db, tbls[1], downSchema, downTable, DDLs2, ti0, []*model.TableInfo{ti2}, vers)
 	DDLs, cols, err = l.TrySync(info, tts)
 	c.Assert(err, ErrorMatches, ".*add columns with different field lengths.*")
-	c.Assert(DDLs, DeepEquals, DDLs2)
+	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 
 	// case 2: add a column with a smaller field length
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 	// TrySync for the first table, no table has done the DDLs operation.
 	vers[source][db][tbls[0]]--
@@ -1627,7 +1774,7 @@ func (t *testLock) TestAddDifferentFieldLenColumns(c *C) {
 	info = newInfoWithVersion(task, source, db, tbls[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
 	DDLs, cols, err = l.TrySync(info, tts)
 	c.Assert(err, ErrorMatches, ".*add columns with different field lengths.*")
-	c.Assert(DDLs, DeepEquals, DDLs1)
+	c.Assert(DDLs, DeepEquals, []string{})
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 }
@@ -1654,10 +1801,11 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 		DDLs2 = []string{"ALTER TABLE bar DROP COLUMN b"}
 		DDLs3 = []string{"ALTER TABLE bar ADD COLUMN b INT"}
 		DDLs4 = []string{"ALTER TABLE bar ADD COLUMN c INT"}
+		DDLs5 = []string{"ALTER TABLE bar DROP COLUMN c", "ALTER TABLE bar ADD COLUMN c INT"}
 
 		tables = map[string]map[string]struct{}{db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}}}
 		tts    = []TargetTable{newTargetTable(task, source, downSchema, downTable, tables)}
-		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l      = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1777,10 +1925,14 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 	c.Assert(l.IsResolved(), IsFalse)
+
+	_, _, err = l.TrySync(newInfoWithVersion(task, source, db, tbls[0], downSchema, downTable, DDLs5, ti0, []*model.TableInfo{ti1, ti0}, vers), tts)
+	c.Assert(err, ErrorMatches, ".*add column c that wasn't fully dropped in downstream.*")
 }
 
 func (t *testLock) trySyncForAllTablesLarger(c *C, l *Lock,
-	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64) {
+	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64,
+) {
 	for source, schemaTables := range l.Ready() {
 		for schema, tables := range schemaTables {
 			for table := range tables {
@@ -1822,7 +1974,8 @@ func (t *testLock) checkLockNoDone(c *C, l *Lock) {
 }
 
 func newInfoWithVersion(task, source, upSchema, upTable, downSchema, downTable string, ddls []string, tableInfoBefore *model.TableInfo,
-	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64) Info {
+	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64,
+) Info {
 	info := NewInfo(task, source, upSchema, upTable, downSchema, downTable, ddls, tableInfoBefore, tableInfosAfter)
 	vers[source][upSchema][upTable]++
 	info.Version = vers[source][upSchema][upTable]
@@ -1853,7 +2006,7 @@ func (t *testLock) TestLockTrySyncDifferentIndex(c *C) {
 			newTargetTable(task, source, downSchema, downTable, tables),
 		}
 
-		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts)
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
 
 		vers = map[string]map[string]map[string]int64{
 			source: {
@@ -1896,7 +2049,9 @@ func (t *testLock) TestLockTrySyncDifferentIndex(c *C) {
 	c.Assert(synced, IsFalse)
 	c.Assert(remain, Equals, 1)
 
-	cmp, err = l.tables[source][db][tbls[0]].Compare(l.joined)
+	joined, err := l.joinFinalTables()
+	c.Assert(err, IsNil)
+	cmp, err = l.tables[source][db][tbls[0]].Compare(joined)
 	c.Assert(err, IsNil)
 	c.Assert(cmp, Equals, 0)
 
@@ -1908,4 +2063,694 @@ func (t *testLock) TestLockTrySyncDifferentIndex(c *C) {
 	c.Assert(cols, DeepEquals, []string{})
 	c.Assert(l.versions, DeepEquals, vers)
 	t.checkLockSynced(c, l)
+}
+
+func (t *testLock) TestFetchTableInfo(c *C) {
+	var (
+		meta             = "meta"
+		ID               = "test_lock_try_sync_index-`foo`.`bar`"
+		task             = "test_lock_try_sync_index"
+		source           = "mysql-replica-1"
+		downSchema       = "db"
+		downTable        = "bar"
+		schema           = "db"
+		tbls             = []string{"bar1", "bar2"}
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, UNIQUE INDEX idx_c1(c1))`)
+		tables           = map[string]map[string]struct{}{
+			schema: {tbls[0]: struct{}{}, tbls[1]: struct{}{}},
+		}
+		tts = []TargetTable{
+			newTargetTable(task, source, downSchema, downTable, tables),
+		}
+		query = fmt.Sprintf("SELECT table_info FROM `%s`.`%s` WHERE id = \\? AND cp_schema = \\? AND cp_table = \\?", meta, cputil.SyncerCheckpoint(task))
+	)
+
+	// nil downstream meta
+	l := NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
+	ti, err := l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// table info not exist
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock := conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrDBExecuteFailed.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// null table info
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow("null"))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+	c.Assert(ti, IsNil)
+
+	// succeed
+	tiBytes, err := json.Marshal(ti0)
+	c.Assert(err, IsNil)
+	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	mock = conn.InitMockDB(c)
+	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(tiBytes))
+	ti, err = l.FetchTableInfos(task, source, schema, tbls[0])
+	c.Assert(err, IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	c.Assert(ti, DeepEquals, ti0)
+}
+
+func (t *testLock) TestCheckAddDropColumns(c *C) {
+	var (
+		ID               = "test-`foo`.`bar`"
+		task             = "test"
+		source           = "mysql-replica-1"
+		downSchema       = "db"
+		downTable        = "bar"
+		db               = "db"
+		tbls             = []string{"bar1", "bar2"}
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		DDLs1            = "ALTER TABLE bar ADD COLUMN a VARCHAR(1)"
+		DDLs2            = "ALTER TABLE bar ADD COLUMN a VARCHAR(2)"
+		DDLs3            = "ALTER TABLE bar DROP COLUMN col"
+		DDLs4            = "ALTER TABLE bar ADD COLUMN col int"
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int)`)
+		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, a VARCHAR(1))`)
+		ti2              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, a VARCHAR(2))`)
+		ti3              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, a VARCHAR(2))`)
+		tables           = map[string]map[string]struct{}{
+			db: {tbls[0]: struct{}{}, tbls[1]: struct{}{}},
+		}
+		tts = []TargetTable{
+			newTargetTable(task, source, downSchema, downTable, tables),
+		}
+
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, nil)
+	)
+
+	l.tables[source][db][tbls[0]] = schemacmp.Encode(ti0)
+	l.tables[source][db][tbls[1]] = schemacmp.Encode(ti1)
+
+	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1), nil)
+	c.Assert(err, IsNil)
+	c.Assert(len(col), Equals, 0)
+
+	l.tables[source][db][tbls[0]] = schemacmp.Encode(ti1)
+	col, err = l.checkAddDropColumn(source, db, tbls[1], DDLs2, schemacmp.Encode(ti0), schemacmp.Encode(ti2), nil)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, ".*add columns with different field lengths.*")
+	c.Assert(len(col), Equals, 0)
+
+	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs3, schemacmp.Encode(ti2), schemacmp.Encode(ti3), nil)
+	c.Assert(err, IsNil)
+	c.Assert(col, Equals, "col")
+
+	l.columns = map[string]map[string]map[string]map[string]DropColumnStage{
+		"col": {
+			source: {
+				db: {tbls[0]: DropNotDone},
+			},
+		},
+	}
+
+	col, err = l.checkAddDropColumn(source, db, tbls[0], DDLs4, schemacmp.Encode(ti3), schemacmp.Encode(ti2), nil)
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, ".*add column .* that wasn't fully dropped in downstream.*")
+	c.Assert(len(col), Equals, 0)
+}
+
+func (t *testLock) TestJoinTables(c *C) {
+	var (
+		source       = "mysql-replica-1"
+		db           = "db"
+		tbls         = []string{"bar1", "bar2"}
+		p            = parser.New()
+		se           = mock.NewContext()
+		tblID  int64 = 111
+		ti0          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int)`)
+		ti1          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, a VARCHAR(1))`)
+		ti2          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col varchar(4))`)
+		t0           = schemacmp.Encode(ti0)
+		t1           = schemacmp.Encode(ti1)
+		t2           = schemacmp.Encode(ti2)
+	)
+
+	l := &Lock{
+		tables: map[string]map[string]map[string]schemacmp.Table{
+			source: {
+				db: {tbls[0]: t0, tbls[1]: t0},
+			},
+		},
+		finalTables: map[string]map[string]map[string]schemacmp.Table{
+			source: {
+				db: {tbls[0]: t0, tbls[1]: t0},
+			},
+		},
+	}
+
+	joined, err := l.joinNormalTables()
+	c.Assert(err, IsNil)
+	cmp, err := joined.Compare(t0)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	joined, err = l.joinFinalTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t0)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	_, err = l.joinConflictTables()
+	c.Assert(err, IsNil)
+
+	l.tables[source][db][tbls[0]] = t1
+	l.finalTables[source][db][tbls[0]] = t1
+
+	joined, err = l.joinNormalTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t1)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	joined, err = l.joinFinalTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t1)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	_, err = l.joinConflictTables()
+	c.Assert(err, IsNil)
+
+	l.tables[source][db][tbls[1]] = t1
+	l.finalTables[source][db][tbls[1]] = t1
+	l.conflictTables = map[string]map[string]map[string]schemacmp.Table{
+		source: {
+			db: {tbls[0]: t2},
+		},
+	}
+
+	joined, err = l.joinNormalTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t1)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	joined, err = l.joinFinalTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t1)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+	joined, err = l.joinConflictTables()
+	c.Assert(err, IsNil)
+	cmp, err = joined.Compare(t2)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+
+	l.tables[source][db][tbls[1]] = t2
+	_, err = l.joinNormalTables()
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, ".*incompatible mysql type.*")
+
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+}
+
+func (t *testLock) TestAddRemoveConflictTable(c *C) {
+	var (
+		source       = "source"
+		schema       = "schema"
+		table1       = "table1"
+		table2       = "table2"
+		table3       = "table3"
+		p            = parser.New()
+		se           = mock.NewContext()
+		tblID  int64 = 111
+		ti0          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int)`)
+		t0           = schemacmp.Encode(ti0)
+	)
+	l := &Lock{
+		conflictTables: make(map[string]map[string]map[string]schemacmp.Table),
+	}
+	c.Assert(l.conflictTables, HasLen, 0)
+
+	l.addConflictTable(source, schema, table1, t0)
+	c.Assert(l.conflictTables, HasLen, 1)
+	c.Assert(l.conflictTables[source], HasLen, 1)
+	c.Assert(l.conflictTables[source][schema], HasLen, 1)
+	tb := l.conflictTables[source][schema][table1]
+	cmp, err := tb.Compare(t0)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+
+	l.addConflictTable(source, schema, table1, t0)
+	c.Assert(l.conflictTables, HasLen, 1)
+	c.Assert(l.conflictTables[source], HasLen, 1)
+	c.Assert(l.conflictTables[source][schema], HasLen, 1)
+
+	l.addConflictTable(source, schema, table2, t0)
+	c.Assert(l.conflictTables, HasLen, 1)
+	c.Assert(l.conflictTables[source], HasLen, 1)
+	c.Assert(l.conflictTables[source][schema], HasLen, 2)
+	tb = l.conflictTables[source][schema][table2]
+	cmp, err = tb.Compare(t0)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+
+	l.removeConflictTable(source, schema, table3)
+	c.Assert(l.conflictTables[source][schema], HasLen, 2)
+
+	l.removeConflictTable(source, schema, table1)
+	c.Assert(l.conflictTables[source][schema], HasLen, 1)
+	tb = l.conflictTables[source][schema][table2]
+	cmp, err = tb.Compare(t0)
+	c.Assert(err, IsNil)
+	c.Assert(cmp, Equals, 0)
+
+	l.removeConflictTable(source, schema, table2)
+	c.Assert(l.conflictTables, HasLen, 0)
+}
+
+func (t *testLock) TestAllTableSmallerLarger(c *C) {
+	var (
+		source       = "source"
+		schema       = "schema"
+		table1       = "table1"
+		table2       = "table2"
+		p            = parser.New()
+		se           = mock.NewContext()
+		tblID  int64 = 111
+		ti0          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int)`)
+		ti1          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, new_col int)`)
+		ti2          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, new_col varchar(4))`)
+		ti3          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, new_col varchar(4))`)
+		ti4          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, new_col2 varchar(4))`)
+		ti5          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id varchar(4) PRIMARY KEY, new_col int)`)
+		ti6          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, new_col int)`)
+		ti7          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, new_col varchar(4))`)
+		ti8          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col int, col2 int not null)`)
+		ti9          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (a INT PRIMARY KEY, new_col int)`)
+		t0           = schemacmp.Encode(ti0)
+		t1           = schemacmp.Encode(ti1)
+		t2           = schemacmp.Encode(ti2)
+		t3           = schemacmp.Encode(ti3)
+		t4           = schemacmp.Encode(ti4)
+		t5           = schemacmp.Encode(ti5)
+		t6           = schemacmp.Encode(ti6)
+		t7           = schemacmp.Encode(ti7)
+		t8           = schemacmp.Encode(ti8)
+		t9           = schemacmp.Encode(ti9)
+	)
+	l := &Lock{
+		tables: map[string]map[string]map[string]schemacmp.Table{
+			source: {
+				schema: {table1: t0, table2: t0},
+			},
+		},
+		finalTables: map[string]map[string]map[string]schemacmp.Table{
+			source: {
+				schema: {table1: t0, table2: t0},
+			},
+		},
+		conflictTables: make(map[string]map[string]map[string]schemacmp.Table),
+	}
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+
+	// rename table
+	l.addConflictTable(source, schema, table1, t1)
+	l.finalTables[source][schema][table1] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t1)
+	l.finalTables[source][schema][table2] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+
+	// modify column
+	l.addConflictTable(source, schema, table1, t2)
+	l.finalTables[source][schema][table1] = t2
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t2)
+	l.finalTables[source][schema][table2] = t2
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t2)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t2)
+
+	// different rename
+	l.addConflictTable(source, schema, table1, t3)
+	l.finalTables[source][schema][table1] = t3
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t4)
+	l.finalTables[source][schema][table2] = t4
+	c.Assert(l.allConflictTableSmaller(), IsFalse)
+	c.Assert(l.allConflictTableLarger(), IsFalse)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	// reset
+	l.finalTables[source][schema][table1] = t1
+	l.finalTables[source][schema][table2] = t1
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t1)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t1)
+
+	// different modify
+	l.addConflictTable(source, schema, table1, t2)
+	l.finalTables[source][schema][table1] = t2
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t5)
+	l.finalTables[source][schema][table2] = t5
+	c.Assert(l.allConflictTableSmaller(), IsFalse)
+	c.Assert(l.allConflictTableLarger(), IsFalse)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	// reset
+	l.finalTables[source][schema][table1] = t1
+	l.finalTables[source][schema][table2] = t1
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t1)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t1)
+
+	// one table rename, one table modify
+	l.addConflictTable(source, schema, table1, t4)
+	l.finalTables[source][schema][table1] = t4
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t5)
+	l.finalTables[source][schema][table2] = t5
+	c.Assert(l.allConflictTableSmaller(), IsFalse)
+	c.Assert(l.allConflictTableLarger(), IsFalse)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	// reset
+	l.finalTables[source][schema][table1] = t0
+	l.finalTables[source][schema][table2] = t0
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+
+	// one table rename, one table add and drop
+	l.addConflictTable(source, schema, table1, t1)
+	l.finalTables[source][schema][table1] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.finalTables[source][schema][table2] = t6
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	l.finalTables[source][schema][table2] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.finalTables[source][schema][table1] = t0
+	l.finalTables[source][schema][table2] = t0
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+
+	// one table modify, one table add and drop
+	l.addConflictTable(source, schema, table1, t2)
+	l.finalTables[source][schema][table1] = t2
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.finalTables[source][schema][table2] = t7
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	l.finalTables[source][schema][table2] = t2
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.finalTables[source][schema][table1] = t0
+	l.finalTables[source][schema][table2] = t0
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+
+	// not null no default
+	l.addConflictTable(source, schema, table1, t8)
+	l.finalTables[source][schema][table1] = t8
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	l.addConflictTable(source, schema, table2, t8)
+	l.finalTables[source][schema][table2] = t8
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.finalTables[source][schema][table1] = t0
+	l.finalTables[source][schema][table2] = t0
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+
+	// multiple rename
+	// tb1: rename col to new_col
+	l.addConflictTable(source, schema, table1, t1)
+	l.finalTables[source][schema][table1] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	// tb2: rename col to new_col
+	l.addConflictTable(source, schema, table2, t1)
+	l.finalTables[source][schema][table2] = t1
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	l.resolveTables()
+	// tb1: rename id to a
+	l.addConflictTable(source, schema, table1, t9)
+	l.finalTables[source][schema][table1] = t9
+	c.Assert(l.noConflictWithNormalTables(source, schema, table1, t1), IsFalse)
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsFalse)
+	c.Assert(l.allFinalTableLarger(), IsFalse)
+	// tb2: rename col to new_col (idempotent)
+	l.tables[source][schema][table2] = t0
+	l.addConflictTable(source, schema, table2, t1)
+	l.finalTables[source][schema][table2] = t1
+	c.Assert(l.noConflictWithNormalTables(source, schema, table2, t1), IsTrue)
+	l.removeConflictTable(source, schema, table2)
+	l.tables[source][schema][table2] = t1
+	// tb2: rename id to a
+	l.addConflictTable(source, schema, table2, t9)
+	l.finalTables[source][schema][table2] = t9
+	c.Assert(l.noConflictWithNormalTables(source, schema, table2, t9), IsFalse)
+	c.Assert(l.allConflictTableSmaller(), IsTrue)
+	c.Assert(l.allConflictTableLarger(), IsTrue)
+	c.Assert(l.allFinalTableSmaller(), IsTrue)
+	c.Assert(l.allFinalTableLarger(), IsTrue)
+	// reset
+	l.finalTables[source][schema][table1] = t0
+	l.finalTables[source][schema][table2] = t0
+	l.resolveTables()
+	c.Assert(l.conflictTables, HasLen, 0)
+	c.Assert(l.tables, DeepEquals, l.finalTables)
+	c.Assert(l.tables[source][schema], HasLen, 2)
+	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
+	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+}
+
+func checkRedirectOp(c *C, task, source, schema, table string) bool {
+	ops, _, err := GetAllOperations(etcdTestCli)
+	c.Assert(err, IsNil)
+	if _, ok := ops[task]; !ok {
+		return false
+	}
+	if _, ok := ops[task][source]; !ok {
+		return false
+	}
+	if _, ok := ops[task][source][schema]; !ok {
+		return false
+	}
+	op, ok := ops[task][source][schema][table]
+	if !ok {
+		return false
+	}
+	return op.ConflictStage == ConflictResolved
+}
+
+func (t *testLock) TestTrySyncForOneDDL(c *C) {
+	var (
+		ID               = "test-`foo`.`bar`"
+		task             = "test"
+		source           = "source"
+		schema           = "schema"
+		downSchema       = "downSchema"
+		downTable        = "downTable"
+		table1           = "table1"
+		table2           = "table2"
+		p                = parser.New()
+		se               = mock.NewContext()
+		tblID      int64 = 111
+		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col1 int)`)
+		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col1 int, col2 int)`)
+		ti2              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		ti3              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col1 int, col3 int)`)
+		ti4              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col2 int)`)
+		ti5              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col3 int)`)
+		ti6              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col3 varchar(4))`)
+		ti7              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col3 int)`)
+		ti8              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col3 varchar(4), col4 int not null)`)
+		ti9              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col2 varchar(4), col4 int not null)`)
+		ti10             = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, col3 int, col4 int not null)`)
+		t0               = schemacmp.Encode(ti0)
+		t1               = schemacmp.Encode(ti1)
+		t2               = schemacmp.Encode(ti2)
+		t3               = schemacmp.Encode(ti3)
+		t4               = schemacmp.Encode(ti4)
+		t5               = schemacmp.Encode(ti5)
+		t6               = schemacmp.Encode(ti6)
+		t7               = schemacmp.Encode(ti7)
+		t8               = schemacmp.Encode(ti8)
+		t9               = schemacmp.Encode(ti9)
+		t10              = schemacmp.Encode(ti10)
+		tables           = map[string]map[string]struct{}{
+			schema: {table1: struct{}{}, table2: struct{}{}},
+		}
+		tts = []TargetTable{
+			newTargetTable(task, source, downSchema, downTable, tables),
+		}
+		l = NewLock(etcdTestCli, ID, task, downSchema, downTable, t0, tts, nil)
+	)
+
+	// check create table statement
+	schemaChanged, conflictStage := l.trySyncForOneDDL(source, schema, table1, t0, t0)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check alter table add column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t0, t1)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check alter table drop column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t0, t2)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check table rename column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t1, t3)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
+
+	// check other table add column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t2, t4)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check all table rename column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t4, t5)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+	// table1 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table1), IsTrue)
+
+	// check one table modify column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t5, t6)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
+
+	// check other table drop column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t3, t7)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check all table modify column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t7, t6)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+	// table2 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table2), IsTrue)
+
+	// check add column not null no default
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
+	// check idempotent.
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t6, t8)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
+
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+	// table1 redirect
+	c.Assert(checkRedirectOp(c, task, source, schema, table2), IsTrue)
+	// check idempotent.
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t6, t8)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check multiple conflict DDL
+	// tb1 rename column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t8, t9)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictSkipWaitRedirect)
+	// tb2 modify column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table2, t8, t10)
+	c.Assert(schemaChanged, IsFalse)
+	c.Assert(conflictStage, Equals, ConflictDetected)
 }

@@ -180,8 +180,7 @@ func TestMessageClientBasics(t *testing.T) {
 	sender.AssertExpectations(t)
 
 	// Test point 7: Interrupt the connection
-	grpcStream.ExpectedCalls = nil
-	grpcStream.Calls = nil
+	grpcStream.ResetMock()
 
 	sender.ExpectedCalls = nil
 	sender.Calls = nil
@@ -320,6 +319,8 @@ func TestClientSendAnomalies(t *testing.T) {
 	})
 
 	grpcStream.On("Recv").Return(nil, nil)
+	sender.On("Flush").Return(nil)
+	sender.On("Append", mock.Anything).Return(nil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

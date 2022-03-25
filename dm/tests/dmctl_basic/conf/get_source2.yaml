@@ -1,3 +1,4 @@
+enable: true
 enable-gtid: true
 auto-fix-gtid: false
 relay-dir: /tmp/dm_test/dmctl_basic/worker2/relay_log

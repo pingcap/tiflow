@@ -40,6 +40,7 @@ func NewActorNode(parentNode AsyncMessageHolder, messageProcessor AsyncMessagePr
 //  or message handling is blocking
 // only one message will be cached
 func (n *ActorNode) TryRun(ctx context.Context) error {
+	processedCount := 0
 	for {
 		// batch?
 		if n.messageStash == nil {
@@ -54,9 +55,16 @@ func (n *ActorNode) TryRun(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if ok {
-			n.messageStash = nil
-		} else {
+		// node is blocked
+		if !ok {
+			return nil
+		}
+
+		n.messageStash = nil
+		processedCount++
+		// processed too many messages may consume more than 1 second,
+		// return here to allow actor system poll other tables, and avoid dead loop
+		if processedCount >= defaultOutputChannelSize {
 			return nil
 		}
 	}
@@ -72,14 +80,14 @@ type AsyncMessageHolder interface {
 	TryGetDataMessage() *pipeline.Message
 }
 
-type AsyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
+type asyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
 
-func (fn AsyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (fn asyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
 	return fn(ctx, msg)
 }
 
-type AsyncMessageHolderFunc func() *pipeline.Message
+type asyncMessageHolderFunc func() *pipeline.Message
 
-func (fn AsyncMessageHolderFunc) TryGetDataMessage() *pipeline.Message {
+func (fn asyncMessageHolderFunc) TryGetDataMessage() *pipeline.Message {
 	return fn()
 }

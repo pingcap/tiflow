@@ -22,11 +22,12 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 
+	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -97,11 +98,11 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	expectedSQL := "ALTER TABLE `schemadb`.`ep_edu_course_message_auto_reply` MODIFY COLUMN `answer` JSON COMMENT '回复的内容-格式为list，有两个字段：\"answerType\"：//''发送客服消息类型：1-文本消息，2-图片，3-图文链接''；  answer：回复内容'"
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestCommentQuote")))
-	ec := &eventContext{
+	testEC := &eventContext{
 		tctx: tctx,
 	}
 	qec := &queryEventContext{
-		eventContext: ec,
+		eventContext: testEC,
 		ddlSchema:    "schemadb",
 		originSQL:    sql,
 		p:            parser.New(),
@@ -220,7 +221,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	c.Assert(err, IsNil)
 
-	syncer.tableRouter, err = router.NewTableRouter(false, []*router.TableRule{
+	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
 		{
 			SchemaPattern: "s1",
 			TargetSchema:  "xs1",
@@ -228,14 +229,14 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	ec := &eventContext{
+	testEC := &eventContext{
 		tctx: tctx,
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	syncer.idAndCollationMap = map[int]string{46: "utf8mb4_bin"}
 	for i, sql := range sqls {
 		qec := &queryEventContext{
-			eventContext:    ec,
+			eventContext:    testEC,
 			ddlSchema:       "test",
 			originSQL:       sql,
 			appliedDDLs:     make([]string, 0),
@@ -443,7 +444,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveOnlineDDL")))
 	p := parser.New()
 
-	ec := &eventContext{tctx: tctx}
+	testEC := &eventContext{tctx: tctx}
 	cluster, err := conn.NewCluster()
 	c.Assert(err, IsNil)
 	c.Assert(cluster.Start(), IsNil)
@@ -463,7 +464,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		c.Assert(plugin.Clear(tctx), IsNil)
 		c.Assert(syncer.genRouter(), IsNil)
 		qec = &queryEventContext{
-			eventContext: ec,
+			eventContext: testEC,
 			ddlSchema:    "test",
 			appliedDDLs:  make([]string, 0),
 			p:            p,

@@ -16,6 +16,7 @@ package redo
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -36,12 +37,17 @@ func TestRowRedoConvert(t *testing.T) {
 		}, {
 			Name:  "a2",
 			Type:  mysql.TypeVarchar,
-			Value: "char",
+			Value: []byte("char"),
 		}, {
 			Name:  "a3",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 			Value: int64(1),
+		}, {
+			Name:    "a4",
+			Type:    mysql.TypeTinyBlob,
+			Charset: charset.CharsetGBK,
+			Value:   []byte("你好"),
 		}, nil},
 		Columns: []*model.Column{{
 			Name:  "a1",
@@ -51,18 +57,23 @@ func TestRowRedoConvert(t *testing.T) {
 		}, {
 			Name:  "a2",
 			Type:  mysql.TypeVarchar,
-			Value: "char-updated",
+			Value: []byte("char-updated"),
 		}, {
 			Name:  "a3",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 			Value: int64(2),
+		}, {
+			Name:    "a4",
+			Type:    mysql.TypeTinyBlob,
+			Charset: charset.CharsetGBK,
+			Value:   []byte("世界"),
 		}, nil},
 		IndexColumns: [][]int{{1, 3}},
 	}
 	rowRedo := RowToRedo(row)
-	require.Equal(t, 4, len(rowRedo.PreColumns))
-	require.Equal(t, 4, len(rowRedo.Columns))
+	require.Equal(t, 5, len(rowRedo.PreColumns))
+	require.Equal(t, 5, len(rowRedo.Columns))
 
 	redoLog := &model.RedoLog{
 		RedoRow: rowRedo,

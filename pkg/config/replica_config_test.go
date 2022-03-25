@@ -77,9 +77,9 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.Mounter.WorkerNum = 3
 	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.DispatchRules = []*DispatchRule{
-		{Matcher: []string{"a.b"}, Dispatcher: "r1"},
-		{Matcher: []string{"a.c"}, Dispatcher: "r2"},
-		{Matcher: []string{"a.d"}, Dispatcher: "r2"},
+		{Matcher: []string{"a.b"}, PartitionRule: "r1"},
+		{Matcher: []string{"a.c"}, PartitionRule: "r2"},
+		{Matcher: []string{"a.d"}, PartitionRule: "r2"},
 	}
 	require.Equal(t, conf, conf2)
 }

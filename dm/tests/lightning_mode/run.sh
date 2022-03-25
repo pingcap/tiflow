@@ -23,7 +23,7 @@ function run() {
 	check_contains 'Query OK, 3 rows affected'
 
 	# start DM worker and master
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml

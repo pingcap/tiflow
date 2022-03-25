@@ -36,7 +36,7 @@ var _ = Suite(&testOptimist{})
 
 // clear keys in etcd test cluster.
 func clearOptimistTestSourceInfoOperation(c *C) {
-	c.Assert(optimism.ClearTestInfoOperationSchema(etcdTestCli), IsNil)
+	c.Assert(optimism.ClearTestInfoOperationColumn(etcdTestCli), IsNil)
 }
 
 func createTableInfo(c *C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
@@ -95,6 +95,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tables := o.Tables()
+	c.Assert(len(tables), Equals, 0)
+
 	// init with some source tables.
 	err := o.Init(sourceTables)
 	c.Assert(err, IsNil)
@@ -103,6 +106,9 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(stm, HasLen, 1)
 	c.Assert(stm[task], HasLen, 1)
 	c.Assert(stm[task][source], DeepEquals, o.tables)
+
+	tables = o.Tables()
+	c.Assert(len(tables), Equals, 4)
 
 	// no info and operation in pending.
 	c.Assert(o.PendingInfo(), IsNil)
@@ -127,6 +133,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 	// wait for the lock operation.
 	op1c, err := o.GetOperation(ctx, info1, rev1)
 	c.Assert(err, IsNil)
+	op1.Revision = rev2
 	c.Assert(op1c, DeepEquals, op1)
 
 	// have operation in pending.
@@ -156,6 +163,8 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(opm[task], HasLen, 1)
 	c.Assert(opm[task][source], HasLen, 1)
 	c.Assert(opm[task][source][op1.UpSchema], HasLen, 1)
+	// Revision is in DoneOperation, skip this check
+	opc.Revision = opm[task][source][op1.UpSchema][op1.UpTable].Revision
 	c.Assert(opm[task][source][op1.UpSchema][op1.UpTable], DeepEquals, opc)
 
 	// no info and operation in pending now.
@@ -163,19 +172,12 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(o.PendingOperation(), IsNil)
 
 	// handle `CREATE TABLE`.
-	rev3, err := o.PutInfoAddTable(infoCreate)
+	rev3, err := o.AddTable(infoCreate)
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Greater, rev2)
-	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, IsNil)
-	infoCreateWithVer := infoCreate
-	infoCreateWithVer.Version = 1
-	infoCreateWithVer.Revision = rev3
-	c.Assert(ifm[task][source][infoCreate.UpSchema][infoCreate.UpTable], DeepEquals, infoCreateWithVer)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], HasKey, infoCreate.UpTable)
 
 	// handle `DROP TABLE`.
-	rev4, err := o.DeleteInfoRemoveTable(infoDrop)
+	rev4, err := o.RemoveTable(infoDrop)
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Greater, rev3)
 	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
@@ -199,49 +201,11 @@ func (t *testOptimist) TestOptimist(c *C) {
 	_, err = o.GetOperation(ctx, info2, rev5)
 	c.Assert(err, IsNil)
 	c.Assert(o.PendingOperation(), NotNil)
+	op2.Revision = rev6
 	c.Assert(*o.PendingOperation(), DeepEquals, op2)
 
 	// reset the optimist.
 	o.Reset()
 	c.Assert(o.PendingInfo(), IsNil)
 	c.Assert(o.PendingOperation(), IsNil)
-}
-
-func (t *testOptimist) TestGetTableInfo(c *C) {
-	defer clearOptimistTestSourceInfoOperation(c)
-
-	var (
-		task   = "test-get-table-info"
-		source = "mysql-replica-1"
-		logger = log.L()
-		o      = NewOptimist(&logger, etcdTestCli, task, source)
-
-		downSchema       = "foo"
-		downTable        = "bar"
-		p                = parser.New()
-		se               = mock.NewContext()
-		tblID      int64 = 111
-		is               = optimism.NewInitSchema(task, downSchema, downTable,
-			createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`))
-	)
-
-	// no table info exist now
-	ti, err := o.GetTableInfo(downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(ti, IsNil)
-
-	// put the table schema.
-	_, putted, err := optimism.PutInitSchemaIfNotExist(etcdTestCli, is)
-	c.Assert(err, IsNil)
-	c.Assert(putted, IsTrue)
-
-	// can get the table info now.
-	ti, err = o.GetTableInfo(downSchema, downTable)
-	c.Assert(err, IsNil)
-	c.Assert(ti, DeepEquals, is.TableInfo)
-
-	// no table info for database.
-	ti, err = o.GetTableInfo(downSchema, "")
-	c.Assert(err, IsNil)
-	c.Assert(ti, IsNil)
 }

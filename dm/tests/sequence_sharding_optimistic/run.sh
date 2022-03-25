@@ -64,9 +64,9 @@ run() {
 		"query-status $task_name" \
 		"\"stage\": \"Paused\"" 2
 
-	# try to get schema for the table, but can't get because no DDL/DML replicated yet.
+	# try to get schema for the table, table exists for optimistic.
 	curl -X PUT ${API_URL} -d '{"op":1, "task":"sequence_sharding_optimistic", "sources": ["mysql-replica-01"], "database":"sharding_seq_opt", "table":"t1"}' >${WORK_DIR}/get_schema.log
-	check_log_contains ${WORK_DIR}/get_schema.log "Table 'sharding_seq_opt.t1' doesn't exist" 1
+	check_log_contains ${WORK_DIR}/get_schema.log 'CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c1` varchar(20) DEFAULT NULL, `c2` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`) .*) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' 1
 
 	# resume task manually.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -89,10 +89,6 @@ run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"shard-ddl-lock unlock non-exist-task-\`test_db\`.\`test_table\`" \
 		"lock with ID non-exist-task-\`test_db\`.\`test_table\` not found" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"shard-ddl-lock unlock $task_name-\`shard_db\`.\`shard_table\`" \
-		"\`unlock-ddl-lock\` is only supported in pessimistic shard mode currently" 1
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2

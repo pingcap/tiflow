@@ -16,9 +16,10 @@ package errorutil
 import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbterror"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
 // IsIgnorableMySQLDDLError is used to check what error can be ignored
@@ -38,9 +39,31 @@ func IsIgnorableMySQLDDLError(err error) bool {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(),
+		infoschema.ErrKeyNotExists.Code(), dbterror.ErrCantDropFieldOrKey.Code(),
 		mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
 		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsRetryableEtcdError is used to check what error can be retried.
+func IsRetryableEtcdError(err error) bool {
+	etcdErr := errors.Cause(err)
+
+	switch etcdErr {
+	// Etcd ResourceExhausted errors, may recover after some time
+	case v3rpc.ErrNoSpace, v3rpc.ErrTooManyRequests:
+		return true
+	// Etcd Unavailable errors, may be available after some time
+	// https://github.com/etcd-io/etcd/pull/9934/files#diff-6d8785d0c9eaf96bc3e2b29c36493c04R162-R167
+	// ErrStopped:
+	// one of the etcd nodes stopped from failure injection
+	// ErrNotCapable:
+	// capability check has not been done (in the beginning)
+	case v3rpc.ErrNoLeader, v3rpc.ErrLeaderChanged, v3rpc.ErrNotCapable, v3rpc.ErrStopped, v3rpc.ErrTimeout,
+		v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
 		return true
 	default:
 		return false

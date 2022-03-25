@@ -6,14 +6,19 @@ import {
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux'
 
 import { api } from '~/models/api'
-import { message } from '~/uikit'
+import { globalSlice } from '~/models/global'
+import { message } from '~/uikit/message'
 
 const rtkQueryErrorLogger: Middleware = () => next => action => {
   if (isRejectedWithValue(action)) {
     console.error('RTKQ error caught: ', action)
     // insert your own error handler here
     message.error({
-      content: action.payload?.data?.error_msg ?? 'Oops, somthing went wrong',
+      content:
+        action.payload?.data?.error_msg ??
+        action.payload?.data?.error ??
+        'Oops, somthing went wrong',
+      duration: 15,
     })
   }
 
@@ -23,6 +28,7 @@ const rtkQueryErrorLogger: Middleware = () => next => action => {
 export const store = configureStore({
   reducer: {
     [api.reducerPath]: api.reducer,
+    globals: globalSlice.reducer,
   },
   middleware: getDefaultMiddleware => {
     const middlewares = getDefaultMiddleware({
@@ -45,4 +51,6 @@ export const useAppDispatch = () => useDispatch<AppDispatch>()
 
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector
 
-export const actions = {}
+export const actions = {
+  ...globalSlice.actions,
+}

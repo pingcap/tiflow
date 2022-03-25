@@ -154,7 +154,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# third, set schema to be same with upstream
 	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush --sync" \
+		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush" \
 		"\"result\": true" 2
 
 	# fourth, resume-task. don't check "result: true" here, because worker may run quickly and meet the error from tb2
@@ -173,7 +173,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	# This may only work for a "rename ddl"
 	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema2.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb2} ${WORK_DIR}/schema2.sql --flush --sync" \
+		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb2} ${WORK_DIR}/schema2.sql --flush" \
 		"\"result\": true" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -309,11 +309,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 
 	restart_master
@@ -329,11 +331,13 @@ function DM_RestartMaster_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"shard-ddl-lock" \
 			'mysql-replica-01-`shardddl1`.`tb1`' 1 \
-			'mysql-replica-02-`shardddl1`.`tb1`' 1
+			'mysql-replica-02-`shardddl1`.`tb1`' 2 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `c` TEXT' 1
 	fi
 }
 
@@ -381,6 +385,7 @@ function DM_UpdateBARule_CASE() {
 
 	# source2 db2.tb1 do a unsupported DDL
 	run_sql_source2 "alter table ${shardddl2}.${tb1} rename column id to new_id;"
+	# TODO: fix this after DM worker supports redirect
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"because schema conflict detected" 1
@@ -394,9 +399,16 @@ function DM_UpdateBARule_CASE() {
 	sed -i 's/do-dbs: \["shardddl1","shardddl2"\]/do-dbs: \["shardddl1"\]/g' $WORK_DIR/task.yaml
 	echo 'ignore-checking-items: ["schema_of_shard_tables"]' >>$WORK_DIR/task.yaml
 
+	# source1: db1.tb1(id,new_col1,new_col3)
+	# source2: db1.tb1(id)
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/task.yaml" \
 		"\"result\": true" 3
+
+	# no lock exist when task begin
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"show-ddl-locks" \
+		"no DDL lock exists" 1
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14);"
@@ -406,7 +418,7 @@ function DM_UpdateBARule_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"show-ddl-locks" \
-		"\"ID\": \"test-\`shardddl\`.\`tb\`\"" 1
+		"no DDL lock exists" 1
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column new_col1"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col3 int"
@@ -703,10 +715,10 @@ function DM_MULTIPLE_ROWS_CASE() {
 
 	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb} where a>100 and a<=200;" "count(1): 100"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
-	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=insert\]' | wc -l)
-	replaceMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=replace\]' | wc -l)
-	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op="insert on duplicate update"\]' | wc -l)
-	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=delete\]' | wc -l)
+	insertMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLInsert\]' | wc -l)
+	replaceMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLReplace\]' | wc -l)
+	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLInsertOnDuplicateUpdate\]' | wc -l)
+	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLDelete\]' | wc -l)
 	echo $insertMergeCnt $replaceMergeCnt $updateMergeCnt $deleteMergeCnt
 	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 || "$replaceMergeCnt" -le 5 ]]; then
 		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, replaceMergeCnt: $replaceMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
@@ -783,6 +795,32 @@ function DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA() {
 		"clean_table" ""
 }
 
+function DM_DML_EXECUTE_ERROR_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values(1,1)"
+	run_sql_source1 "update ${shardddl1}.${tb1} set b=b+1 where a=1"
+
+	check_log_contain_with_retry "length of queries not equals length of jobs" $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"RawCause\": \"ErrorOnLastDML\"" 1 \
+		"Paused" 1
+}
+
+function DM_DML_EXECUTE_ERROR() {
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ErrorOnLastDML=return()'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_case DML_EXECUTE_ERROR "single-source-no-sharding" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -799,6 +837,7 @@ function run() {
 	DM_RestartMaster
 	DM_ADD_DROP_COLUMNS
 	DM_COLUMN_INDEX
+	DM_DML_EXECUTE_ERROR
 	start=1
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do

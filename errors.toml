@@ -103,7 +103,7 @@ campaign owner failed
 
 ["CDC:ErrCaptureNotExist"]
 error = '''
-capture not exists, key: %s
+capture not exists, %s
 '''
 
 ["CDC:ErrCaptureRegister"]
@@ -123,12 +123,12 @@ capture suicide
 
 ["CDC:ErrChangeFeedAlreadyExists"]
 error = '''
-changefeed already exists, key: %s
+changefeed already exists, %s
 '''
 
 ["CDC:ErrChangeFeedNotExists"]
 error = '''
-changefeed not exists, key: %s
+changefeed not exists, %s
 '''
 
 ["CDC:ErrChangefeedAbnormalState"]
@@ -143,7 +143,7 @@ changefeed update error: %s
 
 ["CDC:ErrCheckClusterVersionFromPD"]
 error = '''
-failed to request PD
+failed to request PD %s, please try again later
 '''
 
 ["CDC:ErrCheckDataDirSatisfied"]
@@ -348,7 +348,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaCreateTopic"]
+error = '''
+kafka create topic failed
+'''
+
 ["CDC:ErrKafkaFlushUnfinished"]
 error = '''
 flush not finished before producer close
@@ -456,6 +461,11 @@ error = '''
 kafka send message failed
 '''
 
+["CDC:ErrKafkaTopicExprInvalid"]
+error = '''
+invalid topic expression
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
@@ -481,9 +491,19 @@ error = '''
 locate region by id
 '''
 
+["CDC:ErrMQCodecInvalidConfig"]
+error = '''
+MQ Codec invalid config
+'''
+
 ["CDC:ErrMQSinkUnknownProtocol"]
 error = '''
 unknown '%s' protocol for Message Queue sink
+'''
+
+["CDC:ErrMQWorkerClosed"]
+error = '''
+MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -648,7 +668,7 @@ peer-to-peer message client has failed permanently, no need to reconnect: %s
 
 ["CDC:ErrPeerMessageDataLost"]
 error = '''
-peer-to-peer message data lost, topic: %s, seq: %s
+peer-to-peer message data lost, topic: %s, seq: %d
 '''
 
 ["CDC:ErrPeerMessageDecodeError"]
@@ -729,11 +749,6 @@ pending region cancelled due to stream disconnecting
 ["CDC:ErrPipelineTryAgain"]
 error = '''
 pipeline is full, please try again. Internal use only, report a bug if seen externally
-'''
-
-["CDC:ErrPrepareAvroFailed"]
-error = '''
-prepare avro failed
 '''
 
 ["CDC:ErrPrewriteNotMatch"]
@@ -978,12 +993,12 @@ fail to create changefeed because target-ts %d is earlier than start-ts %d
 
 ["CDC:ErrTaskPositionNotExists"]
 error = '''
-task position not exists, key: %s
+task position not exists, %s
 '''
 
 ["CDC:ErrTaskStatusNotExists"]
 error = '''
-task status not exists, key: %s
+task status not exists, %s
 '''
 
 ["CDC:ErrTiKVEventFeed"]
@@ -1014,6 +1029,11 @@ unified sorter backend is terminating
 ["CDC:ErrUnifiedSorterIOError"]
 error = '''
 unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
+'''
+
+["CDC:ErrUnimplemented"]
+error = '''
+unimplemented %s
 '''
 
 ["CDC:ErrUnknownKVEventType"]
@@ -1083,7 +1103,7 @@ file lock conflict: %s
 
 ["ErrRequestForwardErr"]
 error = '''
-request forward error, an request can only forward to owner one time 
+request forward error, an request can only forward to owner one time
 '''
 
 ["ErrSortDirLockError"]

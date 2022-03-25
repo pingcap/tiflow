@@ -30,7 +30,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
@@ -55,7 +55,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsFull, HasLen, 2)
 	_, ok := unitsFull[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsFull[1].(*loader.Loader)
+	_, ok = unitsFull[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 
 	cfg.Mode = config.ModeIncrement
@@ -69,7 +69,7 @@ func (t *testSubTask) TestCreateUnits(c *C) {
 	c.Assert(unitsAll, HasLen, 3)
 	_, ok = unitsAll[0].(*dumpling.Dumpling)
 	c.Assert(ok, IsTrue)
-	_, ok = unitsAll[1].(*loader.Loader)
+	_, ok = unitsAll[1].(*loader.LightningLoader)
 	c.Assert(ok, IsTrue)
 	_, ok = unitsAll[2].(*syncer.Syncer)
 	c.Assert(ok, IsTrue)
@@ -117,6 +117,8 @@ func (m *MockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
 }
 
 func (m *MockUnit) Close() {}
+
+func (m *MockUnit) Kill() {}
 
 func (m MockUnit) Pause() {}
 
@@ -180,7 +182,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return nil
 	}
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Paused)
 	c.Assert(strings.Contains(st.Result().Errors[0].String(), "has no dm units for mode"), IsTrue)
 
@@ -190,7 +192,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -301,7 +303,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Running, nil)
+	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Running)
 	c.Assert(st.CurrUnit(), Equals, mockDumper)
 	c.Assert(st.Result(), IsNil)
@@ -401,7 +403,7 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
 
-	st.Run(pb.Stage_Finished, nil)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.CurrUnit(), Equals, mockLoader)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, HasLen, 0)
@@ -409,9 +411,11 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *C) {
 
 func (t *testSubTask) TestSubtaskWithStage(c *C) {
 	cfg := &config.SubTaskConfig{
-		Name: "testSubtaskScene",
-		Mode: config.ModeFull,
+		SourceID: "source",
+		Name:     "testSubtaskScene",
+		Mode:     config.ModeFull,
 	}
+	c.Assert(cfg.Adjust(false), IsNil)
 
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	c.Assert(st.Stage(), DeepEquals, pb.Stage_Paused)
@@ -450,7 +454,7 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
-	st.Run(pb.Stage_Finished, nil)
+	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
 	c.Assert(st.Stage(), Equals, pb.Stage_Finished)
 	c.Assert(st.CurrUnit(), Equals, nil)
 	c.Assert(st.Result(), IsNil)

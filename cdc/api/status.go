@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // status of cdc server
@@ -60,9 +60,10 @@ func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, 
 }
 
 func (h *statusAPI) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
-	h.capture.WriteDebugInfo(w)
+	ctx := req.Context()
+	h.capture.WriteDebugInfo(ctx, w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	h.writeEtcdInfo(req.Context(), h.capture.EtcdClient, w)
+	h.writeEtcdInfo(ctx, h.capture.EtcdClient, w)
 }
 
 func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {

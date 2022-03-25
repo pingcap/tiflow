@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/rand"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -39,7 +39,9 @@ import (
 )
 
 const (
-	defaultOutputChanSize = 128000
+	// The buffer size of input channel of each mounter worker.
+	// 16 is large enough, because a channel exclusively belongs to a worker.
+	defaultInputChanSize = 16
 )
 
 type baseKVEntry struct {
@@ -67,7 +69,11 @@ type rowKVEntry struct {
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
-	Input() chan<- *model.PolymorphicEvent
+	// AddEntry accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
+	// decodes `RawKVEntry` into `RowChangedEvent`.
+	// It also close `model.PolymorphicEvent.finished` channel to notify callers
+	// that decoding is done.
+	AddEntry(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounterImpl struct {
@@ -76,6 +82,9 @@ type mounterImpl struct {
 	tz               *time.Location
 	workerNum        int
 	enableOldValue   bool
+
+	// index is an atomic variable to dispatch input events to workers.
+	index int64
 }
 
 // NewMounter creates a mounter
@@ -85,7 +94,7 @@ func NewMounter(schemaStorage SchemaStorage, workerNum int, enableOldValue bool)
 	}
 	chs := make([]chan *model.PolymorphicEvent, workerNum)
 	for i := 0; i < workerNum; i++ {
-		chs[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
+		chs[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
 	}
 	return &mounterImpl{
 		schemaStorage:    schemaStorage,
@@ -100,27 +109,42 @@ const defaultMounterWorkerNum = 32
 func (m *mounterImpl) Run(ctx context.Context) error {
 	m.tz = util.TimezoneFromCtx(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
-	errg.Go(func() error {
-		m.collectMetrics(ctx)
-		return nil
-	})
 	for i := 0; i < m.workerNum; i++ {
 		index := i
 		errg.Go(func() error {
 			return m.codecWorker(ctx, index)
 		})
 	}
-	return errg.Wait()
+
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(changefeedID)
+
+	flushMetricsInterval := 15 * time.Second
+	timer := time.NewTimer(flushMetricsInterval)
+	defer timer.Stop()
+	for {
+		select {
+		// ctx.Done returns when parent ctx done or error occurs in errg.
+		case <-ctx.Done():
+			return errg.Wait()
+		case <-timer.C:
+			chSize := 0
+			for _, ch := range m.rawRowChangedChs {
+				chSize += len(ch)
+			}
+			metricMounterInputChanSize.Set(float64(chSize))
+			timer.Reset(flushMetricsInterval)
+		}
+	}
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
-	metricTotalRows := totalRowsCountGauge.WithLabelValues(captureAddr, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(changefeedID)
+	metricTotalRows := totalRowsCountGauge.WithLabelValues(changefeedID)
 	defer func() {
-		mountDuration.DeleteLabelValues(captureAddr, changefeedID)
-		totalRowsCountGauge.DeleteLabelValues(captureAddr, changefeedID)
+		mountDuration.DeleteLabelValues(changefeedID)
+		totalRowsCountGauge.DeleteLabelValues(changefeedID)
 	}()
 
 	for {
@@ -148,26 +172,13 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 	}
 }
 
-func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
-	return m.rawRowChangedChs[rand.Intn(m.workerNum)]
-}
-
-func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Second * 15):
-			chSize := 0
-			for _, ch := range m.rawRowChangedChs {
-				chSize += len(ch)
-			}
-			metricMounterInputChanSize.Set(float64(chSize))
-		}
+func (m *mounterImpl) AddEntry(ctx context.Context, event *model.PolymorphicEvent) error {
+	index := atomic.AddInt64(&m.index, 1) % int64(m.workerNum)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case m.rawRowChangedChs[index] <- event:
+		return nil
 	}
 }
 
@@ -248,15 +259,6 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 		return nil, errors.Trace(err)
 	}
 
-	if base.Delete && !m.enableOldValue && (tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
-		handleColIDs, fieldTps, _ := tableInfo.GetRowColInfos()
-		preRow, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, fieldTps, m.tz, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		preRowExist = true
-	}
-
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
@@ -321,7 +323,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var warn string
 		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
 			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
@@ -333,10 +335,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:  colName,
-			Type:  colInfo.Tp,
-			Value: colValue,
-			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+			Name:    colName,
+			Type:    colInfo.Tp,
+			Charset: colInfo.Charset,
+			Value:   colValue,
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
@@ -396,6 +399,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		tableInfoVersion = tableInfo.TableInfoVersion
 	}
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -407,6 +412,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
+		ColInfos:            colInfos,
 		Columns:             cols,
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
@@ -438,13 +444,13 @@ func sizeOfBytes(b []byte) int {
 }
 
 // formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
-func formatColVal(datum types.Datum, tp byte) (
+func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	value interface{}, size int, warn string, err error,
 ) {
 	if datum.IsNull() {
 		return nil, 0, "", nil
 	}
-	switch tp {
+	switch col.Tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
@@ -543,7 +549,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		}
 	}
 
-	return formatColVal(d, col.Tp)
+	return formatColVal(d, col)
 }
 
 // DecodeTableID decodes the raw key to a table ID

@@ -74,9 +74,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"writeTimeout=2m",
 			"allow_auto_random_explicit_insert=1",
 			"transaction_isolation=%22READ-COMMITTED%22",
+			"charset=utf8mb4",
+			"tidb_placement_mode=%22ignore%22",
 		}
 		for _, param := range expectedParams {
-			require.True(t, strings.Contains(dsnStr, param))
+			require.Contains(t, dsnStr, param)
 		}
 		require.False(t, strings.Contains(dsnStr, "time_zone"))
 	}
@@ -118,9 +120,76 @@ func TestGenerateDSNByParams(t *testing.T) {
 		}
 	}
 
+	testIsolationParams := func() {
+		db, mock, err := sqlmock.New()
+		require.Nil(t, err)
+		defer db.Close() // nolint:errcheck
+		columns := []string{"Variable_name", "Value"}
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		// simulate error
+		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+		require.Nil(t, err)
+		params := defaultParams.Clone()
+		var dsnStr string
+		_, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Error(t, err)
+
+		// simulate no transaction_isolation
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
+		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
+			)
+		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Nil(t, err)
+		expectedParams := []string{
+			"tx_isolation=%22READ-COMMITTED%22",
+		}
+		for _, param := range expectedParams {
+			require.True(t, strings.Contains(dsnStr, param))
+		}
+
+		// simulate transaction_isolation
+		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		)
+		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
+			sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+		)
+		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_placement_mode", "IGNORE"),
+			)
+		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		require.Nil(t, err)
+		expectedParams = []string{
+			"transaction_isolation=%22READ-COMMITTED%22",
+		}
+		for _, param := range expectedParams {
+			require.True(t, strings.Contains(dsnStr, param))
+		}
+	}
+
 	testDefaultParams()
 	testTimezoneParam()
 	testTimeoutParams()
+	testIsolationParams()
 }
 
 func TestParseSinkURIToParams(t *testing.T) {
@@ -172,17 +241,63 @@ func TestParseSinkURITimezone(t *testing.T) {
 	}
 }
 
+func TestParseSinkURIOverride(t *testing.T) {
+	defer testleak.AfterTestT(t)()
+	cases := []struct {
+		uri     string
+		checker func(*sinkParams)
+	}{{
+		uri: "mysql://127.0.0.1:3306/?worker-count=2147483648", // int32 max
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.workerCount, maxWorkerCount)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.maxTxnRow, maxMaxTxnRow)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",
+		checker: func(sp *sinkParams) {
+			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
+		},
+	}}
+	ctx := context.TODO()
+	opts := map[string]string{OptChangefeedID: "changefeed-01"}
+	var uri *url.URL
+	var err error
+	for _, cs := range cases {
+		if cs.uri != "" {
+			uri, err = url.Parse(cs.uri)
+			require.Nil(t, err)
+		} else {
+			uri = nil
+		}
+		p, err := parseSinkURIToParams(ctx, uri, opts)
+		require.Nil(t, err)
+		cs.checker(p)
+	}
+}
+
 func TestParseSinkURIBadQueryString(t *testing.T) {
 	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
 		"mysql://127.0.0.1:3306/?worker-count=not-number",
+		"mysql://127.0.0.1:3306/?worker-count=-1",
+		"mysql://127.0.0.1:3306/?worker-count=0",
 		"mysql://127.0.0.1:3306/?max-txn-row=not-number",
+		"mysql://127.0.0.1:3306/?max-txn-row=-1",
+		"mysql://127.0.0.1:3306/?max-txn-row=0",
 		"mysql://127.0.0.1:3306/?ssl-ca=only-ca-exists",
 		"mysql://127.0.0.1:3306/?batch-replace-enable=not-bool",
 		"mysql://127.0.0.1:3306/?batch-replace-enable=true&batch-replace-size=not-number",
 		"mysql://127.0.0.1:3306/?safe-mode=not-bool",
+		"mysql://127.0.0.1:3306/?time-zone=badtz",
+		"mysql://127.0.0.1:3306/?write-timeout=badduration",
+		"mysql://127.0.0.1:3306/?read-timeout=badduration",
+		"mysql://127.0.0.1:3306/?timeout=badduration",
 	}
 	ctx := context.TODO()
 	opts := map[string]string{OptChangefeedID: "changefeed-01"}
@@ -196,7 +311,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 			uri = nil
 		}
 		_, err = parseSinkURIToParams(ctx, uri, opts)
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 

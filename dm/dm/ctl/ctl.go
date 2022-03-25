@@ -83,6 +83,7 @@ func NewRootCmd() *cobra.Command {
 		master.NewShardDDLLockCmd(),
 		master.NewSourceTableSchemaCmd(),
 		master.NewConfigCmd(),
+		master.NewValidationCmd(),
 		newDecryptCmd(),
 		newEncryptCmd(),
 	)
@@ -154,7 +155,7 @@ func loop() error {
 			continue
 		}
 
-		args := strings.Fields(line)
+		args := common.SplitArgsRespectQuote(line)
 		c, err := Start(args)
 		if err != nil {
 			fmt.Println("fail to run:", args)

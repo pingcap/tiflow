@@ -20,6 +20,9 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// get cluster info such as cluster id
+	// (GET /api/v1/cluster/info)
+	DMAPIGetClusterInfo(c *gin.Context)
 	// get cluster master node list
 	// (GET /api/v1/cluster/masters)
 	DMAPIGetClusterMasterList(c *gin.Context)
@@ -41,42 +44,54 @@ type ServerInterface interface {
 	// get data source list
 	// (GET /api/v1/sources)
 	DMAPIGetSourceList(c *gin.Context, params DMAPIGetSourceListParams)
-	// create new data source
+	// create and enable a new data source
 	// (POST /api/v1/sources)
 	DMAPICreateSource(c *gin.Context)
 	// delete a data source
 	// (DELETE /api/v1/sources/{source-name})
 	DMAPIDeleteSource(c *gin.Context, sourceName string, params DMAPIDeleteSourceParams)
-	// pause relay log function for the data source
-	// (POST /api/v1/sources/{source-name}/pause-relay)
-	DMAPIPauseRelay(c *gin.Context, sourceName string)
-	// resume relay log function for the data source
-	// (POST /api/v1/sources/{source-name}/resume-relay)
-	DMAPIResumeRelay(c *gin.Context, sourceName string)
+	// get source
+	// (GET /api/v1/sources/{source-name})
+	DMAPIGetSource(c *gin.Context, sourceName string, params DMAPIGetSourceParams)
+	// update a data source
+	// (PUT /api/v1/sources/{source-name})
+	DMAPIUpdateSource(c *gin.Context, sourceName string)
+	// disable a data source
+	// (POST /api/v1/sources/{source-name}/disable)
+	DMAPIDisableSource(c *gin.Context, sourceName string)
+	// enable a data source
+	// (POST /api/v1/sources/{source-name}/enable)
+	DMAPIEnableSource(c *gin.Context, sourceName string)
+	// disable relay log function for the data source
+	// (POST /api/v1/sources/{source-name}/relay/disable)
+	DMAPIDisableRelay(c *gin.Context, sourceName string)
+	// enable relay log function for the data source
+	// (POST /api/v1/sources/{source-name}/relay/enable)
+	DMAPIEnableRelay(c *gin.Context, sourceName string)
+	// purge relay log
+	// (POST /api/v1/sources/{source-name}/relay/purge)
+	DMAPIPurgeRelay(c *gin.Context, sourceName string)
 	// get source schema list
 	// (GET /api/v1/sources/{source-name}/schemas)
 	DMAPIGetSourceSchemaList(c *gin.Context, sourceName string)
 	// get source table list
 	// (GET /api/v1/sources/{source-name}/schemas/{schema-name})
 	DMAPIGetSourceTableList(c *gin.Context, sourceName string, schemaName string)
-	// enable relay log function for the data source
-	// (POST /api/v1/sources/{source-name}/start-relay)
-	DMAPIStartRelay(c *gin.Context, sourceName string)
 	// get the current status of the data source
 	// (GET /api/v1/sources/{source-name}/status)
 	DMAPIGetSourceStatus(c *gin.Context, sourceName string)
-	// disable relay log function for the data source
-	// (POST /api/v1/sources/{source-name}/stop-relay)
-	DMAPIStopRelay(c *gin.Context, sourceName string)
 	// transfer source to a free worker
 	// (POST /api/v1/sources/{source-name}/transfer)
 	DMAPITransferSource(c *gin.Context, sourceName string)
 	// get task list
 	// (GET /api/v1/tasks)
 	DMAPIGetTaskList(c *gin.Context, params DMAPIGetTaskListParams)
-	// create and start task
+	// create a task
 	// (POST /api/v1/tasks)
-	DMAPIStartTask(c *gin.Context)
+	DMAPICreateTask(c *gin.Context)
+	// Turn task into the format of a configuration file or vice versa.
+	// (POST /api/v1/tasks/converters)
+	DMAPIConvertTask(c *gin.Context)
 	// get task template list
 	// (GET /api/v1/tasks/templates)
 	DMAPIGetTaskTemplateList(c *gin.Context)
@@ -95,15 +110,18 @@ type ServerInterface interface {
 	// update task template template
 	// (PUT /api/v1/tasks/templates/{task-name})
 	DMAPUpdateTaskTemplate(c *gin.Context, taskName string)
-	// delete and stop task
+	// delete a task
 	// (DELETE /api/v1/tasks/{task-name})
 	DMAPIDeleteTask(c *gin.Context, taskName string, params DMAPIDeleteTaskParams)
-	// pause task
-	// (POST /api/v1/tasks/{task-name}/pause)
-	DMAPIPauseTask(c *gin.Context, taskName string)
-	// resume task
-	// (POST /api/v1/tasks/{task-name}/resume)
-	DMAPIResumeTask(c *gin.Context, taskName string)
+	// get a task
+	// (GET /api/v1/tasks/{task-name})
+	DMAPIGetTask(c *gin.Context, taskName string, params DMAPIGetTaskParams)
+	// update a task
+	// (PUT /api/v1/tasks/{task-name})
+	DMAPIUpdateTask(c *gin.Context, taskName string)
+	// get task source table and target table route relation
+	// (GET /api/v1/tasks/{task-name}/sources/{source-name}/migrate_targets)
+	DMAPIGetTaskMigrateTargets(c *gin.Context, taskName string, sourceName string, params DMAPIGetTaskMigrateTargetsParams)
 	// get task source schema list
 	// (GET /api/v1/tasks/{task-name}/sources/{source-name}/schemas)
 	DMAPIGetSchemaListByTaskAndSource(c *gin.Context, taskName string, sourceName string)
@@ -119,9 +137,15 @@ type ServerInterface interface {
 	// operate task source table structure
 	// (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name})
 	DMAPIOperateTableStructure(c *gin.Context, taskName string, sourceName string, schemaName string, tableName string)
+	// start a task
+	// (POST /api/v1/tasks/{task-name}/start)
+	DMAPIStartTask(c *gin.Context, taskName string)
 	// get task status
 	// (GET /api/v1/tasks/{task-name}/status)
 	DMAPIGetTaskStatus(c *gin.Context, taskName string, params DMAPIGetTaskStatusParams)
+	// stop a task
+	// (POST /api/v1/tasks/{task-name}/stop)
+	DMAPIStopTask(c *gin.Context, taskName string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -131,6 +155,15 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// DMAPIGetClusterInfo operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIGetClusterInfo(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIGetClusterInfo(c)
+}
 
 // DMAPIGetClusterMasterList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterMasterList(c *gin.Context) {
@@ -225,6 +258,16 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 		return
 	}
 
+	// ------------- Optional query parameter "enable_relay" -------------
+	if paramValue := c.Query("enable_relay"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "enable_relay", c.Request.URL.Query(), &params.EnableRelay)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter enable_relay: %s", err)})
+		return
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -274,8 +317,8 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
 	siw.Handler.DMAPIDeleteSource(c, sourceName, params)
 }
 
-// DMAPIPauseRelay operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIPauseRelay(c *gin.Context) {
+// DMAPIGetSource operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -287,15 +330,28 @@ func (siw *ServerInterfaceWrapper) DMAPIPauseRelay(c *gin.Context) {
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DMAPIGetSourceParams
+
+	// ------------- Optional query parameter "with_status" -------------
+	if paramValue := c.Query("with_status"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter with_status: %s", err)})
+		return
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
 
-	siw.Handler.DMAPIPauseRelay(c, sourceName)
+	siw.Handler.DMAPIGetSource(c, sourceName, params)
 }
 
-// DMAPIResumeRelay operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIResumeRelay(c *gin.Context) {
+// DMAPIUpdateSource operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIUpdateSource(c *gin.Context) {
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -311,7 +367,107 @@ func (siw *ServerInterfaceWrapper) DMAPIResumeRelay(c *gin.Context) {
 		middleware(c)
 	}
 
-	siw.Handler.DMAPIResumeRelay(c, sourceName)
+	siw.Handler.DMAPIUpdateSource(c, sourceName)
+}
+
+// DMAPIDisableSource operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIDisableSource(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIDisableSource(c, sourceName)
+}
+
+// DMAPIEnableSource operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIEnableSource(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIEnableSource(c, sourceName)
+}
+
+// DMAPIDisableRelay operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIDisableRelay(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIDisableRelay(c, sourceName)
+}
+
+// DMAPIEnableRelay operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIEnableRelay(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIEnableRelay(c, sourceName)
+}
+
+// DMAPIPurgeRelay operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIPurgeRelay(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIPurgeRelay(c, sourceName)
 }
 
 // DMAPIGetSourceSchemaList operation middleware
@@ -363,26 +519,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceTableList(c *gin.Context) {
 	siw.Handler.DMAPIGetSourceTableList(c, sourceName, schemaName)
 }
 
-// DMAPIStartRelay operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIStartRelay(c *gin.Context) {
-	var err error
-
-	// ------------- Path parameter "source-name" -------------
-	var sourceName string
-
-	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-	}
-
-	siw.Handler.DMAPIStartRelay(c, sourceName)
-}
-
 // DMAPIGetSourceStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
 	var err error
@@ -401,26 +537,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
 	}
 
 	siw.Handler.DMAPIGetSourceStatus(c, sourceName)
-}
-
-// DMAPIStopRelay operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIStopRelay(c *gin.Context) {
-	var err error
-
-	// ------------- Path parameter "source-name" -------------
-	var sourceName string
-
-	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-	}
-
-	siw.Handler.DMAPIStopRelay(c, sourceName)
 }
 
 // DMAPITransferSource operation middleware
@@ -460,6 +576,26 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 		return
 	}
 
+	// ------------- Optional query parameter "stage" -------------
+	if paramValue := c.Query("stage"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "stage", c.Request.URL.Query(), &params.Stage)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter stage: %s", err)})
+		return
+	}
+
+	// ------------- Optional query parameter "source_name_list" -------------
+	if paramValue := c.Query("source_name_list"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source_name_list: %s", err)})
+		return
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -467,13 +603,22 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 	siw.Handler.DMAPIGetTaskList(c, params)
 }
 
-// DMAPIStartTask operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
+// DMAPICreateTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPICreateTask(c *gin.Context) {
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
 
-	siw.Handler.DMAPIStartTask(c)
+	siw.Handler.DMAPICreateTask(c)
+}
+
+// DMAPIConvertTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIConvertTask(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIConvertTask(c)
 }
 
 // DMAPIGetTaskTemplateList operation middleware
@@ -579,13 +724,13 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 	// Parameter object where we will unmarshal all parameters from the context
 	var params DMAPIDeleteTaskParams
 
-	// ------------- Optional query parameter "source_name_list" -------------
-	if paramValue := c.Query("source_name_list"); paramValue != "" {
+	// ------------- Optional query parameter "force" -------------
+	if paramValue := c.Query("force"); paramValue != "" {
 	}
 
-	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
+	err = runtime.BindQueryParameter("form", true, false, "force", c.Request.URL.Query(), &params.Force)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source_name_list: %s", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter force: %s", err)})
 		return
 	}
 
@@ -596,8 +741,8 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 	siw.Handler.DMAPIDeleteTask(c, taskName, params)
 }
 
-// DMAPIPauseTask operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIPauseTask(c *gin.Context) {
+// DMAPIGetTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -609,15 +754,28 @@ func (siw *ServerInterfaceWrapper) DMAPIPauseTask(c *gin.Context) {
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DMAPIGetTaskParams
+
+	// ------------- Optional query parameter "with_status" -------------
+	if paramValue := c.Query("with_status"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter with_status: %s", err)})
+		return
+	}
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
 
-	siw.Handler.DMAPIPauseTask(c, taskName)
+	siw.Handler.DMAPIGetTask(c, taskName, params)
 }
 
-// DMAPIResumeTask operation middleware
-func (siw *ServerInterfaceWrapper) DMAPIResumeTask(c *gin.Context) {
+// DMAPIUpdateTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIUpdateTask(c *gin.Context) {
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -633,7 +791,59 @@ func (siw *ServerInterfaceWrapper) DMAPIResumeTask(c *gin.Context) {
 		middleware(c)
 	}
 
-	siw.Handler.DMAPIResumeTask(c, taskName)
+	siw.Handler.DMAPIUpdateTask(c, taskName)
+}
+
+// DMAPIGetTaskMigrateTargets operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "task-name" -------------
+	var taskName string
+
+	err = runtime.BindStyledParameter("simple", false, "task-name", c.Param("task-name"), &taskName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter task-name: %s", err)})
+		return
+	}
+
+	// ------------- Path parameter "source-name" -------------
+	var sourceName string
+
+	err = runtime.BindStyledParameter("simple", false, "source-name", c.Param("source-name"), &sourceName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter source-name: %s", err)})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DMAPIGetTaskMigrateTargetsParams
+
+	// ------------- Optional query parameter "schema_pattern" -------------
+	if paramValue := c.Query("schema_pattern"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "schema_pattern", c.Request.URL.Query(), &params.SchemaPattern)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter schema_pattern: %s", err)})
+		return
+	}
+
+	// ------------- Optional query parameter "table_pattern" -------------
+	if paramValue := c.Query("table_pattern"); paramValue != "" {
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "table_pattern", c.Request.URL.Query(), &params.TablePattern)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter table_pattern: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIGetTaskMigrateTargets(c, taskName, sourceName, params)
 }
 
 // DMAPIGetSchemaListByTaskAndSource operation middleware
@@ -844,6 +1054,26 @@ func (siw *ServerInterfaceWrapper) DMAPIOperateTableStructure(c *gin.Context) {
 	siw.Handler.DMAPIOperateTableStructure(c, taskName, sourceName, schemaName, tableName)
 }
 
+// DMAPIStartTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "task-name" -------------
+	var taskName string
+
+	err = runtime.BindStyledParameter("simple", false, "task-name", c.Param("task-name"), &taskName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter task-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIStartTask(c, taskName)
+}
+
 // DMAPIGetTaskStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 	var err error
@@ -877,6 +1107,26 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 	siw.Handler.DMAPIGetTaskStatus(c, taskName, params)
 }
 
+// DMAPIStopTask operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIStopTask(c *gin.Context) {
+	var err error
+
+	// ------------- Path parameter "task-name" -------------
+	var taskName string
+
+	err = runtime.BindStyledParameter("simple", false, "task-name", c.Param("task-name"), &taskName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter task-name: %s", err)})
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIStopTask(c, taskName)
+}
+
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL     string
@@ -894,6 +1144,8 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
 	}
+
+	router.GET(options.BaseURL+"/api/v1/cluster/info", wrapper.DMAPIGetClusterInfo)
 
 	router.GET(options.BaseURL+"/api/v1/cluster/masters", wrapper.DMAPIGetClusterMasterList)
 
@@ -913,25 +1165,33 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.DELETE(options.BaseURL+"/api/v1/sources/:source-name", wrapper.DMAPIDeleteSource)
 
-	router.POST(options.BaseURL+"/api/v1/sources/:source-name/pause-relay", wrapper.DMAPIPauseRelay)
+	router.GET(options.BaseURL+"/api/v1/sources/:source-name", wrapper.DMAPIGetSource)
 
-	router.POST(options.BaseURL+"/api/v1/sources/:source-name/resume-relay", wrapper.DMAPIResumeRelay)
+	router.PUT(options.BaseURL+"/api/v1/sources/:source-name", wrapper.DMAPIUpdateSource)
+
+	router.POST(options.BaseURL+"/api/v1/sources/:source-name/disable", wrapper.DMAPIDisableSource)
+
+	router.POST(options.BaseURL+"/api/v1/sources/:source-name/enable", wrapper.DMAPIEnableSource)
+
+	router.POST(options.BaseURL+"/api/v1/sources/:source-name/relay/disable", wrapper.DMAPIDisableRelay)
+
+	router.POST(options.BaseURL+"/api/v1/sources/:source-name/relay/enable", wrapper.DMAPIEnableRelay)
+
+	router.POST(options.BaseURL+"/api/v1/sources/:source-name/relay/purge", wrapper.DMAPIPurgeRelay)
 
 	router.GET(options.BaseURL+"/api/v1/sources/:source-name/schemas", wrapper.DMAPIGetSourceSchemaList)
 
 	router.GET(options.BaseURL+"/api/v1/sources/:source-name/schemas/:schema-name", wrapper.DMAPIGetSourceTableList)
 
-	router.POST(options.BaseURL+"/api/v1/sources/:source-name/start-relay", wrapper.DMAPIStartRelay)
-
 	router.GET(options.BaseURL+"/api/v1/sources/:source-name/status", wrapper.DMAPIGetSourceStatus)
-
-	router.POST(options.BaseURL+"/api/v1/sources/:source-name/stop-relay", wrapper.DMAPIStopRelay)
 
 	router.POST(options.BaseURL+"/api/v1/sources/:source-name/transfer", wrapper.DMAPITransferSource)
 
 	router.GET(options.BaseURL+"/api/v1/tasks", wrapper.DMAPIGetTaskList)
 
-	router.POST(options.BaseURL+"/api/v1/tasks", wrapper.DMAPIStartTask)
+	router.POST(options.BaseURL+"/api/v1/tasks", wrapper.DMAPICreateTask)
+
+	router.POST(options.BaseURL+"/api/v1/tasks/converters", wrapper.DMAPIConvertTask)
 
 	router.GET(options.BaseURL+"/api/v1/tasks/templates", wrapper.DMAPIGetTaskTemplateList)
 
@@ -947,9 +1207,11 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.DELETE(options.BaseURL+"/api/v1/tasks/:task-name", wrapper.DMAPIDeleteTask)
 
-	router.POST(options.BaseURL+"/api/v1/tasks/:task-name/pause", wrapper.DMAPIPauseTask)
+	router.GET(options.BaseURL+"/api/v1/tasks/:task-name", wrapper.DMAPIGetTask)
 
-	router.POST(options.BaseURL+"/api/v1/tasks/:task-name/resume", wrapper.DMAPIResumeTask)
+	router.PUT(options.BaseURL+"/api/v1/tasks/:task-name", wrapper.DMAPIUpdateTask)
+
+	router.GET(options.BaseURL+"/api/v1/tasks/:task-name/sources/:source-name/migrate_targets", wrapper.DMAPIGetTaskMigrateTargets)
 
 	router.GET(options.BaseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas", wrapper.DMAPIGetSchemaListByTaskAndSource)
 
@@ -961,99 +1223,114 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.PUT(options.BaseURL+"/api/v1/tasks/:task-name/sources/:source-name/schemas/:schema-name/:table-name", wrapper.DMAPIOperateTableStructure)
 
+	router.POST(options.BaseURL+"/api/v1/tasks/:task-name/start", wrapper.DMAPIStartTask)
+
 	router.GET(options.BaseURL+"/api/v1/tasks/:task-name/status", wrapper.DMAPIGetTaskStatus)
+
+	router.POST(options.BaseURL+"/api/v1/tasks/:task-name/stop", wrapper.DMAPIStopTask)
 
 	return router
 }
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-
-	"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",
-	"AA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

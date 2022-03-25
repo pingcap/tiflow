@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { groupBy } from 'lodash'
+import { groupBy } from 'lodash-es'
 
 import { pages } from '~/routes'
 import { Menu } from '~/uikit'
@@ -82,7 +82,7 @@ const SiderMenu: React.FC<{
         <img src={logo} alt="" className="h-[36px]" />
         {!collapsed && (
           <h1 className="font-extrabold text-lg ml-2 leading-[36px]">
-            Data Sync Platform
+            Data Migration
           </h1>
         )}
       </div>

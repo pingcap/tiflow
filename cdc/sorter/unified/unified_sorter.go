@@ -47,24 +47,20 @@ type metricsInfo struct {
 	changeFeedID model.ChangeFeedID
 	tableName    string
 	tableID      model.TableID
-	captureAddr  string
 }
 
 type ctxKey struct{}
 
 // NewUnifiedSorter creates a new Sorter
 func NewUnifiedSorter(
-	dir string,
-	changeFeedID model.ChangeFeedID,
-	tableName string,
-	tableID model.TableID,
-	captureAddr string) (*Sorter, error) {
+	dir string, changeFeedID model.ChangeFeedID, tableName string, tableID model.TableID,
+) (*Sorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
 	if pool == nil {
 		var err error
-		pool, err = newBackEndPool(dir, captureAddr)
+		pool, err = newBackEndPool(dir)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -79,7 +75,6 @@ func NewUnifiedSorter(
 			changeFeedID: changeFeedID,
 			tableName:    tableName,
 			tableID:      tableID,
-			captureAddr:  captureAddr,
 		},
 		closeCh: make(chan struct{}, 1),
 	}, nil
@@ -114,11 +109,10 @@ func (s *Sorter) Run(ctx context.Context) error {
 
 	defer close(s.closeCh)
 
-	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
+	finish, startCancel := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
 	ctx = context.WithValue(ctx, ctxKey{}, s)
-	ctx = util.PutCaptureAddrInCtx(ctx, s.metricsInfo.captureAddr)
 	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
 	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
@@ -163,6 +157,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 
 		select {
 		case <-subctx.Done():
+			startCancel()
 			return errors.Trace(subctx.Err())
 		case err := <-heapSorterErrCh:
 			return errors.Trace(err)
@@ -174,11 +169,9 @@ func (s *Sorter) Run(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		captureAddr := util.CaptureAddrFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
-			"capture":    captureAddr,
 			"changefeed": changefeedID,
 		})
 

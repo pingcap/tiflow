@@ -74,7 +74,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.serverConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.serverConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
 	// 80 is safe on most systems.
-	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPressure, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPressure, "system memory usage threshold for forcing in-disk sort")
+	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPercentage, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPercentage, "system memory usage threshold for forcing in-disk sort")
 	// We use 8GB as a safe default before we support local configuration file.
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.serverConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
 	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
@@ -187,7 +187,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 		case "sorter-chunk-size-limit":
 			cfg.Sorter.ChunkSizeLimit = o.serverConfig.Sorter.ChunkSizeLimit
 		case "sorter-max-memory-percentage":
-			cfg.Sorter.MaxMemoryPressure = o.serverConfig.Sorter.MaxMemoryPressure
+			cfg.Sorter.MaxMemoryPercentage = o.serverConfig.Sorter.MaxMemoryPercentage
 		case "sorter-max-memory-consumption":
 			cfg.Sorter.MaxMemoryConsumption = o.serverConfig.Sorter.MaxMemoryConsumption
 		case "ca":

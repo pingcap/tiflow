@@ -17,6 +17,9 @@ import (
 	"time"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
+	"go.uber.org/zap"
 )
 
 // backoffStrategy represents enum of retry wait interval.
@@ -47,7 +50,6 @@ type Params struct {
 
 // Strategy define different kind of retry strategy.
 type Strategy interface {
-
 	// Apply define retry strategy
 	// params: (retry parameters for this strategy, a normal operation)
 	// return: (result of operation, number of retry, error of operation)
@@ -65,7 +67,8 @@ type FiniteRetryStrategy struct{}
 
 // Apply for FiniteRetryStrategy, it wait `FirstRetryDuration` before it starts first retry, and then rest of retries wait time depends on BackoffStrategy.
 func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params,
-	operateFn func(*tcontext.Context) (interface{}, error)) (ret interface{}, i int, err error) {
+	operateFn func(*tcontext.Context) (interface{}, error),
+) (ret interface{}, i int, err error) {
 	for ; i < params.RetryCount; i++ {
 		ret, err = operateFn(ctx)
 		if err != nil {
@@ -77,6 +80,7 @@ func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params,
 					duration = time.Duration(i+1) * params.FirstRetryDuration
 				default:
 				}
+				log.L().Warn("retry stratey takes effect", zap.Error(err), zap.Int("retry_times", i), zap.Int("retry_count", params.RetryCount))
 
 				select {
 				case <-ctx.Context().Done():

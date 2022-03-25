@@ -22,13 +22,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.etcd.io/etcd/clientv3"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 const (
@@ -48,22 +49,7 @@ var etcdDefaultTxnRetryParam = retry.Params{
 	FirstRetryDuration: time.Second,
 	BackoffStrategy:    retry.Stable,
 	IsRetryableFn: func(retryTime int, err error) bool {
-		switch err {
-		// Etcd ResourceExhausted errors, may recover after some time
-		case v3rpc.ErrNoSpace, v3rpc.ErrTooManyRequests:
-			return true
-		// Etcd Unavailable errors, may be available after some time
-		// https://github.com/etcd-io/etcd/pull/9934/files#diff-6d8785d0c9eaf96bc3e2b29c36493c04R162-R167
-		// ErrStopped:
-		// one of the etcd nodes stopped from failure injection
-		// ErrNotCapable:
-		// capability check has not been done (in the beginning)
-		case v3rpc.ErrNoLeader, v3rpc.ErrLeaderChanged, v3rpc.ErrNotCapable, v3rpc.ErrStopped, v3rpc.ErrTimeout,
-			v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
-			return true
-		default:
-			return false
-		}
+		return errorutil.IsRetryableEtcdError(err)
 	},
 }
 
