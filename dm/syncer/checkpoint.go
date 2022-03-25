@@ -19,8 +19,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"sync"
 	"time"
 
@@ -36,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -220,7 +219,7 @@ type CheckPoint interface {
 	Load(tctx *tcontext.Context) error
 
 	// LoadMeta loads checkpoints from meta config item or file
-	LoadMeta() error
+	LoadMeta(ctx context.Context) error
 
 	// SaveTablePoint saves checkpoint for specified table in memory
 	SaveTablePoint(table *filter.Table, point binlog.Location, ti *model.TableInfo)
@@ -244,7 +243,7 @@ type CheckPoint interface {
 	// SaveGlobalPointForcibly saves the global binlog stream's checkpoint forcibly.
 	SaveGlobalPointForcibly(location binlog.Location)
 
-	// Snapshot make a snapshot of current checkpoint
+	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushPointsExcept flushes the global checkpoint and tables'
@@ -288,15 +287,14 @@ type CheckPoint interface {
 	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
 	CheckLastSnapshotCreationTime() bool
 
-	// GetFlushedTableInfo gets flushed table info
-	// use for lazy create table in schemaTracker
-	GetFlushedTableInfo(table *filter.Table) *model.TableInfo
-
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
 	Rollback(schemaTracker *schema.Tracker)
 
 	// String return text of global position
 	String() string
+
+	// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
+	LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error
 
 	// CheckAndUpdate check the checkpoint data consistency and try to fix them if possible
 	CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error
@@ -377,6 +375,7 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
+	cp.lastSnapshotCreationTime = time.Now()
 
 	tableCheckPoints := make(map[string]map[string]tablePoint, len(cp.points))
 	for s, tableCps := range cp.points {
@@ -413,7 +412,6 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	}
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	cp.lastSnapshotCreationTime = time.Now()
 	return &SnapshotInfo{
 		id:        id,
 		globalPos: globalPoint.location,
@@ -582,8 +580,7 @@ func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
 func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error {
 	cp.Lock()
 	defer cp.Unlock()
-	_, ok := cp.points[sourceSchema]
-	if !ok {
+	if _, ok := cp.points[sourceSchema]; !ok {
 		return nil
 	}
 
@@ -1101,6 +1098,30 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
 }
 
+// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
+func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	for cpSchema, mSchema := range cp.points {
+		for cpTable, point := range mSchema {
+			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
+			if point.flushedPoint.ti == nil {
+				continue
+			}
+			if err := schemaTracker.CreateSchemaIfNotExists(cpSchema); err != nil {
+				return terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, cpSchema)
+			}
+			tbl := filter.Table{Schema: cpSchema, Name: cpTable}
+			if err := schemaTracker.CreateTableIfNotExists(&tbl, point.flushedPoint.ti); err != nil {
+				return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, cpSchema, cpTable)
+			}
+			cp.logCtx.L().Debug("init table info in schema tracker", zap.Stringer("table", &tbl))
+		}
+	}
+	return nil
+}
+
 // CheckAndUpdate check the checkpoint data consistency and try to fix them if possible.
 func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error {
 	cp.Lock()
@@ -1140,7 +1161,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 }
 
 // LoadMeta implements CheckPoint.LoadMeta.
-func (cp *RemoteCheckPoint) LoadMeta() error {
+func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -1153,7 +1174,7 @@ func (cp *RemoteCheckPoint) LoadMeta() error {
 	case config.ModeAll:
 		// NOTE: syncer must continue the syncing follow loader's tail, so we parse mydumper's output
 		// refine when master / slave switching added and checkpoint mechanism refactored
-		location, safeModeExitLoc, err = cp.parseMetaData()
+		location, safeModeExitLoc, err = cp.parseMetaData(ctx)
 		if err != nil {
 			return err
 		}
@@ -1241,13 +1262,12 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 	return sql2, args
 }
 
-func (cp *RemoteCheckPoint) parseMetaData() (*binlog.Location, *binlog.Location, error) {
+func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
-	filename := path.Join(cp.cfg.Dir, "metadata")
-
-	loc, loc2, err := dumpling.ParseMetaData(filename, cp.cfg.Flavor)
+	filename := "metadata"
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
 	if err != nil {
-		toPrint, err2 := os.ReadFile(filename)
+		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {
 			toPrint = []byte(err2.Error())
 		}
@@ -1255,17 +1275,4 @@ func (cp *RemoteCheckPoint) parseMetaData() (*binlog.Location, *binlog.Location,
 	}
 
 	return loc, loc2, err
-}
-
-// GetFlushedTableInfo implements CheckPoint.GetFlushedTableInfo.
-func (cp *RemoteCheckPoint) GetFlushedTableInfo(table *filter.Table) *model.TableInfo {
-	cp.Lock()
-	defer cp.Unlock()
-
-	if tables, ok := cp.points[table.Schema]; ok {
-		if point, ok2 := tables[table.Name]; ok2 {
-			return point.flushedPoint.ti
-		}
-	}
-	return nil
 }

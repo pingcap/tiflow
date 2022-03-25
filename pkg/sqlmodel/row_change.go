@@ -24,7 +24,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -55,6 +54,8 @@ func (t RowChangeType) String() string {
 }
 
 // RowChange represents a row change, it can be further converted into DML SQL.
+// It also provides some utility functions about calculating causality of two
+// row changes, merging successive row changes into one row change, etc.
 type RowChange struct {
 	sourceTable *cdcmodel.TableName
 	targetTable *cdcmodel.TableName
@@ -67,8 +68,8 @@ type RowChange struct {
 
 	tiSessionCtx sessionctx.Context
 
-	tp           RowChangeType
-	identityInfo *schema.DownstreamTableInfo
+	tp          RowChangeType
+	whereHandle *WhereHandle
 }
 
 // NewRowChange creates a new RowChange.
@@ -92,6 +93,13 @@ func NewRowChange(
 	downstreamTableInfo *timodel.TableInfo,
 	tiCtx sessionctx.Context,
 ) *RowChange {
+	if sourceTable == nil {
+		log.L().DPanic("sourceTable is nil")
+	}
+	if sourceTableInfo == nil {
+		log.L().DPanic("sourceTableInfo is nil")
+	}
+
 	ret := &RowChange{
 		sourceTable:     sourceTable,
 		preValues:       preValues,
@@ -166,46 +174,28 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used when caller has calculated and cached
-// identityInfo, to avoid every RowChange lazily initialize it.
-func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
-	r.identityInfo = info
+// SetWhereHandle can be used when caller has cached whereHandle, to avoid every
+// RowChange lazily initialize it.
+func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
+	r.whereHandle = whereHandle
 }
 
-func (r *RowChange) lazyInitIdentityInfo() {
-	if r.identityInfo != nil {
+func (r *RowChange) lazyInitWhereHandle() {
+	if r.whereHandle != nil {
 		return
 	}
 
-	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
-}
-
-func getColsAndValuesOfIdx(
-	columns []*timodel.ColumnInfo,
-	indexColumns *timodel.IndexInfo,
-	data []interface{},
-) ([]*timodel.ColumnInfo, []interface{}) {
-	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	values := make([]interface{}, 0, len(indexColumns.Columns))
-	for _, col := range indexColumns.Columns {
-		cols = append(cols, columns[col.Offset])
-		values = append(values, data[col.Offset])
-	}
-
-	return cols, values
+	r.whereHandle = GetWhereHandle(r.sourceTableInfo, r.targetTableInfo)
 }
 
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
-	r.lazyInitIdentityInfo()
-
-	uniqueIndex := r.identityInfo.AbsoluteUKIndexInfo
-	if uniqueIndex == nil {
-		uniqueIndex = schema.GetIdentityUKByData(r.identityInfo, r.preValues)
-	}
+	r.lazyInitWhereHandle()
 
 	columns, values := r.sourceTableInfo.Columns, r.preValues
+
+	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
 		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
 	}
@@ -247,21 +237,6 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	return whereValues
 }
 
-// valuesHolder gens values holder like (?,?,?).
-func valuesHolder(n int) string {
-	var builder strings.Builder
-	builder.Grow((n-1)*2 + 3)
-	builder.WriteByte('(')
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("?")
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
@@ -279,15 +254,6 @@ func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	buf.WriteString(" LIMIT 1")
 
 	return buf.String(), whereArgs
-}
-
-func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
-	for _, col := range columns {
-		if col.Name.L == name.L {
-			return col.IsGenerated()
-		}
-	}
-	return false
 }
 
 func (r *RowChange) genUpdateSQL() (string, []interface{}) {

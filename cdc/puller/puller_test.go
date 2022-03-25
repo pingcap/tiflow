@@ -18,8 +18,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore"
@@ -31,14 +31,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 )
-
-type pullerSuite struct{}
-
-var _ = check.Suite(&pullerSuite{})
 
 type mockPdClientForPullerTest struct {
 	pd.Client
@@ -110,15 +106,15 @@ func (mc *mockCDCKVClient) Returns(ev model.RegionFeedEvent) {
 	mc.expectations <- ev
 }
 
-func (s *pullerSuite) newPullerForTest(
-	c *check.C,
+func newPullerForTest(
+	t *testing.T,
 	spans []regionspan.Span,
 	checkpointTs uint64,
 ) (*mockInjectedPuller, context.CancelFunc, *sync.WaitGroup, tidbkv.Storage) {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	store, err := mockstore.NewMockStore()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	enableOldValue := true
 	backupNewCDCKVClient := kv.NewCDCKVClient
 	kv.NewCDCKVClient = newMockCDCKVClient
@@ -138,10 +134,10 @@ func (s *pullerSuite) newPullerForTest(
 		defer wg.Done()
 		err := plr.Run(ctx)
 		if err != nil {
-			c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+			require.Equal(t, context.Canceled, errors.Cause(err))
 		}
 	}()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	mockPlr := &mockInjectedPuller{
 		Puller: plr,
 		cli:    plr.(*pullerImpl).kvCli.(*mockCDCKVClient),
@@ -149,13 +145,12 @@ func (s *pullerSuite) newPullerForTest(
 	return mockPlr, cancel, &wg, store
 }
 
-func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPullerResolvedForward(t *testing.T) {
 	spans := []regionspan.Span{
 		{Start: []byte("t_a"), End: []byte("t_e")},
 	}
 	checkpointTs := uint64(996)
-	plr, cancel, wg, store := s.newPullerForTest(c, spans, checkpointTs)
+	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)
 
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
@@ -176,9 +171,9 @@ func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
 		},
 	})
 	ev := <-plr.Output()
-	c.Assert(ev.OpType, check.Equals, model.OpTypeResolved)
-	c.Assert(ev.CRTs, check.Equals, uint64(1000))
-	c.Assert(plr.IsInitialized(), check.IsTrue)
+	require.Equal(t, model.OpTypeResolved, ev.OpType)
+	require.Equal(t, uint64(1000), ev.CRTs)
+	require.True(t, plr.IsInitialized())
 	err := retry.Do(context.Background(), func() error {
 		ts := plr.GetResolvedTs()
 		if ts != uint64(1000) {
@@ -187,20 +182,19 @@ func (s *pullerSuite) TestPullerResolvedForward(c *check.C) {
 		return nil
 	}, retry.WithBackoffBaseDelay(10), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	store.Close()
 	cancel()
 	wg.Wait()
 }
 
-func (s *pullerSuite) TestPullerRawKV(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPullerRawKV(t *testing.T) {
 	spans := []regionspan.Span{
 		{Start: []byte("c"), End: []byte("e")},
 	}
 	checkpointTs := uint64(996)
-	plr, cancel, wg, store := s.newPullerForTest(c, spans, checkpointTs)
+	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)
 
 	plr.cli.Returns(model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
@@ -220,11 +214,11 @@ func (s *pullerSuite) TestPullerRawKV(c *check.C) {
 	})
 	var ev *model.RawKVEntry
 	ev = <-plr.Output()
-	c.Assert(ev.OpType, check.Equals, model.OpTypePut)
-	c.Assert(ev.Key, check.DeepEquals, []byte("a"))
+	require.Equal(t, model.OpTypePut, ev.OpType)
+	require.Equal(t, []byte("a"), ev.Key)
 	ev = <-plr.Output()
-	c.Assert(ev.OpType, check.Equals, model.OpTypePut)
-	c.Assert(ev.Key, check.DeepEquals, []byte("d"))
+	require.Equal(t, model.OpTypePut, ev.OpType)
+	require.Equal(t, []byte("d"), ev.Key)
 
 	store.Close()
 	cancel()

@@ -29,13 +29,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/redo/common"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
-	pioutil "go.etcd.io/etcd/pkg/ioutil"
+	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -159,9 +160,9 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
 	}
 
 	w.running.Store(true)
@@ -271,9 +272,9 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
-	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
-	redoWriteBytesGauge.DeleteLabelValues(w.cfg.CaptureID, w.cfg.ChangeFeedID)
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.ChangeFeedID)
 
 	return w.close()
 }

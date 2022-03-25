@@ -14,13 +14,16 @@ package config
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
@@ -51,7 +54,7 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
@@ -99,8 +102,8 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 
 	c.Assert(rule.SchemaPattern, check.Equals, sourceSchema)
 	c.Assert(rule.TablePattern, check.Equals, sourceTable)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	c.Assert(subTaskConfig.FilterRules, check.HasLen, 0)
 	// check balist
@@ -115,11 +118,11 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
-	sourceCfg2, err := LoadFromFile(sourceSampleFile)
+	sourceCfg2, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
@@ -172,8 +175,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	tartgetTable := task.TableMigrateRule[0].Target.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source1Schema)
 	c.Assert(rule.TablePattern, check.Equals, source1Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	filterARule, ok := task.BinlogFilterRule.Get("filterA")
 	c.Assert(ok, check.IsTrue)
@@ -233,8 +236,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	source2Table := task.TableMigrateRule[1].Source.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source2Schema)
 	c.Assert(rule.TablePattern, check.Equals, source2Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	_, ok = task.BinlogFilterRule.Get("filterB")
 	c.Assert(ok, check.IsFalse)
@@ -256,7 +259,7 @@ func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
@@ -272,25 +275,24 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 1)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
-
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
 }
 
 func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
-	sourceCfg1, err := LoadFromFile(sourceSampleFile)
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
-	sourceCfg2, err := LoadFromFile(sourceSampleFile)
+	sourceCfg2, err := ParseYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
@@ -307,12 +309,12 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 2)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
-	subTaskConfigMap[task.Name][source2Name] = *subTaskConfigList[1]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+	subTaskConfigMap[task.Name][source2Name] = subTaskConfigList[1]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
 
@@ -335,5 +337,120 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
+}
+
+func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
+	// one source task
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = source1Name
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, taskCfg)
+
+	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, task1)
+	require.EqualValues(t, task1, &task)
+
+	// test update some fields in task
+	batch := 1000
+	task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	taskCfg1, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, batch, taskCfg1.MySQLInstances[0].Syncer.Batch)
+	for _, cfg := range taskCfg1.Syncers {
+		require.Equal(t, batch, cfg.Batch)
+	}
+
+	// test update some fields in taskConfig
+	batch = 1
+	for _, cfg := range taskCfg1.Syncers {
+		cfg.Batch = batch
+	}
+	task2, err := TaskConfigToOpenAPITask(taskCfg1, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, batch, *task2.SourceConfig.IncrMigrateConf.ReplBatch)
+
+	// test more complex case
+	{
+		require.Len(t, task.TableMigrateRule, 1)
+		// only route schema
+		targetSchema := "db1"
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Schema: &targetSchema,
+		}
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 1)
+		var routeKey string
+		for k := range taskCfg.Routes {
+			routeKey = k
+		}
+		require.Equal(t, targetSchema, taskCfg.Routes[routeKey].TargetSchema)
+
+		// only route table will meet error
+		targetTable := "tb1"
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Table: &targetTable,
+		}
+		_, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.True(t, terror.ErrConfigGenTableRouter.Equal(err))
+
+		// remove route target (meanus only use block-allow-list to sync)
+		task.TableMigrateRule[0].Target = nil
+		taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 0)
+
+		taskAfterConvert, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// add filter
+		require.Nil(t, task.BinlogFilterRule)
+		ignoreEvent := []string{"drop database"}
+		ignoreSQL := []string{"^Drop"}
+		ruleName := genFilterRuleName(source1Name, 0)
+		ruleNameList := []string{ruleName}
+		rule := openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent, IgnoreSql: &ignoreSQL}
+		ruleM := &openapi.Task_BinlogFilterRule{}
+		ruleM.Set(ruleName, rule)
+		task.BinlogFilterRule = ruleM
+		task.TableMigrateRule[0].BinlogFilterRule = &ruleNameList
+
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// only filter events
+		rule = openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent}
+		ruleM.Set(ruleName, rule)
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		ruleMAfterConvert := taskAfterConvert.BinlogFilterRule
+		ruleAfterConvert, ok := ruleMAfterConvert.Get(ruleName)
+		require.True(t, ok)
+		require.Nil(t, ruleAfterConvert.IgnoreSql)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+	}
 }

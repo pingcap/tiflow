@@ -144,18 +144,20 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	case *ast.DropDatabaseStmt:
 		skipOp = true
 	case *ast.CreateTableStmt:
-		info.TableInfoBefore = tiAfter // for `CREATE TABLE`, we use tiAfter as tiBefore.
-		rev, err = s.optimist.PutInfoAddTable(info)
-		if err != nil {
+		// need to execute the DDL to the downstream, but do not do the coordination with DM-master.
+		op.DDLs = qec.needHandleDDLs
+		skipOp = true
+		if err = s.checkpoint.FlushPointsWithTableInfos(qec.tctx, []*filter.Table{upTable}, []*model.TableInfo{tiAfter}); err != nil {
+			log.L().Error("failed to flush create table info", zap.Stringer("table", upTable), zap.Strings("ddls", qec.needHandleDDLs), log.ShortError(err))
+		}
+		if _, err = s.optimist.AddTable(info); err != nil {
 			return err
 		}
 	case *ast.DropTableStmt:
-		// no operation exist for `DROP TABLE` now.
-		_, err = s.optimist.DeleteInfoRemoveTable(info)
-		if err != nil {
+		skipOp = true
+		if _, err = s.optimist.RemoveTable(info); err != nil {
 			return err
 		}
-		skipOp = true
 	default:
 		rev, err = s.optimist.PutInfo(info)
 		if err != nil {
@@ -163,16 +165,26 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
+	s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
 	if !skipOp {
-		s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
-		op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
-		if err != nil {
-			return err
+		for {
+			op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
+			if err != nil {
+				return err
+			}
+			s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
+			if op.ConflictStage != optimism.ConflictDetected {
+				break
+			}
+			rev = op.Revision
+			s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}
-		s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
 	}
 
-	if op.ConflictStage == optimism.ConflictDetected {
+	// TODO: support redirect for DM worker
+	// return error to pass IT now
+	switch op.ConflictStage {
+	case optimism.ConflictError, optimism.ConflictSkipWaitRedirect:
 		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	}
 

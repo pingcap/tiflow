@@ -72,21 +72,21 @@ func TestNewRowChange(t *testing.T) {
 		targetTableInfo: targetTI,
 		tiSessionCtx:    tiSession,
 		tp:              RowChangeUpdate,
-		identityInfo:    nil,
+		whereHandle:     nil,
 	}
 
 	actual := NewRowChange(source, target, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, targetTI, tiSession)
 	require.Equal(t, expected, actual)
 
-	actual.lazyInitIdentityInfo()
-	require.NotNil(t, actual.identityInfo)
+	actual.lazyInitWhereHandle()
+	require.NotNil(t, actual.whereHandle)
 
 	// test some arguments of NewRowChange can be nil
 
 	expected.targetTable = expected.sourceTable
 	expected.targetTableInfo = expected.sourceTableInfo
 	expected.tiSessionCtx = utils.ZeroSessionCtx
-	expected.identityInfo = nil
+	expected.whereHandle = nil
 	actual = NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, nil, nil)
 	require.Equal(t, expected, actual)
 }
@@ -334,12 +334,4 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedInsertOnDupSQL, sql)
 		require.Equal(t, c.expectedArgs, args)
 	}
-}
-
-func TestValuesHolder(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "()", valuesHolder(0))
-	require.Equal(t, "(?)", valuesHolder(1))
-	require.Equal(t, "(?,?)", valuesHolder(2))
 }

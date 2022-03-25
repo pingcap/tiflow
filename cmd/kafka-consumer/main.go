@@ -35,7 +35,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -56,6 +59,13 @@ var (
 
 	downstreamURIStr string
 
+	protocol            config.Protocol
+	enableTiDBExtension bool
+
+	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
+	// which then can be used to check RowChangedEvent dispatched correctness
+	eventRouterReplicaConfig *config.ReplicaConfig
+
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -63,10 +73,14 @@ var (
 )
 
 func init() {
-	var upstreamURIStr string
+	var (
+		upstreamURIStr string
+		configFile     string
+	)
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
@@ -105,14 +119,14 @@ func init() {
 	})
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
 
-	config, err := newSaramaConfig()
+	saramaConfig, err := newSaramaConfig()
 	if err != nil {
-		log.Panic("Error creating sarama config", zap.Error(err))
+		log.Panic("Error creating sarama saramaConfig", zap.Error(err))
 	}
 
 	s = upstreamURI.Query().Get("partition-num")
 	if s == "" {
-		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
+		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, saramaConfig)
 		if err != nil {
 			log.Panic("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
 		}
@@ -124,6 +138,7 @@ func init() {
 		}
 		kafkaPartitionNum = int32(c)
 	}
+	log.Info("Setting partitionNum", zap.Int32("partitionNum", kafkaPartitionNum))
 
 	s = upstreamURI.Query().Get("max-message-bytes")
 	if s != "" {
@@ -131,9 +146,9 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-message-bytes of upstream-uri")
 		}
-		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
 		kafkaMaxMessageBytes = c
 	}
+	log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", kafkaMaxMessageBytes))
 
 	s = upstreamURI.Query().Get("max-batch-size")
 	if s != "" {
@@ -141,8 +156,43 @@ func init() {
 		if err != nil {
 			log.Panic("invalid max-batch-size of upstream-uri")
 		}
-		log.Info("Setting max-batch-size", zap.Int("max-batch-size", c))
 		kafkaMaxBatchSize = c
+	}
+	log.Info("Setting max-batch-size", zap.Int("max-batch-size", kafkaMaxBatchSize))
+
+	s = upstreamURI.Query().Get("protocol")
+	if s != "" {
+		if err := protocol.FromString(s); err != nil {
+			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
+		}
+	}
+	log.Info("Setting protocol", zap.Any("protocol", protocol))
+
+	s = upstreamURI.Query().Get("enable-tidb-extension")
+	if s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Panic("invalid enable-tidb-extension of upstream-uri")
+		}
+		if protocol != config.ProtocolCanalJSON && b {
+			log.Panic("enable-tidb-extension only work with canal-json")
+		}
+
+		enableTiDBExtension = b
+	}
+
+	if configFile != "" {
+		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
+		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
+		if err != nil {
+			log.Panic("invalid config file for kafka consumer",
+				zap.Error(err),
+				zap.String("config", configFile))
+		}
+		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+			log.Panic("verify rule failed", zap.Error(err))
+		}
 	}
 }
 
@@ -164,7 +214,9 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 	if !exist {
 		return 0, errors.Errorf("can not find topic %s", topic)
 	}
-	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+	log.Info("get partition number of topic",
+		zap.String("topic", topic),
+		zap.Int32("partitionNum", topicDetail.NumPartitions))
 	return topicDetail.NumPartitions, nil
 }
 
@@ -220,8 +272,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 }
 
 func main() {
-	log.Info("Starting a new TiCDC open protocol consumer")
-
 	/**
 	 * Construct a new Sarama configuration.
 	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
@@ -237,6 +287,7 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
+	log.Info("Starting a new TiCDC consumer", zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
 	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
@@ -269,12 +320,12 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Panic("Error running consumer: %v", zap.Error(err))
+			log.Panic("Error running consumer", zap.Error(err))
 		}
 	}()
 
 	<-consumer.ready // Await till the consumer has been set up
-	log.Info("TiCDC open protocol consumer up and running!...")
+	log.Info("TiCDC consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
@@ -312,7 +363,13 @@ type Consumer struct {
 	ddlSink              sink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
+	// initialize to 0 by default
 	globalResolvedTs uint64
+
+	protocol            config.Protocol
+	enableTiDBExtension bool
+
+	eventRouter *dispatcher.EventRouter
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -327,10 +384,31 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	c := new(Consumer)
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
+	c.protocol = protocol
+	c.enableTiDBExtension = enableTiDBExtension
+
+	// this means user has input config file to enable dispatcher check
+	// some protocol does not provide enough information to check the
+	// dispatched partition match or not. such as `open-protocol`, which
+	// does not have `IndexColumn` info, then make the default dispatcher
+	// use different dispatch rule to the CDC side.
+	// when try to enable dispatcher check for any protocol and dispatch
+	// rule, make sure decoded `RowChangedEvent` contains information
+	// identical to the CDC side.
+	if eventRouterReplicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		c.eventRouter = eventRouter
+
+	}
+
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = util.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
@@ -387,15 +465,25 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		var (
+			decoder codec.EventBatchDecoder
+			err     error
+		)
+		switch c.protocol {
+		case config.ProtocolOpen, config.ProtocolDefault:
+			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+		case config.ProtocolCanalJSON:
+			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
+		default:
+			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+		}
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		counter := 0
 		for {
-			tp, hasNext, err := batchDecoder.HasNext()
+			tp, hasNext, err := decoder.HasNext()
 			if err != nil {
 				log.Panic("decode message key failed", zap.Error(err))
 			}
@@ -407,29 +495,50 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
 			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
 				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-					zap.Int("receviedBytes", len(message.Key)+len(message.Value)))
+					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
 			}
 
 			switch tp {
 			case model.MqMessageTypeDDL:
-				ddl, err := batchDecoder.NextDDLEvent()
+				// for some protocol, DDL would be dispatched to all partitions,
+				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
+				// if we receive `a` from partition-1, which would be seemed as DDL regression,
+				// then cause the consumer panic, but it was a duplicate one.
+				// so we only handle DDL received from partition-0 should be enough.
+				// but all DDL event messages should be consumed.
+				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
-				c.appendDDL(ddl)
+				if partition == 0 {
+					c.appendDDL(ddl)
+				}
 			case model.MqMessageTypeRow:
-				row, err := batchDecoder.NextRowChangedEvent()
+				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
+
+				if c.eventRouter != nil {
+					target := c.eventRouter.GetPartitionForRowChange(row, kafkaPartitionNum)
+					if partition != target {
+						log.Panic("RowChangedEvent dispatched to wrong partition",
+							zap.Int32("obtained", partition),
+							zap.Int32("expected", target),
+							zap.Int32("partitionNum", kafkaPartitionNum),
+							zap.Any("row", row),
+						)
+					}
+				}
+
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
-					log.Debug("RowChangedEvent fallback row, ignore it",
+					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition),
-						zap.ByteString("row", message.Key))
+						zap.Any("row", row))
 				}
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
@@ -438,8 +547,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID =
-					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Panic("emit row changed event failed", zap.Error(err))
@@ -449,19 +557,20 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
 				}
 			case model.MqMessageTypeResolved:
-				ts, err := batchDecoder.NextResolvedEvent()
+				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				// `resolvedTs` should be monotonically increasing, it's allowed to receive redandunt one.
+				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
-				} else if ts > resolvedTs {
-					log.Debug("update sink resolved ts",
+				}
+				if ts > resolvedTs {
+					log.Info("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
@@ -481,21 +590,27 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	return nil
 }
 
+// append DDL wait to be handled, only consider the constraint among DDLs.
+// for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.CommitTs <= c.maxDDLReceivedTs {
+	// DDL CommitTs fallback, just crash it to indicate the bug.
+	if ddl.CommitTs < c.maxDDLReceivedTs {
+		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Any("DDL", ddl))
+	}
+
+	if ddl.CommitTs == c.maxDDLReceivedTs {
+		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+			zap.Any("DDL", ddl))
 		return
 	}
-	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.CommitTs < globalResolvedTs {
-		log.Panic("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-	}
-	if ddl.CommitTs == globalResolvedTs {
-		log.Warn("receive redundant ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
-		return
-	}
+
 	c.ddlList = append(c.ddlList, ddl)
+	log.Info("DDL event received", zap.Any("DDL", ddl))
 	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
@@ -530,9 +645,20 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 	return nil
 }
 
-// Run runs the Consumer
+func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
+	result = uint64(math.MaxUint64)
+	err = c.forEachSink(func(sink *partitionSink) error {
+		a := atomic.LoadUint64(&sink.resolvedTs)
+		if a < result {
+			result = a
+		}
+		return nil
+	})
+	return result, err
+}
+
+// Run the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	var lastGlobalResolvedTs uint64
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -541,56 +667,55 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		// initialize the `globalResolvedTs` as min of all partition's `ResolvedTs`
-		globalResolvedTs := uint64(math.MaxUint64)
-		err := c.forEachSink(func(sink *partitionSink) error {
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < globalResolvedTs {
-				globalResolvedTs = resolvedTs
-			}
-			return nil
-		})
+
+		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// handle ddl
+
+		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
+		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
-			err := c.forEachSink(func(sink *partitionSink) error {
+			if err := c.forEachSink(func(sink *partitionSink) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			})
-			if err != nil {
+			}); err != nil {
 				return errors.Trace(err)
 			}
 
-			// execute ddl
-			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-			if err != nil {
+			// DDL can be executed, do it first.
+			if err := c.ddlSink.EmitDDLEvent(ctx, todoDDL); err != nil {
 				return errors.Trace(err)
 			}
 			c.popDDL()
+
+			if todoDDL.CommitTs < minPartitionResolvedTs {
+				log.Info("update minPartitionResolvedTs by DDL",
+					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.Any("DDL", todoDDL))
+			}
+			minPartitionResolvedTs = todoDDL.CommitTs
+		}
+
+		// update global resolved ts
+		if c.globalResolvedTs > minPartitionResolvedTs {
+			log.Panic("global ResolvedTs fallback",
+				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
+		}
+
+		if c.globalResolvedTs == minPartitionResolvedTs {
 			continue
 		}
 
-		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
-			globalResolvedTs = todoDDL.CommitTs
-		}
-		if lastGlobalResolvedTs > globalResolvedTs {
-			log.Panic("global ResolvedTs fallback")
-		}
+		c.globalResolvedTs = minPartitionResolvedTs
+		log.Info("update globalResolvedTs",
+			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
-		if globalResolvedTs > lastGlobalResolvedTs {
-			lastGlobalResolvedTs = globalResolvedTs
-			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
-
-			err = c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalResolvedTs)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
+		if err := c.forEachSink(func(sink *partitionSink) error {
+			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+		}); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }

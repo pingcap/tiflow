@@ -14,10 +14,6 @@
 package codec
 
 import (
-	"context"
-	"math"
-	"strconv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
@@ -83,36 +79,6 @@ func (e *CraftEventBatchEncoder) Size() int {
 	return e.rowChangedBuffer.Size()
 }
 
-// SetParams reads relevant parameters for craft protocol
-func (e *CraftEventBatchEncoder) SetParams(params map[string]string) error {
-	var err error
-	maxMessageBytes, ok := params["max-message-bytes"]
-	if !ok {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("max-message-bytes not found")
-	}
-
-	e.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
-	}
-	if e.maxMessageBytes <= 0 || e.maxMessageBytes > math.MaxInt32 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", e.maxMessageBytes))
-	}
-
-	e.maxBatchSize = DefaultMaxBatchSize
-	if maxBatchSize, ok := params["max-batch-size"]; ok {
-		e.maxBatchSize, err = strconv.Atoi(maxBatchSize)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
-	}
-	if e.maxBatchSize <= 0 || e.maxBatchSize > math.MaxUint16 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", e.maxBatchSize))
-	}
-
-	return nil
-}
-
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
@@ -122,21 +88,19 @@ func NewCraftEventBatchEncoder() EventBatchEncoder {
 }
 
 type craftEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a CraftEventBatchEncoder
-func (b *craftEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *craftEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewCraftEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoder, nil
+	encoder.(*CraftEventBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
+	encoder.(*CraftEventBatchEncoder).maxBatchSize = b.config.maxBatchSize
+	return encoder
 }
 
-func newCraftEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &craftEventBatchEncoderBuilder{opts: opts}
+func newCraftEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &craftEventBatchEncoderBuilder{config: config}
 }
 
 // NewCraftEventBatchEncoderWithAllocator creates a new CraftEventBatchEncoder with given allocator.

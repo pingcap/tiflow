@@ -25,9 +25,11 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/sync/errgroup"
 
+	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -35,7 +37,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
@@ -430,7 +431,7 @@ type Loader struct {
 
 	fileJobQueue chan *fileJob
 
-	tableRouter   *router.RouteTable
+	tableRouter   *regexprrouter.RouteTable
 	baList        *filter.Filter
 	columnMapping *cm.Mapping
 
@@ -581,7 +582,7 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	defer cancel()
 
 	l.newFileJobQueue()
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
@@ -763,7 +764,7 @@ func (l *Loader) Restore(ctx context.Context) error {
 				}
 			}
 			if l.cfg.CleanDumpFile {
-				cleanDumpFiles(l.cfg)
+				cleanDumpFiles(ctx, l.cfg)
 			}
 		}
 	} else if errors.Cause(err) != context.Canceled {
@@ -882,7 +883,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *router.RouteTable
+		oldTableRouter   *regexprrouter.RouteTable
 		oldColumnMapping *cm.Mapping
 	)
 
@@ -910,7 +911,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update route, for loader, this almost useless, because schemas often have been restored
 	oldTableRouter = l.tableRouter
-	l.tableRouter, err = router.NewRouter(cfg.CaseSensitive, cfg.RouteRules)
+	l.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrLoadUnitGenTableRouter.Delegate(err)
 	}
@@ -930,7 +931,7 @@ func (l *Loader) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 }
 
 func (l *Loader) genRouter(rules []*router.TableRule) error {
-	l.tableRouter, _ = router.NewRouter(l.cfg.CaseSensitive, []*router.TableRule{})
+	l.tableRouter, _ = regexprrouter.NewRegExprRouter(l.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range rules {
 		err := l.tableRouter.AddRule(rule)
 		if err != nil {
@@ -1239,7 +1240,7 @@ func renameShardingSchema(query, srcSchema, dstSchema string, ansiquote bool) st
 	return SQLReplace(query, srcSchema, dstSchema, ansiquote)
 }
 
-func fetchMatchedLiteral(ctx *tcontext.Context, router *router.RouteTable, schema, table string) (targetSchema string, targetTable string) {
+func fetchMatchedLiteral(ctx *tcontext.Context, router *regexprrouter.RouteTable, schema, table string) (targetSchema string, targetTable string) {
 	if schema == "" {
 		// nothing change
 		return schema, table

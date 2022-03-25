@@ -80,7 +80,7 @@ func (s *mockSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, r
 	return resolvedTs, nil
 }
 
-func (s *mockSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	panic("unreachable")
 }
 
@@ -95,7 +95,8 @@ func (s *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 func (s *mockSink) Check(t *testing.T, expected []struct {
 	resolvedTs model.Ts
 	row        *model.RowChangedEvent
-}) {
+},
+) {
 	require.Equal(t, expected, s.received)
 }
 

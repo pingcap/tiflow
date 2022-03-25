@@ -51,14 +51,13 @@ func NewEntrySorter() *EntrySorter {
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) error {
-	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	_, tableName := util.TableIDFromCtx(ctx)
-	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureAddr, changefeedID, tableName)
-	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(changefeedID, tableName)
+	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(changefeedID, tableName)
+	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(changefeedID, tableName)
+	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(changefeedID, tableName)
+	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(changefeedID, tableName)
 
 	output := func(ctx context.Context, entry *model.PolymorphicEvent) {
 		select {

@@ -137,7 +137,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warped table info", zap.Reflect("tableInfo", ti))
+	log.Debug("wrapped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
@@ -305,6 +305,11 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 
 // IsEligible returns whether the table is a eligible table
 func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
+	// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
+	// See https://github.com/pingcap/tiflow/issues/4559
+	if ti.IsSequence() {
+		return false
+	}
 	if forceReplicate {
 		return true
 	}

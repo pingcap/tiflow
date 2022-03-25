@@ -24,8 +24,13 @@ import (
 )
 
 func TestTryRun(t *testing.T) {
+	t.Parallel()
+
 	var pN asyncMessageHolderFunc = func() *pipeline.Message { return nil }
-	var dp asyncMessageProcessorFunc = func(ctx context.Context, msg pipeline.Message) (bool, error) {
+	var dp asyncMessageProcessorFunc = func(
+		ctx context.Context,
+		msg pipeline.Message,
+	) (bool, error) {
 		return false, errors.New("error")
 	}
 	n := NewActorNode(pN, dp)
@@ -71,4 +76,25 @@ func TestTryRun(t *testing.T) {
 	n.messageProcessor = dp
 	require.Nil(t, n.TryRun(context.TODO()))
 	require.Nil(t, n.messageStash)
+}
+
+func TestTryRunLimited(t *testing.T) {
+	t.Parallel()
+
+	var pN asyncMessageHolderFunc = func() *pipeline.Message {
+		return &pipeline.Message{
+			Tp:        pipeline.MessageTypeBarrier,
+			BarrierTs: 1,
+		}
+	}
+	processedCount := 0
+	var dp asyncMessageProcessorFunc = func(
+		ctx context.Context, msg pipeline.Message,
+	) (bool, error) {
+		processedCount++
+		return true, nil
+	}
+	n := NewActorNode(pN, dp)
+	require.Nil(t, n.TryRun(context.TODO()))
+	require.Equal(t, defaultOutputChannelSize, processedCount)
 }

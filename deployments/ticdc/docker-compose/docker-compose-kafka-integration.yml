@@ -63,3 +63,4 @@ services:
     network_mode: "service:kafka"
     volumes:
       - ./logs/tidb_cdc_test:/tmp/tidb_cdc_test
+      - ../../../tests:/go/src/github.com/pingcap/tiflow/tests
