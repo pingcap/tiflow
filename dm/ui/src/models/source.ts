@@ -119,6 +119,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: 'POST',
         body: queryArg.payload,
       }),
+      invalidatesTags: ['Source'],
     }),
     dmapiEnableRelay: build.mutation<
       void,
@@ -137,6 +138,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: 'POST',
         body: queryArg.payload,
       }),
+      invalidatesTags: ['Source'],
     }),
     dmapiPurgeRelay: build.mutation<
       void,
