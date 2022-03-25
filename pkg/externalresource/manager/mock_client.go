@@ -23,3 +23,8 @@ func (m *MockClient) CreateResource(ctx context.Context, in *pb.CreateResourceRe
 	args := m.Called(ctx, in, opts)
 	return args.Get(0).(*pb.CreateResourceResponse), args.Error(1)
 }
+
+func (m *MockClient) QueryResource(ctx context.Context, in *pb.QueryResourceRequest, opts ...grpc.CallOption) (*pb.QueryResourceResponse, error) {
+	args := m.Called(ctx, in, opts)
+	return args.Get(0).(*pb.QueryResourceResponse), args.Error(1)
+}

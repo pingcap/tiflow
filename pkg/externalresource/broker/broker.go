@@ -2,7 +2,6 @@ package broker
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -38,8 +37,9 @@ func NewBroker(config *storagecfg.Config, executorID resourcemeta.ExecutorID, cl
 		config:     config,
 		executorID: executorID,
 		factory: &Factory{
-			config: config,
-			client: client,
+			config:     config,
+			client:     client,
+			executorID: executorID,
 		},
 	}
 }
@@ -50,11 +50,20 @@ func (i *Impl) OpenStorage(
 	jobID resourcemeta.JobID,
 	resourcePath resourcemeta.ResourceID,
 ) (Handle, error) {
-	if strings.HasPrefix(resourcePath, "/"+string(resourcemeta.ResourceTypeLocalFile)+"/") {
-		return i.factory.NewHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+	tp, _, err := resourcemeta.ParseResourcePath(resourcePath)
+	if err != nil {
+		return nil, err
 	}
+
+	switch tp {
+	case resourcemeta.ResourceTypeLocalFile:
+		return i.factory.NewHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+	case resourcemeta.ResourceTypeS3:
+		log.L().Panic("resource type s3 is not supported for now")
+	default:
+	}
+
 	log.L().Panic("unsupported resource type", zap.String("resource-path", resourcePath))
-	// TODO implement S3 support
 	panic("unreachable")
 }
 

@@ -3,15 +3,14 @@ package broker
 import (
 	"context"
 	"path/filepath"
-	"strings"
 
+	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pb"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
@@ -63,8 +62,9 @@ func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 }
 
 type Factory struct {
-	config *storagecfg.Config
-	client pb.ResourceManagerClient
+	config     *storagecfg.Config
+	client     pb.ResourceManagerClient
+	executorID resourcemeta.ExecutorID
 }
 
 func (f *Factory) NewHandleForLocalFile(
@@ -73,34 +73,91 @@ func (f *Factory) NewHandleForLocalFile(
 	workerID resourcemeta.WorkerID,
 	resourceID resourcemeta.ResourceID,
 ) (Handle, error) {
-	pathSuffix, err := getPathSuffix(resourcemeta.ResourceTypeLocalFile, resourceID)
+	tp, suffix, err := resourcemeta.ParseResourcePath(resourceID)
+	if err != nil {
+		return nil, err
+	}
+	if tp != resourcemeta.ResourceTypeLocalFile {
+		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
+	}
+
+	record, exists, err := f.CheckForExistingResource(ctx, resourceID)
 	if err != nil {
 		return nil, err
 	}
 
-	filePath := filepath.Join(getWorkerDir(f.config, workerID), pathSuffix)
+	var creatorWorkerID string
+	if exists {
+		creatorWorkerID = record.Worker
+	} else {
+		creatorWorkerID = workerID
+	}
+	filePath := filepath.Join(getWorkerDir(f.config, creatorWorkerID), suffix)
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	ls, err := brStorage.NewLocalStorage(filePath)
+	backend, err := brStorage.ParseBackend(filePath, nil)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
+	}
+	ls, err := brStorage.New(ctx, backend, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return &BrExternalStorageHandle{
 		inner:  ls,
 		client: f.client,
 
-		id:       resourceID,
-		jobID:    jobID,
-		workerID: workerID,
+		id:         resourceID,
+		jobID:      jobID,
+		workerID:   creatorWorkerID,
+		executorID: f.executorID,
 	}, nil
 }
 
-func getPathSuffix(prefix resourcemeta.ResourceType, path resourcemeta.ResourceID) (string, error) {
-	if !strings.HasPrefix(path, "/"+string(prefix)+"/") {
-		return "", derror.ErrUnexpectedResourcePath.GenWithStackByArgs(path)
+func (f *Factory) CheckForExistingResource(
+	ctx context.Context,
+	resourceID resourcemeta.ResourceID,
+) (*resourcemeta.ResourceMeta, bool, error) {
+	resp, err := f.client.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: resourceID})
+	if err == nil {
+		return &resourcemeta.ResourceMeta{
+			ID:       resourceID,
+			Job:      resp.GetJobId(),
+			Worker:   resp.GetCreatorWorkerId(),
+			Executor: resourcemeta.ExecutorID(resp.GetCreatorExecutor()),
+			Deleted:  false,
+		}, true, nil
 	}
-	return strings.TrimPrefix(path, "/"+string(prefix)+"/"), nil
+
+	// TODO perhaps we need a grpcutil package to put all this stuff?
+	st, ok := status.FromError(err)
+	if !ok {
+		// If the error is not derived from a grpc status, we should throw it.
+		return nil, false, errors.Trace(err)
+	}
+	if len(st.Details()) != 1 {
+		// The resource manager only generates status with ONE detail.
+		return nil, false, errors.Trace(err)
+	}
+	resourceErr, ok := st.Details()[0].(*pb.ResourceError)
+	if !ok {
+		return nil, false, errors.Trace(err)
+	}
+
+	log.L().Info("Got ResourceError",
+		zap.String("resource-id", resourceID),
+		zap.Any("resource-err", resourceErr))
+	switch resourceErr.ErrorCode {
+	case pb.ResourceErrorCode_ResourceNotFound:
+		// Indicates that there is no existing resource with the same name.
+		return nil, false, nil
+	default:
+		log.L().Warn("Unexpected ResourceError",
+			zap.String("code", resourceErr.ErrorCode.String()),
+			zap.String("stack-trace", resourceErr.StackTrace))
+		return nil, false, errors.Trace(err)
+	}
 }
 
 func getWorkerDir(config *storagecfg.Config, workerID resourcemeta.WorkerID) string {

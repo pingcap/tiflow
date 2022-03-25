@@ -8,8 +8,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gogo/status"
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
@@ -21,6 +26,9 @@ import (
 type LocalBroker struct {
 	*Impl
 
+	clientMu sync.Mutex
+	client   *manager.MockClient
+
 	mu            sync.Mutex
 	persistedList []resourcemeta.ResourceID
 }
@@ -31,8 +39,10 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 		log.L().Panic("failed to make tempdir")
 	}
 	cfg := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: dir}}
+	client := manager.NewMockClient()
 	return &LocalBroker{
-		Impl: NewBroker(cfg, executorID, manager.NewMockClient()),
+		Impl:   NewBroker(cfg, executorID, client),
+		client: client,
 	}
 }
 
@@ -42,6 +52,21 @@ func (b *LocalBroker) OpenStorage(
 	jobID resourcemeta.JobID,
 	resourcePath resourcemeta.ResourceID,
 ) (Handle, error) {
+	b.clientMu.Lock()
+	defer b.clientMu.Unlock()
+
+	st, err := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
+		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	b.client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: resourcePath}, mock.Anything).
+		Return((*pb.QueryResourceResponse)(nil), st.Err())
+	defer func() {
+		b.client.ExpectedCalls = nil
+	}()
 	h, err := b.Impl.OpenStorage(ctx, workerID, jobID, resourcePath)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package pb;
 
 service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
+  rpc QueryResource(QueryResourceRequest) returns (QueryResourceResponse){}
 }
 
 message CreateResourceRequest {
@@ -15,6 +16,16 @@ message CreateResourceRequest {
 
 message CreateResourceResponse {}
 
+message QueryResourceRequest {
+  string resource_id = 1;
+}
+
+message QueryResourceResponse {
+  string creator_executor = 2;
+  string job_id = 3;
+  string creator_worker_id = 4;
+}
+
 message ResourceError {
   ResourceErrorCode error_code = 1;
   string stack_trace = 2;
@@ -24,4 +35,6 @@ enum ResourceErrorCode {
   ResourceIDConflict = 0;
   ResourceTypeUnrecognized = 1;
   ResourceManagerInternalError = 2;
+  ResourceNotFound = 3;
 }
+

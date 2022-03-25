@@ -2,16 +2,16 @@ package resourcemeta
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/dataset"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
@@ -20,62 +20,44 @@ const (
 )
 
 type MetadataAccessor struct {
-	rl     ratelimit.Limiter
-	client metaclient.KV
+	// rl limits the frequency the metastore is written to.
+	// It helps to prevent cascading failures after a fail-over
+	// where a large number of resources are created.
+	rl      ratelimit.Limiter
+	dataset *dataset.DataSet[ResourceMeta, *ResourceMeta]
 }
 
 func NewMetadataAccessor(client metaclient.KV) *MetadataAccessor {
 	return &MetadataAccessor{
-		rl:     ratelimit.New(metadataQPSLimit),
-		client: client,
+		rl:      ratelimit.New(metadataQPSLimit),
+		dataset: dataset.NewDataSet[ResourceMeta, *ResourceMeta](client, adapter.ResourceKeyAdapter),
 	}
 }
 
 func (m *MetadataAccessor) GetResource(ctx context.Context, resourceID ResourceID) (*ResourceMeta, bool, error) {
-	key := adapter.ResourceKeyAdapter.Encode(resourceID)
-	resp, err := m.client.Get(ctx, key)
+	rec, err := m.dataset.Get(ctx, resourceID)
+	if derror.ErrDatasetEntryNotFound.Equal(err) {
+		return nil, false, nil
+	}
 	if err != nil {
 		return nil, false, err
 	}
-
-	if len(resp.Kvs) == 0 {
-		// Resource does not exist.
-		return nil, false, nil
-	}
-	if len(resp.Kvs) > 1 {
-		log.L().Panic("unreachable", zap.Any("resp", resp))
-	}
-
-	var ret ResourceMeta
-	if err := json.Unmarshal(resp.Kvs[0].Value, &ret); err != nil {
-		return nil, false, errors.Trace(err)
-	}
-
-	return &ret, true, nil
+	return rec, true, nil
 }
 
 func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *ResourceMeta) (bool, error) {
-	key := adapter.ResourceKeyAdapter.Encode(resource.ID)
-	resp, err := m.client.Get(ctx, key)
-	if err != nil {
+	_, err := m.dataset.Get(ctx, resource.ID)
+	if err == nil {
+		// A duplicate exists
+		return false, nil
+	}
+	if !derror.ErrDatasetEntryNotFound.Equal(err) {
+		// An unexpected error
 		return false, err
 	}
 
-	if len(resp.Kvs) == 1 {
-		// Resource already exists
-		return false, nil
-	}
-	if len(resp.Kvs) > 1 {
-		log.L().Panic("unreachable", zap.Any("resp", resp))
-	}
-
-	str, err1 := json.Marshal(resource)
-	if err1 != nil {
-		return false, errors.Trace(err)
-	}
-
 	m.rl.Take()
-	if _, err := m.client.Put(ctx, key, string(str)); err != nil {
+	if err := m.dataset.Upsert(ctx, resource); err != nil {
 		return false, err
 	}
 
@@ -83,28 +65,16 @@ func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *Resourc
 }
 
 func (m *MetadataAccessor) UpdateResource(ctx context.Context, resource *ResourceMeta) (bool, error) {
-	key := adapter.ResourceKeyAdapter.Encode(resource.ID)
-	m.rl.Take()
-	resp, err := m.client.Get(ctx, key)
+	_, err := m.dataset.Get(ctx, resource.ID)
+	if derror.ErrDatasetEntryNotFound.Equal(err) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
 
-	if len(resp.Kvs) == 0 {
-		// Resource does not exist
-		return false, nil
-	}
-	if len(resp.Kvs) > 1 {
-		log.L().Panic("unreachable", zap.Any("resp", resp))
-	}
-
-	str, err1 := json.Marshal(resource)
-	if err1 != nil {
-		return false, errors.Trace(err)
-	}
-
 	m.rl.Take()
-	if _, err := m.client.Put(ctx, key, string(str)); err != nil {
+	if err := m.dataset.Upsert(ctx, resource); err != nil {
 		return false, err
 	}
 
@@ -112,44 +82,47 @@ func (m *MetadataAccessor) UpdateResource(ctx context.Context, resource *Resourc
 }
 
 func (m *MetadataAccessor) DeleteResource(ctx context.Context, resourceID ResourceID) (bool, error) {
-	key := adapter.ResourceKeyAdapter.Encode(resourceID)
-	// TODO check whether the delete count is 0 or 1.
-	// The current API of the metaclient DOES NOT support this.
-	m.rl.Take()
-	_, err := m.client.Delete(ctx, key)
+	_, err := m.dataset.Get(ctx, resourceID)
+	if derror.ErrDatasetEntryNotFound.Equal(err) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
+
+	if err := m.dataset.Delete(ctx, resourceID); err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+func (m *MetadataAccessor) GetAllResources(ctx context.Context) (ret []*ResourceMeta, err error) {
+	startTime := time.Now()
+	defer func() {
+		timeCost := time.Since(startTime)
+		log.L().Info("Scanned all resources",
+			zap.Int("count", len(ret)),
+			zap.Duration("duration", timeCost),
+			zap.Error(err))
+	}()
+	return m.dataset.LoadAll(ctx)
 }
 
 func (m *MetadataAccessor) GetResourcesForExecutor(
 	ctx context.Context,
 	executorID model.ExecutorID,
 ) (records []*ResourceMeta, err error) {
-	keyPrefix := adapter.ResourceKeyAdapter.Path()
-
-	m.rl.Take()
-	startTime := time.Now()
-	resp, err := m.client.Get(ctx, keyPrefix, metaclient.WithPrefix())
+	all, err := m.GetAllResources(ctx)
 	if err != nil {
 		return nil, err
 	}
-	timeCost := time.Since(startTime)
-	log.L().Info("Scanned all resources",
-		zap.Int("count", len(resp.Kvs)),
-		zap.Duration("duration", timeCost))
 
 	// TODO optimize this when the backend store supports conditional queries.
-	for _, kv := range resp.Kvs {
-		var resource ResourceMeta
-		if err := json.Unmarshal(kv.Value, &resource); err != nil {
-			return nil, errors.Trace(err)
-		}
+	for _, resource := range all {
 		if resource.Executor != executorID {
 			continue
 		}
-		records = append(records, &resource)
+		records = append(records, resource)
 		log.L().Info("Found resource for executor",
 			zap.String("executor-id", string(executorID)),
 			zap.Any("resource", resource))

@@ -15,8 +15,8 @@ type CtxMutex struct {
 	ch chan struct{}
 }
 
-func New() CtxMutex {
-	return CtxMutex{
+func New() *CtxMutex {
+	return &CtxMutex{
 		ch: make(chan struct{}, 1),
 	}
 }
