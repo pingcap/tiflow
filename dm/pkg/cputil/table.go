@@ -37,3 +37,19 @@ func SyncerShardMeta(task string) string {
 func SyncerOnlineDDL(task string) string {
 	return task + "_onlineddl"
 }
+
+func ValidatorCheckpoint(task string) string {
+	return task + "_validator_checkpoint"
+}
+
+func ValidatorPendingChange(task string) string {
+	return task + "_validator_pending_change"
+}
+
+func ValidatorErrorChange(task string) string {
+	return task + "_validator_error_change"
+}
+
+func ValidatorTableStatus(task string) string {
+	return task + "_validator_table_status"
+}

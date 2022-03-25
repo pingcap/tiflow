@@ -573,7 +573,7 @@ type TaskTargetDataBase struct {
 	// source password
 	Password string `json:"password"`
 
-	// ource port
+	// source port
 	Port int `json:"port"`
 
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
