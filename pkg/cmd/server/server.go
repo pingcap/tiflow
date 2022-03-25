@@ -90,7 +90,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("sorter-num-concurrent-worker")
 	_ = cmd.Flags().MarkHidden("sorter-chunk-size-limit")
 	_ = cmd.Flags().MarkHidden("sorter-max-memory-percentage")
-	_ = cmd.Flags().MarkHidden("sorter-max-memory-consuption")
+	_ = cmd.Flags().MarkHidden("sorter-max-memory-consumption")
 }
 
 // run runs the server cmd.
