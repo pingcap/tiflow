@@ -43,6 +43,13 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(newInfo.SinkURI, check.Equals, "mysql://root@downstream-tidb:4000")
 
+	// Test normal update.
+	oldInfo = &model.ChangeFeedInfo{SyncPointUpstreamDSN: "mysql://"}
+	c.Assert(cmd.ParseFlags([]string{"--sync-point-upstream-dsn=tidb://root@downstream-tidb:4000"}), check.IsNil)
+	newInfo, err = o.applyChanges(oldInfo, cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(newInfo.SyncPointUpstreamDSN, check.Equals, "tidb://root@downstream-tidb:4000")
+
 	// Test for cli command flags that should be ignored.
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
 	c.Assert(cmd.ParseFlags([]string{"--interact"}), check.IsNil)

@@ -21,6 +21,7 @@ import (
 
 func TestEtcdKey(t *testing.T) {
 	testcases := []struct {
+		name     string
 		key      string
 		expected *CDCKey
 	}{{
@@ -60,6 +61,13 @@ func TestEtcdKey(t *testing.T) {
 			ChangefeedID: "test-changefeed",
 		},
 	}, {
+		name: "verification",
+		key:  "/tidb/cdc/verification/test-changefeed1",
+		expected: &CDCKey{
+			Tp:           CDCKeyTypeVerification,
+			ChangefeedID: "test-changefeed1",
+		},
+	}, {
 		key: "/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskPosition,
@@ -91,14 +99,15 @@ func TestEtcdKey(t *testing.T) {
 	for _, tc := range testcases {
 		k := new(CDCKey)
 		err := k.Parse(tc.key)
-		require.NoError(t, err)
-		require.Equal(t, k, tc.expected)
-		require.Equal(t, k.String(), tc.key)
+		require.NoError(t, err, tc.name)
+		require.Equal(t, k, tc.expected, tc.name)
+		require.Equal(t, k.String(), tc.key, tc.name)
 	}
 }
 
 func TestEtcdKeyParseError(t *testing.T) {
 	testCases := []struct {
+		name  string
 		key   string
 		error bool
 	}{{
@@ -122,14 +131,18 @@ func TestEtcdKeyParseError(t *testing.T) {
 	}, {
 		key:   "/tidb/cdc/",
 		error: true,
+	}, {
+		name:  "verification",
+		key:   "/tidb/cdc/verification/16bbc01c8-0605-4f86-a0f9-b3119109b225",
+		error: false,
 	}}
 	for _, tc := range testCases {
 		k := new(CDCKey)
 		err := k.Parse(tc.key)
 		if tc.error {
-			require.NotNil(t, err)
+			require.NotNil(t, err, tc.name)
 		} else {
-			require.Nil(t, err)
+			require.Nil(t, err, tc.name)
 		}
 	}
 }

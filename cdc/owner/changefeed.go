@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -506,9 +507,15 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 
 	case syncPointBarrier:
+		// clean up barriers if syncpoint disabled when update changefeed
+		if !ctx.ChangefeedVars().Info.SyncPointEnabled {
+			c.barriers.Update(syncPointBarrier, math.MaxUint64)
+			return 0, nil
+		}
 		if !blocked {
 			return barrierTs, nil
 		}
+
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
 		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)

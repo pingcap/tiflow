@@ -809,6 +809,7 @@ var (
 	)
 
 	// sorter errors
+	ErrPebbleDBError         = errors.Normalize("pebbledb error", errors.RFCCodeText("CDC:ErrPebbleDBError"))
 	ErrCheckDataDirSatisfied = errors.Normalize(
 		"check data dir satisfied failed",
 		errors.RFCCodeText("CDC:ErrCheckDataDirSatisfied"),
@@ -967,16 +968,11 @@ var (
 	)
 
 	// RESTful client error
-	ErrRewindRequestBodyError = errors.Normalize(
-		"failed to seek to the beginning of request body",
-		errors.RFCCodeText("CDC:ErrRewindRequestBodyError"),
-	)
-	ErrZeroLengthResponseBody = errors.Normalize(
-		"0-length response with status code: %d",
-		errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"),
-	)
-	ErrInvalidHost = errors.Normalize(
-		"host must be a URL or a host:port pair: %q",
-		errors.RFCCodeText("CDC:ErrInvalidHost"),
-	)
+	ErrRewindRequestBodyError = errors.Normalize("failed to seek to the beginning of request body", errors.RFCCodeText("CDC:ErrRewindRequestBodyError"))
+	ErrZeroLengthResponseBody = errors.Normalize("0-length response with status code: %d", errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"))
+	ErrInvalidHost            = errors.Normalize("host must be a URL or a host:port pair: %q", errors.RFCCodeText("CDC:ErrInvalidHost"))
+
+	// Verification error
+	ErrVerificationConfigInvalid = errors.Normalize("verification config invalid", errors.RFCCodeText("CDC:ErrVerificationConfigInvalid"))
+	ErrModuleVerificationFail    = errors.Normalize("module level verification fail: module %s", errors.RFCCodeText("CDC:ErrModuleVerificationFail"))
 )
