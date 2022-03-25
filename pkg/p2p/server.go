@@ -621,9 +621,9 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 
 	sendCh := make(chan p2p.SendMessageResponse, m.config.SendChannelSize)
 	streamHandle := newStreamHandle(packet.Meta, sendCh)
-	ctx, cancel := context.WithCancel(stream.Context())
+	ctx0, cancel := context.WithCancel(stream.Context())
 	defer cancel()
-	errg, ctx := errgroup.WithContext(ctx)
+	errg, ctx := errgroup.WithContext(ctx0)
 
 	errg.Go(func() error {
 		defer streamHandle.Close()
@@ -671,7 +671,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	// We cannot allow `Send` and `Recv` to block the handler when it needs to exit,
 	// such as when the MessageServer is exiting due to an error.
 	select {
-	case <-ctx.Done():
+	case <-ctx0.Done():
 		return status.New(codes.Canceled, "context canceled").Err()
 	case <-m.closeCh:
 		return status.New(codes.Aborted, "CDC capture closing").Err()
