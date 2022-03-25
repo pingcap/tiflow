@@ -239,7 +239,10 @@ func (sg *ShardingGroup) CheckSyncing(source string, location binlog.Location) (
 	if activeDDLItem == nil {
 		return true
 	}
-	// ddl position caculate use last_position's gtid, when last is a dml, it will be equal, but the dml should be synced.
+	// this function only affects dml
+	// activeDDLItem.FirstLocation is ddl's startLocation
+	// location is dml's currentLocation
+	// dml should be synced when the comparation is equal
 	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) >= 0
 }
 
