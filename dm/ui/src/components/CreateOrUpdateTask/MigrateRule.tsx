@@ -10,6 +10,7 @@ import {
   Cascader,
   message,
   Space,
+  Checkbox,
 } from '~/uikit'
 import {
   FileAddOutlined,
@@ -284,6 +285,9 @@ const MigrateRule: StepCompnent = ({ prev, initialValues }) => {
             </>
           )}
         </Form.List>
+        <Form.Item name="start_after_saved" hidden>
+          <Checkbox />
+        </Form.Item>
       </div>
 
       <Form.Item>
