@@ -25,7 +25,7 @@ import (
 	"github.com/BurntSushi/toml"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"

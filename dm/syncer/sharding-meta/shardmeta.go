@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"

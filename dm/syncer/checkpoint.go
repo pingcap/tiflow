@@ -42,9 +42,9 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )

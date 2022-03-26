@@ -87,7 +87,7 @@ import (
 	shardmeta "github.com/pingcap/tiflow/dm/syncer/sharding-meta"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 )
 

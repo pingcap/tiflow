@@ -43,7 +43,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
