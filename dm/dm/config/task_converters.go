@@ -20,7 +20,7 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/openapi"

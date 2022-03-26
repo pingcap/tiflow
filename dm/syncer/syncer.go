@@ -42,8 +42,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"

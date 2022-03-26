@@ -28,8 +28,8 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"go.uber.org/zap"
 
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
