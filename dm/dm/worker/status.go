@@ -133,7 +133,7 @@ func (w *SourceWorker) GetValidateStatus(stName string, filterStatus string) []*
 	}
 	sourceIP := w.cfg.DecryptPassword().From.Host
 	for _, st := range sts {
-		if st.validator == nil || !st.validator.Started() {
+		if st.cfg.Name != stName || st.validator == nil || !st.validator.Started() {
 			continue
 		}
 		tblStats := st.validator.GetValidationStatus()
