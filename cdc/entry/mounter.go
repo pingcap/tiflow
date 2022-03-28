@@ -81,7 +81,11 @@ type mounterImpl struct {
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage SchemaStorage, changefeedID string, tz *time.Location, enableOldValue bool) Mounter {
+func NewMounter(schemaStorage SchemaStorage,
+	changefeedID string,
+	tz *time.Location,
+	enableOldValue bool,
+) Mounter {
 	return &mounterImpl{
 		schemaStorage:       schemaStorage,
 		changefeedID:        changefeedID,
