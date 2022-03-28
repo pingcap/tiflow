@@ -981,10 +981,10 @@ func (t *testPessimistSuite) TestMeetEtcdCompactError() {
 		done, _, err = pessimism.PutOperationDeleteExistInfo(t.etcdTestCli, op12c, i12)
 		require.NoError(t.T(), err)
 		require.True(t.T(), done)
-		require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		require.Eventually(t.T(), func() bool {
 			_, ok := p.Locks()[ID1]
 			return !ok
-		}))
+		}, 5*time.Second, 100*time.Millisecond)
 		require.Len(t.T(), p.Locks(), 0)
 
 		cancel2()
@@ -994,7 +994,8 @@ func (t *testPessimistSuite) TestMeetEtcdCompactError() {
 
 func (t *testPessimistSuite) putDoneForSource(
 	ctx context.Context, task, source string, info pessimism.Info, exec bool,
-	watchRev int64, watchTimeout time.Duration) {
+	watchRev int64, watchTimeout time.Duration,
+) {
 	t.T().Helper()
 	var (
 		wg            sync.WaitGroup

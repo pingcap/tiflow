@@ -224,7 +224,8 @@ func (s *Server) waitWorkersReadyV1Import(tctx *tcontext.Context, sourceCfgs map
 //   - configs: task-name -> source-ID -> subtask config.
 //   - stages: task-name -> source-ID -> subtask stage.
 func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
-	map[string]map[string]config.SubTaskConfig, map[string]map[string]pb.Stage, error) {
+	map[string]map[string]config.SubTaskConfig, map[string]map[string]pb.Stage, error,
+) {
 	workers, err := s.scheduler.GetAllWorkers()
 	if err != nil {
 		return nil, nil, err
@@ -354,7 +355,8 @@ func (s *Server) upgradeDBSchemaV1Import(tctx *tcontext.Context, cfgs map[string
 // and let the user to check & fix the problem.
 // TODO(csuzhangxc): merge subtask configs to support `get-task-config`.
 func (s *Server) createSubtaskV1Import(tctx *tcontext.Context,
-	cfgs map[string]map[string]config.SubTaskConfig, stages map[string]map[string]pb.Stage) error {
+	cfgs map[string]map[string]config.SubTaskConfig, stages map[string]map[string]pb.Stage,
+) error {
 	var err error
 outerLoop:
 	for taskName, taskCfgs := range cfgs {

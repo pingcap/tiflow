@@ -75,6 +75,7 @@ EOF
 fi
 
 echo "Starting Upstream PD..."
+pd-server --version
 if [[ "$multiple_upstream_pd" == "true" ]]; then
 	pd_count=3
 	initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
@@ -99,6 +100,7 @@ for idx in $(seq 1 $pd_count); do
 done
 
 echo "Starting Downstream PD..."
+pd-server --version
 pd-server \
 	--advertise-client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT} \
 	--client-urls http://0.0.0.0:${DOWN_PD_PORT} \
@@ -170,9 +172,7 @@ max-open-files = 4096
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
 [cdc]
-# tiflash proxy does not support this feature yet.
-# TODO: enable hibernate-regions-compatible
-hibernate-regions-compatible = false
+hibernate-regions-compatible = true
 EOF
 
 # tidb server config file
@@ -187,6 +187,7 @@ EOF
 fi
 
 echo "Starting Upstream TiKV..."
+tikv-server --version
 for idx in $(seq 1 3); do
 	host="UP_TIKV_HOST_$idx"
 	port="UP_TIKV_PORT_$idx"
@@ -202,6 +203,7 @@ for idx in $(seq 1 3); do
 done
 
 echo "Starting Downstream TiKV..."
+tikv-server --version
 tikv-server \
 	--pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
 	-A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
@@ -214,6 +216,7 @@ tikv-server \
 sleep 2
 
 echo "Starting Upstream TiDB..."
+tidb-server -V
 randomGenSocketsConf
 tidb-server \
 	-P ${UP_TIDB_PORT} \
@@ -233,6 +236,7 @@ tidb-server \
 	--log-file "$OUT_DIR/tidb_other.log" &
 
 echo "Starting Downstream TiDB..."
+tidb-server -V
 randomGenSocketsConf
 tidb-server \
 	-P ${DOWN_TIDB_PORT} \
@@ -361,6 +365,7 @@ EOF
 
 echo "Starting Upstream TiFlash..."
 mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
+tiflash version
 tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
 
 echo "Verifying Upstream TiFlash is started..."

@@ -395,7 +395,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 		return "", err
 	}
 	s.From.Password = cipher
-
+	s.omitDefaultVals()
 	return s.Yaml()
 }
 
@@ -403,7 +403,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type SourceConfigForDowngrade struct {
-	Enable          bool                   `yaml:"enable"`
+	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
 	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
@@ -448,6 +448,13 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		CaseSensitive:   sourceCfg.CaseSensitive,
 		Filters:         sourceCfg.Filters,
 	}
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SourceConfigForDowngrade) omitDefaultVals() {
+	c.Enable = false
 }
 
 // Yaml returns YAML format representation of the config.

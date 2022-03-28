@@ -25,9 +25,9 @@ import (
 // HasNotNullUniqueIdx returns true when the target table structure has PK or UK
 // whose columns are all NOT NULL.
 func (r *RowChange) HasNotNullUniqueIdx() bool {
-	r.lazyInitIdentityInfo()
+	r.lazyInitWhereHandle()
 
-	return r.identityInfo.AbsoluteUKIndexInfo != nil
+	return r.whereHandle.UniqueNotNullIdx != nil
 }
 
 // IdentityValues returns the two group of values that can be used to identify
@@ -37,9 +37,9 @@ func (r *RowChange) HasNotNullUniqueIdx() bool {
 // We always use same index for same table structure to get IdentityValues.
 // two groups returned are from preValues and postValues.
 func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
-	r.lazyInitIdentityInfo()
+	r.lazyInitWhereHandle()
 
-	indexInfo := r.identityInfo.AbsoluteUKIndexInfo
+	indexInfo := r.whereHandle.UniqueNotNullIdx
 	if indexInfo == nil {
 		return r.preValues, r.postValues
 	}
@@ -64,7 +64,7 @@ func (r *RowChange) IsIdentityUpdated() bool {
 		return false
 	}
 
-	r.lazyInitIdentityInfo()
+	r.lazyInitWhereHandle()
 	pre, post := r.IdentityValues()
 	if len(pre) != len(post) {
 		// should not happen
@@ -138,7 +138,7 @@ func (r *RowChange) SplitUpdate() (*RowChange, *RowChange) {
 		targetTableInfo: r.targetTableInfo,
 		tiSessionCtx:    r.tiSessionCtx,
 		tp:              RowChangeDelete,
-		identityInfo:    r.identityInfo,
+		whereHandle:     r.whereHandle,
 	}
 	post := &RowChange{
 		sourceTable:     r.sourceTable,
@@ -148,7 +148,7 @@ func (r *RowChange) SplitUpdate() (*RowChange, *RowChange) {
 		targetTableInfo: r.targetTableInfo,
 		tiSessionCtx:    r.tiSessionCtx,
 		tp:              RowChangeInsert,
-		identityInfo:    r.identityInfo,
+		whereHandle:     r.whereHandle,
 	}
 
 	return pre, post

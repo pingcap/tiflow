@@ -101,7 +101,8 @@ func (o *Optimist) Reset() {
 
 // ConstructInfo constructs a shard DDL info.
 func (o *Optimist) ConstructInfo(upSchema, upTable, downSchema, downTable string,
-	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo) optimism.Info {
+	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+) optimism.Info {
 	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
 }
 
