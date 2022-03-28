@@ -45,6 +45,7 @@ fmt:
 
 tidy:
 	@echo "check go mod tidy"
+	go mod tidy
 
 lint:
 	echo "golangci-lint"; \
