@@ -61,7 +61,6 @@ type rowKVEntry struct {
 
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
-	Run(ctx context.Context) error
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
@@ -72,20 +71,24 @@ type mounterImpl struct {
 	tz             *time.Location
 	workerNum      int
 	enableOldValue bool
+	changefeedID   string
 
 	// index is an atomic variable to dispatch input events to workers.
 	index int64
 
-	metricMountDuration        prometheus.Observer
-	metricTotalRows            prometheus.Gauge
-	metricMounterInputChanSize prometheus.Gauge
+	metricMountDuration prometheus.Observer
+	metricTotalRows     prometheus.Gauge
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage SchemaStorage, enableOldValue bool) Mounter {
+func NewMounter(schemaStorage SchemaStorage, changefeedID string, tz *time.Location, enableOldValue bool) Mounter {
 	return &mounterImpl{
-		schemaStorage:  schemaStorage,
-		enableOldValue: enableOldValue,
+		schemaStorage:       schemaStorage,
+		changefeedID:        changefeedID,
+		enableOldValue:      enableOldValue,
+		metricMountDuration: mountDuration.WithLabelValues(changefeedID),
+		metricTotalRows:     totalRowsCountGauge.WithLabelValues(changefeedID),
+		tz:                  tz,
 	}
 }
 
@@ -95,7 +98,6 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	m.metricMountDuration = mountDuration.WithLabelValues(changefeedID)
 	m.metricTotalRows = totalRowsCountGauge.WithLabelValues(changefeedID)
-	m.metricMounterInputChanSize = mounterInputChanSizeGauge.WithLabelValues(changefeedID)
 	defer func() {
 		mountDuration.DeleteLabelValues(changefeedID)
 		totalRowsCountGauge.DeleteLabelValues(changefeedID)
@@ -116,11 +118,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
-	m.metricMounterInputChanSize.Inc()
 	m.metricTotalRows.Inc()
-	defer func() {
-		m.metricMounterInputChanSize.Dec()
-	}()
 	if pEvent.RawKV.OpType == model.OpTypeResolved {
 		return nil
 	}
