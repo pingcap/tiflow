@@ -63,21 +63,42 @@ func newOptions() *options {
 func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+
 	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", o.serverConfig.TZ, "Specify time zone of TiCDC cluster")
 	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", o.serverConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+
 	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", o.serverConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", o.serverConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+
 	cmd.Flags().StringVar(&o.serverConfig.DataDir, "data-dir", o.serverConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
+
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.OwnerFlushInterval), "owner-flush-interval", time.Duration(o.serverConfig.OwnerFlushInterval), "owner flushes changefeed status interval")
+	_ = cmd.Flags().MarkHidden("owner-flush-interval")
+
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.serverConfig.ProcessorFlushInterval), "processor flushes task status interval")
+	_ = cmd.Flags().MarkHidden("processor-flush-interval")
+
+	// sorter related parameters, hidden them since cannot be configured by TiUP easily.
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
+	_ = cmd.Flags().MarkHidden("sorter-num-workerpool-goroutine")
+
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.serverConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
+	_ = cmd.Flags().MarkHidden("sorter-num-concurrent-worker")
+
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.serverConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
+	_ = cmd.Flags().MarkHidden("sorter-chunk-size-limit")
+
 	// 80 is safe on most systems.
 	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPercentage, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPercentage, "system memory usage threshold for forcing in-disk sort")
+	_ = cmd.Flags().MarkHidden("sorter-max-memory-percentage")
 	// We use 8GB as a safe default before we support local configuration file.
 	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.serverConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
+	_ = cmd.Flags().MarkHidden("sorter-max-memory-consumption")
+
+	// sort-dir id deprecate, hidden it.
 	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
+	_ = cmd.Flags().MarkHidden("sort-dir")
+
 	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
 	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
 
@@ -85,7 +106,6 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
-	_ = cmd.Flags().MarkHidden("sort-dir")
 }
 
 // run runs the server cmd.
