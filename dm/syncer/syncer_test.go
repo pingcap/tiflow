@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -43,7 +45,6 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
-	"github.com/stretchr/testify/require"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -1797,6 +1798,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.Equal(t, 0, len(errCh))
 	require.NotNil(t, syncer.runCtx)
 	require.NotNil(t, syncer.runCancel)
+	require.True(t, syncer.schemaLoaded.Load())
 
 	// test syncer wait time not more than maxPauseOrStopWaitTime
 	oldMaxPauseOrStopWaitTime := defaultMaxPauseOrStopWaitTime
@@ -1823,6 +1825,59 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
 	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
 	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
+}
+
+func TestSyncerGetTableInfo(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	syncer := NewSyncer(cfg, nil, nil)
+	ctx := context.Background()
+	tctx := tcontext.Background()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	dbConn, err := db.Conn(ctx)
+	require.NoError(t, err)
+	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
+	syncer.ddlDBConn = &dbconn.DBConn{Cfg: cfg, BaseConn: baseConn}
+	syncer.downstreamTrackConn = &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	syncer.schemaTracker, err = schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	defer syncer.schemaTracker.Close()
+	require.NoError(t, err)
+
+	upTable := &filter.Table{
+		Schema: "test",
+		Name:   "up",
+	}
+	downTable := &filter.Table{
+		Schema: "test",
+		Name:   "down",
+	}
+
+	mock.ExpectQuery("SHOW VARIABLES LIKE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow(downTable.Name, " CREATE TABLE `"+downTable.Name+"` (c1 int, c2 int)"))
+
+	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
+	require.NoError(t, err)
+	require.Len(t, ti.Columns, 2)
+	// get again, since it's cached, should return the same result
+	ti, err = syncer.getTableInfo(tctx, upTable, downTable)
+	require.NoError(t, err)
+	require.Len(t, ti.Columns, 2)
+
+	noExistTbl := &filter.Table{
+		Schema: "test",
+		Name:   "not-exist",
+	}
+	mock.ExpectQuery("SHOW VARIABLES LIKE .*").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}))
+	_, err = syncer.getTableInfo(tctx, noExistTbl, noExistTbl)
+	require.Error(t, err)
 }
 
 func TestCheckCanUpdateCfg(t *testing.T) {

@@ -324,6 +324,8 @@ var (
 		"MySQL worker panic",
 		errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"),
 	)
+	ErrMQWorkerClosed = errors.Normalize("MQ worker has closed",
+		errors.RFCCodeText("CDC:ErrMQWorkerClosed"))
 	ErrAvroToEnvelopeError = errors.Normalize(
 		"to envelope failed",
 		errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"),
