@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,7 +96,10 @@ func testAction(ctx context.Context, t *testing.T, cli metaclient.KVClient, acts
 }
 
 func TestMockBasicKV(t *testing.T) {
+	t.Parallel()
+
 	cli := NewMetaMock()
+	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -152,4 +156,41 @@ func TestMockBasicKV(t *testing.T) {
 	testAction(ctx, t, cli, actions)
 
 	cli.Close()
+}
+
+func testGenerator(t *testing.T, kvcli metaclient.KVClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	firstEpoch, err := kvcli.GenEpoch(ctx)
+	require.Nil(t, err)
+	require.GreaterOrEqual(t, firstEpoch, int64(0))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			epoch, err := kvcli.GenEpoch(ctx)
+			require.Nil(t, err)
+			require.GreaterOrEqual(t, epoch, int64(0))
+			oldEpoch := epoch
+
+			epoch, err = kvcli.GenEpoch(ctx)
+			require.Nil(t, err)
+			require.Greater(t, epoch, oldEpoch)
+		}()
+	}
+
+	wg.Wait()
+	lastEpoch, err := kvcli.GenEpoch(ctx)
+	require.Nil(t, err)
+	require.Equal(t, int64(201), lastEpoch-firstEpoch)
+}
+
+func TestGenEpoch(t *testing.T) {
+	t.Parallel()
+
+	cli := NewMetaMock()
+	defer cli.Close()
+	testGenerator(t, cli)
 }

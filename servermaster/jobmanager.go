@@ -3,7 +3,6 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -12,7 +11,6 @@ import (
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/epoch"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -44,7 +42,6 @@ type JobManagerImplV2 struct {
 
 	masterMetaClient *lib.MasterMetadataClient
 	uuidGen          uuid.Generator
-	epochGen         epoch.Generator
 }
 
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
@@ -112,20 +109,12 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		err error
 	)
 
-	// [TODO] check the ctx
-	epoch, err := jm.epochGen.GenerateEpoch(ctx)
-	if err != nil {
-		resp.Err = derrors.ToPBError(err)
-		return resp
-	}
-
 	meta := &lib.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
 		Config:     req.Config,
 		StatusCode: lib.MasterStatusUninit,
-		Epoch:      epoch,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
@@ -174,7 +163,6 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id lib.MasterID,
-	epochGen epoch.Generator,
 ) (*JobManagerImplV2, error) {
 	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
 		return lib.NewMasterMetadataClient(id, metaKV), nil
@@ -188,7 +176,6 @@ func NewJobManagerImplV2(
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
 		masterMetaClient: cli,
-		epochGen:         epochGen,
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -196,18 +183,11 @@ func NewJobManagerImplV2(
 		id,
 	)
 
-	ctx, cancel := context.WithTimeout(dctx, time.Second*3)
-	defer cancel()
-	epoch, err := impl.epochGen.GenerateEpoch(ctx)
-	if err != nil {
-		return nil, err
-	}
 	// Note the meta data of job manager is not used, it is safe to overwrite it
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.StatusCode = lib.MasterStatusInit
-	meta.Epoch = epoch
 	err = lib.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
@@ -228,12 +208,6 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *lib.MasterMetaKVData) (string, error) {
-			// increase epoch before creating new job master
-			epoch, err := jm.epochGen.GenerateEpoch(ctx)
-			if err != nil {
-				return lib.WorkerID(""), err
-			}
-			job.Epoch = epoch
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -243,12 +217,6 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 	err = jm.JobFsm.IterWaitAckJobs(
 		func(job *lib.MasterMetaKVData) (string, error) {
-			// increase epoch before creating new job master
-			epoch, err := jm.epochGen.GenerateEpoch(ctx)
-			if err != nil {
-				return lib.WorkerID(""), err
-			}
-			job.Epoch = epoch
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})

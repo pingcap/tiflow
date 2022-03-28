@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -65,7 +65,7 @@ type Server struct {
 	// framework metastore prefix kvclient
 	metaKVClient metaclient.KVClient
 	// user metastore raw kvclient(reuse for all workers)
-	userRawKVClient extKV.KVClientEx
+	userRawKVClient extkv.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  *externalresource.Broker
@@ -165,7 +165,7 @@ func (s *Server) buildDeps(wid lib.WorkerID) (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() extKV.KVClientEx {
+	err = deps.Provide(func() extkv.KVClientEx {
 		return s.userRawKVClient
 	})
 	if err != nil {
@@ -496,7 +496,6 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.etcdCli = etcdCli
 
 	// fetch framework metastore connection endpoint
-	log.L().Info("update framework metastore", zap.String("addr", resp.Address))
 	resp, err = s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
@@ -505,6 +504,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.L().Info("update framework metastore", zap.String("addr", resp.Address))
 
 	conf := metaclient.StoreConfigParams{
 		Endpoints: []string{resp.Address},
@@ -519,7 +519,6 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.metaKVClient = kvclient.NewPrefixKVClient(cliEx, tenant.DefaultUserTenantID)
 
 	// fetch user metastore connection endpoint
-	log.L().Info("update user metastore", zap.String("addr", resp.Address))
 	resp, err = s.cli.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
@@ -528,6 +527,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	log.L().Info("update user metastore", zap.String("addr", resp.Address))
 
 	conf = metaclient.StoreConfigParams{
 		Endpoints: []string{resp.Address},

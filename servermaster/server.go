@@ -33,7 +33,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/epoch"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
@@ -676,7 +675,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID, epoch.NewEpochGenerator(s.etcdClient))
+	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
 	if err != nil {
 		return
 	}

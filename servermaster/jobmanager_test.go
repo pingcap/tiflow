@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/epoch"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -31,7 +30,6 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
 		uuidGen:    uuid.NewGenerator(),
-		epochGen:   epoch.NewMockEpochGenerator(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -65,7 +63,6 @@ func TestJobManagerPauseJob(t *testing.T) {
 	mgr := &JobManagerImplV2{
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
-		uuidGen:    uuid.NewGenerator(),
 	}
 
 	pauseWorkerID := "pause-worker-id"
@@ -130,7 +127,6 @@ func TestJobManagerQueryJob(t *testing.T) {
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
 		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, mockMaster.MetaKVClient()),
-		epochGen:         epoch.NewMockEpochGenerator(),
 	}
 
 	for _, tc := range testCases {
@@ -159,7 +155,6 @@ func TestJobManagerOnlineJob(t *testing.T) {
 		BaseMaster: mockMaster.DefaultBaseMaster,
 		JobFsm:     NewJobFsm(),
 		uuidGen:    uuid.NewGenerator(),
-		epochGen:   epoch.NewMockEpochGenerator(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -211,7 +206,6 @@ func TestJobManagerRecover(t *testing.T) {
 		BaseMaster:       mockMaster.DefaultBaseMaster,
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
-		epochGen:         epoch.NewMockEpochGenerator(),
 		masterMetaClient: lib.NewMasterMetadataClient(lib.JobManagerUUID, metaKVClient),
 	}
 	err := mgr.OnMasterRecovered(ctx)

@@ -91,7 +91,6 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 			Value: []byte(v),
 		})
 	}
-	m.revision++
 	return ret, nil
 }
 
@@ -129,4 +128,11 @@ func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
 
 func (m *MetaMock) Close() error {
 	return nil
+}
+
+func (m *MetaMock) GenEpoch(ctx context.Context) (int64, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.revision++
+	return m.revision, nil
 }

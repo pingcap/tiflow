@@ -6,8 +6,14 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
+	"github.com/hanfei1991/microcosm/pkg/errors"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+)
+
+const (
+	FakeKey   = "/fake-key"
+	FakeValue = "/fake-value"
 )
 
 // We will make follow abstracts and implement for KVClient
@@ -15,7 +21,7 @@ import (
 //					/			\
 //				prefixKV	    |
 //					|			|
-//					KV		   Closer
+//					KV		   Client
 //					\			/
 //					   etcdIml(KVClient)
 
@@ -189,6 +195,15 @@ func (c *etcdImpl) Close() error {
 	}
 
 	return nil
+}
+
+func (c *etcdImpl) GenEpoch(ctx context.Context) (int64, error) {
+	resp, err := c.cli.Put(ctx, FakeKey, FakeValue)
+	if err != nil {
+		return 0, etcdErrorFromOpFail(errors.Wrap(errors.ErrMasterEtcdEpochFail, err))
+	}
+
+	return resp.Header.Revision, nil
 }
 
 func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {

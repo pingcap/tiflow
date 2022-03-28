@@ -15,7 +15,7 @@ import (
 // Support namespace isolation and all kv ability
 // etcdImpl -> kvPrefix+Closer -> etcdKVClient
 type etcdKVClient struct {
-	metaclient.Closer
+	metaclient.Client
 	metaclient.KV
 	tenantID string
 }
@@ -24,7 +24,7 @@ type etcdKVClient struct {
 func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVClient {
 	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(tenantID))
 	return &etcdKVClient{
-		Closer:   cli,
+		Client:   cli,
 		KV:       pfKV,
 		tenantID: tenantID,
 	}

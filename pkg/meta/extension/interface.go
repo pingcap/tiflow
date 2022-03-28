@@ -18,5 +18,5 @@ type KVEx interface {
 // Extend the KVClient interface with Do method to implement the intermediate layer easier
 type KVClientEx interface {
 	KVEx
-	metaclient.Closer
+	metaclient.Client
 }

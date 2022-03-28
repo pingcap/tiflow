@@ -117,4 +117,8 @@ func Test(t *testing.T) {
 	// txnRsp.ResponseOp[1].GetResponsePut()
 	// txnRsp.ResponseOp[2].GetResponseDelete()
 	// When failed, all ops will take no effect.
+
+	epoch, err := cli.GenEpoch(ctx)
+	_ = epoch
+	// expect epoch is always an increasing int64
 }

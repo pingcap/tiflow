@@ -452,11 +452,9 @@ func (m *DefaultBaseMaster) OnError(err error) {
 	}
 }
 
-// refreshMetadata load and update metadata by current nodeID, advertiseAddr, etc.
+// refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
-// fileds to the current value, including nodeID and advertiseAddr.
-// NOTICE: We break the integrity of masterMeta and move the epoch update logic to job manager
-// since we can't get the increasing epoch here. Be careful if you want to update some information in masterMeta future.
+// fileds to the current value, including epoch, nodeID and advertiseAddr.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 
@@ -464,9 +462,14 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	if err != nil {
 		return false, 0, err
 	}
-	epoch = masterMeta.Epoch
+
+	epoch, err = m.metaKVClient.GenEpoch(ctx)
+	if err != nil {
+		return false, 0, err
+	}
 
 	// We should update the master data to reflect our current information
+	masterMeta.Epoch = epoch
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 

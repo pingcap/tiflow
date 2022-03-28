@@ -69,6 +69,21 @@ func (mr *MockKVClientMockRecorder) Delete(arg0, arg1 interface{}, arg2 ...inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockKVClient)(nil).Delete), varargs...)
 }
 
+// GenEpoch mocks base method.
+func (m *MockKVClient) GenEpoch(arg0 context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenEpoch", arg0)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenEpoch indicates an expected call of GenEpoch.
+func (mr *MockKVClientMockRecorder) GenEpoch(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenEpoch", reflect.TypeOf((*MockKVClient)(nil).GenEpoch), arg0)
+}
+
 // Get mocks base method.
 func (m *MockKVClient) Get(arg0 context.Context, arg1 string, arg2 ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	m.ctrl.T.Helper()
