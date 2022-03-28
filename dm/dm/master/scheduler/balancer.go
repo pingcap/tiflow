@@ -15,11 +15,18 @@ package scheduler
 
 import (
 	"math"
+	"math/rand"
+	"sort"
+	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+)
+
+const (
+	rebalanceInterval = 5 * time.Minute
+	hasLoadTaskWeight = 1e6
 )
 
 type balancer interface {
@@ -29,8 +36,19 @@ type balancer interface {
 		// if we want to support workload later, we can
 		totalWeight int,
 		workers map[string]*Worker,
+		relayWorkers map[string]map[string]struct{},
 		hasLoadTaskByWorkerAndSource func(string, string) bool,
 	) (sourcesToBalance []string)
+	// CanBalance returns true if the worker is balanced.
+	CanBalance(totalWeight int, workers map[string]*Worker, workerWeight int) bool
+	// GetWorkerBoundsByWeight returns the weight of the worker.
+	GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper
+}
+
+func newTableNumberBalancer(pLogger *log.Logger) *tableNumberBalancer {
+	return &tableNumberBalancer{
+		logger: pLogger.WithFields(zap.String("component", "balancer")),
+	}
 }
 
 type tableNumberBalancer struct {
@@ -40,72 +58,104 @@ type tableNumberBalancer struct {
 func (r *tableNumberBalancer) FindVictims(
 	sourceNumber int,
 	workers map[string]*Worker,
+	relayWorkers map[string]map[string]struct{},
 	hasLoadTaskByWorkerAndSource func(string, string) bool,
-) (sourcesToBalance []string) {
-	workerNum := len(workers)
+) []string {
+	workerNum := 0
+	for _, w := range workers {
+		if w.Stage() != WorkerOffline {
+			workerNum++
+		}
+	}
 
 	if workerNum == 0 {
 		return nil
 	}
 	upperLimitPerCapture := int(math.Ceil(float64(sourceNumber) / float64(workerNum)))
-
-	r.logger.Info("Start rebalancing",
+	r.logger.Info("start rebalancing",
 		zap.Int("sourceNumber", sourceNumber),
 		zap.Int("workerNum", workerNum),
 		zap.Int("targetLimit", upperLimitPerCapture))
 
-	var victims []*util.TableRecord
+	victims := make(sourceHelper, 0, len(workers))
 	for _, w := range workers {
-		var sourceList []sourceScore
-		for source := range w.Bounds() {
-			if hasLoadTaskByWorkerAndSource(w.BaseInfo().Name, source) {
-				continue
-			}
-			sourceList = append(sourceList, sourceScore{score: sourceNumber, source: source})
-		}
-
-		if r.random != nil {
-			// Complexity note: Shuffle has O(n), where `n` is the number of tables.
-			// Also, during a single call of FindVictims, Shuffle can be called at most
-			// `c` times, where `c` is the number of captures (TiCDC nodes).
-			// Since FindVictims is called only when a rebalance is triggered, which happens
-			// only rarely, we do not expect a performance degradation as a result of adding
-			// the randomness.
-			r.random.Shuffle(len(sourceList), func(i, j int) {
-				sourceList[i], sourceList[j] = sourceList[j], sourceList[i]
-			})
-		} else {
-			// We sort the tableIDs here so that the result is deterministic,
-			// which would aid testing and debugging.
-			util.SortTableIDs(sourceList)
-		}
-
-		tableNum2Remove := len(tables) - upperLimitPerCapture
-		if tableNum2Remove <= 0 {
+		bounds := w.Bounds()
+		sourceNum2Remove := len(bounds) - upperLimitPerCapture
+		if sourceNum2Remove <= 0 || w.Stage() == WorkerOffline {
 			continue
 		}
 
-		// here we pick `tableNum2Remove` tables to delete,
-		for _, tableID := range sourceList {
-			if tableNum2Remove <= 0 {
+		sourceList := r.GetWorkerBoundsByWeight(w, relayWorkers, hasLoadTaskByWorkerAndSource)
+
+		// here we pick `sourceNum2Remove` tables to delete,
+		for _, record := range sourceList {
+			if sourceNum2Remove <= 0 || record.score >= hasLoadTaskWeight {
 				break
 			}
 
-			record := tables[tableID]
-			if record == nil {
-				panic("unreachable")
-			}
-
-			r.logger.Info("Rebalance: find victim table",
-				zap.Any("tableRecord", record))
+			r.logger.Info("find victim source", zap.String("source", record.source), zap.Float32("score", record.score))
 			victims = append(victims, record)
-			tableNum2Remove--
+			sourceNum2Remove--
 		}
 	}
-	return victims
+
+	sort.Sort(victims)
+	victimSources := make([]string, 0, len(victims))
+	for _, record := range victims {
+		victimSources = append(victimSources, record.source)
+	}
+	return victimSources
+}
+
+func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper {
+	relaySources := w.RelaySources()
+	bounds := w.Bounds()
+
+	sourceList := make(sourceHelper, 0, len(bounds))
+	for source := range bounds {
+		var score float32
+		_, hasRelay := relaySources[source]
+		switch {
+		// don't rebalance the source that has load task
+		case hasLoadTaskByWorkerAndSource(w.BaseInfo().Name, source):
+			score = hasLoadTaskWeight
+		case hasRelay:
+			score = 100 - float32(len(relayWorkers[source])) + rand.Float32()
+		default:
+			score = rand.Float32()
+		}
+		sourceList = append(sourceList, sourceScore{score: score, source: source})
+	}
+	sort.Sort(sourceList)
+	return sourceList
+}
+
+func (r *tableNumberBalancer) CanBalance(sourceNumber int, workers map[string]*Worker, workerWeight int) bool {
+	workerNum := 0
+	for _, w := range workers {
+		if w.Stage() != WorkerOffline {
+			workerNum++
+		}
+	}
+	upperLimitPerCapture := int(math.Ceil(float64(sourceNumber) / float64(workerNum)))
+	return workerWeight <= upperLimitPerCapture
 }
 
 type sourceScore struct {
 	source string
-	score  int
+	score  float32
+}
+
+type sourceHelper []sourceScore
+
+func (s sourceHelper) Len() int {
+	return len(s)
+}
+
+func (s sourceHelper) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s sourceHelper) Less(i, j int) bool {
+	return s[i].score < s[j].score
 }
