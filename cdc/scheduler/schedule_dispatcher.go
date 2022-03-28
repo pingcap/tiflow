@@ -290,6 +290,10 @@ func (s *BaseScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.T
 		if s.tables.CountTableByCaptureID(captureID) == 0 {
 			// the checkpoint (as well as resolved-ts) from a capture
 			// that is not replicating any table is meaningless.
+			log.Info("skip collecting resolvedTs and checkpointTs of this capture"+
+				"because the capture not replicating any table",
+				zap.String("captureID", captureID),
+			)
 			continue
 		}
 		if status.ResolvedTs < resolvedTs {
