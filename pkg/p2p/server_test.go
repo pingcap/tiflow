@@ -44,6 +44,7 @@ var defaultServerConfig4Testing = &MessageServerConfig{
 	MaxPendingMessageCountPerTopic:       256,
 	MaxPendingTaskCount:                  102400,
 	SendChannelSize:                      16,
+	SendRateLimitPerStream:               1024,
 	AckInterval:                          time.Millisecond * 200,
 	WorkerPoolSize:                       4,
 	MaxPeerCount:                         1024,
