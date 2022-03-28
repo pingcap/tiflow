@@ -35,6 +35,7 @@ type checker struct {
 	db *sql.DB
 }
 
+
 func newChecker(db *sql.DB) *checker {
 	return &checker{
 		db: db,
