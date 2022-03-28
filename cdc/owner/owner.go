@@ -276,6 +276,7 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	o.cleanStaleMetrics()
 }
 
 func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
