@@ -451,7 +451,6 @@ func (s *System) Start(ctx context.Context) {
 				log.Info("actor goroutine exited",
 					zap.Int("id", id),
 					zap.String("name", s.name))
-				pprof.SetGoroutineLabels(ctx)
 			}()
 			log.Info("actor goroutine started",
 				zap.Int("id", id),
