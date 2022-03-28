@@ -111,8 +111,7 @@ func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 		b.metricExecErrCnt.Inc()
 		return err
 	}
-	castTime := time.Since(startTime).Seconds()
-	b.metricExecTxnHis.Observe(castTime)
+	b.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
 	b.metricExecBatchHis.Observe(float64(batchSize))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
 	return nil
