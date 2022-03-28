@@ -18,12 +18,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOverlapCoveringMerge(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	tests := []struct {
 		name string
 		// inputs is a slice of coverings. The inner slice represents a covering

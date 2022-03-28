@@ -16,7 +16,6 @@ package util
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +27,6 @@ const (
 )
 
 func TestExample(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var flag Flag
 
 	flag.Add(FlagA)
@@ -46,7 +44,6 @@ func TestExample(t *testing.T) {
 }
 
 func TestAdd(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var flag Flag
 
 	flag.Add(FlagA)
@@ -58,7 +55,6 @@ func TestAdd(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var flag Flag
 
 	flag.Add(FlagA, FlagB, FlagC)
@@ -70,7 +66,6 @@ func TestRemove(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var flag Flag
 
 	flag.Add(FlagA, FlagB, FlagC)

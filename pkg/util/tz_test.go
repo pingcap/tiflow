@@ -16,12 +16,10 @@ package util
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetTimezoneFromZonefile(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	testCases := []struct {
 		hasErr   bool
 		zonefile string

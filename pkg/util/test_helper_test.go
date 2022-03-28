@@ -20,12 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWaitSomething(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var (
 		backoff  = 10
 		waitTime = 10 * time.Millisecond
@@ -51,7 +49,6 @@ func TestWaitSomething(t *testing.T) {
 }
 
 func TestHandleErr(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var (
 		ctx, cancel = context.WithCancel(context.Background())
 		errCh       = make(chan error)

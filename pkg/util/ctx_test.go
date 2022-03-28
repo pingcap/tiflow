@@ -18,19 +18,16 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 func TestShouldReturnCaptureID(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	ctx := PutCaptureAddrInCtx(context.Background(), "ello")
 	require.Equal(t, "ello", CaptureAddrFromCtx(ctx))
 }
 
 func TestCaptureIDNotSet(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	require.Equal(t, "", CaptureAddrFromCtx(context.Background()))
 	captureAddr := CaptureAddrFromCtx(context.Background())
 	require.Equal(t, "", captureAddr)
@@ -39,13 +36,11 @@ func TestCaptureIDNotSet(t *testing.T) {
 }
 
 func TestShouldReturnChangefeedID(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
 	require.Equal(t, "ello", ChangefeedIDFromCtx(ctx))
 }
 
 func TestCanceledContext(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "test-cf")
 	require.Equal(t, "test-cf", ChangefeedIDFromCtx(ctx))
 	ctx, cancel := context.WithCancel(ctx)
@@ -54,7 +49,6 @@ func TestCanceledContext(t *testing.T) {
 }
 
 func TestChangefeedIDNotSet(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	require.Equal(t, "", ChangefeedIDFromCtx(context.Background()))
 	changefeedID := ChangefeedIDFromCtx(context.Background())
 	require.Equal(t, "", changefeedID)
@@ -64,7 +58,6 @@ func TestChangefeedIDNotSet(t *testing.T) {
 }
 
 func TestShouldReturnTimezone(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	tz, _ := getTimezoneFromZonefile("UTC")
 	ctx := PutTimezoneInCtx(context.Background(), tz)
 	tz = TimezoneFromCtx(ctx)
@@ -72,7 +65,6 @@ func TestShouldReturnTimezone(t *testing.T) {
 }
 
 func TestTimezoneNotSet(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	tz := TimezoneFromCtx(context.Background())
 	require.Nil(t, tz)
 	ctx := context.WithValue(context.Background(), ctxKeyTimezone, 1321)
@@ -81,7 +73,6 @@ func TestTimezoneNotSet(t *testing.T) {
 }
 
 func TestShouldReturnTableInfo(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
 	tableID, tableName := TableIDFromCtx(ctx)
 	require.Equal(t, int64(1321), tableID)
@@ -89,7 +80,6 @@ func TestShouldReturnTableInfo(t *testing.T) {
 }
 
 func TestTableInfoNotSet(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	tableID, tableName := TableIDFromCtx(context.Background())
 	require.Equal(t, int64(0), tableID)
 	require.Equal(t, "", tableName)
@@ -100,7 +90,6 @@ func TestTableInfoNotSet(t *testing.T) {
 }
 
 func TestShouldReturnKVStorage(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	kvStorage, _ := mockstore.NewMockStore()
 	defer kvStorage.Close()
 	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
@@ -110,7 +99,6 @@ func TestShouldReturnKVStorage(t *testing.T) {
 }
 
 func TestKVStorageNotSet(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	// Context not set value
 	kvStorage, err := KVStorageFromCtx(context.Background())
 	require.Nil(t, kvStorage)
@@ -123,7 +111,6 @@ func TestKVStorageNotSet(t *testing.T) {
 }
 
 func TestZapFieldWithContext(t *testing.T) {
-	defer testleak.NewAfterTest(t)()
 	var (
 		capture    string = "127.0.0.1:8200"
 		changefeed string = "test-cf"
