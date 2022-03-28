@@ -128,7 +128,9 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.counter = 0
 	if !jm.IsMasterReady() {
-		log.L().Info("jobmaster is not ready", zap.Any("master id", jm.workerID))
+		if jm.statusRateLimiter.Allow() {
+			log.L().Info("jobmaster is not ready", zap.Any("master id", jm.workerID))
+		}
 		return nil
 	}
 
