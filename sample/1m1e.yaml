@@ -41,6 +41,8 @@ services:
                         - "0.0.0.0:10241"
                         - "--advertise-addr"
                         - "server-executor:10241"
+                ports:
+                        - "10241:10241"
                 depends_on:
                         - "server-master"
                 restart: "on-failure"

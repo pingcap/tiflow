@@ -70,8 +70,9 @@ type BaseWorker interface {
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
-	// Exit should be called when worker (in user logic) wants to exit
-	// Worker should update its worker status code to correct value before calling Exit
+	// Exit should be called when worker (in user logic) wants to exit.
+	// When `err` is not nil, the status code is assigned WorkerStatusError.
+	// Otherwise worker should set its status code to a meaningful value.
 	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
