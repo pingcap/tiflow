@@ -23,7 +23,6 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/atomic"
@@ -800,15 +799,13 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 			},
 		})
 	})
-	ret, err := v.persistHelper.loadTableStatus(v.tctx)
-	if err != nil {
-		return []*pb.ValidationStatus{}
-	}
+	v.Lock()
+	defer v.Unlock()
 	result := make([]*pb.ValidationStatus, 0)
-	for _, tblStat := range ret {
+	for _, tblStat := range v.tableStatus {
 		result = append(result, &pb.ValidationStatus{
-			SrcTable:         dbutil.TableName(tblStat.source.Schema, tblStat.source.Name),
-			DstTable:         dbutil.TableName(tblStat.target.Schema, tblStat.target.Name),
+			SrcTable:         tblStat.source.String(),
+			DstTable:         tblStat.target.String(),
 			ValidationStatus: tblStat.stage.String(),
 			Message:          tblStat.message,
 		})

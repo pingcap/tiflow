@@ -273,7 +273,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 	var syncerObj *syncer.Syncer
 	var ok bool
-	failpoint.Inject("WorkerMockValidationQuery", func(_ failpoint.Value) {
+	failpoint.Inject("MockValidationQuery", func(_ failpoint.Value) {
 		failpoint.Goto("StartValidatorWithoutCheck")
 	})
 	for _, u := range st.units {
@@ -298,6 +298,16 @@ func (st *SubTask) StopValidator() {
 		st.validator.Stop()
 	}
 	st.Unlock()
+}
+
+func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
+	st.Lock()
+	defer st.Unlock()
+	if st.validator != nil && st.validator.Started() {
+		return st.validator.GetValidationStatus()
+	}
+	st.l.Warn("validator not start")
+	return []*pb.ValidationStatus{}
 }
 
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {

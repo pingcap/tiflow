@@ -409,7 +409,7 @@ message CheckSubtasksCanUpdateResponse {
 
 message GetValidationStatusRequest {
     string taskName = 1;
-    string FilterStatus = 2;
+    Stage filterStatus = 2;
 }
 
 message ValidationStatus {

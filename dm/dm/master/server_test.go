@@ -152,25 +152,6 @@ syncers:
     batch: 100
 `
 
-var taskCfg2 = `---
-name: new-task
-task-mode: all
-is-sharding: true
-shard-mode: ""
-meta-schema: "dm_meta"
-enable-heartbeat: true
-ignore-checking-items: ["all"]
-
-target-database:
-  host: "127.0.0.1"
-  port: 4000
-  user: "root"
-  password: ""
-
-mysql-instances:
-  - source-id: "mysql-replica-01"
-`
-
 var (
 	errGRPCFailed         = "test grpc request failed"
 	errGRPCFailedReg      = fmt.Sprintf("(?m).*%s.*", errGRPCFailed)
@@ -2445,65 +2426,9 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. query invalid stage
 	statusReq.TaskName = taskName
-	statusReq.FilterStatus = "invalid-stage"
+	statusReq.FilterStatus = pb.Stage_Paused // invalid stage
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Matches, ".*filtering stage should be either.*")
 	c.Assert(resp.Result, check.IsFalse)
-}
-
-func (t *testMaster) TestOneSourceValidatorStatus(c *check.C) {
-	var (
-		wg       sync.WaitGroup
-		taskName = "new-task"
-	)
-	ctrl := gomock.NewController(c)
-	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
-	server.etcdClient = t.etcdTestCli
-	sources, workers := defaultWorkerSource()
-	sources = sources[:1]
-	workers = workers[:1]
-	startReq := &pb.StartTaskRequest{
-		Task:    taskCfg2,
-		Sources: sources,
-	}
-	// test query all workers
-	worker := workers[0]
-	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-	mockWorkerClient.EXPECT().GetWorkerValidateStatus(
-		gomock.Any(),
-		gomock.Any(),
-	).Return(&pb.GetValidationStatusResponse{
-		Result: true,
-		Status: []*pb.ValidationStatus{
-			{
-				SrcTable: "tbl1",
-			},
-		},
-	}, nil)
-	mockRevelantWorkerClient(mockWorkerClient, taskName, sources[0], startReq)
-	t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer t.clearSchedulerEnv(c, cancel, &wg)
-	// start task without validation
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
-	mock := conn.InitVersionDB(c)
-	defer func() {
-		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
-	}()
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("version", "5.7.25-TiDB-v4.0.2"))
-	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
-	statusReq := &pb.GetValidationStatusRequest{
-		TaskName: taskName,
-	}
-	resp, err := server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Equals, "")
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(resp.Status), check.Equals, 1)
 }

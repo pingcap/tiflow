@@ -768,63 +768,45 @@ func (t *testServer) TestQueryValidator(c *C) {
 	cfg.RelayDir = dir
 	cfg.MetaDir = dir
 
-	var (
-		masterAddr   = tempurl.Alloc()[len("http://"):]
-		keepAliveTTL = int64(1)
-	)
-	etcdDir := c.MkDir()
-	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
-	c.Assert(err, IsNil)
-	defer ETCD.Close()
-	workerCfg := NewConfig()
-	c.Assert(workerCfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
-	workerCfg.Join = masterAddr
-	workerCfg.KeepAliveTTL = keepAliveTTL
-	workerCfg.RelayKeepAliveTTL = keepAliveTTL
-
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:            GetJoinURLs(workerCfg.Join),
-		DialTimeout:          dialTimeout,
-		DialKeepAliveTime:    keepaliveTime,
-		DialKeepAliveTimeout: keepaliveTimeout,
-	})
-	c.Assert(err, IsNil)
-
-	w, err := NewSourceWorker(cfg, etcdCli, "", "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
 	w.closed.Store(false)
 	c.Assert(err, IsNil)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/WorkerMockValidationQuery", `return(true)`), IsNil)
-	c.Assert(w.StartSubTask(&config.SubTaskConfig{
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
 		Name: "testQueryValidator",
 		ValidatorCfg: config.ValidatorConfig{
 			Mode: config.ValidationFull,
 		},
-	}, pb.Stage_Running, pb.Stage_Running, true), IsNil)
+	}, pb.Stage_Running, nil, "")
+	st.StartValidator(pb.Stage_Running)
+	w.subTaskHolder.recordSubTask(st)
 	expected := []*pb.ValidationStatus{
 		{
-			Source:           "127.0.0.1",
+			Source:           "127.0.0.1:3306",
 			SrcTable:         "`testdb1`.`testtable1`",
 			DstTable:         "`dstdb`.`dsttable`",
 			ValidationStatus: pb.Stage_Running.String(),
 		},
 		{
-			Source:           "127.0.0.1",
+			Source:           "127.0.0.1:3306",
 			SrcTable:         "`testdb2`.`testtable2`",
 			DstTable:         "`dstdb`.`dsttable`",
 			ValidationStatus: pb.Stage_Stopped.String(),
 			Message:          "no primary key",
 		},
 	}
-	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running.String())
+	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[0])
-	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped.String())
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[1])
-	ret = w.GetValidateStatus("testQueryValidator", "")
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/WorkerMockValidationQuery"), IsNil)
 }

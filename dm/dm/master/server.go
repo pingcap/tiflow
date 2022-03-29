@@ -2694,12 +2694,12 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
 	var (
 		resp2       *pb.GetValidationStatusResponse
-		err2, err   error
+		err         error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
-	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
 	if shouldRet {
-		return resp2, err2
+		return resp2, err
 	}
 	resp := &pb.GetValidationStatusResponse{
 		Result: true,
@@ -2709,10 +2709,11 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.FilterStatus != "" && req.FilterStatus != strings.ToLower(pb.Stage_Running.String()) && req.FilterStatus != strings.ToLower(pb.Stage_Stopped.String()) {
+	if req.FilterStatus != pb.Stage_InvalidStage && req.FilterStatus != pb.Stage_Running && req.FilterStatus != pb.Stage_Stopped {
 		resp.Result = false
 		resp.Msg = fmt.Sprintf("filtering stage should be either `%s`, `%s`, or empty", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
-		return resp, err
+		// nolint:nilerr
+		return resp, nil
 	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
@@ -2721,7 +2722,6 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: get validation status from worker
 	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)

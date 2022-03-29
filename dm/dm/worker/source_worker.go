@@ -572,11 +572,6 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	failpoint.Inject("WorkerMockValidationQuery", func(_ failpoint.Value) {
-		// only start validator
-		st.StartValidator(pb.Stage_Running)
-		failpoint.Return(nil)
-	})
 	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }
