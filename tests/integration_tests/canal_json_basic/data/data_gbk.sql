@@ -1,3 +1,6 @@
+-- This sql file is encoded in GBK by the 'iconv' command.
+-- DO NOT EDIT.
+
 DROP DATABASE IF EXISTS test;
 CREATE DATABASE test;
 SET NAMES gbk;
@@ -15,22 +18,22 @@ CREATE TABLE cs_gbk (
 ) ENGINE = InnoDB CHARSET = utf8mb4;
 
 INSERT INTO cs_gbk
-VALUES (1, 'ï¿½ï¿½ï¿½ï¿½', "ï¿½Ð¹ï¿½", "ï¿½Ïºï¿½", "ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½"
+VALUES (1, '²âÊÔ', "ÖÐ¹ú", "ÉÏº£", "ÄãºÃ,ÊÀ½ç"
 	, 0xC4E3BAC3CAC0BDE7);
 
 INSERT INTO cs_gbk
-VALUES (2, 'ï¿½ï¿½ï¿½ï¿½', "ï¿½ï¿½ï¿½ï¿½", "Å¦Ô¼", "ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½"
+VALUES (2, '²¿Êð', "ÃÀ¹ú", "Å¦Ô¼", "ÊÀ½ç,ÄãºÃ"
 	, 0xCAC0BDE7C4E3BAC3);
 
 UPDATE cs_gbk
-SET name = 'ï¿½ï¿½ï¿½ï¿½'
-WHERE name = 'ï¿½ï¿½ï¿½ï¿½';
+SET name = '¿ª·¢'
+WHERE name = '²âÊÔ';
 
 DELETE FROM cs_gbk
-WHERE name = 'ï¿½ï¿½ï¿½ï¿½'
-	AND country = 'ï¿½ï¿½ï¿½ï¿½'
+WHERE name = '²¿Êð'
+	AND country = 'ÃÀ¹ú'
 	AND city = 'Å¦Ô¼'
-	AND description = 'ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½';
+	AND description = 'ÊÀ½ç,ÄãºÃ';
 
 -- ddls
 CREATE TABLE test_ddl1
@@ -70,29 +73,29 @@ CREATE TABLE test_ddl2
 
 CREATE TABLE test_ddl3 (
 	id INT,
-	ï¿½ï¿½ï¿½ï¿½ varchar(128),
+	Ãû³Æ varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
 ALTER TABLE test_ddl3
-	ADD COLUMN ï¿½ï¿½ï¿½ï¿½ char(32);
+	ADD COLUMN ³ÇÊÐ char(32);
 
 ALTER TABLE test_ddl3
-	MODIFY COLUMN ï¿½ï¿½ï¿½ï¿½ varchar(32);
+	MODIFY COLUMN ³ÇÊÐ varchar(32);
 
 ALTER TABLE test_ddl3
-	DROP COLUMN ï¿½ï¿½ï¿½ï¿½;
+	DROP COLUMN ³ÇÊÐ;
 
 /* this is a DDL test for table */
-CREATE TABLE ï¿½ï¿½1 (
+CREATE TABLE ±í1 (
 	id INT,
 	name varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
-RENAME TABLE ï¿½ï¿½1 TO ï¿½ï¿½2;
+RENAME TABLE ±í1 TO ±í2;
 
-DROP TABLE ï¿½ï¿½2;
+DROP TABLE ±í2;
 
 create table finish_mark
 (
