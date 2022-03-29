@@ -189,6 +189,14 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 			return false, pb.ErrorOp_InvalidErrorOp
 		}
 
+		if operator.op == pb.ErrorOp_Inject {
+			// if last event's position already equals currentEvent, this is repeatedly match, need remove last event before recalculate
+			if last := operator.events[len(operator.events)-1]; last.Header.LogPos == currentEvent.Header.LogPos {
+				h.logger.Info("re-match and apply a inject operator", zap.Stringer("startlocation", startLocation), zap.Stringer("endlocation", endLocation), zap.Stringer("operator", operator))
+				return true, operator.op
+			}
+		}
+
 		// set LogPos as start position
 		for _, ev := range operator.events {
 			ev.Header.LogPos = startLocation.Position.Pos
