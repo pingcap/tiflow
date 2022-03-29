@@ -70,8 +70,6 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 	defer func() {
-		flushRowChangedDuration.DeleteLabelValues(changefeedID, "Flush")
-		flushRowChangedDuration.DeleteLabelValues(changefeedID, "EmitRow")
 		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
 

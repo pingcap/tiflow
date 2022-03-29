@@ -78,14 +78,6 @@ var (
 			Name:      "total_flushed_rows_count",
 			Help:      "The total count of rows that are flushed by sink",
 		}, []string{"changefeed"})
-	flushRowChangedDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "flush_event_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
-			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
-		}, []string{"changefeed", "type"})
 
 	tableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -114,7 +106,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(bucketSizeCounter)
 	registry.MustRegister(totalRowsCountGauge)
 	registry.MustRegister(totalFlushedRowsCountGauge)
-	registry.MustRegister(flushRowChangedDuration)
 	registry.MustRegister(tableSinkTotalRowsCountCounter)
 	registry.MustRegister(bufferSinkTotalRowsCountCounter)
 }
