@@ -38,10 +38,12 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
+	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -54,7 +56,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
@@ -86,7 +87,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	defaultMaxPauseOrStopWaitTime = 10 * time.Second
 
@@ -165,15 +165,15 @@ type Syncer struct {
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
 
-	tableRouter     *router.RouteTable
+	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
 	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed  atomic.Bool
-	running atomic.Bool
+	closed       atomic.Bool
+	schemaLoaded atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -259,7 +259,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
-	syncer.running.Store(false)
+	syncer.schemaLoaded.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -693,9 +693,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		<-newCtx.Done() // ctx or newCtx
 	}()
 
-	s.running.Store(true)
-	defer s.running.Store(false)
-
 	err := s.Run(newCtx)
 	if err != nil {
 		// returned error rather than sent to runFatalChan
@@ -742,21 +739,10 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return nil, terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, sourceTable.Schema)
 	}
 
-	// if table already exists in checkpoint, create it in schema tracker
-	if ti = s.checkpoint.GetFlushedTableInfo(sourceTable); ti != nil {
-		if err = s.schemaTracker.CreateTableIfNotExists(sourceTable, ti); err != nil {
-			return nil, terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
-		tctx.L().Debug("lazy init table info in schema tracker", zap.Stringer("table", sourceTable))
-		return ti, nil
-	}
-
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
-	if ti == nil {
-		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
-		if err != nil {
-			return nil, err
-		}
+	err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
+	if err != nil {
+		return nil, err
 	}
 
 	ti, err = s.schemaTracker.GetTableInfo(sourceTable)
@@ -1168,7 +1154,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Debug("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1204,7 +1190,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		s.tctx.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Debug("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -1560,6 +1546,14 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
+	if !s.schemaLoaded.Load() {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
+		}
+		s.schemaLoaded.Store(true)
+	}
+
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
@@ -1661,10 +1655,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
 		}
 	}
-
-	failpoint.Inject("S3GetDumpFilesCheck", func() {
-		cleanDumpFile = false
-	})
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
@@ -2531,7 +2521,7 @@ func (qec *queryEventContext) String() string {
 }
 
 // generateExtendColumn generate extended columns by extractor.
-func generateExtendColumn(data [][]interface{}, r *router.RouteTable, table *filter.Table, sourceID string) [][]interface{} {
+func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, table *filter.Table, sourceID string) [][]interface{} {
 	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
 		return nil
@@ -3082,7 +3072,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist            bool
 		shouldTableExistNum          int  // tableNames[:shouldTableExistNum] should exist
 		shouldRefTableExistNum       int  // tableNames[1:shouldTableExistNum] should exist, since first one is "caller table"
-		tryFetchDownstreamTable      bool // to make sure if not exists will execute correctly
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
@@ -3108,7 +3097,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldSchemaExist = true
 		// for CREATE TABLE LIKE/AS, the reference tables should exist
 		shouldRefTableExistNum = len(srcTables)
-		tryFetchDownstreamTable = true
 	case *ast.DropTableStmt:
 		shouldExecDDLOnSchemaTracker = true
 		shouldReTrackDownstreamIndex = true
@@ -3168,11 +3156,6 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		if _, err := s.getTableInfo(ec.tctx, srcTables[i], targetTables[i]); err != nil {
 			return err
 		}
-	}
-
-	if tryFetchDownstreamTable {
-		// ignore table not exists error, just try to fetch table from downstream.
-		_, _ = s.getTableInfo(ec.tctx, srcTables[0], targetTables[0])
 	}
 
 	if shouldExecDDLOnSchemaTracker {
@@ -3264,7 +3247,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 }
 
 func (s *Syncer) genRouter() error {
-	s.tableRouter, _ = router.NewRouter(s.cfg.CaseSensitive, []*router.TableRule{})
+	s.tableRouter, _ = regexprrouter.NewRegExprRouter(s.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range s.cfg.RouteRules {
 		err := s.tableRouter.AddRule(rule)
 		if err != nil {
@@ -3279,9 +3262,6 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
-		failpoint.Inject("S3GetDumpFilesCheck", func() {
-			panic(errors.Annotate(err, "fail to get dump files"))
-		})
 		return err
 	}
 	var dbs, tables []string
@@ -3473,8 +3453,8 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
-func (s *Syncer) IsRunning() bool {
-	return s.running.Load()
+func (s *Syncer) IsSchemaLoaded() bool {
+	return s.schemaLoaded.Load()
 }
 
 func (s *Syncer) isClosed() bool {
@@ -3572,10 +3552,55 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	s.Process(ctx, pr)
 }
 
+// CheckCanUpdateCfg check if task config can be updated.
+// 1. task must not in a pessimistic ddl state.
+// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
+func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
+	s.RLock()
+	defer s.RUnlock()
+	// can't update when in sharding merge
+	if s.cfg.ShardMode == config.ShardPessimistic {
+		_, tables := s.sgk.UnresolvedTables()
+		if len(tables) > 0 {
+			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
+		}
+	}
+
+	oldCfg, err := s.cfg.Clone()
+	if err != nil {
+		return err
+	}
+	oldCfg.BAList = newCfg.BAList
+	oldCfg.BWList = newCfg.BWList
+	oldCfg.RouteRules = newCfg.RouteRules
+	oldCfg.FilterRules = newCfg.FilterRules
+	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
+
+	// support fields that changed in func `copyConfigFromSource`
+	oldCfg.From = newCfg.From
+	oldCfg.Flavor = newCfg.Flavor
+	oldCfg.ServerID = newCfg.ServerID
+	oldCfg.RelayDir = newCfg.RelayDir
+	oldCfg.UseRelay = newCfg.UseRelay
+	oldCfg.EnableGTID = newCfg.EnableGTID
+	oldCfg.AutoFixGTID = newCfg.AutoFixGTID
+	oldCfg.CaseSensitive = newCfg.CaseSensitive
+
+	if oldCfg.String() != newCfg.String() {
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
+	}
+	return nil
+}
+
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+	s.Lock()
+	defer s.Unlock()
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3586,7 +3611,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	var (
 		err              error
 		oldBaList        *filter.Filter
-		oldTableRouter   *router.RouteTable
+		oldTableRouter   *regexprrouter.RouteTable
 		oldBinlogFilter  *bf.BinlogEvent
 		oldColumnMapping *cm.Mapping
 	)
@@ -3618,7 +3643,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update route
 	oldTableRouter = s.tableRouter
-	s.tableRouter, err = router.NewRouter(cfg.CaseSensitive, cfg.RouteRules)
+	s.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
 	if err != nil {
 		return terror.ErrSyncerUnitGenTableRouter.Delegate(err)
 	}
@@ -3667,6 +3692,18 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		s.timezone, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
 		return err
 	}
+	// update syncer config
+	s.cfg.SyncerConfig = cfg.SyncerConfig
+
+	// updated fileds that changed in func `copyConfigFromSource`
+	s.cfg.From = cfg.From
+	s.cfg.Flavor = cfg.Flavor
+	s.cfg.ServerID = cfg.ServerID
+	s.cfg.RelayDir = cfg.RelayDir
+	s.cfg.UseRelay = cfg.UseRelay
+	s.cfg.EnableGTID = cfg.EnableGTID
+	s.cfg.AutoFixGTID = cfg.AutoFixGTID
+	s.cfg.CaseSensitive = cfg.CaseSensitive
 	return nil
 }
 

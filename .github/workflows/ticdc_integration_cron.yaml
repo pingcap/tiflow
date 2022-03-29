@@ -23,9 +23,9 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
-          go-version: "1.16.4"
+          go-version: 1.18
 
       - name: Cache Vendor
         id: cache-vendor
@@ -85,9 +85,9 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
-          go-version: "1.16.4"
+          go-version: 1.18
 
       - name: Cache Vendor
         id: cache-vendor

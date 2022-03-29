@@ -19,8 +19,8 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func (t *testForEtcd) TestOperationJSON(c *C) {

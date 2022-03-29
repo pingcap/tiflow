@@ -16,6 +16,8 @@ package schema
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -31,16 +33,18 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	dmterror "github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 const (
@@ -59,6 +63,7 @@ var (
 
 // Tracker is used to track schema locally.
 type Tracker struct {
+	storePath string
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
@@ -74,15 +79,29 @@ type downstreamTracker struct {
 
 // DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
-	TableInfo            *model.TableInfo   // tableInfo which comes from parse create statement syntaxtree
-	AbsoluteUKIndexInfo  *model.IndexInfo   // absolute uk index is a pk/uk(not null)
-	AvailableUKIndexList []*model.IndexInfo // index list which is all uks
+	TableInfo   *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
+	WhereHandle *sqlmodel.WhereHandle
 }
 
 // NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
 // some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
 func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
+	var (
+		err       error
+		storePath string
+		store     kv.Storage
+		dom       *domain.Domain
+		se        session.Session
+	)
+
+	rollbackHolder := fr.NewRollbackHolder("schema-tracker")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	// NOTE: tidb uses a **global** config so can't isolate tracker's config from each other. If that isolation is needed,
 	// we might SetGlobalConfig before every call to tracker, or use some patch like https://github.com/bouk/monkey
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
@@ -124,24 +143,39 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	store, err := mockstore.NewMockStore(mockstore.WithStoreType(mockstore.EmbedUnistore))
+	storePath, err = ioutil.TempDir("./", "schema-tracker")
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "DeleteStorePath", Fn: func() {
+		_ = os.RemoveAll(storePath)
+	}})
+
+	store, err = mockstore.NewMockStore(
+		mockstore.WithStoreType(mockstore.EmbedUnistore),
+		mockstore.WithPath(storePath))
+	if err != nil {
+		return nil, err
+	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseStore", Fn: func() {
+		_ = store.Close()
+	}})
 
 	// avoid data race and of course no use in DM
 	domain.RunAutoAnalyze = false
 	session.DisableStats4Test()
 
-	dom, err := session.BootstrapSession(store)
+	dom, err = session.BootstrapSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseDomain", Fn: dom.Close})
 
-	se, err := session.CreateSession(store)
+	se, err = session.CreateSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseSession", Fn: se.Close})
 
 	globalVarsToSet := make(map[string]string, len(defaultGlobalVars))
 	for k, v := range defaultGlobalVars {
@@ -168,6 +202,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 			return nil, err
 		}
 	}
+	// skip DDL test https://github.com/pingcap/tidb/pull/33079
+	se.SetValue(sessionctx.QueryString, "skip")
 
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
@@ -184,6 +220,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}
 
 	return &Tracker{
+		storePath: storePath,
 		store:     store,
 		dom:       dom,
 		se:        se,
@@ -299,6 +336,7 @@ func IsTableNotExists(err error) bool {
 
 // Reset drops all tables inserted into this tracker.
 func (tr *Tracker) Reset() error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
 	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
@@ -317,11 +355,15 @@ func (tr *Tracker) Reset() error {
 func (tr *Tracker) Close() error {
 	tr.se.Close()
 	tr.dom.Close()
-	return tr.store.Close()
+	if err := tr.store.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(tr.storePath)
 }
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -331,6 +373,7 @@ func (tr *Tracker) DropTable(table *filter.Table) error {
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -340,6 +383,7 @@ func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	dbName := model.NewCIStr(db)
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
@@ -362,6 +406,7 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	schemaName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
@@ -370,6 +415,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 }
 
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
@@ -392,7 +438,7 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
-func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTi *model.TableInfo) (*DownstreamTableInfo, error) {
+func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
 	dti, ok := tr.dsTracker.tableInfos[tableID]
 	if !ok {
 		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
@@ -402,37 +448,13 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 			return nil, err
 		}
 
-		dti = GetDownStreamTI(downstreamTI, originTi)
+		dti = &DownstreamTableInfo{
+			TableInfo:   downstreamTI,
+			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+		}
 		tr.dsTracker.tableInfos[tableID] = dti
 	}
 	return dti, nil
-}
-
-// GetAvailableDownStreamUKIndexInfo gets available downstream UK whose data is not null.
-// note. this function will not init downstreamTrack.
-func (tr *Tracker) GetAvailableDownStreamUKIndexInfo(tableID string, data []interface{}) *model.IndexInfo {
-	dti := tr.dsTracker.tableInfos[tableID]
-
-	return GetIdentityUKByData(dti, data)
-}
-
-// GetIdentityUKByData gets available downstream UK whose data is not null.
-func GetIdentityUKByData(downstreamTI *DownstreamTableInfo, data []interface{}) *model.IndexInfo {
-	if downstreamTI == nil || len(downstreamTI.AvailableUKIndexList) == 0 {
-		return nil
-	}
-	// func for check data is not null
-	fn := func(i int) bool {
-		return data[i] != nil
-	}
-
-	for _, uk := range downstreamTI.AvailableUKIndexList {
-		// check uk's column data is not null
-		if isSpecifiedIndexColumn(uk, fn) {
-			return uk
-		}
-	}
-	return nil
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
@@ -502,120 +524,4 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	}
 	tr.dsTracker.stmtParser = stmtParser
 	return nil
-}
-
-// GetDownStreamTI constructs downstreamTable index cache by tableinfo.
-func GetDownStreamTI(downstreamTI *model.TableInfo, originTi *model.TableInfo) *DownstreamTableInfo {
-	var (
-		absoluteUKIndexInfo  *model.IndexInfo
-		availableUKIndexList = []*model.IndexInfo{}
-		hasPk                = false
-		absoluteUKPosition   = -1
-	)
-
-	// func for check not null constraint
-	fn := func(i int) bool {
-		return mysql.HasNotNullFlag(downstreamTI.Columns[i].Flag)
-	}
-
-	for i, idx := range downstreamTI.Indices {
-		if !idx.Primary && !idx.Unique {
-			continue
-		}
-		indexRedirect := redirectIndexKeys(idx, originTi)
-		if indexRedirect == nil {
-			continue
-		}
-		availableUKIndexList = append(availableUKIndexList, indexRedirect)
-		if idx.Primary {
-			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
-			hasPk = true
-		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
-			// second check not null unique key
-			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
-		}
-	}
-
-	// handle pk exceptional case.
-	// e.g. "create table t(a int primary key, b int)".
-	if !hasPk {
-		exPk := redirectIndexKeys(handlePkExCase(downstreamTI), originTi)
-		if exPk != nil {
-			absoluteUKIndexInfo = exPk
-			absoluteUKPosition = len(availableUKIndexList)
-			availableUKIndexList = append(availableUKIndexList, absoluteUKIndexInfo)
-		}
-	}
-
-	// move absoluteUKIndexInfo to the first in availableUKIndexList
-	if absoluteUKPosition != -1 && len(availableUKIndexList) > 1 {
-		availableUKIndexList[0], availableUKIndexList[absoluteUKPosition] = availableUKIndexList[absoluteUKPosition], availableUKIndexList[0]
-	}
-
-	return &DownstreamTableInfo{
-		TableInfo:            downstreamTI,
-		AbsoluteUKIndexInfo:  absoluteUKIndexInfo,
-		AvailableUKIndexList: availableUKIndexList,
-	}
-}
-
-// redirectIndexKeys redirect index's columns offset in origin tableinfo.
-func redirectIndexKeys(index *model.IndexInfo, originTi *model.TableInfo) *model.IndexInfo {
-	if index == nil || originTi == nil {
-		return nil
-	}
-
-	columns := make([]*model.IndexColumn, 0, len(index.Columns))
-	for _, key := range index.Columns {
-		originColumn := model.FindColumnInfo(originTi.Columns, key.Name.L)
-		if originColumn == nil {
-			return nil
-		}
-		column := &model.IndexColumn{
-			Name:   key.Name,
-			Offset: originColumn.Offset,
-			Length: key.Length,
-		}
-		columns = append(columns, column)
-	}
-	return &model.IndexInfo{
-		Table:   index.Table,
-		Unique:  index.Unique,
-		Primary: index.Primary,
-		State:   index.State,
-		Tp:      index.Tp,
-		Columns: columns,
-	}
-}
-
-// handlePkExCase is handle pk exceptional case.
-// e.g. "create table t(a int primary key, b int)".
-func handlePkExCase(ti *model.TableInfo) *model.IndexInfo {
-	if pk := ti.GetPkColInfo(); pk != nil {
-		return &model.IndexInfo{
-			Table:   ti.Name,
-			Unique:  true,
-			Primary: true,
-			State:   model.StatePublic,
-			Tp:      model.IndexTypeBtree,
-			Columns: []*model.IndexColumn{{
-				Name:   pk.Name,
-				Offset: pk.Offset,
-				Length: types.UnspecifiedLength,
-			}},
-		}
-	}
-	return nil
-}
-
-// isSpecifiedIndexColumn checks all of index's columns are matching 'fn'.
-func isSpecifiedIndexColumn(index *model.IndexInfo, fn func(i int) bool) bool {
-	for _, col := range index.Columns {
-		if !fn(col.Offset) {
-			return false
-		}
-	}
-	return true
 }

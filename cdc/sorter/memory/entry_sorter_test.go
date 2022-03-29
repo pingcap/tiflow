@@ -21,23 +21,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type mockEntrySorterSuite struct{}
-
-var _ = check.Suite(&mockEntrySorterSuite{})
-
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEntrySorter(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		input      []*model.RawKVEntry
 		resolvedTs uint64
@@ -119,7 +110,7 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
@@ -128,15 +119,15 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
-			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
+			require.Equal(t, tc.expect[i], e.RawKV)
 		}
 	}
 	cancel()
 	wg.Wait()
 }
 
-func (s *mockEntrySorterSuite) TestEntrySorterNonBlocking(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEntrySorterNonBlocking(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		input      []*model.RawKVEntry
 		resolvedTs uint64
@@ -218,28 +209,28 @@ func (s *mockEntrySorterSuite) TestEntrySorterNonBlocking(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
 			added, err := es.TryAddEntry(ctx, model.NewPolymorphicEvent(entry))
-			c.Assert(added, check.IsTrue)
-			c.Assert(err, check.IsNil)
+			require.True(t, added)
+			require.Nil(t, err)
 		}
 		added, err := es.TryAddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		c.Assert(added, check.IsTrue)
-		c.Assert(err, check.IsNil)
+		require.True(t, added)
+		require.Nil(t, err)
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
-			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
+			require.Equal(t, tc.expect[i], e.RawKV)
 		}
 	}
 	cancel()
 	wg.Wait()
 }
 
-func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEntrySorterRandomly(t *testing.T) {
+	t.Parallel()
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -248,7 +239,7 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
 	maxTs := uint64(1000000)
@@ -277,10 +268,10 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	var resolvedTs uint64
 	lastOpType := model.OpTypePut
 	for entry := range es.Output() {
-		c.Assert(entry.CRTs, check.GreaterEqual, lastTs)
-		c.Assert(entry.CRTs, check.Greater, resolvedTs)
+		require.GreaterOrEqual(t, entry.CRTs, lastTs)
+		require.Greater(t, entry.CRTs, resolvedTs)
 		if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
-			c.Assert(entry.CRTs, check.Greater, lastTs)
+			require.Greater(t, entry.CRTs, lastTs)
 		}
 		lastTs = entry.CRTs
 		lastOpType = entry.RawKV.OpType
@@ -295,8 +286,8 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	wg.Wait()
 }
 
-func (s *mockEntrySorterSuite) TestEventLess(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEventLess(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		i        *model.PolymorphicEvent
 		j        *model.PolymorphicEvent
@@ -374,12 +365,12 @@ func (s *mockEntrySorterSuite) TestEventLess(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(eventLess(tc.i, tc.j), check.Equals, tc.expected)
+		require.Equal(t, tc.expected, eventLess(tc.i, tc.j))
 	}
 }
 
-func (s *mockEntrySorterSuite) TestMergeEvents(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergeEvents(t *testing.T) {
+	t.Parallel()
 	events1 := []*model.PolymorphicEvent{
 		{
 			CRTs: 1,
@@ -456,16 +447,16 @@ func (s *mockEntrySorterSuite) TestMergeEvents(c *check.C) {
 	})
 
 	mergeEvents(events1, events2, output)
-	c.Assert(outputResults, check.DeepEquals, expectedResults)
+	require.Equal(t, expectedResults, outputResults)
 }
 
-func (s *mockEntrySorterSuite) TestEntrySorterClosed(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEntrySorterClosed(t *testing.T) {
+	t.Parallel()
 	es := NewEntrySorter()
 	atomic.StoreInt32(&es.closed, 1)
 	added, err := es.TryAddEntry(context.TODO(), model.NewResolvedPolymorphicEvent(0, 1))
-	c.Assert(added, check.IsFalse)
-	c.Assert(cerror.ErrSorterClosed.Equal(err), check.IsTrue)
+	require.False(t, added)
+	require.True(t, cerror.ErrSorterClosed.Equal(err))
 }
 
 func BenchmarkSorter(b *testing.B) {

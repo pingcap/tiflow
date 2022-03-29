@@ -179,7 +179,8 @@ func TestParseCfg(t *testing.T) {
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter: false,
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -199,7 +200,7 @@ func TestParseCfg(t *testing.T) {
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
@@ -321,7 +322,8 @@ server-worker-pool-size = 16
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter: false,
+			EnableDBSorter:     false,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -461,7 +463,8 @@ cert-allowed-cn = ["dd","ee"]
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter: false,
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -481,7 +484,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
@@ -520,7 +523,8 @@ unknown3 = 3
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableDBSorter: false,
+		EnableDBSorter:     true,
+		EnableNewScheduler: true,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
@@ -540,7 +544,7 @@ unknown3 = 3
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
-			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 			ClientMaxBatchSize:           8 * 1024 * 1024,
 			ClientMaxBatchCount:          128,
 			ClientRetryRateLimit:         1.0,

@@ -36,8 +36,11 @@ import (
 
 func init() {
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
-		sinkIniterMap["simple-mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-			filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+		sinkIniterMap["simple-mysql"] = func(
+			ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+			filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
+			errCh chan error,
+		) (Sink, error) {
 			return newSimpleMySQLSink(ctx, sinkURI, config)
 		}
 	})
@@ -204,8 +207,9 @@ func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, _ model.Tab
 }
 
 // EmitCheckpointTs sends CheckpointTs to Sink
-// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
-func (s *simpleMySQLSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+// TiCDC guarantees that all Events **in the cluster** which of commitTs
+// less than or equal `checkpointTs` are sent to downstream successfully.
+func (s *simpleMySQLSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// do nothing
 	return nil
 }

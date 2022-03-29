@@ -15,12 +15,16 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
+	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,11 +38,12 @@ func newTestSorter(name string, capacity int) (Sorter, actor.Mailbox) {
 			dbRouter:  router,
 			dbActorID: mb.ID(),
 			errCh:     make(chan error, 1),
+			closedWg:  &sync.WaitGroup{},
 		},
 		writerRouter:  router,
 		writerActorID: mb.ID(),
 		readerRouter:  router,
-		readerActorID: mb.ID(),
+		ReaderActorID: mb.ID(),
 	}
 	return s, mb
 }
@@ -60,6 +65,28 @@ func TestAddEntry(t *testing.T) {
 		}, task.SorterTask)
 }
 
+func TestTryAddEntry(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, mb := newTestSorter(t.Name(), 1)
+
+	event := model.NewResolvedPolymorphicEvent(0, 1)
+	sent, err := s.TryAddEntry(ctx, event)
+	require.True(t, sent)
+	require.Nil(t, err)
+	task, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, event, task.SorterTask.InputEvent)
+
+	sent, err = s.TryAddEntry(ctx, event)
+	require.True(t, sent)
+	require.Nil(t, err)
+	sent, err = s.TryAddEntry(ctx, event)
+	require.False(t, sent)
+	require.Nil(t, err)
+}
+
 func TestOutput(t *testing.T) {
 	t.Parallel()
 
@@ -76,14 +103,28 @@ func TestOutput(t *testing.T) {
 		}, task.SorterTask)
 }
 
-func TestCleanupFunc(t *testing.T) {
+func TestRunAndReportError(t *testing.T) {
 	t.Parallel()
 
-	s, mb := newTestSorter(t.Name(), 1)
+	// Run exits with three messages
+	cap := 3
+	s, mb := newTestSorter(t.Name(), cap)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		s.common.reportError(
+			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	}()
+	require.Error(t, s.Run(context.Background()))
 
-	fn := s.CleanupFunc()
-	require.Nil(t, fn(context.Background()))
-	task, ok := mb.Receive()
+	// Stop writer and reader.
+	msg, ok := mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
+	msg, ok = mb.Receive()
+	require.True(t, ok)
+	require.EqualValues(t, actormsg.StopMessage(), msg)
+	// Cleanup
+	msg, ok = mb.Receive()
 	require.True(t, ok)
 	require.EqualValues(t,
 		message.Task{
@@ -95,5 +136,15 @@ func TestCleanupFunc(t *testing.T) {
 					encoding.EncodeTsKey(s.uid, s.tableID+1, 0),
 				},
 			},
-		}, task.SorterTask)
+		}, msg.SorterTask)
+
+	// No more message.
+	msg, ok = mb.Receive()
+	require.False(t, ok)
+
+	// Must be nonblock.
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+	s.common.reportError(
+		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
 }

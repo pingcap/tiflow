@@ -15,14 +15,13 @@ package worker
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -150,8 +149,8 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 func (st *SubTask) initUnits(relay relay.Process) error {
 	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
 	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
-		// NOTE: LoaderConfig.Dir is always not empty because we only dump certs when we use lightning.
-		if err := st.cfg.To.Security.DumpTLSContent(filepath.Join(st.cfg.LoaderConfig.Dir, "..")); err != nil {
+		// NOTE: LoaderConfig.Dir may be a s3 path, but Lightning just supports local tls files, we need to use a new local dir.
+		if err := st.cfg.To.Security.DumpTLSContent("./" + loader.TmpTLSConfigPath + "_" + st.cfg.Name); err != nil {
 			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
 		}
 	}
@@ -268,6 +267,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 	st.Lock()
 	defer st.Unlock()
+
 	if st.cfg.ValidatorCfg.Mode != config.ValidationFast && st.cfg.ValidatorCfg.Mode != config.ValidationFull {
 		return
 	}
@@ -556,6 +556,10 @@ func (st *SubTask) Close() {
 	}
 	st.closeUnits() // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	// we can start/stop validator independent of task, so we don't set st.validator = nil inside
+	st.StopValidator()
+	st.validator = nil
 }
 
 // Kill kill running unit and stop the sub task.
@@ -572,6 +576,7 @@ func (st *SubTask) Kill() {
 	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
 
 	st.StopValidator()
+	st.validator = nil
 }
 
 // Pause pauses a running sub task or a sub task paused by error.
@@ -639,20 +644,19 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 		return terror.ErrWorkerUpdateTaskStage.Generate(st.Stage().String())
 	}
 
-	// update all units' configuration, if SubTask itself has configuration need to update, do it later
 	for _, u := range st.units {
 		err := u.Update(ctx, cfg)
 		if err != nil {
 			return err
 		}
 	}
-
+	st.SetCfg(*cfg)
 	return nil
 }
 
 // OperateSchema operates schema for an upstream table.
 func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (schema string, err error) {
-	if st.Stage() != pb.Stage_Paused {
+	if st.Stage() != pb.Stage_Paused && req.Op != pb.SchemaOp_ListMigrateTargets {
 		return "", terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
 	}
 
@@ -683,16 +687,34 @@ func (st *SubTask) UpdateFromConfig(cfg *config.SubTaskConfig) error {
 
 // CheckUnit checks whether current unit is sync unit.
 func (st *SubTask) CheckUnit() bool {
-	st.Lock()
-	defer st.Unlock()
-
+	st.RLock()
+	defer st.RUnlock()
 	flag := true
-
 	if _, ok := st.currUnit.(*syncer.Syncer); !ok {
 		flag = false
 	}
-
 	return flag
+}
+
+// CheckUnitCfgCanUpdate checks this unit cfg can update.
+func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
+	st.RLock()
+	defer st.RUnlock()
+
+	if st.currUnit == nil {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, pb.UnitType_InvalidUnit)
+	}
+
+	switch st.currUnit.Type() {
+	case pb.UnitType_Sync:
+		if s, ok := st.currUnit.(*syncer.Syncer); ok {
+			return s.CheckCanUpdateCfg(cfg)
+		}
+		// skip check for mock sync unit
+	default:
+		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, st.currUnit.Type())
+	}
+	return nil
 }
 
 // ShardDDLOperation returns the current shard DDL lock operation.

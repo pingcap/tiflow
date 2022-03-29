@@ -348,7 +348,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -499,6 +499,11 @@ MQ Codec invalid config
 ["CDC:ErrMQSinkUnknownProtocol"]
 error = '''
 unknown '%s' protocol for Message Queue sink
+'''
+
+["CDC:ErrMQWorkerClosed"]
+error = '''
+MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -663,7 +668,7 @@ peer-to-peer message client has failed permanently, no need to reconnect: %s
 
 ["CDC:ErrPeerMessageDataLost"]
 error = '''
-peer-to-peer message data lost, topic: %s, seq: %s
+peer-to-peer message data lost, topic: %s, seq: %d
 '''
 
 ["CDC:ErrPeerMessageDecodeError"]
@@ -1098,7 +1103,7 @@ file lock conflict: %s
 
 ["ErrRequestForwardErr"]
 error = '''
-request forward error, an request can only forward to owner one time 
+request forward error, an request can only forward to owner one time
 '''
 
 ["ErrSortDirLockError"]

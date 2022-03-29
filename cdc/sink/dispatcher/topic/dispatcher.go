@@ -14,13 +14,13 @@
 package topic
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
+	"fmt"
 )
 
 // Dispatcher is an abstraction for dispatching rows and ddls into different topics.
 type Dispatcher interface {
-	DispatchRowChangedEvent(row *model.RowChangedEvent) string
-	DispatchDDLEvent(ddl *model.DDLEvent) string
+	fmt.Stringer
+	Substitute(schema, table string) string
 }
 
 // StaticTopicDispatcher is a topic dispatcher which dispatches rows and ddls to the default topic.
@@ -35,42 +35,33 @@ func NewStaticTopicDispatcher(defaultTopic string) *StaticTopicDispatcher {
 	}
 }
 
-// DispatchRowChangedEvent returns the target topic to which a row should be dispatched to.
-func (s *StaticTopicDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) string {
+// Substitute converts schema/table name in a topic expression to kafka topic name.
+func (s *StaticTopicDispatcher) Substitute(schema, table string) string {
 	return s.defaultTopic
 }
 
-// DispatchDDLEvent returns the target topic to which a ddl should be dispatched.
-func (s *StaticTopicDispatcher) DispatchDDLEvent(ddl *model.DDLEvent) string {
+func (s *StaticTopicDispatcher) String() string {
 	return s.defaultTopic
 }
 
 // DynamicTopicDispatcher is a topic dispatcher which dispatches rows and ddls
 // dynamically to the target topics.
 type DynamicTopicDispatcher struct {
-	defaultTopic string
-	expression   Expression
+	expression Expression
 }
 
 // NewDynamicTopicDispatcher creates a DynamicTopicDispatcher.
-func NewDynamicTopicDispatcher(defaultTopic string, topicExpr Expression) *DynamicTopicDispatcher {
+func NewDynamicTopicDispatcher(topicExpr Expression) *DynamicTopicDispatcher {
 	return &DynamicTopicDispatcher{
-		defaultTopic: defaultTopic,
-		expression:   topicExpr,
+		expression: topicExpr,
 	}
 }
 
-// DispatchRowChangedEvent returns the target topic to which a row should be dispatched to.
-func (d *DynamicTopicDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent) string {
-	return d.expression.Substitute(row.Table.Schema, row.Table.Table)
+// Substitute converts schema/table name in a topic expression to kafka topic name.
+func (d *DynamicTopicDispatcher) Substitute(schema, table string) string {
+	return d.expression.Substitute(schema, table)
 }
 
-// DispatchDDLEvent returns the target topic to which a ddl should be dispatched.
-// If the ddl is a schema-level event such as 'CREATE DATABASE', 'DROP DATABASE', etc.,
-// that event will be dispatched to default topic.
-func (d *DynamicTopicDispatcher) DispatchDDLEvent(ddl *model.DDLEvent) string {
-	if len(ddl.TableInfo.Table) == 0 {
-		return d.defaultTopic
-	}
-	return d.expression.Substitute(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+func (d *DynamicTopicDispatcher) String() string {
+	return string(d.expression)
 }

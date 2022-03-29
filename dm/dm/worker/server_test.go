@@ -26,9 +26,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -45,9 +45,7 @@ import (
 
 // do not forget to update this path if the file removed/renamed.
 const (
-	sourceSampleFile  = "./source.yaml"
-	subtaskSampleFile = "./subtask.toml"
-	mydumperPath      = "../../bin/mydumper"
+	mydumperPath = "../../bin/mydumper"
 )
 
 var etcdErrCompacted = v3rpc.ErrCompacted
@@ -63,14 +61,11 @@ var _ = Suite(&testServer{})
 func (t *testServer) SetUpSuite(c *C) {
 	err := log.InitLogger(&log.Config{})
 	c.Assert(err, IsNil)
-
 	getMinLocForSubTaskFunc = getFakeLocForSubTask
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
 }
 
 func (t *testServer) TearDownSuite(c *C) {
 	getMinLocForSubTaskFunc = getMinLocForSubTask
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
 }
 
 func createMockETCD(dir string, host string) (*embed.Etcd, error) {
@@ -109,7 +104,6 @@ func (t *testServer) TestServer(c *C) {
 	etcdDir := c.MkDir()
 	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
 	c.Assert(err, IsNil)
-	defer ETCD.Close()
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
 	cfg.Join = masterAddr
@@ -166,7 +160,7 @@ func (t *testServer) TestServer(c *C) {
 
 	// start task
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
@@ -198,12 +192,40 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Paused)
 	}), IsTrue)
+
+	// test refresh source cfg
+	sourceCfg.MetaDir = "new meta"
+	_, err = ha.PutSourceCfg(s.etcdClient, sourceCfg)
+	c.Assert(err, IsNil)
+	c.Assert(s.worker.refreshSourceCfg(), IsNil)
+	c.Assert(s.worker.cfg.MetaDir, Equals, sourceCfg.MetaDir)
+
+	// check update subtask cfg failed
+	tomlStr, tomlErr := subtaskCfg.Toml()
+	c.Assert(tomlErr, IsNil)
+	ctx := context.Background()
+	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
+	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
+	c.Assert(checkErr, IsNil)
+	c.Assert(checkResp.Success, IsFalse)
+
+	// test refresh subtask cfg
+	subtaskCfg.SyncerConfig.Batch = 111
+	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{}, []ha.Stage{})
+	c.Assert(err, IsNil)
+	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	subTask.setCurrUnit(subTask.units[2]) // set to syncer unit
+	c.Assert(s.worker.tryRefreshSubTaskAndSourceConfig(subTask), IsNil)
+	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
+
 	// resume task
 	_, err = ha.PutSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name))
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Running)
 	}), IsTrue)
+
 	// stop task
 	_, err = ha.DeleteSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name))
 	c.Assert(err, IsNil)
@@ -217,15 +239,14 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err.Error(), Matches, ".*bind: address already in use.*")
 
 	t.testStopWorkerWhenLostConnect(c, s, ETCD)
-	// close
 	s.Close()
 
 	c.Assert(utils.WaitSomething(30, 10*time.Millisecond, func() bool {
 		return s.closed.Load()
 	}), IsTrue)
 
-	// test worker, just make sure testing sort
-	t.testWorker(c)
+	// test source worker, just make sure testing sort
+	t.testSourceWorker(c)
 }
 
 func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
@@ -638,7 +659,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg

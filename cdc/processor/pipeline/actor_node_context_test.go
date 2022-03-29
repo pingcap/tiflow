@@ -81,7 +81,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	sys := system.NewSystem()
 	defer func() {
 		cancel()
-		require.Nil(t, sys.Stop())
+		sys.Stop()
 	}()
 
 	require.Nil(t, sys.Start(ctx))
@@ -127,6 +127,8 @@ func (f *forwardActor) Poll(ctx sdtContext.Context, msgs []message.Message) bool
 	}
 	return true
 }
+
+func (f *forwardActor) OnClose() {}
 
 func wait(t *testing.T, timeout time.Duration, f func()) {
 	wait := make(chan int)

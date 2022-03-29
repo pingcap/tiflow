@@ -34,6 +34,12 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
+	config.GetGlobalServerConfig().Debug.EnableDBSorter = false
+	defer func() {
+		// Restore default server config.
+		config.GetGlobalServerConfig().Debug.EnableDBSorter = true
+	}()
+
 	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0)
 	require.Nil(t, err)
 
@@ -120,7 +126,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	)
 	err = sn.Receive(nctx)
 	require.Nil(t, err)
-	require.EqualValues(t, 2, sn.barrierTs)
+	require.EqualValues(t, 2, sn.BarrierTs())
 	// Barrier message must be passed to the next node.
 	require.EqualValues(t, pipeline.BarrierMessage(2), <-ch)
 
@@ -152,7 +158,7 @@ func TestSorterUpdateBarrierTs(t *testing.T) {
 	t.Parallel()
 	s := &sorterNode{barrierTs: 1}
 	s.updateBarrierTs(model.Ts(2))
-	require.Equal(t, model.Ts(2), s.barrierTs)
+	require.Equal(t, model.Ts(2), s.BarrierTs())
 	s.updateBarrierTs(model.Ts(1))
-	require.Equal(t, model.Ts(2), s.barrierTs)
+	require.Equal(t, model.Ts(2), s.BarrierTs())
 }

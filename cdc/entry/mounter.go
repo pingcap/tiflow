@@ -323,7 +323,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var warn string
 		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo.Tp)
+			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
 			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
@@ -335,10 +335,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:  colName,
-			Type:  colInfo.Tp,
-			Value: colValue,
-			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
+			Name:    colName,
+			Type:    colInfo.Tp,
+			Charset: colInfo.Charset,
+			Value:   colValue,
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
@@ -398,6 +399,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		tableInfoVersion = tableInfo.TableInfoVersion
 	}
 
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -409,6 +412,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
+		ColInfos:            colInfos,
 		Columns:             cols,
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
@@ -440,13 +444,13 @@ func sizeOfBytes(b []byte) int {
 }
 
 // formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
-func formatColVal(datum types.Datum, tp byte) (
+func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	value interface{}, size int, warn string, err error,
 ) {
 	if datum.IsNull() {
 		return nil, 0, "", nil
 	}
-	switch tp {
+	switch col.Tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
@@ -545,7 +549,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		}
 	}
 
-	return formatColVal(d, col.Tp)
+	return formatColVal(d, col)
 }
 
 // DecodeTableID decodes the raw key to a table ID

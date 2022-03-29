@@ -24,13 +24,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/tikv/client-go/v2/oracle"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/tikv/client-go/v2/oracle"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.uber.org/zap"
 )
 
 const (

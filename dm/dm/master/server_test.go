@@ -40,8 +40,9 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	tidbmock "github.com/pingcap/tidb/util/mock"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/integration"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/verify"
+	"go.etcd.io/etcd/tests/v3/integration"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/checker"
@@ -168,13 +169,21 @@ type testMaster struct {
 	etcdTestCli     *clientv3.Client
 }
 
-var testSuite = check.Suite(&testMaster{})
+var (
+	testSuite = check.SerialSuites(&testMaster{})
+	pwd       string
+)
 
 func TestMaster(t *testing.T) {
 	err := log.InitLogger(&log.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	pwd, err = os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	integration.BeforeTestExternal(t)
 	// inject *testing.T to testMaster
 	s := testSuite.(*testMaster)
 	s.testT = t
@@ -187,8 +196,7 @@ func TestMaster(t *testing.T) {
 }
 
 func (t *testMaster) SetUpSuite(c *check.C) {
-	err := log.InitLogger(&log.Config{})
-	c.Assert(err, check.IsNil)
+	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	maxRetryNum = 2
@@ -344,7 +352,7 @@ func makeWorkerClientsForHandle(ctrl *gomock.Controller, taskName string, source
 
 func testDefaultMasterServer(c *check.C) *Server {
 	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config=./dm-master.toml"})
+	err := cfg.FromContent(SampleConfig)
 	c.Assert(err, check.IsNil)
 	cfg.DataDir = c.MkDir()
 	server := NewServer(cfg)
@@ -431,7 +439,7 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 func generateServerConfig(c *check.C, name string) *Config {
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = name
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1367,7 +1375,7 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 func (t *testMaster) TestServer(c *check.C) {
 	var err error
 	cfg := NewConfig()
-	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 	cfg.PeerUrls = "http://127.0.0.1:8294"
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1383,12 +1391,19 @@ func (t *testMaster) TestServer(c *check.C) {
 		basicServiceCheck(c, cfg)
 
 		// try to start another server with the same address.  Expect it to fail
+		// unset an etcd variable because it will cause checking on exit, and block forever
+		err = os.Unsetenv(verify.ENV_VERIFY)
+		c.Assert(err, check.IsNil)
+
 		dupServer := NewServer(cfg)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		err1 := dupServer.Start(ctx)
 		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
 		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+
+		err = os.Setenv(verify.ENV_VERIFY, verify.ENV_VERIFY_ALL_VALUE)
+		c.Assert(err, check.IsNil)
 	})
 
 	// test the listen address is 0.0.0.0
@@ -1411,6 +1426,10 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 	_, peerPort, err := net.SplitHostPort(peerAddr)
 	c.Assert(err, check.IsNil)
 
+	caPath := pwd + "/tls_for_test/ca.pem"
+	certPath := pwd + "/tls_for_test/dm.pem"
+	keyPath := pwd + "/tls_for_test/dm.key"
+
 	// all with `https://` prefix
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{
@@ -1421,9 +1440,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
@@ -1442,9 +1461,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 
@@ -1458,9 +1477,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 
@@ -1474,9 +1493,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 
@@ -1490,9 +1509,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 
@@ -1506,9 +1525,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
@@ -1527,9 +1546,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=http://%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=http://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=http://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
 	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
@@ -1547,9 +1566,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=http://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
 	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
@@ -1568,9 +1587,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		fmt.Sprintf("--peer-urls=0.0.0.0:%s", peerPort),
 		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
 		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
-		"--ssl-ca=./tls_for_test/ca.pem",
-		"--ssl-cert=./tls_for_test/dm.pem",
-		"--ssl-key=./tls_for_test/dm.key",
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
 	}), check.IsNil)
 	t.testTLSPrefix(c, cfg)
 }
@@ -1603,7 +1622,7 @@ func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLog
 
 func (t *testMaster) testHTTPInterface(c *check.C, url string, contain []byte) {
 	// we use HTTPS in some test cases.
-	tls, err := toolutils.NewTLS("./tls_for_test/ca.pem", "./tls_for_test/dm.pem", "./tls_for_test/dm.key", url, []string{})
+	tls, err := toolutils.NewTLS(pwd+"/tls_for_test/ca.pem", pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key", url, []string{})
 	c.Assert(err, check.IsNil)
 	cli := toolutils.ClientWithTLS(tls.TLSConfig())
 
@@ -1623,7 +1642,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1643,7 +1662,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 
 	// join to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1678,7 +1697,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	c.Assert(leaderID, check.Equals, cfg1.Name)
 
 	cfg3 := NewConfig()
-	c.Assert(cfg3.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg3.FromContent(SampleConfig), check.IsNil)
 	cfg3.Name = "dm-master-3"
 	cfg3.DataDir = c.MkDir()
 	cfg3.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1721,7 +1740,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -1734,7 +1753,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	s1.leader.Store(oneselfLeader)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
-	mysqlCfg, err := config.LoadFromFile("./source.yaml")
+	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
 	task, err := mysqlCfg.Yaml()
