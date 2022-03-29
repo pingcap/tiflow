@@ -167,7 +167,7 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 	atomic.StoreUint64(&b.totalDDLCount, 0)
 
 	log.Info("sink replication status",
-		zap.Any("sinkType", b.sinkType),
+		zap.Stringer("sinkType", b.sinkType),
 		zap.String("changefeed", b.changefeedID),
 		util.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),
