@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -85,17 +86,17 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	return storage.Persist(ctx)
 }
 
-func (w *exampleWorker) Status() lib.WorkerStatus {
+func (w *exampleWorker) Status() libModel.WorkerStatus {
 	log.L().Info("Status")
-	code := lib.WorkerStatusNormal
+	code := libModel.WorkerStatusNormal
 	w.work.mu.Lock()
 	finished := w.work.finished
 	w.work.mu.Unlock()
 
 	if finished {
-		code = lib.WorkerStatusFinished
+		code = libModel.WorkerStatusFinished
 	}
-	return lib.WorkerStatus{Code: code}
+	return libModel.WorkerStatus{Code: code}
 }
 
 func (w *exampleWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {

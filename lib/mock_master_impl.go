@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/client"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
@@ -125,6 +126,14 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(worker, newStatus)
+	return args.Error(0)
+}
+
 func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -211,9 +220,9 @@ func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, me
 	return args.Error(0)
 }
 
-func (m *MockWorkerHandler) Status() *WorkerStatus {
+func (m *MockWorkerHandler) Status() *libModel.WorkerStatus {
 	args := m.Called()
-	return args.Get(0).(*WorkerStatus)
+	return args.Get(0).(*libModel.WorkerStatus)
 }
 
 func (m *MockWorkerHandler) ID() WorkerID {

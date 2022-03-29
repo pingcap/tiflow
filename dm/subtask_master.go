@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -118,7 +119,7 @@ func (s *SubTaskMaster) Tick(ctx context.Context) error {
 	}
 	status := worker.Status()
 	switch status.Code {
-	case lib.WorkerStatusFinished:
+	case libModel.WorkerStatusFinished:
 		log.L().Info("worker finished", zap.String("currWorkerID", s.currWorkerID))
 		if len(s.workerSeq) > 0 {
 			s.workerSeq = s.workerSeq[1:]
@@ -132,7 +133,7 @@ func (s *SubTaskMaster) Tick(ctx context.Context) error {
 				return lib.StopAfterTick
 			}
 		}
-	case lib.WorkerStatusError:
+	case libModel.WorkerStatusError:
 		// TODO: will print lots of logs, should find a way to expose the error
 		log.L().Info("worker error", zap.String("message", status.ErrorMessage))
 	}
@@ -190,5 +191,10 @@ func (s *SubTaskMaster) OnMasterFailover(reason lib.MasterFailoverReason) error 
 
 func (s *SubTaskMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("on master message", zap.Any("message", message))
+	return nil
+}
+
+func (s *SubTaskMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil
 }

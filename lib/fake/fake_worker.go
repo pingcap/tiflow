@@ -13,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
@@ -40,7 +41,7 @@ type (
 
 		statusCode struct {
 			sync.RWMutex
-			code lib.WorkerStatusCode
+			code libModel.WorkerStatusCode
 		}
 	}
 )
@@ -64,7 +65,7 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
 		d.init = true
-		d.setStatusCode(lib.WorkerStatusNormal)
+		d.setStatusCode(libModel.WorkerStatusNormal)
 		return nil
 	}
 	return errors.New("repeated init")
@@ -91,31 +92,31 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 		return nil
 	}
 
-	if d.getStatusCode() == lib.WorkerStatusStopped {
-		d.setStatusCode(lib.WorkerStatusStopped)
+	if d.getStatusCode() == libModel.WorkerStatusStopped {
+		d.setStatusCode(libModel.WorkerStatusStopped)
 		return d.Exit(ctx, d.Status(), nil)
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
-		d.setStatusCode(lib.WorkerStatusFinished)
+		d.setStatusCode(libModel.WorkerStatusFinished)
 		return d.Exit(ctx, d.Status(), nil)
 	}
 
 	return nil
 }
 
-func (d *dummyWorker) Status() lib.WorkerStatus {
+func (d *dummyWorker) Status() libModel.WorkerStatus {
 	if d.init {
 		extBytes, err := d.status.Marshal()
 		if err != nil {
 			log.L().Panic("unexpected error", zap.Error(err))
 		}
-		return lib.WorkerStatus{
+		return libModel.WorkerStatus{
 			Code:     d.getStatusCode(),
 			ExtBytes: extBytes,
 		}
 	}
-	return lib.WorkerStatus{Code: lib.WorkerStatusCreated}
+	return libModel.WorkerStatus{Code: libModel.WorkerStatusCreated}
 }
 
 func (d *dummyWorker) Workload() model.RescUnit {
@@ -131,8 +132,8 @@ func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue)
 	switch msg := message.(type) {
 	case *lib.StatusChangeRequest:
 		switch msg.ExpectState {
-		case lib.WorkerStatusStopped:
-			d.setStatusCode(lib.WorkerStatusStopped)
+		case libModel.WorkerStatusStopped:
+			d.setStatusCode(libModel.WorkerStatusStopped)
 		default:
 			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -148,13 +149,13 @@ func (d *dummyWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (d *dummyWorker) setStatusCode(code lib.WorkerStatusCode) {
+func (d *dummyWorker) setStatusCode(code libModel.WorkerStatusCode) {
 	d.statusCode.Lock()
 	defer d.statusCode.Unlock()
 	d.statusCode.code = code
 }
 
-func (d *dummyWorker) getStatusCode() lib.WorkerStatusCode {
+func (d *dummyWorker) getStatusCode() libModel.WorkerStatusCode {
 	d.statusCode.RLock()
 	defer d.statusCode.RUnlock()
 	return d.statusCode.code

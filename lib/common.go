@@ -7,13 +7,13 @@ import (
 
 	"github.com/pingcap/errors"
 
+	"github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type (
-	WorkerStatusCode int32
-	WorkerType       int64
+	WorkerType int64
 
 	MasterStatusCode int32
 
@@ -21,19 +21,6 @@ type (
 	WorkerConfig = interface{}
 	MasterID     = string
 	WorkerID     = string
-)
-
-// Among these statuses, only WorkerStatusCreated is used by the framework
-// for now. The rest are for the business logic to use.
-// TODO think about whether to manage the transition of the statuses.
-// TODO: need a FSM graph
-const (
-	WorkerStatusNormal = WorkerStatusCode(iota + 1)
-	WorkerStatusCreated
-	WorkerStatusInit
-	WorkerStatusError
-	WorkerStatusFinished
-	WorkerStatusStopped
 )
 
 // Job master statuses
@@ -88,31 +75,6 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 	return tc
 }
 
-type WorkerStatus struct {
-	Code         WorkerStatusCode `json:"code"`
-	ErrorMessage string           `json:"error-message"`
-
-	// ExtBytes carries the serialized form of the Ext field, which is used in
-	// business logic only.
-	// Business logic can parse the raw bytes and decode into business Go object
-	ExtBytes []byte `json:"ext-bytes"`
-}
-
-// InTerminateState returns whether worker is in a terminate state, including
-// finished, stopped, error.
-func (s *WorkerStatus) InTerminateState() bool {
-	switch s.Code {
-	case WorkerStatusFinished, WorkerStatusStopped, WorkerStatusError:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *WorkerStatus) Marshal() ([]byte, error) {
-	return json.Marshal(s)
-}
-
 func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-ping-%s", masterID)
 }
@@ -124,15 +86,6 @@ func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 
 func WorkerStatusChangeRequestTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	return fmt.Sprintf("worker-status-change-req-%s-%s", masterID, workerID)
-}
-
-func WorkerStatusUpdatedTopic(masterID MasterID) string {
-	return fmt.Sprintf("worker-status-updated-%s", masterID)
-}
-
-type WorkerStatusUpdatedMessage struct {
-	FromWorkerID WorkerID `json:"from-worker-id"`
-	Epoch        Epoch    `json:"epoch"`
 }
 
 type HeartbeatPingMessage struct {
@@ -149,10 +102,10 @@ type HeartbeatPongMessage struct {
 }
 
 type StatusChangeRequest struct {
-	SendTime     clock.MonotonicTime `json:"send-time"`
-	FromMasterID MasterID            `json:"from-master-id"`
-	Epoch        Epoch               `json:"epoch"`
-	ExpectState  WorkerStatusCode    `json:"expect-state"`
+	SendTime     clock.MonotonicTime    `json:"send-time"`
+	FromMasterID MasterID               `json:"from-master-id"`
+	Epoch        Epoch                  `json:"epoch"`
+	ExpectState  model.WorkerStatusCode `json:"expect-state"`
 }
 
 type (
@@ -179,10 +132,10 @@ func (m *MasterMetaKVData) Unmarshal(data []byte) error {
 }
 
 type WorkerMetaKVData struct {
-	MasterID   Master           `json:"id"`
-	NodeID     p2p.NodeID       `json:"node-id"`
-	StatusCode WorkerStatusCode `json:"status-code"`
-	Message    string           `json:"message"`
+	MasterID   Master                 `json:"id"`
+	NodeID     p2p.NodeID             `json:"node-id"`
+	StatusCode model.WorkerStatusCode `json:"status-code"`
+	Message    string                 `json:"message"`
 }
 
 type MasterFailoverReasonCode int32

@@ -3,9 +3,11 @@ package servermaster
 import (
 	"testing"
 
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/pb"
 )
 
 func TestJobFsmStateTrans(t *testing.T) {
@@ -18,7 +20,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 		ID:     id,
 		Config: []byte("simple config"),
 	}
-	worker := lib.NewTombstoneWorkerHandle(id, lib.WorkerStatus{Code: lib.WorkerStatusNormal}, nil)
+	worker := lib.NewTombstoneWorkerHandle(id, libModel.WorkerStatus{Code: libModel.WorkerStatusNormal}, nil)
 
 	// create new job, enter into WaitAckack job queue
 	fsm.JobDispatched(job)
@@ -62,6 +64,6 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// offline invalid job, will do nothing
-	invalidWorker := lib.NewTombstoneWorkerHandle(id+"invalid", lib.WorkerStatus{}, nil)
+	invalidWorker := lib.NewTombstoneWorkerHandle(id+"invalid", libModel.WorkerStatus{}, nil)
 	fsm.JobOffline(invalidWorker, true)
 }

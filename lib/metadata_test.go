@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
+
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
 func TestMasterMetadata(t *testing.T) {
@@ -81,22 +83,22 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	// Using context.Background() since there is no risk that
 	// the mock KV might time out.
-	err := workerMetaClient.Store(context.Background(), "worker-1", &WorkerStatus{
-		Code:         WorkerStatusInit,
+	err := workerMetaClient.Store(context.Background(), "worker-1", &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusInit,
 		ErrorMessage: "test-1",
 		ExtBytes:     []byte("ext-bytes-1"),
 	})
 	require.NoError(t, err)
 
-	err = workerMetaClient.Store(context.Background(), "worker-2", &WorkerStatus{
-		Code:         WorkerStatusNormal,
+	err = workerMetaClient.Store(context.Background(), "worker-2", &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusNormal,
 		ErrorMessage: "test-2",
 		ExtBytes:     []byte("ext-bytes-2"),
 	})
 	require.NoError(t, err)
 
-	err = workerMetaClient.Store(context.Background(), "worker-3", &WorkerStatus{
-		Code:         WorkerStatusFinished,
+	err = workerMetaClient.Store(context.Background(), "worker-3", &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusFinished,
 		ErrorMessage: "test-3",
 		ExtBytes:     []byte("ext-bytes-3"),
 	})
@@ -104,19 +106,19 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	workerStatuses, err := workerMetaClient.LoadAllWorkers(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, map[WorkerID]*WorkerStatus{
+	require.Equal(t, map[WorkerID]*libModel.WorkerStatus{
 		"worker-1": {
-			Code:         WorkerStatusInit,
+			Code:         libModel.WorkerStatusInit,
 			ErrorMessage: "test-1",
 			ExtBytes:     []byte("ext-bytes-1"),
 		},
 		"worker-2": {
-			Code:         WorkerStatusNormal,
+			Code:         libModel.WorkerStatusNormal,
 			ErrorMessage: "test-2",
 			ExtBytes:     []byte("ext-bytes-2"),
 		},
 		"worker-3": {
-			Code:         WorkerStatusFinished,
+			Code:         libModel.WorkerStatusFinished,
 			ErrorMessage: "test-3",
 			ExtBytes:     []byte("ext-bytes-3"),
 		},

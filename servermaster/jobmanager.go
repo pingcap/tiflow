@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -56,7 +58,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 		SendTime:     jm.clocker.Mono(),
 		FromMasterID: jm.BaseMaster.MasterID(),
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
-		ExpectState:  lib.WorkerStatusStopped,
+		ExpectState:  libModel.WorkerStatusStopped,
 	}
 	err := job.WorkerHandle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
 	return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
@@ -278,6 +280,11 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason erro
 // OnWorkerMessage implements lib.MasterImpl.OnWorkerMessage
 func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
+	return nil
+}
+
+func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil
 }
 

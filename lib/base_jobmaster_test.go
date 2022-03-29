@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
@@ -56,6 +57,14 @@ func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *testJobMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(worker, newStatus)
 	return args.Error(0)
 }
 
@@ -119,9 +128,9 @@ func (m *testJobMasterImpl) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
-func (m *testJobMasterImpl) Status() WorkerStatus {
-	return WorkerStatus{
-		Code: WorkerStatusNormal,
+func (m *testJobMasterImpl) Status() libModel.WorkerStatus {
+	return libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
 	}
 }
 

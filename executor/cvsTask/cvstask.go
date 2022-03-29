@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -55,7 +56,7 @@ type cvsTask struct {
 
 	statusCode struct {
 		sync.RWMutex
-		code lib.WorkerStatusCode
+		code libModel.WorkerStatusCode
 	}
 	runError struct {
 		sync.RWMutex
@@ -87,14 +88,14 @@ func NewCvsTask(ctx *dcontext.Context, _workerID lib.WorkerID, masterID lib.Mast
 
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
-	task.setStatusCode(lib.WorkerStatusNormal)
+	task.setStatusCode(libModel.WorkerStatusNormal)
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
 			log.L().Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(lib.WorkerStatusError)
+			task.setStatusCode(libModel.WorkerStatusError)
 		}
 	}()
 	go func() {
@@ -102,9 +103,9 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		if err != nil {
 			log.L().Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(lib.WorkerStatusError)
+			task.setStatusCode(libModel.WorkerStatusError)
 		} else {
-			task.setStatusCode(lib.WorkerStatusFinished)
+			task.setStatusCode(libModel.WorkerStatusFinished)
 		}
 	}()
 
@@ -123,7 +124,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		return err
 	}
 	switch task.getStatusCode() {
-	case lib.WorkerStatusFinished, lib.WorkerStatusError, lib.WorkerStatusStopped:
+	case libModel.WorkerStatusFinished, libModel.WorkerStatusError, libModel.WorkerStatusStopped:
 		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
 	default:
 	}
@@ -131,7 +132,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 }
 
 // Status returns a short worker status to be periodically sent to the master.
-func (task *cvsTask) Status() lib.WorkerStatus {
+func (task *cvsTask) Status() libModel.WorkerStatus {
 	stats := &Status{
 		TaskConfig: task.Config,
 		CurrentLoc: task.curLoc,
@@ -141,7 +142,7 @@ func (task *cvsTask) Status() lib.WorkerStatus {
 	if err != nil {
 		log.L().Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
-	return lib.WorkerStatus{
+	return libModel.WorkerStatus{
 		Code: task.getStatusCode(), ErrorMessage: "",
 		ExtBytes: statsBytes,
 	}
@@ -161,8 +162,8 @@ func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) 
 	switch msg := message.(type) {
 	case *lib.StatusChangeRequest:
 		switch msg.ExpectState {
-		case lib.WorkerStatusStopped:
-			task.setStatusCode(lib.WorkerStatusStopped)
+		case libModel.WorkerStatusStopped:
+			task.setStatusCode(libModel.WorkerStatusStopped)
 		default:
 			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -260,13 +261,13 @@ func (task *cvsTask) Send(ctx context.Context) error {
 	}
 }
 
-func (task *cvsTask) getStatusCode() lib.WorkerStatusCode {
+func (task *cvsTask) getStatusCode() libModel.WorkerStatusCode {
 	task.statusCode.RLock()
 	defer task.statusCode.RUnlock()
 	return task.statusCode.code
 }
 
-func (task *cvsTask) setStatusCode(status lib.WorkerStatusCode) {
+func (task *cvsTask) setStatusCode(status libModel.WorkerStatusCode) {
 	task.statusCode.Lock()
 	defer task.statusCode.Unlock()
 	task.statusCode.code = status

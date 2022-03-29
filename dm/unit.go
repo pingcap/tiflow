@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 type unitHolder struct {
@@ -60,15 +61,15 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 	if !hasResult {
 		return nil
 	}
-	var s lib.WorkerStatus
+	var s libModel.WorkerStatus
 	if len(result.Errors) > 0 {
-		s = lib.WorkerStatus{
-			Code:         lib.WorkerStatusError,
+		s = libModel.WorkerStatus{
+			Code:         libModel.WorkerStatusError,
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
 		}
 	} else {
-		s = lib.WorkerStatus{
-			Code: lib.WorkerStatusFinished,
+		s = libModel.WorkerStatus{
+			Code: libModel.WorkerStatusFinished,
 		}
 	}
 	err := base.UpdateStatus(ctx, s)

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 const (
@@ -74,7 +75,7 @@ func TestExampleMaster(t *testing.T) {
 	master.worker.mu.Lock()
 	code := master.worker.statusCode
 	master.worker.mu.Unlock()
-	require.Equal(t, lib.WorkerStatusCreated, code)
+	require.Equal(t, libModel.WorkerStatusCreated, code)
 
 	lib.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
 
@@ -86,8 +87,8 @@ func TestExampleMaster(t *testing.T) {
 		return online
 	}, 2*time.Second, 100*time.Millisecond)
 
-	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &lib.WorkerStatus{
-		Code: lib.WorkerStatusInit,
+	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &libModel.WorkerStatus{
+		Code: libModel.WorkerStatusInit,
 	})
 
 	require.Eventually(t, func() bool {
@@ -98,7 +99,7 @@ func TestExampleMaster(t *testing.T) {
 		code = master.worker.statusCode
 		master.worker.mu.Unlock()
 
-		return code == lib.WorkerStatusInit
+		return code == libModel.WorkerStatusInit
 	}, time.Second, time.Millisecond*10)
 
 	err = master.Close(ctx)

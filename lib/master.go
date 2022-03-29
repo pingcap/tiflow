@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -18,6 +20,7 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib/quota"
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -62,6 +65,8 @@ type MasterImpl interface {
 
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+
+	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
@@ -281,10 +286,10 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 
 	ok, err = m.messageHandlerManager.RegisterHandler(
 		ctx,
-		WorkerStatusUpdatedTopic(m.id),
-		&WorkerStatusUpdatedMessage{},
+		statusutil.WorkerStatusTopic(m.id),
+		&statusutil.WorkerStatusMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*WorkerStatusUpdatedMessage)
+			msg := value.(*statusutil.WorkerStatusMessage)
 			m.workerManager.OnWorkerStatusUpdated(msg)
 			return nil
 		})
@@ -292,7 +297,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", WorkerStatusUpdatedTopic(m.id)))
+		log.L().Panic("duplicate handler", zap.String("topic", statusutil.WorkerStatusTopic(m.id)))
 	}
 
 	return nil
@@ -325,9 +330,11 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := m.workerManager.CheckStatusUpdate(ctx); err != nil {
-		return errors.Trace(err)
+	err := m.workerManager.CheckStatusUpdate(m.Impl.OnWorkerStatusUpdated)
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -424,9 +431,9 @@ func (m *DefaultBaseMaster) runWorkerCheck(ctx context.Context) error {
 			tombstoneHandle := NewTombstoneWorkerHandle(workerInfo.ID, *status, nil)
 			var offlineError error
 			switch status.Code {
-			case WorkerStatusFinished:
+			case libModel.WorkerStatusFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-			case WorkerStatusStopped:
+			case libModel.WorkerStatusStopped:
 				offlineError = derror.ErrWorkerStop.FastGenByArgs()
 			default:
 				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerInfo.ID)
@@ -559,7 +566,7 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		// When CreateWorker failed, we need to pass the worker id to
 		// OnWorkerDispatched, so we use a dummy WorkerHandle.
 		dispatchFailedDummyHandler := NewTombstoneWorkerHandle(
-			workerID, WorkerStatus{Code: WorkerStatusError}, nil)
+			workerID, libModel.WorkerStatus{Code: libModel.WorkerStatusError}, nil)
 		requestCtx, cancel := context.WithTimeout(context.Background(), createWorkerTimeout)
 		defer cancel()
 		// This following API should be refined.

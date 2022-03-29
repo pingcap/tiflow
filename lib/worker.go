@@ -5,9 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -15,10 +12,14 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -66,12 +67,12 @@ type BaseWorker interface {
 	Close(ctx context.Context) error
 	ID() runtime.RunnableID
 	MetaKVClient() metaclient.KVClient
-	UpdateStatus(ctx context.Context, status WorkerStatus) error
+	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit
 	// Worker should update its worker status code to correct value before calling Exit
-	Exit(ctx context.Context, status WorkerStatus, err error) error
+	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
 type DefaultBaseWorker struct {
@@ -89,7 +90,7 @@ type DefaultBaseWorker struct {
 	masterID     MasterID
 
 	workerMetaClient *WorkerMetadataClient
-	statusSender     *StatusSender
+	statusSender     *statusutil.Writer
 	messageRouter    *MessageRouter
 
 	id            WorkerID
@@ -205,7 +206,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 
 	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
-	w.statusSender = NewStatusSender(w.id, w.masterClient, w.workerMetaClient, w.messageSender, w.pool)
+	w.statusSender = statusutil.NewWriter(
+		w.metaKVClient, w.messageSender, w.masterClient, w.id)
 	w.messageRouter = NewMessageRouter(w.id, w.pool, defaultMessageRouterBufferSize,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			return w.Impl.OnMasterMessage(topic, msg)
@@ -224,8 +226,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
-	if err := w.statusSender.SafeSendStatus(
-		ctx, WorkerStatus{Code: WorkerStatusInit}); err != nil {
+	if err := w.statusSender.UpdateStatus(
+		ctx, &libModel.WorkerStatus{Code: libModel.WorkerStatusInit}); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -244,10 +246,6 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	default:
-	}
-
-	if err := w.statusSender.Tick(ctx); err != nil {
-		return errors.Trace(err)
 	}
 
 	if err := w.messageRouter.Tick(ctx); err != nil {
@@ -307,8 +305,15 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 	return w.userMetaKVClient
 }
 
-func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status WorkerStatus) error {
-	err := w.statusSender.AsyncSendStatus(ctx, status)
+// UpdateStatus updates the worker's status and tries to notify the master.
+// The status is persisted if Code or ErrorMessage has changed. Refer to (*WorkerStatus).HasSignificantChange.
+//
+// If UpdateStatus returns without an error, then the status must have been persisted,
+// but there is no guarantee that the master has received a notification.
+// Note that if the master cannot handle the notifications fast enough, notifications
+// can be lost.
+func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
+	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -327,12 +332,12 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status WorkerStatus, err error) error {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	if err != nil {
-		status.Code = WorkerStatusError
+		status.Code = libModel.WorkerStatusError
 	}
 
-	if err1 := w.statusSender.SafeSendStatus(ctx, status); err1 != nil {
+	if err1 := w.statusSender.UpdateStatus(ctx, &status); err1 != nil {
 		return err1
 	}
 

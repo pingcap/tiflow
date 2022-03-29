@@ -68,6 +68,7 @@ var (
 	ErrInvalidJobType             = errors.Normalize("invalid job type: %s", errors.RFCCodeText("DFLOW:ErrInvalidJobType"))
 	ErrWorkerFinish               = errors.Normalize("worker finished and exited", errors.RFCCodeText("DFLOW:ErrWorkerFinish"))
 	ErrWorkerStop                 = errors.Normalize("worker is stopped", errors.RFCCodeText("DFLOW:ErrWorkerStop"))
+	ErrTooManyStatusUpdates       = errors.Normalize("there are too many pending worker status updates: %d", errors.RFCCodeText("DFLOW:ErrTooManyStatusUpdates"))
 
 	// master etcd related errors
 	ErrMasterEtcdCreateSessionFail    = errors.Normalize("failed to create Etcd session", errors.RFCCodeText("DFLOW:ErrMasterEtcdCreateSessionFail"))
@@ -93,6 +94,7 @@ var (
 	ErrRuntimeDuplicateTaskID     = errors.Normalize("trying to add a task with the same ID as an existing one", errors.RFCCodeText("DFLOW:ErrRuntimeDuplicateTaskID %s"))
 	ErrRuntimeClosed              = errors.Normalize("runtime has been closed", errors.RFCCodeText("DFLOW:ErrRuntimeClosed"))
 	ErrExecutorEtcdConnFail       = errors.Normalize("executor conn inner etcd fail", errors.RFCCodeText("DFLOW:ErrExecutorEtcdConnFail"))
+	ErrExecutorNotFoundForMessage = errors.Normalize("cannot find the executor for p2p messaging", errors.RFCCodeText("DFLOW:ErrExecutorNotFoundForMessage"))
 
 	// planner related errors
 	ErrPlannerDAGDepthExceeded = errors.Normalize("dag depth exceeded: %d", errors.RFCCodeText("DFLOW:ErrPlannerDAGDepthExceeded"))

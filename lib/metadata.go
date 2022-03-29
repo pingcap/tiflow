@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -99,13 +101,13 @@ func NewWorkerMetadataClient(
 	}
 }
 
-func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*WorkerStatus, error) {
+func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*libModel.WorkerStatus, error) {
 	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
 	resp, err := c.metaKVClient.Get(ctx, loadPrefix, metaclient.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ret := make(map[WorkerID]*WorkerStatus, len(resp.Kvs))
+	ret := make(map[WorkerID]*libModel.WorkerStatus, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
 		decoded, err := adapter.WorkerKeyAdapter.Decode(string(kv.Key))
 		if err != nil {
@@ -120,7 +122,7 @@ func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID
 		workerID := decoded[1]
 
 		workerMetaBytes := kv.Value
-		var workerMeta WorkerStatus
+		var workerMeta libModel.WorkerStatus
 		if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
 			// TODO wrap the error
 			return nil, errors.Trace(err)
@@ -130,7 +132,7 @@ func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID
 	return ret, nil
 }
 
-func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*WorkerStatus, error) {
+func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*libModel.WorkerStatus, error) {
 	resp, err := c.metaKVClient.Get(ctx, c.workerMetaKey(workerID))
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -139,7 +141,7 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID WorkerID) (*Wo
 		return nil, derror.ErrWorkerNoMeta.GenWithStackByArgs()
 	}
 	workerMetaBytes := resp.Kvs[0].Value
-	var workerMeta WorkerStatus
+	var workerMeta libModel.WorkerStatus
 	if err := json.Unmarshal(workerMetaBytes, &workerMeta); err != nil {
 		// TODO wrap the error
 		return nil, errors.Trace(err)
@@ -156,7 +158,7 @@ func (c *WorkerMetadataClient) Remove(ctx context.Context, id WorkerID) (bool, e
 	return true, nil
 }
 
-func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *WorkerStatus) error {
+func (c *WorkerMetadataClient) Store(ctx context.Context, workerID WorkerID, data *libModel.WorkerStatus) error {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return errors.Trace(err)

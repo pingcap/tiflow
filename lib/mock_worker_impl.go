@@ -8,6 +8,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
@@ -68,12 +69,12 @@ func (w *mockWorkerImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func (w *mockWorkerImpl) Status() WorkerStatus {
+func (w *mockWorkerImpl) Status() libModel.WorkerStatus {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	args := w.Called()
-	return args.Get(0).(WorkerStatus)
+	return args.Get(0).(libModel.WorkerStatus)
 }
 
 func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {

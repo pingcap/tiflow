@@ -8,6 +8,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
+
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
 
 // MessageSender is used to send a message of a given topic to a given node.
@@ -38,7 +40,7 @@ func (m *messageSenderImpl) SendToNodeB(
 ) error {
 	client := m.router.GetClient(targetNodeID)
 	if client == nil {
-		return nil
+		return derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
 	}
 
 	// TODO: blocking send in p2p library may have performance issue

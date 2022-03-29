@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -44,7 +45,7 @@ type Master struct {
 	config            *Config
 	statusCode        struct {
 		sync.RWMutex
-		code lib.WorkerStatusCode
+		code libModel.WorkerStatusCode
 	}
 	ctx     context.Context
 	clocker clock.Clock
@@ -60,8 +61,8 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 	switch msg := message.(type) {
 	case *lib.StatusChangeRequest:
 		switch msg.ExpectState {
-		case lib.WorkerStatusStopped:
-			m.setStatusCode(lib.WorkerStatusStopped)
+		case libModel.WorkerStatusStopped:
+			m.setStatusCode(libModel.WorkerStatusStopped)
 			m.workerListMu.Lock()
 			for _, worker := range m.workerList {
 				if worker == nil {
@@ -72,7 +73,7 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 					SendTime:     m.clocker.Mono(),
 					FromMasterID: m.BaseJobMaster.ID(),
 					Epoch:        m.BaseJobMaster.CurrentEpoch(),
-					ExpectState:  lib.WorkerStatusStopped,
+					ExpectState:  libModel.WorkerStatusStopped,
 				}
 				ctx, cancel := context.WithTimeout(m.ctx, time.Second*2)
 				if err := worker.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
@@ -169,14 +170,14 @@ func (m *Master) Tick(ctx context.Context) error {
 		return err
 	}
 
-	if m.getStatusCode() == lib.WorkerStatusStopped {
+	if m.getStatusCode() == libModel.WorkerStatusStopped {
 		log.L().Info("FakeMaster: received pause command, stop now")
-		m.setStatusCode(lib.WorkerStatusStopped)
+		m.setStatusCode(libModel.WorkerStatusStopped)
 		return m.Exit(ctx, m.Status(), nil)
 	}
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.L().Info("FakeMaster: all worker finished, job master exits now")
-		m.setStatusCode(lib.WorkerStatusFinished)
+		m.setStatusCode(libModel.WorkerStatusFinished)
 		return m.Exit(ctx, m.Status(), nil)
 	}
 
@@ -264,24 +265,24 @@ func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) erro
 	return nil
 }
 
-func (m *Master) Status() lib.WorkerStatus {
+func (m *Master) Status() libModel.WorkerStatus {
 	bytes, err := json.Marshal(m.status)
 	if err != nil {
 		log.L().Panic("unexpected marshal error", zap.Error(err))
 	}
-	return lib.WorkerStatus{
+	return libModel.WorkerStatus{
 		Code:     m.getStatusCode(),
 		ExtBytes: bytes,
 	}
 }
 
-func (m *Master) setStatusCode(code lib.WorkerStatusCode) {
+func (m *Master) setStatusCode(code libModel.WorkerStatusCode) {
 	m.statusCode.Lock()
 	defer m.statusCode.Unlock()
 	m.statusCode.code = code
 }
 
-func (m *Master) getStatusCode() lib.WorkerStatusCode {
+func (m *Master) getStatusCode() libModel.WorkerStatusCode {
 	m.statusCode.RLock()
 	defer m.statusCode.RUnlock()
 	return m.statusCode.code
@@ -298,6 +299,6 @@ func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.Ma
 		ctx:               ctx.Context,
 		clocker:           clock.New(),
 	}
-	ret.setStatusCode(lib.WorkerStatusNormal)
+	ret.setStatusCode(libModel.WorkerStatusNormal)
 	return ret
 }

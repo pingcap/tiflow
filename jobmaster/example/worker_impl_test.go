@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +45,7 @@ func TestExampleWorker(t *testing.T) {
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
-		return worker.Status().Code == lib.WorkerStatusFinished
+		return worker.Status().Code == libModel.WorkerStatusFinished
 	}, time.Second, time.Millisecond*100)
 
 	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)
