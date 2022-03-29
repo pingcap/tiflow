@@ -313,7 +313,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			AddRow(resolvedValidateErrorRow, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
-	syncerObj.schemaLoaded.Store(true)
+	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
 	currLoc := binlog.NewLocation(cfg.Flavor)
