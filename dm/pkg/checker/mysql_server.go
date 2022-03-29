@@ -18,8 +18,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util/dbutil"
 
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )

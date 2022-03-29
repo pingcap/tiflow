@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/diff"
 	"go.uber.org/zap"
 

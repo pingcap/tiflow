@@ -41,7 +41,7 @@ import (
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"

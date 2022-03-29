@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
