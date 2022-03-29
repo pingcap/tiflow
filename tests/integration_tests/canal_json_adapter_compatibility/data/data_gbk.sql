@@ -1,10 +1,10 @@
 -- This sql file is encoded in GBK by the 'iconv' command.
 -- DO NOT EDIT. 
 
-DROP DATABASE IF EXISTS test;
-CREATE DATABASE test;
+DROP DATABASE IF EXISTS test1;
+CREATE DATABASE test1;
 SET NAMES gbk;
-USE test;
+USE test1;
 
 CREATE TABLE multi_data_type
 (
