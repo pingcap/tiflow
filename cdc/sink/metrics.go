@@ -25,7 +25,7 @@ var (
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 	execTxnHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -33,7 +33,7 @@ var (
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 	execDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
