@@ -74,6 +74,11 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
 
+	// imitate fail to start scheduler/pessimism/optimism
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
+	//nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
+
 	s2 = NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	// wait the second master ready
@@ -91,11 +96,6 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(leaderID, check.Equals, cfg1.Name)
 	c.Assert(s1.ClusterID(), check.Greater, uint64(0))
 	c.Assert(s2.ClusterID(), check.Equals, uint64(0))
-
-	// fail to start scheduler/pessimism/optimism
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
-	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
 
 	s1.election.Resign()
 	time.Sleep(1 * time.Second)
