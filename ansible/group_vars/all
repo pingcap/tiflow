@@ -9,7 +9,12 @@ executor_port: 10241
 df_data_prefix: /data/df-data-{{ cluster_name }}
 df_bin_dir: "{{ df_data_prefix }}/bin"
 df_script_dir: "{{ df_data_prefix }}/script"
+df_config_dir: "{{ df_data_prefix }}/config"
 
 log_level: info
 df_executor_std_log: "{{ df_data_prefix }}/executor_std.log"
+
+etcd_peer_port: 2379
+etcd_port: 2380
+etcd_dir: "{{ df_data_prefix }}/etcd"
 

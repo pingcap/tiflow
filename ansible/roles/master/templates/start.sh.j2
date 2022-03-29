@@ -14,4 +14,7 @@
     --advertise-addr {{ inventory_hostname }}:{{ master_port }} \
     --peer-urls 0.0.0.0:{{ master_peer_port }} \
     --advertise-peer-urls {{ inventory_hostname }}:{{ master_peer_port }} \
-    --initial-cluster {{ cluster|join(',') }}
+    --initial-cluster {{ cluster|join(',') }} \
+    --frame-meta-endpoints {{ inventory_hostname }}:{{ etcd_peer_port }} \
+    --user-meta-endpoints {{ inventory_hostname }}:{{ etcd_peer_port }}
+    

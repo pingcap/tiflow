@@ -8,9 +8,23 @@
 - name: Create script dir
   file: path={{ df_script_dir }} owner=root group=root state=directory
 
+- name: Create config dir
+  file: path={{ df_config_dir }} owner=root group=root state=directory
+
 - name: Copy bins
   copy: src="{{ item }}.bin" dest="{{ df_bin_dir }}/{{ item }}-{{ cluster_name }}" mode=0655
   loop:
     - master
     - executor
     - demoserver
+
+- name: Download etcd
+  get_url:
+    url=https://github.com/etcd-io/etcd/releases/download/v3.5.2/etcd-v3.5.2-linux-amd64.tar.gz dest={{ df_data_prefix }} 
+  run_once: true
+  delegate_to: localhost
+
+- name: extract etcd
+  unarchive:
+    src: "{{ df_data_prefix }}/etcd-v3.5.2-linux-amd64.tar.gz"
+    dest: "{{ df_bin_dir }}"

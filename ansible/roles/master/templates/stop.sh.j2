@@ -1,3 +1,4 @@
 #!/bin/bash
 
 ps -e | grep master-{{ cluster_name }} | awk '{ print $1 }' | xargs -r kill
+ps -e | grep etcd | awk '{ print $1 }' | xargs -r kill
