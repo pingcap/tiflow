@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -50,7 +49,7 @@ func TestWriterUpdate(t *testing.T) {
 	rawBytes, err := st.Marshal()
 	require.NoError(t, err)
 
-	resp, err := suite.kv.Get(ctx, adapter.WorkerKeyAdapter.Encode("worker-1"))
+	resp, err := suite.kv.Get(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 	require.Equal(t, rawBytes, resp.Kvs[0].Value)
@@ -66,7 +65,7 @@ func TestWriterUpdate(t *testing.T) {
 
 	// Deletes the persisted status for testing purpose.
 	// TODO make a better mock KV that can inspect calls.
-	_, err = suite.kv.Delete(ctx, adapter.WorkerKeyAdapter.Encode("worker-1"))
+	_, err = suite.kv.Delete(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 
 	// Repeated update. Should have a notification too, but no persistence.
@@ -80,7 +79,7 @@ func TestWriterUpdate(t *testing.T) {
 		MasterEpoch: 1,
 		Status:      st,
 	}, msg)
-	resp, err = suite.kv.Get(ctx, adapter.WorkerKeyAdapter.Encode("worker-1"))
+	resp, err = suite.kv.Get(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 0)
 }

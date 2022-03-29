@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -102,6 +101,7 @@ func NewWorkerMetadataClient(
 }
 
 func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[WorkerID]*libModel.WorkerStatus, error) {
+	// We still use the raw adapter for now. This file will be refactored soon using pkg/dataset.
 	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
 	resp, err := c.metaKVClient.Get(ctx, loadPrefix, metaclient.WithPrefix())
 	if err != nil {
@@ -177,7 +177,7 @@ func (c *WorkerMetadataClient) MasterID() MasterID {
 }
 
 func (c *WorkerMetadataClient) workerMetaKey(id WorkerID) string {
-	return adapter.WorkerKeyAdapter.Encode(c.masterID, id)
+	return libModel.EncodeWorkerStatusKey(c.masterID, id)
 }
 
 // StoreMasterMeta is exposed to job manager for job master meta persistence

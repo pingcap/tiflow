@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+
+	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
 type WorkerStatusCode int32
@@ -56,4 +58,8 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func EncodeWorkerStatusKey(masterID string, workerID string) string {
+	return adapter.WorkerKeyAdapter.Encode(masterID, workerID)
 }

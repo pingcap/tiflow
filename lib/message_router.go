@@ -3,11 +3,12 @@ package lib
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
+
+	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 const defaultMessageRouterBufferSize = 4

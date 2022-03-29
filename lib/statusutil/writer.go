@@ -12,7 +12,6 @@ import (
 	"golang.org/x/time/rate"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -118,7 +117,8 @@ func (w *Writer) persistStatus(ctx context.Context, newStatus *libModel.WorkerSt
 	}
 
 	return retry.Do(ctx, func() error {
-		if _, err := w.metaclient.Put(ctx, adapter.WorkerKeyAdapter.Encode(w.workerID), string(raw)); err != nil {
+		key := libModel.EncodeWorkerStatusKey(w.masterInfo.MasterID(), w.workerID)
+		if _, err := w.metaclient.Put(ctx, key, string(raw)); err != nil {
 			return err
 		}
 		return nil
