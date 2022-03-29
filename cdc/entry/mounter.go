@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -96,31 +95,8 @@ func NewMounter(schemaStorage SchemaStorage,
 	}
 }
 
-func (m *mounterImpl) Run(ctx context.Context) error {
-	m.tz = util.TimezoneFromCtx(ctx)
-
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	m.metricMountDuration = mountDuration.WithLabelValues(changefeedID)
-	m.metricTotalRows = totalRowsCountGauge.WithLabelValues(changefeedID)
-	defer func() {
-		mountDuration.DeleteLabelValues(changefeedID)
-		totalRowsCountGauge.DeleteLabelValues(changefeedID)
-	}()
-
-	flushMetricsInterval := 15 * time.Second
-	timer := time.NewTimer(flushMetricsInterval)
-	defer timer.Stop()
-	for {
-		select {
-		// ctx.Done returns when parent ctx done or error occurs in errg.
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			timer.Reset(flushMetricsInterval)
-		}
-	}
-}
-
+// DecodeEvent decode kv events using ddl puller's schemaStorage
+// this method could block indefinitely if the DDL puller is lagging.
 func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
 	if pEvent.RawKV.OpType == model.OpTypeResolved {
