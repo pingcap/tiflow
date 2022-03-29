@@ -484,44 +484,80 @@ func TestValidatorGenColData(t *testing.T) {
 }
 
 func TestGetValidationStatus(t *testing.T) {
+	var err error
+	createTableSQL1 := "CREATE TABLE `db`.`tbl1` (id int primary key, v varchar(100))"
+	createTableSQL2 := "CREATE TABLE `db`.`tbl2` (id int primary key, v varchar(100))"
 	cfg := genSubtaskConfig(t)
-	db, dbMock, err := conn.InitMockDBFull()
-	require.NoError(t, err)
+	generator := genEventGenerator(t)
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.schemaLoaded.Store(true)
+	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
+	require.NoError(t, err)
+	defer syncerObj.schemaTracker.Close()
+	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
+	require.NoError(t, err)
 	validator := NewContinuousDataValidator(cfg, syncerObj)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
-	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
-		dbMock.NewRows([]string{"src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "stage", "message"}).
-			AddRow("db", "tbl1", "dstdb", "tbl2", 2, "").
-			AddRow("db", "errtbl", "dstdb", "tbl2", 4, "some error"),
-	)
-	expected := []*pb.ValidationStatus{
+	validator.workerCnt = 1
+	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowChange, workerChannelSize)}}
+	defer close(validator.workers[0].rowChangeCh)
+	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists("db"))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL1))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL2))
+	dmlData := []*event.DMLData{
 		{
+			TableID:    11,
+			Schema:     "db",
+			Table:      "tbl1",
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
+			Rows: [][]interface{}{
+				{int32(3), "c"},
+				{int32(3), "d"},
+			},
+		},
+		{
+			TableID:    12,
+			Schema:     "db",
+			Table:      "tbl2",
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
+			Rows: [][]interface{}{
+				{int32(3), "c"},
+				{int32(3), "d"},
+			},
+		},
+	}
+	dmlEvents, _, err := generator.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, dmlData, 0)
+	require.NoError(t, err)
+	for _, ev := range dmlEvents {
+		if _, ok := ev.Event.(*replication.RowsEvent); ok {
+			err = validator.processRowsEvent(ev.Header, ev.Event.(*replication.RowsEvent))
+			require.NoError(t, err)
+		}
+	}
+	expected := map[string]*pb.ValidationStatus{
+		"`db`.`tbl1`": {
 			SrcTable:         "`db`.`tbl1`",
-			DstTable:         "`dstdb`.`tbl2`",
+			DstTable:         "`db`.`tbl1`",
 			ValidationStatus: pb.Stage_Running.String(),
 			Message:          "",
 		},
-		{
-			SrcTable:         "`db`.`errtbl`",
-			DstTable:         "`dstdb`.`tbl2`",
-			ValidationStatus: pb.Stage_Stopped.String(),
-			Message:          "some error",
+		"`db`.`tbl2`": {
+			SrcTable:         "`db`.`tbl2`",
+			DstTable:         "`db`.`tbl2`",
+			ValidationStatus: pb.Stage_Running.String(),
+			Message:          "",
 		},
 	}
 	ret := validator.GetValidationStatus()
 	require.Equal(t, len(expected), len(ret))
-	for idx, want := range expected {
-		require.Equal(t, want.SrcTable, ret[idx].SrcTable)
-		require.Equal(t, want.DstTable, ret[idx].DstTable)
-		require.Equal(t, want.ValidationStatus, ret[idx].ValidationStatus)
-		require.Equal(t, want.Message, ret[idx].Message)
+	for _, result := range ret {
+		ent, ok := expected[result.SrcTable]
+		require.Equal(t, ok, true)
+		require.EqualValues(t, ent, result)
 	}
 }

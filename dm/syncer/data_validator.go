@@ -799,8 +799,8 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 			},
 		})
 	})
-	v.Lock()
-	defer v.Unlock()
+	v.RLock()
+	defer v.RUnlock()
 	result := make([]*pb.ValidationStatus, 0)
 	for _, tblStat := range v.tableStatus {
 		result = append(result, &pb.ValidationStatus{
