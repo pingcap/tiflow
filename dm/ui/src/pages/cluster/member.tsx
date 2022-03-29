@@ -1,28 +1,12 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  Space,
-  Button,
-  Tabs,
-  Card,
-  Table,
-  Badge,
-  message,
-  Modal,
-  Breadcrumb,
-} from '~/uikit'
-import {
-  RedoOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-} from '~/uikit/icons'
+import { Space, Button, Tabs, Card, Table, Badge, Breadcrumb } from '~/uikit'
+import { RedoOutlined, CheckCircleOutlined } from '~/uikit/icons'
 import i18n from '~/i18n'
 import {
   useDmapiGetClusterMasterListQuery,
   useDmapiGetClusterWorkerListQuery,
-  useDmapiOfflineMasterNodeMutation,
-  useDmapiOfflineWorkerNodeMutation,
 } from '~/models/cluster'
 
 const { TabPane } = Tabs
@@ -30,24 +14,6 @@ const { TabPane } = Tabs
 const MasterTable: React.FC = () => {
   const [t] = useTranslation()
   const { data, isFetching, refetch } = useDmapiGetClusterMasterListQuery()
-  const [offlineMasterNode] = useDmapiOfflineMasterNodeMutation()
-  const handleConfirmOffline = (name: string) => {
-    Modal.confirm({
-      title: t('are you sure to offline this master'),
-      content: t('offline master confirm description'),
-      icon: <ExclamationCircleOutlined />,
-      async onOk() {
-        const key = 'offlineMasterNode-' + Date.now()
-        message.loading({ content: t('requesting'), key })
-        try {
-          await offlineMasterNode(name).unwrap()
-          message.success({ content: t('request success'), key })
-        } catch (e) {
-          message.destroy(key)
-        }
-      },
-    })
-  }
   const dataSource = data?.data
   const columns = [
     {
@@ -72,23 +38,6 @@ const MasterTable: React.FC = () => {
         return leader ? (
           <CheckCircleOutlined style={{ color: 'green' }} />
         ) : null
-      },
-    },
-    {
-      title: t('operations'),
-      dataIndex: 'name',
-      render(name: string) {
-        return (
-          <Space>
-            <Button
-              type="link"
-              danger
-              onClick={() => handleConfirmOffline(name)}
-            >
-              {t('offline')}
-            </Button>
-          </Space>
-        )
       },
     },
   ]
@@ -120,24 +69,6 @@ const MasterTable: React.FC = () => {
 const WorkerTable: React.FC = () => {
   const [t] = useTranslation()
   const { data, isFetching, refetch } = useDmapiGetClusterWorkerListQuery()
-  const [offlineWorkerNode] = useDmapiOfflineWorkerNodeMutation()
-  const handleConfirmOffline = (name: string) => {
-    Modal.confirm({
-      title: t('are you sure to offline this worker'),
-      content: t('offline worker confirm description'),
-      icon: <ExclamationCircleOutlined />,
-      async onOk() {
-        const key = 'offlineWorkerNode-' + Date.now()
-        message.loading({ content: t('requesting'), key })
-        try {
-          await offlineWorkerNode(name).unwrap()
-          message.success({ content: t('request success'), key })
-        } catch (e) {
-          message.destroy(key)
-        }
-      },
-    })
-  }
   const dataSource = data?.data
   const columns = [
     {
@@ -163,23 +94,6 @@ const WorkerTable: React.FC = () => {
     {
       title: t('source'),
       dataIndex: 'bound_source_name',
-    },
-    {
-      title: t('operations'),
-      dataIndex: 'name',
-      render(name: string) {
-        return (
-          <Space>
-            <Button
-              type="link"
-              danger
-              onClick={() => handleConfirmOffline(name)}
-            >
-              {t('offline')}
-            </Button>
-          </Space>
-        )
-      },
     },
   ]
 

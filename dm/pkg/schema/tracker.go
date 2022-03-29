@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	"go.uber.org/zap"
@@ -206,6 +207,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 			return nil, err
 		}
 	}
+	// skip DDL test https://github.com/pingcap/tidb/pull/33079
+	se.SetValue(sessionctx.QueryString, "skip")
 
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
@@ -340,6 +343,7 @@ func IsTableNotExists(err error) bool {
 
 // Reset drops all tables inserted into this tracker.
 func (tr *Tracker) Reset() error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
 	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
@@ -366,6 +370,7 @@ func (tr *Tracker) Close() error {
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -375,6 +380,7 @@ func (tr *Tracker) DropTable(table *filter.Table) error {
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -384,6 +390,7 @@ func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	dbName := model.NewCIStr(db)
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
@@ -406,6 +413,7 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	schemaName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
@@ -434,6 +442,7 @@ func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filt
 }
 
 func (tr *Tracker) batchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
