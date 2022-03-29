@@ -275,3 +275,6 @@ require (
 
 // Fix CVE-2020-26160.
 replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
+
+// Fix https://github.com/pingcap/tiflow/issues/4961
+replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
