@@ -269,16 +269,16 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.schemaLoaded.Store(true)
+	syncerObj.running.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.schemaLoaded.Store(false)
+	syncerObj.running.Store(false)
 	go func() {
 		time.Sleep(3 * time.Second)
-		syncerObj.schemaLoaded.Store(true)
+		syncerObj.running.Store(true)
 	}()
 	require.NoError(t, validator.waitSyncerRunning())
 }

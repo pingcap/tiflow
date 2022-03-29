@@ -455,7 +455,7 @@ ErrWorkerVerAutoDowngrade,[code=40047:class=dm-worker:scope=internal:level=high]
 ErrWorkerStartService,[code=40048:class=dm-worker:scope=internal:level=high], "Message: start server"
 ErrWorkerAlreadyClosed,[code=40049:class=dm-worker:scope=internal:level=high], "Message: mysql source handler worker already closed"
 ErrWorkerNotRunningStage,[code=40050:class=dm-worker:scope=internal:level=high], "Message: current stage is %s but not running, invalid"
-ErrWorkerNotPausedStage,[code=40051:class=dm-worker:scope=internal:level=high], "Message: current stage is %s but not paused, invalid"
+ErrWorkerNotPausedStage,[code=40051:class=dm-worker:scope=internal:level=high], "Message: current task or validator stage is %s but not paused, invalid"
 ErrWorkerUpdateTaskStage,[code=40052:class=dm-worker:scope=internal:level=high], "Message: can only update task on Paused stage, but current stage is %s, Workaround: Please use `pause-task` command to pause the task."
 ErrWorkerMigrateStopRelay,[code=40053:class=dm-worker:scope=internal:level=high], "Message: relay unit has stopped, can not be migrated"
 ErrWorkerSubTaskNotFound,[code=40054:class=dm-worker:scope=internal:level=high], "Message: sub task with name %s not found"
