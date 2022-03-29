@@ -107,7 +107,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 		validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
 			tp:      deletedRowExists,
 			dstData: []*sql.NullString{{String: "", Valid: true}},
-			srcRow: &rowChange{
+			srcJob: &rowChange{
 				table: &validateTableInfo{
 					Source: &filter.Table{Schema: schemaName, Name: tableName},
 					Target: &filter.Table{Schema: schemaName, Name: tableName},
@@ -116,7 +116,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 			},
 		})
 		lastRev := validator.persistHelper.revision
-		err2 := validator.flushCheckpointAndData(*validator.location)
+		err2 := validator.persistCheckpointAndData(*validator.location)
 		if errStr == "" {
 			require.NoError(t, err2)
 			require.Equal(t, lastRev+1, validator.persistHelper.revision)

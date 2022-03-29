@@ -2986,6 +2986,36 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-validator-43001]
+message = "failed to load persisted data"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43002]
+message = "failed to persist checkpoint and data"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43003]
+message = "failed to get event"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43004]
+message = "failed to process event"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43005]
+message = "failed to validate row change"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

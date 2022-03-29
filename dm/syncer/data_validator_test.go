@@ -188,7 +188,7 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop()
 	require.Equal(t, pb.Stage_Running, validator.Stage())
-	validator.errChan <- errors.New("test error")
+	validator.sendError(errors.New("test error"))
 	require.True(t, utils.WaitSomething(20, 100*time.Millisecond, func() bool {
 		return validator.Stage() == pb.Stage_Stopped
 	}))
@@ -466,9 +466,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.loadedPendingChanges, 1)
 	ft := filter.Table{Schema: schemaName, Name: tableName}
 	require.Contains(t, validator.loadedPendingChanges, ft.String())
-	require.Len(t, validator.loadedPendingChanges[ft.String()].rows, 1)
-	require.Contains(t, validator.loadedPendingChanges[ft.String()].rows, "11")
-	require.Equal(t, validator.loadedPendingChanges[ft.String()].rows["11"].Tp, rowInsert)
+	require.Len(t, validator.loadedPendingChanges[ft.String()].jobs, 1)
+	require.Contains(t, validator.loadedPendingChanges[ft.String()].jobs, "11")
+	require.Equal(t, validator.loadedPendingChanges[ft.String()].jobs["11"].Tp, rowInsert)
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
@@ -504,22 +504,22 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 }
 
 func TestValidatorGenRowKey(t *testing.T) {
-	require.Equal(t, "a", genRowKey([]string{"a"}))
-	require.Equal(t, "a\tb", genRowKey([]string{"a", "b"}))
-	require.Equal(t, "a\tb\tc", genRowKey([]string{"a", "b", "c"}))
+	require.Equal(t, "a", genRowKeyByString([]string{"a"}))
+	require.Equal(t, "a\tb", genRowKeyByString([]string{"a", "b"}))
+	require.Equal(t, "a\tb\tc", genRowKeyByString([]string{"a", "b", "c"}))
 	var bytes []byte
 	for i := 0; i < 100; i++ {
 		bytes = append(bytes, 'a')
 	}
 	{
 		longStr := string(bytes[:maxRowKeyLength])
-		require.Equal(t, longStr, genRowKey([]string{longStr}))
+		require.Equal(t, longStr, genRowKeyByString([]string{longStr}))
 	}
 	{
 		longStr := string(bytes[:maxRowKeyLength+1])
 		sum := sha256.Sum256([]byte(longStr))
 		sha := hex.EncodeToString(sum[:])
-		require.Equal(t, sha, genRowKey([]string{longStr}))
+		require.Equal(t, sha, genRowKeyByString([]string{longStr}))
 	}
 }
 
