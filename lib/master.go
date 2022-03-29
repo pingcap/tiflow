@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -19,7 +17,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib/quota"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -31,6 +29,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -73,8 +72,9 @@ type MasterImpl interface {
 }
 
 const (
-	createWorkerTimeout        = 10 * time.Second
-	maxCreateWorkerConcurrency = 100
+	createWorkerWaitQuotaTimeout = 5 * time.Second
+	createWorkerTimeout          = 10 * time.Second
+	maxCreateWorkerConcurrency   = 100
 )
 
 type BaseMaster interface {
@@ -545,8 +545,10 @@ func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerCon
 		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
-	if !m.createWorkerQuota.TryConsume() {
-		return "", derror.ErrMasterConcurrencyExceeded.GenWithStackByArgs()
+	quotaCtx, cancel := context.WithTimeout(context.Background(), createWorkerWaitQuotaTimeout)
+	defer cancel()
+	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
+		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
 	}
 
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
