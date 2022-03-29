@@ -48,11 +48,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66
-	github.com/pingcap/kvproto v0.0.0-20220314103629-10e688307221
+	github.com/pingcap/kvproto v0.0.0-20220328072018-6e75c12dbd73
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220325110835-6517ee3fb640
+	github.com/pingcap/tidb v1.1.0-beta.0.20220329110428-fbaaa1117936
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220317013353-dfc5146f4746+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220325145434-7c51deb16e37
+	github.com/pingcap/tidb/parser v0.0.0-20220329110428-fbaaa1117936
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -66,7 +66,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.1-0.20220321123529-f4eae62b7ed5
+	github.com/tikv/client-go/v2 v2.0.1-0.20220328083738-8489c3e8c3d9
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	github.com/tinylib/msgp v1.1.6
