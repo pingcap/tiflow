@@ -109,7 +109,9 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		if len(toExecRows) == 0 {
 			return nil
 		}
-		err := w.execDMLs(ctx, toExecRows, replicaID, w.bucket)
+		rows := make([]*model.RowChangedEvent, len(toExecRows))
+		copy(rows, toExecRows)
+		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
 			txnNum = 0
 			return err
