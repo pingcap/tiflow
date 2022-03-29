@@ -31,12 +31,6 @@ func AfterTest(c *check.C) func() {
 	}
 }
 
-// NewAfterTest is a new dummy implementation by testify when build tag 'leak' is not set.
-func NewAfterTest(c *testing.T) func() {
-	return func() {
-	}
-}
-
 // AfterTestT is used after all the test cases is finished.
 func AfterTestT(t *testing.T) func() {
 	return func() {
