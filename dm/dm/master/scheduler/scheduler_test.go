@@ -1141,8 +1141,8 @@ func (t *testSchedulerSuite) TestLastBound() {
 	s.sourceCfgs[sourceID1] = sourceCfg1
 	s.sourceCfgs[sourceID2] = sourceCfg2
 
-	s.lastBound[sourceID1] = ha.SourceBound{Worker: workerName1}
-	s.lastBound[sourceID2] = ha.SourceBound{Worker: workerName2}
+	s.lastBound[sourceID1] = ha.NewSourceBound(sourceID1, workerName1)
+	s.lastBound[sourceID2] = ha.NewSourceBound(sourceID2, workerName2)
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
@@ -1206,7 +1206,7 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 	s.workers[workerName1] = worker1
 	// sourceID2 doesn't have a source config and not in unbound
 	s.sourceCfgs[sourceID1] = sourceCfg1
-	s.lastBound[sourceID2] = ha.SourceBound{Worker: workerName1}
+	s.lastBound[sourceID2] = ha.NewSourceBound(sourceID2, workerName1)
 	s.unbounds[sourceID1] = struct{}{}
 	// step2: worker1 doesn't go to last bounded source, because last source doesn't have a source config (might be removed)
 	worker1.ToFree()
