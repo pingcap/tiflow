@@ -147,7 +147,7 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	}
 	elapsed := time.Since(start)
-	if time.Since(start) > time.Second {
+	if elapsed > time.Second {
 		log.Warn("flush row changed events too slow",
 			zap.Int("batchSize", batchSize),
 			zap.Duration("duration", elapsed),
