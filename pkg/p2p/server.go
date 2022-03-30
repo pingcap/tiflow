@@ -33,6 +33,7 @@ type (
 )
 
 // read only
+// TODO: should we expose a default config from p2pImpl package
 var defaultServerConfig = Config{
 	MaxPendingMessageCountPerTopic:       256,
 	MaxPendingTaskCount:                  102400,
@@ -41,6 +42,7 @@ var defaultServerConfig = Config{
 	WorkerPoolSize:                       4,
 	MaxPeerCount:                         1024,
 	WaitUnregisterHandleTimeoutThreshold: time.Millisecond * 100,
+	SendRateLimitPerStream:               1024.0,
 }
 
 // MessageRPCService is a background service wrapping a MessageServer instance.
