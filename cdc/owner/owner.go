@@ -95,8 +95,10 @@ type ownerImpl struct {
 
 	gcManager gc.Manager
 
-	ownerJobQueueMu sync.Mutex
-	ownerJobQueue   []*ownerJob
+	ownerJobQueue struct {
+		sync.Mutex
+		queue []*ownerJob
+	}
 	// logLimiter controls cluster version check log output rate
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
@@ -216,8 +218,9 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	return state, nil
 }
 
-// EnqueueJob enqueues an admin job into an internal queue, and the Owner will handle the job in the next tick
-// `done` must be buffered to prevernt blocking owner.
+// EnqueueJob enqueues an admin job into an internal queue,
+// and the Owner will handle the job in the next tick
+// `done` must be buffered to prevent blocking owner.
 func (o *ownerImpl) EnqueueJob(adminJob model.AdminJob, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:           ownerJobTypeAdminJob,
@@ -228,7 +231,7 @@ func (o *ownerImpl) EnqueueJob(adminJob model.AdminJob, done chan<- error) {
 }
 
 // RebalanceTables triggers a rebalance for the specified changefeed
-// `done` must be buffered to prevernt blocking owner.
+// `done` must be buffered to prevent blocking owner.
 func (o *ownerImpl) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:           ownerJobTypeRebalance,
@@ -238,7 +241,7 @@ func (o *ownerImpl) RebalanceTables(cfID model.ChangeFeedID, done chan<- error) 
 }
 
 // ScheduleTable moves a table from a capture to another capture
-// `done` must be buffered to prevernt blocking owner.
+// `done` must be buffered to prevent blocking owner.
 func (o *ownerImpl) ScheduleTable(
 	cfID model.ChangeFeedID, toCapture model.CaptureID, tableID model.TableID,
 	done chan<- error,
@@ -273,6 +276,7 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	o.cleanStaleMetrics()
 }
 
 func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
@@ -544,18 +548,18 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
-	o.ownerJobQueueMu.Lock()
-	defer o.ownerJobQueueMu.Unlock()
+	o.ownerJobQueue.Lock()
+	defer o.ownerJobQueue.Unlock()
 
-	jobs := o.ownerJobQueue
-	o.ownerJobQueue = nil
+	jobs := o.ownerJobQueue.queue
+	o.ownerJobQueue.queue = nil
 	return jobs
 }
 
 func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
-	o.ownerJobQueueMu.Lock()
-	defer o.ownerJobQueueMu.Unlock()
-	o.ownerJobQueue = append(o.ownerJobQueue, job)
+	o.ownerJobQueue.Lock()
+	defer o.ownerJobQueue.Unlock()
+	o.ownerJobQueue.queue = append(o.ownerJobQueue.queue, job)
 }
 
 func (o *ownerImpl) updateGCSafepoint(
@@ -563,16 +567,16 @@ func (o *ownerImpl) updateGCSafepoint(
 ) error {
 	forceUpdate := false
 	minCheckpointTs := uint64(math.MaxUint64)
-	for changefeedID, changefeefState := range state.Changefeeds {
-		if changefeefState.Info == nil {
+	for changefeedID, changefeedState := range state.Changefeeds {
+		if changefeedState.Info == nil {
 			continue
 		}
-		switch changefeefState.Info.State {
+		switch changefeedState.Info.State {
 		case model.StateNormal, model.StateStopped, model.StateError:
 		default:
 			continue
 		}
-		checkpointTs := changefeefState.Info.GetCheckpointTs(changefeefState.Status)
+		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
 		if minCheckpointTs > checkpointTs {
 			minCheckpointTs = checkpointTs
 		}
