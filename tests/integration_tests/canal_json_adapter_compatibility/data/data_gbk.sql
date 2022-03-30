@@ -4,6 +4,8 @@
 SET NAMES gbk;
 USE test;
 
+DROP TABLE IF EXISTS multi_data_type;
+
 CREATE TABLE multi_data_type
 (
     id                   INT AUTO_INCREMENT,
@@ -93,6 +95,8 @@ DELETE
 FROM multi_data_type
 WHERE id = 2;
 
+DROP TABLE IF EXISTS multi_charset;
+
 CREATE TABLE multi_charset (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -121,12 +125,16 @@ WHERE name = '部署'
 	AND city = '纽约'
 	AND description = '世界,你好';
 
+DROP TABLE IF EXISTS test_ddl1;
+
 CREATE TABLE test_ddl1
 (
     id INT AUTO_INCREMENT,
     c1 INT,
     PRIMARY KEY (id)
 );
+
+DROP TABLE IF EXISTS test_ddl2;
 
 CREATE TABLE test_ddl2
 (
@@ -156,6 +164,8 @@ CREATE TABLE test_ddl2
     PRIMARY KEY (id)
 );
 
+DROP TABLE IF EXISTS test_ddl3;
+
 CREATE TABLE test_ddl3 (
 	id INT,
 	名称 varchar(128),
@@ -171,6 +181,10 @@ ALTER TABLE test_ddl3
 ALTER TABLE test_ddl3
 	DROP COLUMN 城市;
 
+DROP TABLE IF EXISTS 表1;
+
+DROP TABLE IF EXISTS 表2;
+
 CREATE TABLE 表1 (
 	id INT,
 	name varchar(128),
@@ -178,6 +192,8 @@ CREATE TABLE 表1 (
 ) ENGINE = InnoDB;
 
 RENAME TABLE 表1 TO 表2;
+
+DROP TABLE IF EXISTS binary_columns;
 
 CREATE TABLE binary_columns
 (
