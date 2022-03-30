@@ -915,7 +915,6 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	unbounds := s.UnboundSources()
 	require.Len(t.T(), unbounds, 1)
 	require.Equal(t.T(), sourceID1, unbounds[0])
-	sourceBound1.Source = ""
 	sourceBound1.IsDeleted = true
 	checkSourceBoundCh()
 
