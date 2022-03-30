@@ -45,7 +45,7 @@ type sorterNode struct {
 	sorter sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -143,7 +143,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID)
+		metricsTableMemoryGauge := tableMemoryGauge.WithLabelValues(ctx.ChangefeedVars().ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -156,7 +156,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 			case <-stdCtx.Done():
 				return nil
 			case <-metricsTicker.C:
-				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
+				metricsTableMemoryGauge.Set(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
@@ -290,7 +290,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 }
 
 func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+	defer tableMemoryGauge.DeleteLabelValues(changefeedID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
