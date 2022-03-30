@@ -25,7 +25,8 @@ import (
 // newBlackHoleSink creates a black hole sink
 func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
-		statistics: NewStatistics(ctx, "blackhole"),
+		// use `sinkTypeDB` to record metrics
+		statistics: NewStatistics(ctx, sinkTypeDB),
 	}
 }
 

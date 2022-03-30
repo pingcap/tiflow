@@ -93,7 +93,7 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 		panic(err)
 	}
 	producer := NewMockProducer()
-	return newFlushWorker(encoder, producer, NewStatistics(context.Background(), "Test")), producer
+	return newFlushWorker(encoder, producer, NewStatistics(context.Background(), sinkTypeMQ)), producer
 }
 
 func TestBatch(t *testing.T) {
