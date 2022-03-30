@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO remove following line once revive supports generic.
+//revive:disable:receiver-naming
+
 package actor
 
 import (
