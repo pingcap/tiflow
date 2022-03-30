@@ -8469,7 +8469,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events that are buffered in Processor's output channel and Mounter input channel",
+          "description": "The number of events that are buffered in Processor's output channel",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -8510,13 +8510,6 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_mounter_input_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}) by (instance)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{instance}}-mounter input chan",
-              "refId": "A"
-            },
-            {
               "expr": "-sum(ticdc_sink_buffer_chan_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}) by (instance)",
               "format": "time_series",
               "intervalFactor": 1,
@@ -8528,7 +8521,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink/Mounter buffer size",
+          "title": "Sink buffer size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -17663,5 +17656,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 37,
+  "version": 37
 }

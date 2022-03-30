@@ -462,12 +462,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.sendError(p.mounter.Run(stdCtx))
-	}()
+	p.mounter = entry.NewMounter(p.schemaStorage,
+		p.changefeedID,
+		util.TimezoneFromCtx(ctx),
+		p.changefeed.Info.Config.EnableOldValue)
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
