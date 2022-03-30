@@ -601,19 +601,28 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 		}
 	}()
 	w.parentCtx = parentCtx
-	wg, ctx := errgroup.WithContext(parentCtx)
+	ctx, cancel := context.WithCancel(parentCtx)
+	once := sync.Once{}
+	wg, ctx := errgroup.WithContext(ctx)
 	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
 	wg.Go(func() error {
-		return w.checkErrorReconnect(w.resolveLock(ctx))
+		return handleError(cancel, w.checkErrorReconnect(w.resolveLock(ctx)), &once)
 	})
 	wg.Go(func() error {
-		return w.eventHandler(ctx)
+		return handleError(cancel, w.eventHandler(ctx), &once)
 	})
-	wg.Go(func() error {
-		return w.collectWorkpoolError(ctx)
+	err := w.collectWorkpoolError(ctx)
+	if err != nil {
+		return handleError(cancel, err, &once)
+	}
+	return wg.Wait()
+}
+
+func handleError(cancel context.CancelFunc, err error, once *sync.Once) error {
+	once.Do(func() {
+		cancel()
 	})
-	err := wg.Wait()
 	// ErrRegionWorkerExit means the region worker exits normally, but we don't
 	// need to terminate the other goroutines in errgroup
 	if cerror.ErrRegionWorkerExit.Equal(err) {
