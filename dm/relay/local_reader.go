@@ -589,7 +589,7 @@ func (r *BinlogReader) parseFile(
 
 		// align with MySQL
 		// ref https://github.com/pingcap/tiflow/issues/5063#issuecomment-1082678211
-		// heartbeat period is implemented elsewhere
+		// heartbeat period is implemented in LocalStreamer.GetEvent
 		if state.skipGTID {
 			switch e.Event.(type) {
 			// Only replace transaction event
