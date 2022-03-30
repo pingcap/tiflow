@@ -36,6 +36,10 @@ function run() {
 	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+	run_sql_file $CUR/data/data_gbk.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
 	cleanup_process $CDC_BINARY
 }
 
