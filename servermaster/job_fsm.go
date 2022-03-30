@@ -16,6 +16,9 @@ type jobHolder struct {
 	lib.WorkerHandle
 	*lib.MasterMetaKVData
 	waitAckStartTime time.Time
+	// True means the job is loaded from metastore during jobmanager failover.
+	// Otherwise it is added by SubmitJob.
+	addFromFailover bool
 }
 
 // JobFsm manages state of all job masters, job master state forms a finite-state
@@ -163,12 +166,13 @@ func (fsm *JobFsm) QueryJob(jobID lib.MasterID) *pb.QueryJobResponse {
 	return checkOnlineJob()
 }
 
-func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData) {
+func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &jobHolder{
 		MasterMetaKVData: job,
 		waitAckStartTime: fsm.clocker.Now(),
+		addFromFailover:  addFromFailover,
 	}
 }
 
@@ -200,6 +204,11 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *lib.MasterMetaKVData)
 	for id, job := range fsm.waitAckJobs {
 		duration := fsm.clocker.Since(job.waitAckStartTime)
 		if duration > defaultWorkerTimeout {
+			if !job.addFromFailover {
+				log.L().Debug("job master offline delay",
+					zap.Any("job", job), zap.Duration("duration", duration))
+				continue
+			}
 			_, err := dispatchJobFn(job.MasterMetaKVData)
 			if err != nil {
 				return err

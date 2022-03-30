@@ -156,7 +156,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
-	jm.JobFsm.JobDispatched(meta)
+	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
 	resp.JobIdStr = id
 	return resp
 }
@@ -240,7 +240,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}
-		jm.JobFsm.JobDispatched(job)
+		jm.JobFsm.JobDispatched(job, true /*addFromFailover*/)
 		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
 	}
 	return nil

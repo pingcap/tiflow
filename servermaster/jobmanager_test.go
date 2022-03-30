@@ -67,7 +67,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 
 	pauseWorkerID := "pause-worker-id"
 	meta := &lib.MasterMetaKVData{ID: pauseWorkerID}
-	mgr.JobFsm.JobDispatched(meta)
+	mgr.JobFsm.JobDispatched(meta, false)
 
 	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: pauseWorkerID}
 	mockWorkerHandler.On("SendMessage",

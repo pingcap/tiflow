@@ -23,7 +23,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	worker := lib.NewTombstoneWorkerHandle(id, libModel.WorkerStatus{Code: libModel.WorkerStatusNormal}, nil)
 
 	// create new job, enter into WaitAckack job queue
-	fsm.JobDispatched(job)
+	fsm.JobDispatched(job, false)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// OnWorkerOnline, WaitAck -> Online

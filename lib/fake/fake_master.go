@@ -250,6 +250,10 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 	return nil
 }
 
+func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	return nil
+}
+
 func (m *Master) CloseImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
 	return nil
