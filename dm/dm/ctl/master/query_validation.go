@@ -118,6 +118,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 	var pbStage pb.Stage
 	switch stage {
 	case "":
+		// use invalid stage to represent `all` stages
 		pbStage = pb.Stage_InvalidStage
 	case strings.ToLower(pb.Stage_Running.String()):
 		pbStage = pb.Stage_Running
