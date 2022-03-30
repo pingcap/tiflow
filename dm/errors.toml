@@ -2741,7 +2741,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40051]
-message = "current stage is %s but not paused, invalid"
+message = "current task or validator stage is %s but not paused, invalid"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
