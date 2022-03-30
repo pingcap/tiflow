@@ -44,6 +44,7 @@ import (
 
 	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -172,6 +173,7 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
+	running      atomic.Bool
 	closed       atomic.Bool
 	schemaLoaded atomic.Bool
 
@@ -240,6 +242,8 @@ type Syncer struct {
 	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
 	locations *locationRecorder
+	// initial executed binlog location, set once for each instance of syncer.
+	initExecutedLoc *binlog.Location
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
@@ -1746,6 +1750,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	now := time.Now()
 	s.start.Store(now)
 	s.lastTime.Store(now)
+
+	s.initInitExecutedLoc()
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	tryReSync := true
 
@@ -3453,8 +3461,8 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
-func (s *Syncer) IsSchemaLoaded() bool {
-	return s.schemaLoaded.Load()
+func (s *Syncer) IsRunning() bool {
+	return s.running.Load()
 }
 
 func (s *Syncer) isClosed() bool {
@@ -3576,7 +3584,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
-	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
 
 	// support fields that changed in func `copyConfigFromSource`
 	oldCfg.From = newCfg.From
@@ -3589,6 +3597,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.CaseSensitive = newCfg.CaseSensitive
 
 	if oldCfg.String() != newCfg.String() {
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
@@ -3961,4 +3970,27 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 		zap.String("time", timeStr),
 		zap.Any("locationOfTheTime", loc))
 	return nil
+}
+
+func (s *Syncer) getFlushedGlobalPoint() binlog.Location {
+	return s.checkpoint.FlushedGlobalPoint()
+}
+
+func (s *Syncer) getInitExecutedLoc() binlog.Location {
+	s.RLock()
+	defer s.RUnlock()
+	return s.initExecutedLoc.Clone()
+}
+
+func (s *Syncer) initInitExecutedLoc() {
+	s.Lock()
+	defer s.Unlock()
+	if s.initExecutedLoc == nil {
+		p := s.checkpoint.GlobalPoint()
+		s.initExecutedLoc = &p
+	}
+}
+
+func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
+	return s.schemaTracker.GetTableInfo(table)
 }
