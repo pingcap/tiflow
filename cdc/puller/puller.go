@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -108,16 +107,7 @@ func NewPuller(
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	once := sync.Once{}
 	g, ctx := errgroup.WithContext(ctx)
-
-	handleErr := func(err error) error {
-		once.Do(func() {
-			cancel()
-		})
-		return err
-	}
 
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
@@ -128,8 +118,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return handleErr(p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
-				lockResolver, p, eventCh))
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
+				lockResolver, p, eventCh)
 		})
 	}
 
@@ -152,95 +142,98 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	}()
 
 	lastResolvedTs := p.checkpointTs
-	metricsTicker := time.NewTicker(15 * time.Second)
-	defer metricsTicker.Stop()
-	output := func(raw *model.RawKVEntry) error {
-		// even after https://github.com/pingcap/tiflow/pull/2038, kv client
-		// could still miss region change notification, which leads to resolved
-		// ts update missing in puller, however resolved ts fallback here can
-		// be ignored since no late data is received and the guarantee of
-		// resolved ts is not broken.
-		if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-			log.Warn("The CRTs is fallen back in puller",
-				zap.String("changefeed", changefeedID),
-				zap.Reflect("row", raw),
-				zap.Uint64("CRTs", raw.CRTs),
-				zap.Uint64("resolvedTs", p.resolvedTs),
-				zap.Int64("tableID", tableID))
+	g.Go(func() error {
+		metricsTicker := time.NewTicker(15 * time.Second)
+		defer metricsTicker.Stop()
+		output := func(raw *model.RawKVEntry) error {
+			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
+			// could still miss region change notification, which leads to resolved
+			// ts update missing in puller, however resolved ts fallback here can
+			// be ignored since no late data is received and the guarantee of
+			// resolved ts is not broken.
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
+				log.Warn("The CRTs is fallen back in puller",
+					zap.String("changefeed", changefeedID),
+					zap.Reflect("row", raw),
+					zap.Uint64("CRTs", raw.CRTs),
+					zap.Uint64("resolvedTs", p.resolvedTs),
+					zap.Int64("tableID", tableID))
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case p.outputCh <- raw:
+			}
 			return nil
 		}
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case p.outputCh <- raw:
-		}
-		return nil
-	}
 
-	start := time.Now()
-	initialized := false
-	for {
-		var e model.RegionFeedEvent
-		select {
-		case <-ctx.Done():
-			return handleErr(errors.Trace(ctx.Err()))
-		case <-metricsTicker.C:
-			metricEventChanSize.Observe(float64(len(eventCh)))
-			metricOutputChanSize.Observe(float64(len(p.outputCh)))
-			metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-			continue
-		case e = <-eventCh:
-		}
-
-		if e.Val != nil {
-			metricTxnCollectCounterKv.Inc()
-			if err := output(e.Val); err != nil {
-				return handleErr(errors.Trace(err))
+		start := time.Now()
+		initialized := false
+		for {
+			var e model.RegionFeedEvent
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case <-metricsTicker.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				continue
+			case e = <-eventCh:
 			}
-			continue
-		}
 
-		if e.Resolved != nil {
-			metricTxnCollectCounterResolved.Inc()
-			if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
-				log.Panic("the resolved span is not in the total span",
-					zap.String("changefeed", changefeedID),
-					zap.Reflect("resolved", e.Resolved),
-					zap.Int64("tableID", tableID),
-					zap.Reflect("spans", p.spans),
-				)
-			}
-			// Forward is called in a single thread
-			p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
-			resolvedTs := p.tsTracker.Frontier()
-			if resolvedTs > 0 && !initialized {
-				// Advancing to a non-zero value means the puller level
-				// resolved ts is initialized.
-				atomic.StoreInt64(&p.initialized, 1)
-				initialized = true
-
-				spans := make([]string, 0, len(p.spans))
-				for i := range p.spans {
-					spans = append(spans, p.spans[i].String())
+			if e.Val != nil {
+				metricTxnCollectCounterKv.Inc()
+				if err := output(e.Val); err != nil {
+					return errors.Trace(err)
 				}
-				log.Info("puller is initialized",
-					zap.String("changefeed", changefeedID),
-					zap.Duration("duration", time.Since(start)),
-					zap.Int64("tableID", tableID),
-					zap.Strings("spans", spans),
-					zap.Uint64("resolvedTs", resolvedTs))
-			}
-			if !initialized || resolvedTs == lastResolvedTs {
 				continue
 			}
-			lastResolvedTs = resolvedTs
-			err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-			if err != nil {
-				return handleErr(errors.Trace(err))
+
+			if e.Resolved != nil {
+				metricTxnCollectCounterResolved.Inc()
+				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
+					log.Panic("the resolved span is not in the total span",
+						zap.String("changefeed", changefeedID),
+						zap.Reflect("resolved", e.Resolved),
+						zap.Int64("tableID", tableID),
+						zap.Reflect("spans", p.spans),
+					)
+				}
+				// Forward is called in a single thread
+				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
+				resolvedTs := p.tsTracker.Frontier()
+				if resolvedTs > 0 && !initialized {
+					// Advancing to a non-zero value means the puller level
+					// resolved ts is initialized.
+					atomic.StoreInt64(&p.initialized, 1)
+					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
+					log.Info("puller is initialized",
+						zap.String("changefeed", changefeedID),
+						zap.Duration("duration", time.Since(start)),
+						zap.Int64("tableID", tableID),
+						zap.Strings("spans", spans),
+						zap.Uint64("resolvedTs", resolvedTs))
+				}
+				if !initialized || resolvedTs == lastResolvedTs {
+					continue
+				}
+				lastResolvedTs = resolvedTs
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+				if err != nil {
+					return errors.Trace(err)
+				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
-			atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 		}
-	}
+	})
+	return g.Wait()
 }
 
 func (p *pullerImpl) GetResolvedTs() uint64 {

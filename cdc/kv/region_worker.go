@@ -606,29 +606,31 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
-	wg.Go(func() error {
-		return handleError(cancel, w.checkErrorReconnect(w.resolveLock(ctx)), &once)
-	})
-	wg.Go(func() error {
-		return handleError(cancel, w.eventHandler(ctx), &once)
-	})
-	err := w.collectWorkpoolError(ctx)
-	if err != nil {
-		return handleError(cancel, err, &once)
-	}
-	return wg.Wait()
-}
 
-func handleError(cancel context.CancelFunc, err error, once *sync.Once) error {
-	once.Do(func() {
-		cancel()
+	var retErr error
+	handleError := func(err error) error {
+		if err != nil {
+			once.Do(func() {
+				cancel()
+				retErr = err
+			})
+		}
+		return err
+	}
+	wg.Go(func() error {
+		return handleError(w.checkErrorReconnect(w.resolveLock(ctx)))
 	})
+	wg.Go(func() error {
+		return handleError(w.eventHandler(ctx))
+	})
+	_ = handleError(w.collectWorkpoolError(ctx))
+	_ = wg.Wait()
 	// ErrRegionWorkerExit means the region worker exits normally, but we don't
 	// need to terminate the other goroutines in errgroup
-	if cerror.ErrRegionWorkerExit.Equal(err) {
+	if cerror.ErrRegionWorkerExit.Equal(retErr) {
 		return nil
 	}
-	return err
+	return retErr
 }
 
 func (w *regionWorker) handleEventEntry(
