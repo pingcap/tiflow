@@ -23,16 +23,13 @@ import (
 
 	capturer "github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
-	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-var (
-	defaultConfigFile = "./dm-master.toml"
-	_                 = check.Suite(&testConfigSuite{})
-)
+var _ = check.Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 
@@ -42,30 +39,21 @@ func (t *testConfigSuite) SetUpSuite(c *check.C) {
 }
 
 func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
-	buf, err := os.ReadFile(defaultConfigFile)
-	c.Assert(err, check.IsNil)
-
 	// test print sample config
 	out := capturer.CaptureStdout(func() {
 		cfg := NewConfig()
-		err = cfg.Parse([]string{"-print-sample-config"})
+		err := cfg.Parse([]string{"-print-sample-config"})
 		c.Assert(err, check.ErrorMatches, flag.ErrHelp.Error())
 	})
-	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(string(buf)))
+	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(SampleConfig))
 }
 
 func (t *testConfigSuite) TestConfig(c *check.C) {
 	var (
-		err               error
-		cfg               = &Config{}
-		masterAddr        = ":8261"
-		advertiseAddr     = "127.0.0.1:8261"
-		name              = "dm-master"
-		dataDir           = "default.dm-master"
-		peerURLs          = "http://127.0.0.1:8291"
-		advertisePeerURLs = "http://127.0.0.1:8291"
-		initialCluster    = "dm-master=http://127.0.0.1:8291"
-		cases             = []struct {
+		err        error
+		cfg        = &Config{}
+		masterAddr = ":8261"
+		cases      = []struct {
 			args     []string
 			hasError bool
 			errorReg string
@@ -85,15 +73,11 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 				true,
 				".*'invalid' is an invalid flag.*",
 			},
-			{
-				[]string{"--config=./dm-master.toml"},
-				false,
-				"",
-			},
 		}
 	)
 
-	cfg.ConfigFile = defaultConfigFile
+	err = cfg.FromContent(SampleConfig)
+	c.Assert(err, check.IsNil)
 	err = cfg.Reload()
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
@@ -103,19 +87,6 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 		err = cfg.Parse(tc.args)
 		if tc.hasError {
 			c.Assert(err, check.ErrorMatches, tc.errorReg)
-		} else {
-			c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-			c.Assert(cfg.AdvertiseAddr, check.Equals, advertiseAddr)
-			c.Assert(cfg.Name, check.Equals, name)
-			c.Assert(cfg.DataDir, check.Equals, dataDir)
-			c.Assert(cfg.PeerUrls, check.Equals, peerURLs)
-			c.Assert(cfg.AdvertisePeerUrls, check.Equals, advertisePeerURLs)
-			c.Assert(cfg.InitialCluster, check.Equals, initialCluster)
-			c.Assert(cfg.InitialClusterState, check.Equals, embed.ClusterStateFlagNew)
-			c.Assert(cfg.Join, check.Equals, "")
-			c.Assert(cfg.String(), check.Matches, fmt.Sprintf("{.*master-addr\":\"%s\".*}", masterAddr))
-			c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
-			c.Assert(cfg.OpenAPI, check.Equals, false)
 		}
 	}
 }
@@ -283,7 +254,7 @@ func (t *testConfigSuite) TestParseURLs(c *check.C) {
 
 func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 
 	// invalid `advertise-addr`
@@ -303,14 +274,14 @@ func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
 
 func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
 	cfg := NewConfig()
-	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
+	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
 	c.Assert(cfg.adjust(), check.IsNil)
 
 	// test default value
 	c.Assert(cfg.OpenAPI, check.Equals, false)
 	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
 
-	//  adjust openapi from experimental-features
+	// adjust openapi from experimental-features
 	cfg.ExperimentalFeatures.OpenAPI = true
 	c.Assert(cfg.adjust(), check.IsNil)
 	c.Assert(cfg.OpenAPI, check.Equals, true)

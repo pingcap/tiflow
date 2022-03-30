@@ -62,8 +62,8 @@ function check_dump_s3_exist() {
 	schema_create="${1}-schema-create.sql"
 	table_schema="${1}.${2}-schema.sql"
 
-	file_should_exist "${s3_DBPATH}/${dumpPath}.${3}.${4}/${schema_create}"
-	file_should_exist "${s3_DBPATH}/${dumpPath}.${3}.${4}/${table_schema}"
+	file_should_exist "${s3_DBPATH}/${dumpPath}/${3}.${4}/${schema_create}"
+	file_should_exist "${s3_DBPATH}/${dumpPath}/${3}.${4}/${table_schema}"
 }
 
 function file_should_exist() {
@@ -90,12 +90,6 @@ function run_test() {
 	kill_dm_master
 	kill_dm_worker
 
-	if $1; then
-		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/S3GetDumpFilesCheck=return()"
-	else
-		export GO_FAILPOINTS=""
-	fi
-
 	# start dm master and worker
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -121,6 +115,9 @@ function run_test() {
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s#name: test#name: $2#g" $WORK_DIR/dm-task.yaml
 	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task.yaml
+	if $1; then
+		sed -i "s#clean-dump-file: true#clean-dump-file: false#g" $WORK_DIR/dm-task.yaml
+	fi
 	dmctl_start_task $WORK_DIR/dm-task.yaml "--remove-meta"
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -136,9 +133,8 @@ function run_test() {
 	# check dump file
 	if $1; then
 		check_dump_s3_exist $db1 $tb1 $2 $SOURCE_ID1
-		export GO_FAILPOINTS=""
 	else
-		dir_should_not_exist "${s3_DBPATH}/${dumpPath}.${2}.${SOURCE_ID1}"
+		dir_should_not_exist "${s3_DBPATH}/${dumpPath}/${2}.${SOURCE_ID1}"
 	fi
 
 	cleanup_s3

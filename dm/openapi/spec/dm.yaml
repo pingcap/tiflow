@@ -1,7 +1,7 @@
 openapi: "3.0.0"
 info:
   title: DM OpenAPI DOC
-  version: "5.3.0"
+  version: "6.0.0"
 externalDocs:
   description: "DM OpenAPI DOC"
   url: "https://docs.pingcap.com/zh/tidb-data-migration/stable"
@@ -12,12 +12,12 @@ tags:
     description: source
     externalDocs:
       description: doc
-      url: "https://docs.pingcap.com/zh/tidb-data-migration/stable/quick-start-create-source"
+      url: "https://docs.pingcap.com/zh/tidb/stable/quick-start-create-source"
   - name: task
     description: task
     externalDocs:
       description: doc
-      url: "https://docs.pingcap.com/zh/tidb-data-migration/stable/quick-create-migration-task"
+      url: "https://docs.pingcap.com/zh/tidb/stable/quick-start-with-dm"
   - name: cluster
     description: cluster
 
@@ -45,14 +45,14 @@ paths:
     post:
       tags:
         - source
-      summary: "create new data source"
+      summary: "create and enable a new data source"
       operationId: "DMAPICreateSource"
       requestBody:
         description: "request body"
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/Source"
+              $ref: "#/components/schemas/CreateSourceRequest"
       responses:
         "201":
           description: "success"
@@ -75,7 +75,14 @@ paths:
         - name: "with_status"
           in: query
           required: false
-          description: "get source with status"
+          description: "list source with status"
+          schema:
+            type: boolean
+            example: true
+        - name: "enable_relay"
+          in: query
+          required: false
+          description: "only return the enable-relay source"
           schema:
             type: boolean
             example: true
@@ -87,6 +94,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetSourceListResponse"
   /api/v1/sources/{source-name}:
+    get:
+      tags:
+        - source
+      summary: "get source"
+      operationId: "DMAPIGetSource"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+        - name: "with_status"
+          in: query
+          required: false
+          description: "list source with status"
+          schema:
+            type: boolean
+            example: true
+      responses:
+        "200":
+          description: "source"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Source"
+        "404":
+          description: "source not found"
     delete:
       tags:
         - source
@@ -103,17 +139,45 @@ paths:
         - name: "force"
           in: query
           required: false
-          description: "force stop task also stop the related tasks"
+          description: "force stop source also stop the related tasks"
           schema:
             type: boolean
             example: true
       responses:
         "204":
           description: "success"
+        "400":
+          description: "failed"
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/DeleteSourceResponse"
+                $ref: "#/components/schemas/ErrorWithMessage"
+    put:
+      tags:
+        - source
+      summary: "update a data source"
+      operationId: "DMAPIUpdateSource"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/UpdateSourceRequest"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Source"
         "400":
           description: "failed"
           content:
@@ -147,70 +211,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/sources/{source-name}/start-relay:
+  /api/v1/sources/{source-name}/enable:
     post:
       tags:
         - source
-      summary: "enable relay log function for the data source"
-      operationId: "DMAPIStartRelay"
-      parameters:
-        - name: "source-name"
-          in: path
-          description: "globally unique data source name"
-          required: true
-          schema:
-            type: string
-            example: "mysql-01"
-      requestBody:
-        required: true
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/StartRelayRequest"
-      responses:
-        "200":
-          description: "success"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/sources/{source-name}/stop-relay:
-    post:
-      tags:
-        - source
-      summary: "disable relay log function for the data source"
-      operationId: "DMAPIStopRelay"
-      parameters:
-        - name: "source-name"
-          in: path
-          description: "globally unique data source name"
-          required: true
-          schema:
-            type: string
-            example: "mysql-01"
-      requestBody:
-        required: true
-        content:
-          "application/json":
-            schema:
-              $ref: "#/components/schemas/StopRelayRequest"
-      responses:
-        "200":
-          description: "success"
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/sources/{source-name}/pause-relay:
-    post:
-      tags:
-        - source
-      summary: "pause relay log function for the data source"
-      operationId: "DMAPIPauseRelay"
+      summary: "enable a data source"
+      operationId: "DMAPIEnableSource"
       parameters:
         - name: "source-name"
           in: path
@@ -228,12 +234,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/sources/{source-name}/resume-relay:
+  /api/v1/sources/{source-name}/disable:
     post:
       tags:
         - source
-      summary: "resume relay log function for the data source"
-      operationId: "DMAPIResumeRelay"
+      summary: "disable a data source"
+      operationId: "DMAPIDisableSource"
       parameters:
         - name: "source-name"
           in: path
@@ -280,6 +286,94 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/relay/enable:
+    post:
+      tags:
+        - source
+      summary: "enable relay log function for the data source"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      operationId: "DMAPIEnableRelay"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/EnableRelayRequest"
+      responses:
+        "200":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/relay/disable:
+    post:
+      tags:
+        - source
+      summary: "disable relay log function for the data source"
+      operationId: "DMAPIDisableRelay"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      requestBody:
+        required: false
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/DisableRelayRequest"
+      responses:
+        "200":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /api/v1/sources/{source-name}/relay/purge:
+    post:
+      tags:
+        - source
+      summary: "purge relay log"
+      operationId: "DMAPIPurgeRelay"
+      parameters:
+        - name: "source-name"
+          in: path
+          description: "globally unique data source name"
+          required: true
+          schema:
+            type: string
+            example: "mysql-01"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/PurgeRelayRequest"
+      responses:
+        "200":
+          description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
   /api/v1/sources/{source-name}/schemas:
     get:
       tags:
@@ -346,8 +440,8 @@ paths:
     post:
       tags:
         - task
-      summary: "create and start task"
-      operationId: "DMAPIStartTask"
+      summary: "create a task"
+      operationId: "DMAPICreateTask"
       requestBody:
         description: "request body"
         content:
@@ -379,6 +473,18 @@ paths:
           schema:
             type: boolean
             example: true
+        - name: "stage"
+          in: query
+          required: false
+          description: "filter by task stage"
+          schema:
+            $ref: "#/components/schemas/TaskStage"
+        - name: source_name_list
+          in: query
+          required: false
+          description: "filter by source name"
+          schema:
+            $ref: "#/components/schemas/SourceNameList"
       operationId: "DMAPIGetTaskList"
       responses:
         "200":
@@ -394,10 +500,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
   /api/v1/tasks/{task-name}:
+    get:
+      tags:
+        - task
+      summary: "get a task"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+        - name: "with_status"
+          in: query
+          required: false
+          description: "get task with status"
+          schema:
+            type: boolean
+            example: true
+      operationId: "DMAPIGetTask"
+      responses:
+        "200":
+          description: "task list"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: "task not found"
     delete:
       tags:
         - task
-      summary: "delete and stop task"
+      summary: "delete a task"
       operationId: "DMAPIDeleteTask"
       parameters:
         - name: task-name
@@ -407,18 +542,48 @@ paths:
           schema:
             type: string
             example: "task-1"
-        - name: source_name_list
+        - name: "force"
           in: query
-          description: "source name list"
           required: false
+          description: "force stop task even if some subtask is running"
           schema:
-            type: array
-            items:
-              type: string
-              example: "source-1"
+            type: boolean
+            example: true
       responses:
         "204":
           description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    put:
+      tags:
+        - task
+      summary: "update a task"
+      operationId: "DMAPIUpdateTask"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Task"
         "400":
           description: "failed"
           content:
@@ -458,12 +623,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/tasks/{task-name}/pause:
+  /api/v1/tasks/{task-name}/start:
     post:
       tags:
         - task
-      summary: "pause task"
-      operationId: "DMAPIPauseTask"
+      summary: "start a task"
+      operationId: "DMAPIStartTask"
       parameters:
         - name: task-name
           in: path
@@ -477,7 +642,7 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/SourceNameList"
+              $ref: "#/components/schemas/StartTaskRequest"
       responses:
         "200":
           description: "success"
@@ -487,12 +652,12 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/tasks/{task-name}/resume:
+  /api/v1/tasks/{task-name}/stop:
     post:
       tags:
         - task
-      summary: "resume task"
-      operationId: "DMAPIResumeTask"
+      summary: "stop a task"
+      operationId: "DMAPIStopTask"
       parameters:
         - name: task-name
           in: path
@@ -506,10 +671,57 @@ paths:
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/SourceNameList"
+              $ref: "#/components/schemas/StopTaskRequest"
       responses:
         "200":
           description: "success"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
+  /api/v1/tasks/{task-name}/sources/{source-name}/migrate_targets:
+    get:
+      tags:
+        - task
+      summary: "get task source table and target table route relation"
+      operationId: "DMAPIGetTaskMigrateTargets"
+      parameters:
+        - name: task-name
+          in: path
+          description: "globally unique task name"
+          required: true
+          schema:
+            type: string
+            example: "task-1"
+        - name: source-name
+          in: path
+          description: "source name"
+          required: true
+          schema:
+            type: string
+            example: "source-1"
+        - name: "schema_pattern"
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "db*"
+        - name: "table_pattern"
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "table*"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetTaskMigrateTargetsResponse"
         "400":
           description: "failed"
           content:
@@ -731,6 +943,33 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
+
+  /api/v1/tasks/converters:
+    post:
+      tags:
+        - task
+      summary: "Turn task into the format of a configuration file or vice versa."
+      operationId: "DMAPIConvertTask"
+      requestBody:
+        description: "if task is input this task will be converted to task_config file or vice versa"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ConverterTaskRequest"
+      responses:
+        "201":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ConverterTaskResponse"
+        "400":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
   /api/v1/tasks/templates:
     post:
       tags:
@@ -875,6 +1114,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
 
+  /api/v1/cluster/info:
+    get:
+      tags:
+        - cluster
+      summary: "get cluster info such as cluster id"
+      operationId: "DMAPIGetClusterInfo"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetClusterInfoResponse"
   /api/v1/cluster/masters:
     get:
       tags:
@@ -959,19 +1211,6 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
-  /api/v1/cluster/info:
-    get:
-      tags:
-        - cluster 
-      summary: "get cluster info such as cluster id"
-      operationId: "DMAPIGetClusterInfo"
-      responses:
-        "200":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/GetClusterInfoResponse"
 
 components:
   schemas:
@@ -1126,6 +1365,18 @@ components:
           default: false
           description: "whether to use GTID to pull binlogs from upstream"
           nullable: false
+        enable:
+          type: boolean
+          example: false
+          default: false
+          description: "whether this source is enabled"
+          nullable: false
+        flavor:
+          type: string
+          example: mysql
+          description: "flavor of this source"
+        task_name_list:
+          $ref: "#/components/schemas/TaskNameList"
         security:
           $ref: "#/components/schemas/Security"
         purge:
@@ -1143,7 +1394,7 @@ components:
         - "user"
         - "password"
         - "enable_gtid"
-
+        - "enable"
     ShardingGroup:
       type: object
       properties:
@@ -1196,7 +1447,7 @@ components:
         - "meta_binlog_gtid"
     SyncStatus:
       type: object
-      description: "status of sync uuit"
+      description: "status of sync unit"
       properties:
         total_events:
           type: integer
@@ -1269,7 +1520,7 @@ components:
         - "completed_tables"
         - "finished_bytes"
         - "finished_rows"
-        - "estimate_total_rows" 
+        - "estimate_total_rows"
     SubTaskStatus:
       type: object
       properties:
@@ -1283,9 +1534,7 @@ components:
           type: string
           description: worker name
         stage:
-          type: string
-          example: "runing"
-          description: "current stage of the task"
+          $ref: "#/components/schemas/TaskStage"
         unit:
           type: string
           example: "sync"
@@ -1321,7 +1570,7 @@ components:
         port:
           type: integer
           example: 3306
-          description: "ource port"
+          description: "source port"
         user:
           type: string
           example: "root"
@@ -1391,9 +1640,6 @@ components:
               type: string
               description: table name, does not support wildcards
               example: "tb1"
-          required:
-            - "schema"
-            - "table"
         binlog_filter_rule:
           type: array
           description: "filter rule name"
@@ -1484,6 +1730,12 @@ components:
           type: string
           example: "5m0s"
           description: "sets the time interval for adjusting the waiting time of the automatic recovery."
+    TaskStage:
+      type: string
+      enum:
+        - Stopped
+        - Running
+        - Finished
     Task:
       description: "task"
       type: object
@@ -1520,8 +1772,9 @@ components:
           type: string
           description: "how to handle conflicted data"
           enum:
-            - "overwrite"
+            - "replace"
             - "error"
+            - "ignore"
         target_config:
           $ref: "#/components/schemas/TaskTargetDataBase"
         binlog_filter_rule:
@@ -1624,7 +1877,7 @@ components:
       type: array
       items:
         type: string
-        example: "task-1"
+        example: "task1"
 
     RelayConfig:
       description: the config of relay
@@ -1658,7 +1911,7 @@ components:
           description: "worker name"
       required:
         - "worker_name"
-    StartRelayRequest:
+    EnableRelayRequest:
       description: action to start a relay request
       type: object
       properties:
@@ -1679,49 +1932,44 @@ components:
           default: "./relay_log"
           description: "the directory where the relay log is stored"
           nullable: true
-      required:
-        - "worker_name_list"
-    StopRelayRequest:
+    DisableRelayRequest:
       description: action to stop a relay request
       type: object
       properties:
         worker_name_list:
           $ref: "#/components/schemas/WorkerNameList"
-      required:
-        - "worker_name_list"
-    CreateTaskRequest:
+    PurgeRelayRequest:
+      description: action to stop a relay request
       type: object
       properties:
-        remove_meta:
-          type: boolean
-          default: false
-          description: whether to remove meta database in downstream database
-        task:
-          $ref: "#/components/schemas/Task"
-        source_name_list:
-          $ref: "#/components/schemas/SourceNameList"
-      required:
-        - "remove_meta"
-        - "task"
-
-    OperateTaskTableStructureRequest:
-      description: action to operate table request
-      type: object
-      properties:
-        sql_content:
+        relay_binlog_name:
           type: string
-          example: "CREATE TABLE `t1` ( `c1` int(11) DEFAULT NULL, `c2` int(11) DEFAULT NULL, `c3` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-          description: "sql you want to operate"
-        flush:
-          type: boolean
-          default: true
-          description: "Writes the schema to the checkpoint so that DM can load it after restarting the task"
-        sync:
-          type: boolean
-          description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
+          example: "mysql-bin.000002"
+          description: "starting filename of the upstream binlog"
+        relay_dir:
+          type: string
+          description: "specify relay sub directory for relay_binlog_name. If not specified, the latest one will be used. Sample format: 2ae76434-f79f-11e8-bde2-0242ac130008.000001"
+          nullable: true
       required:
-        - "sql_content"
+        - "relay_binlog_name"
 
+    CreateSourceRequest:
+      type: object
+      properties:
+        source:
+          $ref: "#/components/schemas/Source"
+        worker_name:
+          type: string
+          example: worker-1
+      required:
+        - "source"
+    UpdateSourceRequest:
+      type: object
+      properties:
+        source:
+          $ref: "#/components/schemas/Source"
+      required:
+        - "source"
     GetSourceListResponse:
       type: object
       properties:
@@ -1746,12 +1994,116 @@ components:
       required:
         - "total"
         - "data"
-    DeleteSourceResponse:
+
+    ConverterTaskRequest:
       type: object
       properties:
-        task_name_list:
-          type: object
-          $ref: "#/components/schemas/TaskNameList"
+        task:
+          $ref: "#/components/schemas/Task"
+        task_config_file:
+          type: string
+          description: config file in yaml format https://docs.pingcap.com/zh/tidb/stable/task-configuration-file-full.
+    ConverterTaskResponse:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+        task_config_file:
+          type: string
+          description: config file in yaml format https://docs.pingcap.com/zh/tidb/stable/task-configuration-file-full.
+      required:
+        - "task"
+        - "task_config_file"
+
+    TaskMigrateTarget:
+      type: object
+      description: "task migrate targets"
+      properties:
+        source_schema:
+          type: string
+          example: "db1"
+        source_table:
+          type: string
+          example: "tb1"
+        target_schema:
+          type: string
+          example: "db1"
+        target_table:
+          type: string
+          example: "tb1"
+      required:
+        - "source_schema"
+        - "source_table"
+        - "target_schema"
+        - "target_table"
+    GetTaskMigrateTargetsResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskMigrateTarget"
+      required:
+        - "total"
+        - "data"
+
+    CreateTaskRequest:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+      required:
+        - "task"
+    StartTaskRequest:
+      type: object
+      properties:
+        remove_meta:
+          type: boolean
+          default: false
+          description: whether to remove meta database in downstream database
+        source_name_list:
+          $ref: "#/components/schemas/SourceNameList"
+        # start_time:
+        #   type: string
+        #   example: "2006-01-02 15:04:05"
+        #   description: task start time
+        # safe_mode_time_duration:
+        #   example: "1s"
+        #   description: time duration of safe mode
+    StopTaskRequest:
+      type: object
+      properties:
+        # timeout_duration:
+        #   example: "15s"
+        #   description: time duration waiting task stop
+        source_name_list:
+          $ref: "#/components/schemas/SourceNameList"
+    UpdateTaskRequest:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+      required:
+        - "task"
+    OperateTaskTableStructureRequest:
+      description: action to operate table request
+      type: object
+      properties:
+        sql_content:
+          type: string
+          example: "CREATE TABLE `t1` ( `c1` int(11) DEFAULT NULL, `c2` int(11) DEFAULT NULL, `c3` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+          description: "sql you want to operate"
+        flush:
+          type: boolean
+          default: true
+          description: "Writes the schema to the checkpoint so that DM can load it after restarting the task"
+        sync:
+          type: boolean
+          description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
+      required:
+        - "sql_content"
 
     GetTaskListResponse:
       type: object

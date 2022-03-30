@@ -53,7 +53,8 @@ func newContext(stdCtx sdtContext.Context,
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
 	globalVars *context.GlobalVars,
-	throw func(error)) *actorNodeContext {
+	throw func(error),
+) *actorNodeContext {
 	batchSize := defaultEventBatchSize
 	if config.GetGlobalServerConfig().Debug.TableActor != nil {
 		batchSize = config.GetGlobalServerConfig().Debug.TableActor.EventBatchSize

@@ -245,7 +245,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", state.sri.ts),
-		zap.String("error", err.Error()))
+		zap.String("error", err.Error()),
+		zap.Any("sri", state.sri))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
 		return w.checkShouldExit()
@@ -282,7 +283,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
-	// tikv resolved update interval is 1s, use half of the resolck lock interval
+	// tikv resolved update interval is 1s, use half of the resolve lock interval
 	// as lock penalty.
 	resolveLockPenalty := 10
 	resolveLockInterval := 20 * time.Second
@@ -737,7 +738,7 @@ func (w *regionWorker) handleResolvedTs(
 		return nil
 	}
 	regionID := state.sri.verID.GetID()
-	// Send resolved ts update in non blocking way, since we can re-query real
+	// Send resolved ts update in non-blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
 	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
 	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;

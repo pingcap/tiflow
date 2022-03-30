@@ -20,6 +20,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/dustin/go-humanize"
@@ -61,7 +62,9 @@ const (
 	ValidationFast = "fast"
 	ValidationFull = "full"
 
-	DefaultValidatorWorkerCount = 4
+	DefaultValidatorWorkerCount       = 4
+	DefaultValidatorRowErrorDelay     = 30 * time.Minute
+	DefaultValidatorMetaFlushInterval = 1 * time.Minute
 )
 
 // default config item values.
@@ -252,8 +255,9 @@ type LoaderConfig struct {
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize: defaultPoolSize,
-		Dir:      defaultDir,
+		PoolSize:   defaultPoolSize,
+		Dir:        defaultDir,
+		ImportMode: LoadModeSQL,
 	}
 }
 
@@ -339,11 +343,13 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
 }
 
-func (v *ValidatorConfig) adjust() error {
+func (v *ValidatorConfig) Adjust() error {
 	if v.Mode == "" {
 		v.Mode = ValidationNone
 	}
@@ -352,6 +358,12 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.WorkerCount <= 0 {
 		v.WorkerCount = DefaultValidatorWorkerCount
+	}
+	if v.RowErrorDelay.Duration == 0 {
+		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
+	}
+	if v.MetaFlushInterval.Duration == 0 {
+		v.MetaFlushInterval.Duration = DefaultValidatorMetaFlushInterval
 	}
 	return nil
 }
@@ -451,6 +463,7 @@ func NewTaskConfig() *TaskConfig {
 		Syncers:                 make(map[string]*SyncerConfig),
 		Validators:              make(map[string]*ValidatorConfig),
 		CleanDumpFile:           true,
+		OnlineDDL:               true,
 		CollationCompatible:     defaultCollationCompatible,
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
@@ -608,7 +621,7 @@ func (c *TaskConfig) adjust() error {
 	}
 
 	for _, validatorCfg := range c.Validators {
-		if err := validatorCfg.adjust(); err != nil {
+		if err := validatorCfg.Adjust(); err != nil {
 			return err
 		}
 	}
@@ -988,6 +1001,25 @@ func NewMySQLInstancesForDowngrade(mysqlInstances []*MySQLInstance) []*MySQLInst
 	return mysqlInstancesForDowngrade
 }
 
+// LoaderConfigForDowngrade is the base configuration for loader in v2.0.
+// This config is used for downgrade(config export) from a higher dmctl version.
+// When we add any new config item into LoaderConfig, we should update it also.
+type LoaderConfigForDowngrade struct {
+	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
+}
+
+func NewLoaderConfigForDowngrade(loaderConfigs map[string]*LoaderConfig) map[string]*LoaderConfigForDowngrade {
+	loaderConfigsForDowngrade := make(map[string]*LoaderConfigForDowngrade, len(loaderConfigs))
+	for k, v := range loaderConfigs {
+		loaderConfigsForDowngrade[k] = &LoaderConfigForDowngrade{
+			PoolSize: v.PoolSize,
+			Dir:      v.Dir,
+		}
+	}
+	return loaderConfigsForDowngrade
+}
+
 // SyncerConfigForDowngrade is the base configuration for syncer in v2.0.
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SyncerConfig, we should update it also.
@@ -1055,7 +1087,7 @@ type TaskConfigForDowngrade struct {
 	BWList                  map[string]*filter.Rules             `yaml:"black-white-list"`
 	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
 	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
-	Loaders                 map[string]*LoaderConfig             `yaml:"loaders"`
+	Loaders                 map[string]*LoaderConfigForDowngrade `yaml:"loaders"`
 	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
 	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
 	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
@@ -1090,7 +1122,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 		BWList:                  taskConfig.BWList,
 		BAList:                  taskConfig.BAList,
 		Mydumpers:               taskConfig.Mydumpers,
-		Loaders:                 taskConfig.Loaders,
+		Loaders:                 NewLoaderConfigForDowngrade(taskConfig.Loaders),
 		Syncers:                 NewSyncerConfigsForDowngrade(taskConfig.Syncers),
 		CleanDumpFile:           taskConfig.CleanDumpFile,
 		EnableANSIQuotes:        taskConfig.EnableANSIQuotes,
@@ -1113,6 +1145,7 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
 	}
+	c.OnlineDDL = false
 }
 
 // Yaml returns YAML format representation of config.

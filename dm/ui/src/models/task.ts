@@ -2,14 +2,7 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
-    dmapiStartTask: build.mutation<
-      Task,
-      {
-        remove_meta: boolean
-        task: Task
-        source_name_list?: string[]
-      }
-    >({
+    dmapiCreateTask: build.mutation<Task, { task: Task }>({
       query: queryArg => ({
         url: `/tasks`,
         method: 'POST',
@@ -17,24 +10,60 @@ const injectedRtkApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Task'],
     }),
-    dmapiGetTaskList: build.query<ListResponse<Task>, { withStatus: boolean }>({
+    dmapiGetTaskList: build.query<
+      ListResponse<Task>,
+      {
+        withStatus?: boolean
+        stage?: TaskStage
+        sourceNameList?: string[]
+      }
+    >({
       query: queryArg => ({
         url: `/tasks`,
-        params: { with_status: queryArg.withStatus },
+        params: {
+          with_status: queryArg.withStatus,
+          stage: queryArg.stage,
+          source_name_list: queryArg.sourceNameList,
+        },
       }),
       providesTags: ['Task'],
     }),
-    dmapiDeleteTask: build.mutation<void, TaskWithSourceList>({
+    dmapiDeleteTask: build.mutation<
+      void,
+      {
+        taskName: string
+        force?: boolean
+      }
+    >({
       query: queryArg => ({
         url: `/tasks/${queryArg.taskName}`,
         method: 'DELETE',
-        params: { source_name_list: queryArg.sourceNameList },
+        params: { force: queryArg.force },
+      }),
+      invalidatesTags: ['Task'],
+    }),
+    dmapiGetTask: build.query<Task, { taskName: string; withStatus?: boolean }>(
+      {
+        query: queryArg => ({
+          url: `/tasks/${queryArg.taskName}`,
+          params: { with_status: queryArg.withStatus },
+        }),
+      }
+    ),
+    dmapiUpdateTask: build.mutation<Task, { task: Task }>({
+      query: queryArg => ({
+        url: `/tasks/${queryArg.task.name}`,
+        method: 'PUT',
+        body: queryArg,
       }),
       invalidatesTags: ['Task'],
     }),
     dmapiGetTaskStatus: build.query<
       ListResponse<SubTaskStatus>,
-      TaskWithSourceList
+      {
+        taskName: string
+        sourceNameList?: string[]
+      }
     >({
       query: queryArg => ({
         url: `/tasks/${queryArg.taskName}/status`,
@@ -43,19 +72,29 @@ const injectedRtkApi = api.injectEndpoints({
           : undefined,
       }),
     }),
-    dmapiPauseTask: build.mutation<void, TaskWithSourceList>({
+    dmapiStopTask: build.mutation<
+      void,
+      {
+        taskName: string
+        source_name_list?: string[]
+        timeout_duration?: any
+      }
+    >({
       query: queryArg => ({
-        url: `/tasks/${queryArg.taskName}/pause`,
+        url: `/tasks/${queryArg.taskName}/stop`,
         method: 'POST',
-        body: queryArg.sourceNameList,
+        body: {
+          source_name_list: queryArg.source_name_list,
+          timeout_duration: queryArg.timeout_duration,
+        },
       }),
       invalidatesTags: ['Task'],
     }),
-    dmapiResumeTask: build.mutation<void, TaskWithSourceList>({
+    dmapiStartTask: build.mutation<void, DmapiStartTaskApiArg>({
       query: queryArg => ({
-        url: `/tasks/${queryArg.taskName}/resume`,
+        url: `/tasks/${queryArg.taskName}/start`,
         method: 'POST',
-        body: queryArg.sourceNameList,
+        body: queryArg.startTaskRequest,
       }),
       invalidatesTags: ['Task'],
     }),
@@ -82,12 +121,55 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/tasks/${queryArg.taskName}/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
       }),
     }),
+    dmapiConverterTask: build.mutation<
+      { task: Task; task_config_file: string },
+      {
+        task?: Task
+        task_config_file?: string
+      }
+    >({
+      query: queryArg => ({
+        url: `/tasks/converters`,
+        method: 'POST',
+        body: queryArg,
+      }),
+    }),
+    dmapiGetTaskMigrateTargets: build.query<
+      ListResponse<TaskMigrateTarget>,
+      {
+        taskName: string
+        sourceName: string
+        schemaPattern?: string
+        tablePattern?: string
+      }
+    >({
+      query: queryArg => ({
+        url: `/tasks/${queryArg.taskName}/sources/${queryArg.sourceName}/migrate_targets`,
+        params: {
+          schema_pattern: queryArg.schemaPattern,
+          table_pattern: queryArg.tablePattern,
+        },
+      }),
+      keepUnusedDataFor: 1,
+    }),
   }),
 })
 
-export type TaskWithSourceList = {
+export type TaskMigrateTarget = {
+  source_schema: string
+  source_table: string
+  target_schema: string
+  target_table: string
+}
+
+export type DmapiStartTaskApiArg = {
   taskName: string
-  sourceNameList?: string[]
+  startTaskRequest?: {
+    remove_meta?: boolean
+    safe_mode_time_duration?: any
+    source_name_list?: string[]
+    start_time?: string
+  }
 }
 
 export type Security = {
@@ -144,11 +226,19 @@ export type TaskTableMigrateRule = {
   binlog_filter_rule?: string[]
 }
 
+export enum TaskMigrateConsistencyLevel {
+  Flush = 'flush',
+  Snapshot = 'snapshot',
+  Lock = 'lock',
+  None = 'none',
+  Auto = 'auto',
+}
+
 export type TaskFullMigrateConf = {
   export_threads?: number
   import_threads?: number
   data_dir?: string
-  consistency?: string
+  consistency?: TaskMigrateConsistencyLevel
 }
 
 export type TaskIncrMigrateConf = {
@@ -178,11 +268,13 @@ export enum TaskMode {
 export enum TaskShardMode {
   PESSIMISTIC = 'pessimistic',
   OPTIMISTIC = 'optimistic',
+  NONE = 'none',
 }
 
 export enum OnDuplicateBehavior {
   OVERWRITE = 'overwrite',
   ERROR = 'error',
+  REPLACE = 'replace',
 }
 
 export type Task = {
@@ -203,6 +295,7 @@ export type Task = {
 
 export interface TaskFormData extends Task {
   binlog_filter_rule_array?: Array<TaskBinLogFilterRule & { name: string }>
+  start_after_saved?: boolean
 }
 
 export type LoadStatus = {
@@ -252,10 +345,14 @@ export const {
   useDmapiGetTaskListQuery,
   useDmapiDeleteTaskMutation,
   useDmapiGetTaskStatusQuery,
-  useDmapiPauseTaskMutation,
-  useDmapiResumeTaskMutation,
+  useDmapiCreateTaskMutation,
+  useDmapiGetTaskQuery,
+  useDmapiStopTaskMutation,
+  useDmapiUpdateTaskMutation,
   useDmapiGetSchemaListByTaskAndSourceQuery,
   useDmapiGetTableListByTaskAndSourceQuery,
+  useDmapiConverterTaskMutation,
+  useDmapiGetTaskMigrateTargetsQuery,
 } = injectedRtkApi
 
 export enum TaskUnit {
@@ -280,8 +377,19 @@ export enum TaskStage {
 }
 
 // https://github.com/pingcap/tiflow/blob/9261014edd93902d1b0bcb473aec911e80901721/dm/dm/ctl/master/query_status.go#L130
-export const calculateTaskStatus = (subtasks: SubTaskStatus[]) => {
+export const calculateTaskStatus = (subtasks?: SubTaskStatus[]): TaskStage => {
+  if (!subtasks) {
+    return TaskStage.InvalidStage
+  }
+
   // TODO Error status
+  if (subtasks.some(subtask => subtask.stage === TaskStage.Resuming)) {
+    return TaskStage.Resuming
+  }
+
+  if (subtasks.some(subtask => subtask.stage === TaskStage.Pausing)) {
+    return TaskStage.Pausing
+  }
 
   if (subtasks.some(subtask => subtask.stage === TaskStage.Paused)) {
     return TaskStage.Paused

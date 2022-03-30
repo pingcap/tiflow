@@ -2,7 +2,10 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
-    dmapiCreateSource: build.mutation<Source, Partial<Source>>({
+    dmapiCreateSource: build.mutation<
+      Source,
+      { source: Source; worker_name?: string }
+    >({
       query: queryArg => ({
         url: `/sources`,
         method: 'POST',
@@ -13,19 +16,18 @@ const injectedRtkApi = api.injectEndpoints({
     dmapiGetSourceList: build.query<
       ListResponse<Source>,
       {
-        withStatus?: boolean
+        with_status?: boolean
+        enable_relay?: boolean
       }
     >({
       query: queryArg => ({
         url: `/sources`,
-        params: { with_status: queryArg.withStatus },
+        params: queryArg,
       }),
       providesTags: ['Source'],
     }),
     dmapiDeleteSource: build.mutation<
-      {
-        task_name_list?: string[]
-      },
+      void,
       {
         sourceName: string
         force?: boolean
@@ -38,14 +40,40 @@ const injectedRtkApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Source'],
     }),
-    dmapiGetSourceStatus: build.query<
-      ListResponse<SourceStatus>,
-      {
-        sourceName: string
-      }
+    dmapiGetSource: build.query<
+      Source,
+      { sourceName: string; withStatus?: boolean }
     >({
       query: queryArg => ({
-        url: `/sources/${queryArg.sourceName}/status`,
+        url: `/sources/${queryArg.sourceName}`,
+        params: { with_status: queryArg.withStatus },
+      }),
+    }),
+    dmapiUpdateSource: build.mutation<Source, { source: Source }>({
+      query: queryArg => ({
+        url: `/sources/${queryArg.source.source_name}`,
+        method: 'PUT',
+        body: queryArg,
+      }),
+      invalidatesTags: ['Source'],
+    }),
+    dmapiDisableSource: build.mutation<void, string>({
+      query: queryArg => ({
+        url: `/sources/${queryArg}/disable`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Source'],
+    }),
+    dmapiEnableSource: build.mutation<void, string>({
+      query: queryArg => ({
+        url: `/sources/${queryArg}/enable`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Source'],
+    }),
+    dmapiGetSourceStatus: build.query<ListResponse<SourceStatus>, string>({
+      query: queryArg => ({
+        url: `/sources/${queryArg}/status`,
       }),
     }),
     dmapiTransferSource: build.mutation<
@@ -77,12 +105,59 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/sources/${queryArg.sourceName}/schemas/${queryArg.schemaName}`,
       }),
     }),
+    dmapiDisableRelay: build.mutation<
+      void,
+      {
+        name: string
+        payload?: {
+          worker_name_list?: string[]
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/sources/${queryArg.name}/relay/disable`,
+        method: 'POST',
+        body: queryArg.payload,
+      }),
+      invalidatesTags: ['Source'],
+    }),
+    dmapiEnableRelay: build.mutation<
+      void,
+      {
+        name: string
+        payload?: {
+          relay_binlog_gtid?: string | null
+          relay_binlog_name?: string | null
+          relay_dir?: string | null
+          worker_name_list: string[]
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/sources/${queryArg.name}/relay/enable`,
+        method: 'POST',
+        body: queryArg.payload,
+      }),
+      invalidatesTags: ['Source'],
+    }),
+    dmapiPurgeRelay: build.mutation<
+      void,
+      {
+        name: string
+        purgeRelayRequest: {
+          relay_binlog_name: string
+          relay_dir?: string | null
+        }
+      }
+    >({
+      query: queryArg => ({
+        url: `/sources/${queryArg.name}/relay/purge`,
+        method: 'POST',
+        body: queryArg.purgeRelayRequest,
+      }),
+    }),
   }),
 })
-
-export type DmapiGetSourceStatusApiArg = {
-  sourceName: string
-}
 
 export type Security = {
   ssl_ca_content: string
@@ -121,6 +196,7 @@ export type RelayConfig = {
 }
 
 export type Source = {
+  enable: boolean
   source_name: string
   host: string
   port: number
@@ -131,14 +207,22 @@ export type Source = {
   purge?: Purge
   status_list?: SourceStatus[]
   relay_config?: RelayConfig
+  flavor: string
 }
 
 export const {
   useDmapiCreateSourceMutation,
   useDmapiGetSourceListQuery,
   useDmapiDeleteSourceMutation,
+  useDmapiDisableSourceMutation,
+  useDmapiEnableSourceMutation,
+  useDmapiGetSourceQuery,
+  useDmapiUpdateSourceMutation,
   useDmapiGetSourceStatusQuery,
   useDmapiTransferSourceMutation,
   useDmapiGetSourceSchemaListQuery,
   useDmapiGetSourceTableListMutation,
+  useDmapiDisableRelayMutation,
+  useDmapiEnableRelayMutation,
+  useDmapiPurgeRelayMutation,
 } = injectedRtkApi

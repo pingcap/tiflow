@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/errors"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/soheilhy/cmux"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -932,4 +932,33 @@ func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) 
 
 	resp.Cfg, err = s.cfg.Toml()
 	return resp, err
+}
+
+// CheckSubtasksCanUpdate check if input subtask cfg can be updated.
+func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtasksCanUpdateRequest) (*pb.CheckSubtasksCanUpdateResponse, error) {
+	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("payload", req))
+	resp := &pb.CheckSubtasksCanUpdateResponse{}
+	defer func() {
+		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
+	}()
+	w := s.getSourceWorker(true)
+	if w == nil {
+		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source is being handled in the worker"
+		log.L().Warn(msg)
+		resp.Msg = msg
+		return resp, nil
+	}
+	cfg := config.NewSubTaskConfig()
+	if err := cfg.Decode(req.SubtaskCfgTomlString, false); err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	if err := w.CheckCfgCanUpdated(cfg); err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	resp.Success = true
+	return resp, nil
 }

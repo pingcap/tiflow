@@ -47,7 +47,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -65,7 +65,7 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 
 	// join to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
+	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
@@ -73,6 +73,11 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
+
+	// imitate fail to start scheduler/pessimism/optimism
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
+	//nolint:errcheck
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
 
 	s2 = NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
@@ -91,11 +96,6 @@ func (t *testElectionSuite) TestFailToStartLeader(c *check.C) {
 	c.Assert(leaderID, check.Equals, cfg1.Name)
 	c.Assert(s1.ClusterID(), check.Greater, uint64(0))
 	c.Assert(s2.ClusterID(), check.Equals, uint64(0))
-
-	// fail to start scheduler/pessimism/optimism
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader", `return("dm-master-2")`), check.IsNil)
-	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
 
 	s1.election.Resign()
 	time.Sleep(1 * time.Second)

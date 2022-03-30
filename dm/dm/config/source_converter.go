@@ -20,6 +20,7 @@ import (
 // SourceCfgToOpenAPISource converter SourceConfig to openapi.Source.
 func SourceCfgToOpenAPISource(cfg *SourceConfig) openapi.Source {
 	source := openapi.Source{
+		Enable:     cfg.Enable,
 		EnableGtid: cfg.EnableGTID,
 		Host:       cfg.From.Host,
 		Password:   "******", // PM's requirement, we always return obfuscated password to user
@@ -37,6 +38,9 @@ func SourceCfgToOpenAPISource(cfg *SourceConfig) openapi.Source {
 			RelayBinlogName: &cfg.RelayBinLogName,
 			RelayDir:        &cfg.RelayDir,
 		},
+	}
+	if cfg.Flavor != "" {
+		source.Flavor = &cfg.Flavor
 	}
 	if cfg.From.Security != nil {
 		// NOTE we don't return security content here, because we don't want to expose it to the user.
@@ -67,6 +71,10 @@ func OpenAPISourceToSourceCfg(source openapi.Source) *SourceConfig {
 		}
 	}
 	cfg.From = from
+	if source.Flavor != nil {
+		cfg.Flavor = *source.Flavor
+	}
+	cfg.Enable = source.Enable
 	cfg.EnableGTID = source.EnableGtid
 	cfg.SourceID = source.SourceName
 	if purge := source.Purge; purge != nil {

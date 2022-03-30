@@ -172,7 +172,8 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
 	binlogPos gmysql.Position,
 	gs gtid.Set,
-	err error) {
+	err error,
+) {
 	binlogName, pos, _, _, gtidStr, err := GetMasterStatus(ctx, db, flavor)
 	if err != nil {
 		return
@@ -196,7 +197,8 @@ func GetBinlogDB(ctx context.Context, db *sql.DB, flavor string) (string, string
 // GetMasterStatus gets status from master.
 // When the returned error is nil, the gtid.Set must be not nil.
 func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
-	string, uint32, string, string, string, error) {
+	string, uint32, string, string, string, error,
+) {
 	var (
 		binlogName     string
 		pos            uint32

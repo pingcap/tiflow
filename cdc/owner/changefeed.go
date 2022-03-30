@@ -59,6 +59,10 @@ type changefeed struct {
 	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
 	// After the DDL event has been executed, ddlEventCache will be set to nil.
 	ddlEventCache *model.DDLEvent
+	// currentTableNames is the table names that the changefeed is watching.
+	// And it contains only the tables of the ddl that have been processed.
+	// The ones that have not been executed yet do not have.
+	currentTableNames []model.TableName
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -189,7 +193,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	default:
 	}
 
-	c.sink.emitCheckpointTs(ctx, checkpointTs)
+	// This means that the cached DDL has been executed,
+	// and we need to use the latest table names.
+	if c.currentTableNames == nil {
+		c.currentTableNames = c.schema.AllTableNames()
+		log.Debug("changefeed current table names updated",
+			zap.String("changefeed", c.id),
+			zap.Any("tables", c.currentTableNames),
+		)
+	}
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -198,8 +211,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
+		log.Info("barrierTs < checkpointTs, premature to schedule tables or update status",
+			zap.String("changefeed", c.id),
+			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
 	}
+
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
 	costTime := time.Since(startTime)
@@ -288,7 +305,8 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs-1, c.state.Info.Config)
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage,
+		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -510,24 +528,35 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 
 func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (done bool, err error) {
 	if job.BinlogInfo == nil {
-		log.Warn("ignore the invalid DDL job", zap.Reflect("job", job))
+		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id),
+			zap.Reflect("job", job))
 		return true, nil
 	}
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
+		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvent, err := c.schema.BuildDDLEvent(job)
 		if err != nil {
+			log.Error("build DDL event fail", zap.String("changefeed", c.id),
+				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
+		// We can't use the latest schema directly,
+		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
+		// So let's remember the name of the table before processing and cache the DDL.
+		c.currentTableNames = c.schema.AllTableNames()
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
 		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
 		if err != nil {
+			log.Error("add special comment fail", zap.String("changefeed", c.id),
+				zap.String("Query", ddlEvent.Query), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 
@@ -540,7 +569,8 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
+		log.Warn("ignore the DDL job of ineligible table",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
@@ -549,6 +579,9 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	}
 	if done {
 		c.ddlEventCache = nil
+		// It has expired.
+		// We should use the latest table names now.
+		c.currentTableNames = nil
 	}
 	return done, nil
 }
@@ -618,6 +651,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	restoreFlags |= format.RestoreKeyWordUppercase
 	// wrap string with single quote
 	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}

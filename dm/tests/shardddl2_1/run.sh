@@ -111,6 +111,7 @@ function DM_049_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	else
+		# TODO: fix this after DM worker supports redirect
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"because schema conflict detected" 2
@@ -149,7 +150,8 @@ function DM_050_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 2
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `d` INT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -185,7 +187,8 @@ function DM_051_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 2
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `b` `c` INT' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -221,7 +224,7 @@ function DM_056_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 2
+			'because schema conflict detected' 2
 	fi
 }
 
@@ -279,7 +282,8 @@ function DM_058_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 2
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `id` `new_col` INT DEFAULT 2' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -481,7 +485,8 @@ function DM_067_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` MODIFY COLUMN `id` INT DEFAULT 2' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
