@@ -573,9 +573,6 @@ func (s *System) poll(ctx context.Context, id int) {
 			if !running {
 				// Close the actor and mailbox.
 				p.onActorClosed()
-				log.Info("actor is closed",
-					zap.Uint64("id", uint64(p.mb.ID())),
-					zap.String("name", s.name))
 			}
 			actorPollDuration := now().Sub(actorPollStartTime)
 			actorPollStartTime = approximateCurrentTime
