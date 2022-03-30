@@ -17,8 +17,8 @@ import (
 	"context"
 	"sync"
 
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 

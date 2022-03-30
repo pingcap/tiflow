@@ -23,8 +23,8 @@ import (
 
 	"github.com/chaos-mesh/go-sqlsmith"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
