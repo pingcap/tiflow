@@ -65,6 +65,7 @@ const (
 	DefaultValidatorWorkerCount       = 4
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
 	DefaultValidatorMetaFlushInterval = 1 * time.Minute
+	DefaultValidatorBatchQuerySize    = 100
 )
 
 // default config item values.
@@ -347,6 +348,7 @@ type ValidatorConfig struct {
 	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
 	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
 	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
+	BatchQuerySize    int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
 }
 
 func (v *ValidatorConfig) Adjust() error {
@@ -364,6 +366,9 @@ func (v *ValidatorConfig) Adjust() error {
 	}
 	if v.MetaFlushInterval.Duration == 0 {
 		v.MetaFlushInterval.Duration = DefaultValidatorMetaFlushInterval
+	}
+	if v.BatchQuerySize == 0 {
+		v.BatchQuerySize = DefaultValidatorBatchQuerySize
 	}
 	return nil
 }

@@ -30,8 +30,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/dbutil"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util/dbutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
@@ -1677,6 +1677,14 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		dbutil.TableName(metaSchema, cputil.SyncerShardMeta(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerOnlineDDL(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorCheckpoint(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorPendingChange(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorErrorChange(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorTableStatus(taskName))))
 
 	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
 	if err == nil {

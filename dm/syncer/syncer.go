@@ -31,16 +31,17 @@ import (
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -172,6 +173,7 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
+	running      atomic.Bool
 	closed       atomic.Bool
 	schemaLoaded atomic.Bool
 
@@ -240,6 +242,8 @@ type Syncer struct {
 	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
 	locations *locationRecorder
+	// initial executed binlog location, set once for each instance of syncer.
+	initExecutedLoc *binlog.Location
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
@@ -1746,6 +1750,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	now := time.Now()
 	s.start.Store(now)
 	s.lastTime.Store(now)
+
+	s.initInitExecutedLoc()
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	tryReSync := true
 
@@ -3453,8 +3461,8 @@ func (s *Syncer) route(table *filter.Table) *filter.Table {
 	return &filter.Table{Schema: targetSchema, Name: targetTable}
 }
 
-func (s *Syncer) IsSchemaLoaded() bool {
-	return s.schemaLoaded.Load()
+func (s *Syncer) IsRunning() bool {
+	return s.running.Load()
 }
 
 func (s *Syncer) isClosed() bool {
@@ -3962,4 +3970,27 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 		zap.String("time", timeStr),
 		zap.Any("locationOfTheTime", loc))
 	return nil
+}
+
+func (s *Syncer) getFlushedGlobalPoint() binlog.Location {
+	return s.checkpoint.FlushedGlobalPoint()
+}
+
+func (s *Syncer) getInitExecutedLoc() binlog.Location {
+	s.RLock()
+	defer s.RUnlock()
+	return s.initExecutedLoc.Clone()
+}
+
+func (s *Syncer) initInitExecutedLoc() {
+	s.Lock()
+	defer s.Unlock()
+	if s.initExecutedLoc == nil {
+		p := s.checkpoint.GlobalPoint()
+		s.initExecutedLoc = &p
+	}
+}
+
+func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
+	return s.schemaTracker.GetTableInfo(table)
 }
