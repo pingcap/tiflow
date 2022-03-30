@@ -143,6 +143,8 @@ CREATE TABLE test_ddl2
     PRIMARY KEY (id)
 );
 
+DROP TABLE IF EXISTS test_ddl;
+
 RENAME TABLE test_ddl1 TO test_ddl;
 
 ALTER TABLE test_ddl
