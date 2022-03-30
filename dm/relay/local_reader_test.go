@@ -712,9 +712,10 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 
 	var allEvents []*replication.BinlogEvent
 	var allResults []string
+	var eventsNumOfFirstServer int
 
 	// generate binlog file
-	for _, subDir := range testCase {
+	for i, subDir := range testCase {
 		lastPos = 4
 		lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, subDir.gtidStr)
 		c.Assert(err, IsNil)
@@ -746,6 +747,9 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 			}
 			f.Close()
 			t.createMetaFile(c, uuidDir, fileEventResult.filename, lastPos, previousGset.String())
+		}
+		if i == 0 {
+			eventsNumOfFirstServer = len(allEvents)
 		}
 	}
 
@@ -782,11 +786,11 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 
 	excludeStrs := []string{}
-	// exclude first uuid
-	excludeServerUUID := testCase[0].serverUUID
-	excludeUUID := testCase[0].uuid
+	// exclude event except for first server
+	includeServerUUID := testCase[0].serverUUID
+	includeUUID := testCase[0].uuid
 	for _, s := range strings.Split(preGset.String(), ",") {
-		if !strings.Contains(s, excludeServerUUID) {
+		if !strings.Contains(s, includeServerUUID) {
 			excludeStrs = append(excludeStrs, s)
 		}
 	}
@@ -797,19 +801,19 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	// StartSyncByGtid exclude first uuid
 	s, err = r.StartSyncByGTID(excludeGset)
 	c.Assert(err, IsNil)
-	obtainBaseEvents = readNEvents(ctx, c, s, len(allEvents), true)
+	obtainBaseEvents = readNEvents(ctx, c, s, eventsNumOfFirstServer, true)
 
 	gset := excludeGset.Clone()
-	// every gtid event not from first uuid should become heartbeat event
+	// should not receive any event not from first server
 	for i, event := range obtainBaseEvents {
 		switch event.Header.EventType {
 		case replication.HEARTBEAT_EVENT:
-			c.Assert(event.Header.LogPos, Equals, allEvents[i].Header.LogPos)
+			c.FailNow()
 		case replication.GTID_EVENT:
 			// check gtid event comes from first uuid subdir
 			ev, _ := event.Event.(*replication.GTIDEvent)
 			u, _ := uuid.FromBytes(ev.SID)
-			c.Assert(u.String(), Equals, excludeServerUUID)
+			c.Assert(u.String(), Equals, includeServerUUID)
 			c.Assert(event.Header, DeepEquals, allEvents[i].Header)
 			c.Assert(gset.Update(fmt.Sprintf("%s:%d", u.String(), ev.GNO)), IsNil)
 		default:
@@ -820,7 +824,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(gset.Equal(preGset), IsTrue)
 
 	// purge first uuid subdir's first binlog file
-	c.Assert(os.Remove(path.Join(baseDir, excludeUUID, "mysql.000001")), IsNil)
+	c.Assert(os.Remove(path.Join(baseDir, includeUUID, "mysql.000001")), IsNil)
 
 	r.Close()
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
@@ -834,7 +838,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(terror.ErrNoRelayPosMatchGTID.Equal(err), IsTrue)
 
 	// purge first uuid subdir
-	c.Assert(os.RemoveAll(path.Join(baseDir, excludeUUID)), IsNil)
+	c.Assert(os.RemoveAll(path.Join(baseDir, includeUUID)), IsNil)
 
 	r.Close()
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
