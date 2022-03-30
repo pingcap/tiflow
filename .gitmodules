@@ -1,0 +1,3 @@
+[submodule "tests/integration_tests/tidb_mysql_test/mysql_test"]
+	path = tests/integration_tests/tidb_mysql_test/mysql_test
+	url = git@github.com:pingcap/tidb-test.git

@@ -49,9 +49,9 @@ trap stop_tidb_cluster EXIT
 echo -e "start upstream and downstream cluster"
 prepare $*
 
-cp -f $CUR/converter2.sh $CUR/mysql_test/
-cp -f $CUR/build.sh $CUR/mysql_test/
-cd $CUR/mysql_test
+cp -f $CUR/converter2.sh $CUR/mysql_test/mysql_test
+cp -f $CUR/build.sh $CUR/mysql_test/mysql_test
+cd $CUR/mysql_test/mysql_test
 
 # convert test case
 cases="bigint composite_index date_formats datetime_insert \
@@ -70,7 +70,7 @@ TEST_BIN_PATH=./mysql_test
 echo "run mysql test cases:${cases}"
 "$TEST_BIN_PATH" --host=${UP_TIDB_HOST} --port=${UP_TIDB_PORT} --log-level=error --reserve-schema=true ${cases}
 echo "mysqltest end"
-cd ../
+cd ../../
 
 mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "create table test.finish_mark(id int primary key)"
 # all tests will take too much time, how to optimize it?
