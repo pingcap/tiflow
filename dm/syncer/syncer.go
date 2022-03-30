@@ -44,6 +44,7 @@ import (
 
 	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -172,8 +173,9 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	closed  atomic.Bool
-	running atomic.Bool
+	running      atomic.Bool
+	closed       atomic.Bool
+	schemaLoaded atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -240,6 +242,8 @@ type Syncer struct {
 	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
 	locations *locationRecorder
+	// initial executed binlog location, set once for each instance of syncer.
+	initExecutedLoc *binlog.Location
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
@@ -259,7 +263,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
-	syncer.running.Store(false)
+	syncer.schemaLoaded.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -693,9 +697,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		<-newCtx.Done() // ctx or newCtx
 	}()
 
-	s.running.Store(true)
-	defer s.running.Store(false)
-
 	err := s.Run(newCtx)
 	if err != nil {
 		// returned error rather than sent to runFatalChan
@@ -742,21 +743,10 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return nil, terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, sourceTable.Schema)
 	}
 
-	// if table already exists in checkpoint, create it in schema tracker
-	if ti = s.checkpoint.GetFlushedTableInfo(sourceTable); ti != nil {
-		if err = s.schemaTracker.CreateTableIfNotExists(sourceTable, ti); err != nil {
-			return nil, terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
-		tctx.L().Debug("lazy init table info in schema tracker", zap.Stringer("table", sourceTable))
-		return ti, nil
-	}
-
 	// if the table does not exist (IsTableNotExists(err)), continue to fetch the table from downstream and create it.
-	if ti == nil {
-		err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
-		if err != nil {
-			return nil, err
-		}
+	err = s.trackTableInfoFromDownstream(tctx, sourceTable, targetTable)
+	if err != nil {
+		return nil, err
 	}
 
 	ti, err = s.schemaTracker.GetTableInfo(sourceTable)
@@ -1560,6 +1550,14 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
+	if !s.schemaLoaded.Load() {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
+		}
+		s.schemaLoaded.Store(true)
+	}
+
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
@@ -1752,6 +1750,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	now := time.Now()
 	s.start.Store(now)
 	s.lastTime.Store(now)
+
+	s.initInitExecutedLoc()
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	tryReSync := true
 
@@ -3582,7 +3584,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
-	newCfg.To.Session = oldCfg.To.Session // session is adjusted in `createDBs`
+	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
 
 	// support fields that changed in func `copyConfigFromSource`
 	oldCfg.From = newCfg.From
@@ -3595,6 +3597,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.CaseSensitive = newCfg.CaseSensitive
 
 	if oldCfg.String() != newCfg.String() {
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
@@ -3967,4 +3970,27 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 		zap.String("time", timeStr),
 		zap.Any("locationOfTheTime", loc))
 	return nil
+}
+
+func (s *Syncer) getFlushedGlobalPoint() binlog.Location {
+	return s.checkpoint.FlushedGlobalPoint()
+}
+
+func (s *Syncer) getInitExecutedLoc() binlog.Location {
+	s.RLock()
+	defer s.RUnlock()
+	return s.initExecutedLoc.Clone()
+}
+
+func (s *Syncer) initInitExecutedLoc() {
+	s.Lock()
+	defer s.Unlock()
+	if s.initExecutedLoc == nil {
+		p := s.checkpoint.GlobalPoint()
+		s.initExecutedLoc = &p
+	}
+}
+
+func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
+	return s.schemaTracker.GetTableInfo(table)
 }

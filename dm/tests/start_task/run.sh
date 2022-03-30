@@ -16,7 +16,7 @@ function prepare_data() {
 	done
 }
 
-function lazy_init_tracker() {
+function init_tracker_test() {
 	run_sql 'DROP DATABASE if exists start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	for j in $(seq 100); do
@@ -55,8 +55,8 @@ function lazy_init_tracker() {
 	done
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 20
 
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t50' 1
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t51'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t50' 1
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51'
 
 	cleanup_process
 	cleanup_data start_task
@@ -169,7 +169,7 @@ function start_task_by_time() {
 
 function run() {
 	start_task_by_time
-	lazy_init_tracker
+	init_tracker_test
 	failpoints=(
 		# 1152 is ErrAbortingConnection
 		"github.com/pingcap/tiflow/dm/pkg/utils/FetchTargetDoTablesFailed=return(1152)"

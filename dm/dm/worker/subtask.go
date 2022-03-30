@@ -228,7 +228,7 @@ func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, rela
 		return
 	}
 
-	st.StartValidator(expectValidatorStage)
+	st.StartValidator(expectValidatorStage, true)
 
 	if expectStage == pb.Stage_Running {
 		st.run()
@@ -260,7 +260,7 @@ func (st *SubTask) run() {
 	go cu.Process(ctx, pr)
 }
 
-func (st *SubTask) StartValidator(expect pb.Stage) {
+func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 	// when validator mode=none
 	if expect == pb.Stage_InvalidStage {
 		return
@@ -284,7 +284,7 @@ func (st *SubTask) StartValidator(expect pb.Stage) {
 	}
 
 	if st.validator == nil {
-		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj)
+		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj, startWithSubtask)
 	}
 	st.validator.Start(expect)
 }
@@ -524,6 +524,15 @@ func (st *SubTask) Stage() pb.Stage {
 	return st.stage
 }
 
+func (st *SubTask) validatorStage() pb.Stage {
+	st.RLock()
+	defer st.RUnlock()
+	if st.validator != nil {
+		return st.validator.Stage()
+	}
+	return pb.Stage_InvalidStage
+}
+
 // markResultCanceled mark result as canceled if stage is Paused.
 // This func is used to pause a task which has been paused by error,
 // so the task will not auto resume by task checker.
@@ -556,6 +565,10 @@ func (st *SubTask) Close() {
 	}
 	st.closeUnits() // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
+
+	// we can start/stop validator independent of task, so we don't set st.validator = nil inside
+	st.StopValidator()
+	st.validator = nil
 }
 
 // Kill kill running unit and stop the sub task.
@@ -572,6 +585,7 @@ func (st *SubTask) Kill() {
 	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
 
 	st.StopValidator()
+	st.validator = nil
 }
 
 // Pause pauses a running sub task or a sub task paused by error.
@@ -658,6 +672,10 @@ func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchem
 	syncUnit, ok := st.currUnit.(*syncer.Syncer)
 	if !ok {
 		return "", terror.ErrWorkerOperSyncUnitOnly.Generate(st.currUnit.Type())
+	}
+
+	if st.validatorStage() == pb.Stage_Running && req.Op != pb.SchemaOp_ListMigrateTargets {
+		return "", terror.ErrWorkerNotPausedStage.Generate(pb.Stage_Running.String())
 	}
 
 	return syncUnit.OperateSchema(ctx, req)
