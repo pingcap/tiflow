@@ -602,12 +602,12 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	}()
 	w.parentCtx = parentCtx
 	ctx, cancel := context.WithCancel(parentCtx)
-	once := sync.Once{}
 	wg, ctx := errgroup.WithContext(ctx)
 	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
 
 	var retErr error
+	once := sync.Once{}
 	handleError := func(err error) error {
 		if err != nil {
 			once.Do(func() {
