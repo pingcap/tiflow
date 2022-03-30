@@ -15,7 +15,9 @@ package syncer
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -106,7 +108,7 @@ func TestValidatorStartStop(t *testing.T) {
 	syncerObj := NewSyncer(cfg, nil, nil)
 
 	// validator already running
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.stage = pb.Stage_Running
 	validator.Start(pb.Stage_InvalidStage)
 	// if validator already running, Start will return immediately, so we check validator.ctx which has not initialized.
@@ -118,7 +120,7 @@ func TestValidatorStartStop(t *testing.T) {
 		Port: 3306,
 		User: "root",
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.Start(pb.Stage_Stopped)
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 	require.Len(t, validator.result.Errors, 1)
@@ -129,14 +131,14 @@ func TestValidatorStartStop(t *testing.T) {
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 	require.Len(t, validator.result.Errors, 0)
 
 	// normal start & stop
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
@@ -146,7 +148,7 @@ func TestValidatorStartStop(t *testing.T) {
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 
 	// stop before start, should not panic
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Stop()
 }
@@ -160,7 +162,7 @@ func TestValidatorFillResult(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
@@ -182,7 +184,7 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop()
@@ -219,7 +221,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	}()
 
 	currLoc := binlog.NewLocation(cfg.Flavor)
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
@@ -229,7 +231,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		Name: "mysql-bin.000001",
 		Pos:  100,
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.cancel()
@@ -243,7 +245,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		currLoc: binlog.NewLocation(cfg.Flavor),
 		nextLoc: currLoc,
 	}
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
@@ -258,25 +260,25 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.cancel()
 	require.Error(t, validator.waitSyncerRunning())
 
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.schemaLoaded.Store(true)
+	syncerObj.running.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
-	validator = NewContinuousDataValidator(cfg, syncerObj)
+	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
-	syncerObj.schemaLoaded.Store(false)
+	syncerObj.running.Store(false)
 	go func() {
 		time.Sleep(3 * time.Second)
-		syncerObj.schemaLoaded.Store(true)
+		syncerObj.running.Store(true)
 	}()
 	require.NoError(t, validator.waitSyncerRunning())
 }
@@ -298,12 +300,20 @@ func TestValidatorDoValidate(t *testing.T) {
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
-	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(dbMock.NewRows(nil))
-	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(dbMock.NewRows(nil))
-	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(dbMock.NewRows(nil))
+	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
+	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
+			// insert with pk=11
+			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
+	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
+		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
+	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
+		dbMock.NewRows([]string{"", ""}).AddRow(newValidateErrorRow, 2).AddRow(ignoredValidateErrorRow, 3).
+			AddRow(resolvedValidateErrorRow, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
-	syncerObj.schemaLoaded.Store(true)
+	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
 	currLoc := binlog.NewLocation(cfg.Flavor)
@@ -433,7 +443,8 @@ func TestValidatorDoValidate(t *testing.T) {
 	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
 	require.NoError(t, err)
 
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.streamerController = &StreamerController{
@@ -443,10 +454,30 @@ func TestValidatorDoValidate(t *testing.T) {
 	}
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
-	require.Equal(t, int64(1), validator.changeEventCount[rowInsert].Load())
-	require.Equal(t, int64(1), validator.changeEventCount[rowUpdated].Load())
-	require.Equal(t, int64(1), validator.changeEventCount[rowDeleted].Load())
-	ft := filter.Table{Schema: schemaName, Name: tableName2}
+	validator.Stop()
+	// 3 real insert, 1 transformed from an update(updating key)
+	require.Equal(t, int64(4), validator.processedRowCounts[rowInsert].Load())
+	require.Equal(t, int64(1), validator.processedRowCounts[rowUpdated].Load())
+	// 1 real delete, 1 transformed from an update(updating key)
+	require.Equal(t, int64(2), validator.processedRowCounts[rowDeleted].Load())
+
+	require.NotNil(t, validator.location)
+	require.Equal(t, mysql.Position{Name: "mysql-bin.000001", Pos: 100}, validator.location.Position)
+	require.Equal(t, "", validator.location.GTIDSetStr())
+	require.Len(t, validator.loadedPendingChanges, 1)
+	ft := filter.Table{Schema: schemaName, Name: tableName}
+	require.Contains(t, validator.loadedPendingChanges, ft.String())
+	require.Len(t, validator.loadedPendingChanges[ft.String()].rows, 1)
+	require.Contains(t, validator.loadedPendingChanges[ft.String()].rows, "11")
+	require.Equal(t, validator.loadedPendingChanges[ft.String()].rows["11"].Tp, rowInsert)
+	require.Len(t, validator.tableStatus, 4)
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, int64(2), validator.errorRowCounts[newValidateErrorRow].Load())
+	require.Equal(t, int64(3), validator.errorRowCounts[ignoredValidateErrorRow].Load())
+	require.Equal(t, int64(4), validator.errorRowCounts[resolvedValidateErrorRow].Load())
+
+	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
 	require.Equal(t, moreColumnInBinlogMsg, validator.tableStatus[ft.String()].message)
@@ -454,6 +485,11 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
 	require.Equal(t, tableWithoutPrimaryKeyMsg, validator.tableStatus[ft.String()].message)
+	// this one is loaded from meta data
+	ft = filter.Table{Schema: schemaName, Name: tableName4}
+	require.Contains(t, validator.tableStatus, ft.String())
+	require.Equal(t, pb.Stage_Stopped, validator.tableStatus[ft.String()].stage)
+	require.Equal(t, "load from meta", validator.tableStatus[ft.String()].message)
 }
 
 func TestValidatorGetRowChangeType(t *testing.T) {
@@ -466,6 +502,26 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv0))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv1))
 	require.Equal(t, rowDeleted, getRowChangeType(replication.DELETE_ROWS_EVENTv2))
+}
+
+func TestValidatorGenRowKey(t *testing.T) {
+	require.Equal(t, "a", genRowKey([]string{"a"}))
+	require.Equal(t, "a\tb", genRowKey([]string{"a", "b"}))
+	require.Equal(t, "a\tb\tc", genRowKey([]string{"a", "b", "c"}))
+	var bytes []byte
+	for i := 0; i < 100; i++ {
+		bytes = append(bytes, 'a')
+	}
+	{
+		longStr := string(bytes[:maxRowKeyLength])
+		require.Equal(t, longStr, genRowKey([]string{longStr}))
+	}
+	{
+		longStr := string(bytes[:maxRowKeyLength+1])
+		sum := sha256.Sum256([]byte(longStr))
+		sha := hex.EncodeToString(sum[:])
+		require.Equal(t, sha, genRowKey([]string{longStr}))
+	}
 }
 
 func TestValidatorGenColData(t *testing.T) {
