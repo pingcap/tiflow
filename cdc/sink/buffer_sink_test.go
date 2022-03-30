@@ -121,9 +121,7 @@ func BenchmarkRun(b *testing.B) {
 	defer cancel()
 
 	state := runState{
-		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(b.Name(), "Flush"),
-		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(b.Name(), "EmitRow"),
-		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
+		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
 	}
 
 	for exp := 0; exp < 9; exp++ {
