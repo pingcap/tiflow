@@ -28,7 +28,7 @@ import (
 // the event streams in a table.
 // A higher-level controller more suitable for direct use by the processor is TableFlowController.
 type TableMemoryQuota struct {
-	Quota uint64 // should not be changed once intialized
+	Quota uint64 // should not be changed once initialized
 
 	IsAborted uint32
 
