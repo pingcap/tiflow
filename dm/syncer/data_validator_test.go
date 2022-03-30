@@ -556,7 +556,7 @@ func TestGetValidationStatus(t *testing.T) {
 	defer syncerObj.schemaTracker.Close()
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
-	validator := NewContinuousDataValidator(cfg, syncerObj)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
 	validator.workerCnt = 1

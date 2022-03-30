@@ -783,7 +783,7 @@ func (t *testServer) TestQueryValidator(c *C) {
 			Mode: config.ValidationFull,
 		},
 	}, pb.Stage_Running, nil, "")
-	st.StartValidator(pb.Stage_Running)
+	st.StartValidator(pb.Stage_Running, false)
 	w.subTaskHolder.recordSubTask(st)
 	expected := []*pb.ValidationStatus{
 		{
