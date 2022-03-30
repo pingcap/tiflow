@@ -447,7 +447,12 @@ func (s *System[T]) Start(ctx context.Context) {
 	for i := 0; i < s.numWorker; i++ {
 		id := i
 		s.wg.Go(func() error {
-			defer pprof.SetGoroutineLabels(ctx)
+			defer func() {
+				log.Info("actor goroutine exited",
+					zap.Int("id", id), zap.String("name", s.name))
+			}()
+			log.Info("actor goroutine started",
+				zap.Int("id", id), zap.String("name", s.name))
 			pctx := pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
 			pprof.SetGoroutineLabels(pctx)
 
@@ -458,7 +463,7 @@ func (s *System[T]) Start(ctx context.Context) {
 }
 
 // Stop the system, cancels all actors. It should be called after Start.
-// Messages sent before this call will be receive by actors.
+// Messages sent before this call will be received by actors.
 // Stop is not threadsafe.
 func (s *System[T]) Stop() {
 	// Cancel context-aware work currently being polled.
@@ -617,13 +622,13 @@ func (s *System[T]) poll(ctx context.Context, id int) {
 }
 
 func (s *System[T]) handleFatal(msg string, id ID) {
-	handler := defaultFatalhandler
+	handler := defaultFatalHandler
 	if s.fatalHandler != nil {
 		handler = s.fatalHandler
 	}
 	handler(msg, id)
 }
 
-func defaultFatalhandler(msg string, id ID) {
+func defaultFatalHandler(msg string, id ID) {
 	log.Panic(msg, zap.Uint64("id", uint64(id)))
 }

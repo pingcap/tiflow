@@ -19,9 +19,9 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -63,6 +64,10 @@ var (
 
 // Tracker is used to track schema locally.
 type Tracker struct {
+	// we're using an embedded tidb, there's no need to sync operations on it, but we may recreate(drop and create)
+	// a table such as when checkpoint rollback, we need to make sure others(validator for now) can't see the table
+	// is deleted. so we add an extra layer of synchronization for GetTableInfo/RecreateTables for now.
+	sync.RWMutex
 	storePath string
 	store     kv.Storage
 	dom       *domain.Domain
@@ -239,6 +244,8 @@ func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	dbName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
+	tr.RLock()
+	defer tr.RUnlock()
 	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
 	if err != nil {
 		return nil, err
@@ -414,7 +421,27 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
-func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filter.Table, tablesToCreate map[string]map[string]*model.TableInfo) error {
+	tr.Lock()
+	defer tr.Unlock()
+	for _, tbl := range tablesToDrop {
+		// schema changed
+		if err := tr.DropTable(tbl); err != nil {
+			logCtx.L().Warn("failed to drop table from schema tracker",
+				zap.Stringer("table", tbl), log.ShortError(err))
+		}
+	}
+	for schemaName := range tablesToCreate {
+		// TODO: Figure out how to recover from errors.
+		if err := tr.CreateSchemaIfNotExists(schemaName); err != nil {
+			logCtx.L().Error("failed to rollback schema on schema tracker: cannot create schema",
+				zap.String("schema", schemaName), log.ShortError(err))
+		}
+	}
+	return tr.batchCreateTableIfNotExist(tablesToCreate)
+}
+
+func (tr *Tracker) batchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
 		var cloneTis []*model.TableInfo

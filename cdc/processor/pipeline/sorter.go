@@ -170,11 +170,7 @@ func (n *sorterNode) start(
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					// DESIGN NOTE: We send the messages to the mounter in
-					// this separate goroutine to prevent blocking
-					// the whole pipeline.
-					msg.SetUpFinishedChan()
-					err := n.mounter.AddEntry(ctx, msg)
+					err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -195,14 +191,6 @@ func (n *sorterNode) start(
 						}
 					}
 
-					// Must wait before accessing msg.Row
-					err = msg.WaitPrepare(ctx)
-					if err != nil {
-						if errors.Cause(err) != context.Canceled {
-							ctx.Throw(err)
-						}
-						return errors.Trace(err)
-					}
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
