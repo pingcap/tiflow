@@ -87,13 +87,13 @@ func (t *testReaderSuite) createBinlogFileParseState(c *C, relayLogDir, relayLog
 	c.Assert(err, IsNil)
 
 	return &binlogFileParseState{
-		possibleLast:         possibleLast,
-		fullPath:             fullPath,
-		relayLogFile:         relayLogFile,
-		relayLogDir:          relayLogDir,
-		f:                    f,
-		latestPos:            offset,
-		replaceWithHeartbeat: false,
+		possibleLast: possibleLast,
+		fullPath:     fullPath,
+		relayLogFile: relayLogFile,
+		relayLogDir:  relayLogDir,
+		f:            f,
+		latestPos:    offset,
+		skipGTID:     false,
 	}
 }
 
@@ -147,7 +147,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(100))
 		c.Assert(state.formatDescEventRead, IsFalse)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 	}
 
 	// write some events to binlog file
@@ -175,7 +175,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, IsFalse)
+		c.Assert(state.skipGTID, IsFalse)
 
 		// try get events back, firstParse should have fake RotateEvent
 		var fakeRotateEventCount int
@@ -213,7 +213,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 		fakeRotateEventCount := 0
 		i := 0
 		for {
@@ -256,7 +256,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 		t.purgeStreamer(c, s)
 	}
 
@@ -275,7 +275,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 
 		// should only get a RotateEvent
 		i := 0
@@ -347,7 +347,7 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	c.Assert(needReParse, IsFalse)
 	c.Assert(state.latestPos, Equals, int64(4))
 	c.Assert(state.formatDescEventRead, IsTrue)
-	c.Assert(state.replaceWithHeartbeat, Equals, false)
+	c.Assert(state.skipGTID, Equals, false)
 	t.purgeStreamer(c, s)
 
 	// NOTE: if we want to test the returned `needReParse` of `needSwitchSubDir`,
@@ -393,7 +393,7 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 		c.Assert(needReParse, IsTrue)
 		c.Assert(state.latestPos, Equals, int64(4))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 	}
 }
 
