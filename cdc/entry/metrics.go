@@ -18,13 +18,6 @@ import (
 )
 
 var (
-	mounterInputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "mounter",
-			Name:      "input_chan_size",
-			Help:      "mounter input chan size",
-		}, []string{"changefeed"})
 	mountDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -44,7 +37,6 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(mounterInputChanSizeGauge)
 	registry.MustRegister(mountDuration)
 	registry.MustRegister(totalRowsCountGauge)
 }
