@@ -1007,31 +1007,28 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		expected := map[uint32]replication.EventType{}
 		for _, e := range events {
+			// will not receive event for skipped GTID
 			switch e.Event.(type) {
-			// keeps same
 			case *replication.FormatDescriptionEvent, *replication.PreviousGTIDsEvent:
 				expected[e.Header.LogPos] = e.Header.EventType
-			default:
-				expected[e.Header.LogPos] = replication.HEARTBEAT_EVENT
 			}
 		}
 		// fake rotate
 		expected[0] = replication.ROTATE_EVENT
-		lastLogPos := events[len(events)-1].Header.LogPos
 
-		ctx, cancel := context.WithCancel(context.Background())
 		for {
 			ev, err2 := s.GetEvent(ctx)
-			c.Assert(err2, IsNil)
-			c.Assert(ev.Header.EventType, Equals, expected[ev.Header.LogPos])
-			if ev.Header.LogPos == lastLogPos {
+			if err2 == context.Canceled {
 				break
 			}
+			c.Assert(err2, IsNil)
+			c.Assert(ev.Header.EventType, Equals, expected[ev.Header.LogPos])
 		}
-		cancel()
 		wg.Done()
 	}()
 
@@ -1046,6 +1043,8 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 		default:
 		}
 	}
+	time.Sleep(time.Second)
+	cancel()
 	wg.Wait()
 }
 
