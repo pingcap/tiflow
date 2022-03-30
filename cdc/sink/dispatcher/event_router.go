@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/topic"

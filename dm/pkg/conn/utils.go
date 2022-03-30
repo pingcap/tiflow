@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 )
@@ -30,6 +30,7 @@ func FetchTimeZoneSetting(ctx context.Context, cfg *config.DBConfig) (string, er
 	}
 	defer db.Close()
 	dur, err := dbutil.GetTimeZoneOffset(ctx, db.DB)
+	println(dur.String())
 	if err != nil {
 		return "", errors.Trace(err)
 	}

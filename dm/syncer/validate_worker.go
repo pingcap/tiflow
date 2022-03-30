@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
