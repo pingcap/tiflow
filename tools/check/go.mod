@@ -22,3 +22,8 @@ require (
 )
 
 require gotest.tools/gotestsum v1.7.0 // indirect
+
+replace (
+	// Remove this after https://github.com/axw/gocov/pull/91 is merged.
+	github.com/axw/gocov => github.com/jdemeyer/gocov v1.0.1-0.20220316125951-e6ea120e4bdf
+)
