@@ -1,10 +1,8 @@
 -- This sql file is encoded in GBK by the 'iconv' command.
 -- DO NOT EDIT. 
 
-DROP DATABASE IF EXISTS test1;
-CREATE DATABASE test1;
 SET NAMES gbk;
-USE test1;
+USE test;
 
 CREATE TABLE multi_data_type
 (
@@ -180,8 +178,6 @@ CREATE TABLE 表1 (
 ) ENGINE = InnoDB;
 
 RENAME TABLE 表1 TO 表2;
-
-DROP TABLE 表2;
 
 CREATE TABLE binary_columns
 (
