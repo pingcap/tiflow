@@ -600,13 +600,11 @@ func (r *BinlogReader) parseFile(
 			default:
 			}
 			return nil
-		} else {
+		} else if lastSkipGTID && state.lastSkipGTIDHeader != nil {
 			// skipGTID is turned off after this event
-			if lastSkipGTID && state.lastSkipGTIDHeader != nil {
-				select {
-				case s.ch <- event.GenHeartbeatEvent(state.lastSkipGTIDHeader):
-				case <-ctx.Done():
-				}
+			select {
+			case s.ch <- event.GenHeartbeatEvent(state.lastSkipGTIDHeader):
+			case <-ctx.Done():
 			}
 		}
 
