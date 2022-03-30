@@ -595,6 +595,8 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*valida
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
+	v.Lock() // mutex lock to protect tableStatus and maybe other fields
+	defer v.Unlock()
 	sourceTable := &filter.Table{
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
