@@ -21,7 +21,7 @@ function prepare() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="ticdc-default-value-test-$RANDOM"
+	TOPIC_NAME="ticdc-tidb-mysql-test-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
@@ -57,12 +57,12 @@ cd $MYSQL_TEST_PATH
 
 # convert test case
 cases="bigint composite_index date_formats datetime_insert \
-    datetime_update drop mysql_replace gcol_alter_table \
+    datetime_update drop concurrent_ddl gcol_alter_table \
     insert_select insert_update json partition_bug18198 \
     partition_list partition_range single_delete_update time \
     timestamp_insert timestamp_update transaction_isolation_func type_decimal \
     type_time type_timestamp type_uint update \
-    update_stmt concurrent_ddl"
+    update_stmt"
 
 ./converter2.sh "$cases"
 # run mysql-test cases
