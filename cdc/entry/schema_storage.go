@@ -812,8 +812,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
-				zap.String("DDL", job.Query), zap.String("changefeed", s.id),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+				zap.String("DDL", job.Query), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 			return nil
 		}
 		snap = lastSnap.Clone()
@@ -823,12 +822,11 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if err := snap.handleDDL(job); err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.String("changefeed", s.id), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return errors.Trace(err)
 	}
 	log.Info("handle DDL", zap.String("DDL", job.Query),
-		zap.Stringer("job", job), zap.String("changefeed", s.id),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+		zap.Stringer("job", job), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
