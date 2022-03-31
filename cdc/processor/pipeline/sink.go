@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -318,12 +319,12 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 	return err
 }
 
-func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
 	if n.status == TableStatusStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {
-	case pipeline.MessageTypePolymorphicEvent:
+	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
 			if n.status == TableStatusInitializing {
@@ -341,17 +342,17 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pipeline.Message) (boo
 		if err := n.addRowToBuffer(ctx, event); err != nil {
 			return false, errors.Trace(err)
 		}
-	case pipeline.MessageTypeTick:
+	case pmessage.MessageTypeTick:
 		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
 			return false, errors.Trace(err)
 		}
-	case pipeline.MessageTypeCommand:
-		if msg.Command.Tp == pipeline.CommandTypeStop {
+	case pmessage.MessageTypeCommand:
+		if msg.Command.Tp == pmessage.CommandTypeStop {
 			if err := n.stop(ctx); err != nil {
 				return false, errors.Trace(err)
 			}
 		}
-	case pipeline.MessageTypeBarrier:
+	case pmessage.MessageTypeBarrier:
 		if err := n.updateBarrierTs(ctx, msg.BarrierTs); err != nil {
 			return false, errors.Trace(err)
 		}
