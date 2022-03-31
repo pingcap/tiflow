@@ -59,6 +59,7 @@ func GetParserForConn(tctx *tcontext.Context, conn *DBConn) (*parser.Parser, err
 	return utils.GetParserFromSQLModeStr(sqlMode)
 }
 
+//nolint:unparam
 func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (value string, err error) {
 	failpoint.Inject("GetSessionVariableFailed", func(val failpoint.Value) {
 		items := strings.Split(val.(string), ",")
@@ -76,15 +77,20 @@ func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (
 			failpoint.Return("", terror.DBErrorAdapt(err, terror.ErrDBDriverError))
 		}
 	})
-	template := "SHOW VARIABLE LIKE '%s'"
+	template := "SHOW VARIABLES LIKE '%s'"
 	query := fmt.Sprintf(template, variable)
-	row, err := conn.QuerySQL(tctx, query)
-	if err != nil {
-		return "", err
-	}
-	err = row.Scan(&variable, &value)
+	rows, err := conn.QuerySQL(tctx, query)
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err = rows.Scan(&variable, &value); err != nil {
+			return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		}
+	}
+	if err = rows.Close(); err != nil {
+		return "", terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
 	}
 	return value, nil
 }
