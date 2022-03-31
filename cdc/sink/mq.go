@@ -67,6 +67,8 @@ type mqSink struct {
 
 	role util.Role
 	id   model.ChangeFeedID
+
+	lastDMLCommitTs uint64
 }
 
 func newMqSink(
@@ -165,6 +167,13 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			return err
 		}
 		rowsCount++
+		if row.CommitTs < k.lastDMLCommitTs {
+			log.Warn("RowChangedEvent commitTs fallback",
+				zap.Uint64("lastDMLCommitTs", k.lastDMLCommitTs),
+				zap.Any("role", row),
+				zap.Int32("partition", partition))
+		}
+		k.lastDMLCommitTs = row.CommitTs
 	}
 	k.statistics.AddRowsCount(rowsCount)
 	return nil
