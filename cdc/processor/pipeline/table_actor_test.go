@@ -29,14 +29,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestAsyncStopFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
+	sys, router := actor.NewSystemBuilder[pmessage.Message](t.Name()).Build()
+	tableActorSystem, tableActorRouter := sys, router
 	tableActorSystem.Start(ctx)
 	defer func() {
 		cancel()
@@ -53,7 +54,7 @@ func TestAsyncStopFailed(t *testing.T) {
 	}
 	require.True(t, tbl.AsyncStop(1))
 
-	mb := actor.NewMailbox(actor.ID(1), 0)
+	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
@@ -96,7 +97,8 @@ func TestTableActorInterface(t *testing.T) {
 
 func TestTableActorCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
-	tableActorSystem, tableActorRouter := actor.NewSystemBuilder("table").Build()
+	sys, router := actor.NewSystemBuilder[pmessage.Message](t.Name()).Build()
+	tableActorSystem, tableActorRouter := sys, router
 	tableActorSystem.Start(ctx)
 	defer func() {
 		cancel()
@@ -110,7 +112,7 @@ func TestTableActorCancel(t *testing.T) {
 		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
-	mb := actor.NewMailbox(actor.ID(1), 0)
+	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
 	require.Nil(t, tableActorSystem.Spawn(mb, tbl))
 	tbl.mb = mb
@@ -174,7 +176,9 @@ func TestPollStoppedActor(t *testing.T) {
 	tbl := tableActor{stopped: stopped}
 	require.False(t, tbl.Poll(context.TODO(), nil))
 	tbl = tableActor{stopped: stopped}
-	require.False(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
 	require.False(t, tbl.Poll(context.TODO(), nil))
 }
 
@@ -193,14 +197,20 @@ func TestPollTickMessage(t *testing.T) {
 		cancel:            func() {},
 		reportErr:         func(err error) {},
 	}
-	require.True(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
 	require.True(t, tbl.lastFlushSinkTime.After(startTime))
 	startTime = tbl.lastFlushSinkTime
-	require.True(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
 	require.True(t, tbl.lastFlushSinkTime.Equal(startTime))
 	tbl.lastFlushSinkTime = time.Now().Add(-2 * sinkFlushInterval)
 	tbl.sinkNode.status = TableStatusStopped
-	require.False(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
 }
 
 func TestPollStopMessage(t *testing.T) {
@@ -217,7 +227,9 @@ func TestPollStopMessage(t *testing.T) {
 		},
 		reportErr: func(err error) {},
 	}
-	tbl.Poll(context.TODO(), []message.Message{message.StopMessage()})
+	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.StopMessage[pmessage.Message](),
+	})
 	wg.Wait()
 	require.Equal(t, stopped, tbl.stopped)
 }
@@ -234,21 +246,23 @@ func TestPollBarrierTsMessage(t *testing.T) {
 			barrierTs: 8,
 		},
 	}
-	require.True(t, tbl.Poll(context.TODO(), []message.Message{message.BarrierMessage(7)}))
+	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage(pmessage.BarrierMessage(7)),
+	}))
 	require.Equal(t, model.Ts(7), tbl.sinkNode.BarrierTs())
 	require.Equal(t, model.Ts(8), tbl.sortNode.barrierTs)
 }
 
 func TestPollDataFailed(t *testing.T) {
 	// process failed
-	var pN asyncMessageHolderFunc = func() *pipeline.Message {
-		return &pipeline.Message{
-			Tp:        pipeline.MessageTypeBarrier,
+	var pN asyncMessageHolderFunc = func() *pmessage.Message {
+		return &pmessage.Message{
+			Tp:        pmessage.MessageTypeBarrier,
 			BarrierTs: 1,
 		}
 	}
 	var dp asyncMessageProcessorFunc = func(
-		ctx context.Context, msg pipeline.Message,
+		ctx context.Context, msg pmessage.Message,
 	) (bool, error) {
 		return false, errors.New("error")
 	}
@@ -264,7 +278,9 @@ func TestPollDataFailed(t *testing.T) {
 			},
 		},
 	}
-	require.False(t, tbl.Poll(context.TODO(), []message.Message{message.TickMessage()}))
+	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
 	require.Equal(t, stopped, tbl.stopped)
 }
 

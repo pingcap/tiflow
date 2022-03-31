@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestSorter(name string, capacity int) (Sorter, actor.Mailbox) {
-	mb := actor.NewMailbox(1, capacity)
-	router := actor.NewRouter(name)
+func newTestSorter(name string, capacity int) (Sorter, actor.Mailbox[message.Task]) {
+	mb := actor.NewMailbox[message.Task](1, capacity)
+	router := actor.NewRouter[message.Task](name)
 	router.InsertMailbox4Test(mb.ID(), mb)
 
 	s := Sorter{
@@ -62,7 +62,7 @@ func TestAddEntry(t *testing.T) {
 			UID:        s.uid,
 			TableID:    s.tableID,
 			InputEvent: event,
-		}, task.SorterTask)
+		}, task.Value)
 }
 
 func TestTryAddEntry(t *testing.T) {
@@ -77,7 +77,7 @@ func TestTryAddEntry(t *testing.T) {
 	require.Nil(t, err)
 	task, ok := mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, event, task.SorterTask.InputEvent)
+	require.EqualValues(t, event, task.Value.InputEvent)
 
 	sent, err = s.TryAddEntry(ctx, event)
 	require.True(t, sent)
@@ -100,7 +100,7 @@ func TestOutput(t *testing.T) {
 			UID:     s.uid,
 			TableID: s.tableID,
 			ReadTs:  message.ReadTs{},
-		}, task.SorterTask)
+		}, task.Value)
 }
 
 func TestRunAndReportError(t *testing.T) {
@@ -119,10 +119,10 @@ func TestRunAndReportError(t *testing.T) {
 	// Stop writer and reader.
 	msg, ok := mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, actormsg.StopMessage(), msg)
+	require.EqualValues(t, actormsg.StopMessage[message.Task](), msg)
 	msg, ok = mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, actormsg.StopMessage(), msg)
+	require.EqualValues(t, actormsg.StopMessage[message.Task](), msg)
 	// Cleanup
 	msg, ok = mb.Receive()
 	require.True(t, ok)
@@ -136,7 +136,7 @@ func TestRunAndReportError(t *testing.T) {
 					encoding.EncodeTsKey(s.uid, s.tableID+1, 0),
 				},
 			},
-		}, msg.SorterTask)
+		}, msg.Value)
 
 	// No more message.
 	msg, ok = mb.Receive()
