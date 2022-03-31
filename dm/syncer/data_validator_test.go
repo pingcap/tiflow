@@ -95,10 +95,7 @@ func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBCo
 	baseDB := conn.NewBaseDB(db, func() {})
 	baseConn, err := baseDB.GetBaseConn(context.Background())
 	require.NoError(t, err)
-	return &dbconn.DBConn{
-		BaseConn: baseConn,
-		Cfg:      cfg,
-	}
+	return dbconn.NewDBConn(cfg, baseConn)
 }
 
 func TestValidatorStartStop(t *testing.T) {
@@ -323,7 +320,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	)
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	syncerObj.downstreamTrackConn = &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
+	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
 	defer syncerObj.schemaTracker.Close()
 	require.NoError(t, err)

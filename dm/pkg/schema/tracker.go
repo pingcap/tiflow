@@ -491,7 +491,7 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 			return nil, err
 		}
 	}
-	createStr, err := utils.GetTableCreateSQL(tctx.Ctx, tr.dsTracker.downstreamConn.BaseConn.DBConn, tableID)
+	createStr, err := dbconn.GetTableCreateSQL(tctx, tr.dsTracker.downstreamConn, tableID)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
 	}

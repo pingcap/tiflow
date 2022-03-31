@@ -768,12 +768,12 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 		},
 	}
 	_, _, err := retryStrategy.Apply(tctx, params, func(tctx *tcontext.Context) (interface{}, error) {
-		parser2, err := utils.GetParserForConn(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn)
+		parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
 		if err != nil {
 			return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 		}
 
-		createSQL, err := utils.GetTableCreateSQL(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
+		createSQL, err := dbconn.GetTableCreateSQL(tctx, s.ddlDBConn, targetTable.String())
 		if err != nil {
 			return nil, terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
 		}

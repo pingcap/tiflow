@@ -159,7 +159,11 @@ func (s *testSyncerSuite) TestHandleSpecialDDLError(c *C) {
 	c.Assert(err, IsNil)
 	conn1, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	conn2.BaseConn = conn.NewBaseConn(conn1, nil)
+	conn2.ResetBaseConnFn = func(_ *tcontext.Context, _ *conn.BaseConn) (*conn.BaseConn, error) {
+		return conn.NewBaseConn(conn1, nil), nil
+	}
+	err = conn2.ResetConn(tctx)
+	c.Assert(err, IsNil)
 
 	// dropColumnF test successful
 	mock.ExpectQuery("SELECT INDEX_NAME FROM information_schema.statistics WHERE.*").WillReturnRows(

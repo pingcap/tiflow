@@ -57,25 +57,32 @@ func CloseBaseDB(logCtx *tcontext.Context, baseDB *conn.BaseDB) {
 // it's not thread-safe.
 type DBConn struct {
 	Cfg      *config.SubTaskConfig
-	BaseConn *conn.BaseConn
+	baseConn *conn.BaseConn
 
 	// generate new BaseConn and close old one
 	ResetBaseConnFn func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error)
 }
 
+func NewDBConn(cfg *config.SubTaskConfig, baseConn *conn.BaseConn) *DBConn {
+	return &DBConn{
+		Cfg:      cfg,
+		baseConn: baseConn,
+	}
+}
+
 // ResetConn reset one worker connection from specify *BaseDB.
 func (conn *DBConn) ResetConn(tctx *tcontext.Context) error {
-	baseConn, err := conn.ResetBaseConnFn(tctx, conn.BaseConn)
+	baseConn, err := conn.ResetBaseConnFn(tctx, conn.baseConn)
 	if err != nil {
 		return err
 	}
-	conn.BaseConn = baseConn
+	conn.baseConn = baseConn
 	return nil
 }
 
 // QuerySQL does one query.
 func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	if conn == nil || conn.BaseConn == nil {
+	if conn == nil || conn.baseConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database base connection not valid")
 	}
 	// nolint:dupl
@@ -108,12 +115,12 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 		},
 	}
 
-	ret, _, err := conn.BaseConn.ApplyRetryStrategy(
+	ret, _, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			ret, err := conn.BaseConn.QuerySQL(ctx, query, args...)
+			ret, err := conn.baseConn.QuerySQL(ctx, query, args...)
 			if err == nil {
 				if ret.Err() != nil {
 					return err, ret.Err()
@@ -156,7 +163,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		return 0, nil
 	}
 
-	if conn == nil || conn.BaseConn == nil {
+	if conn == nil || conn.baseConn == nil {
 		return 0, terror.ErrDBUnExpect.Generate("database base connection not valid")
 	}
 
@@ -194,12 +201,12 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		},
 	}
 
-	ret, _, err := conn.BaseConn.ApplyRetryStrategy(
+	ret, _, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			ret, err := conn.BaseConn.ExecuteSQLWithIgnoreError(ctx, metrics.StmtHistogram, conn.Cfg.Name, ignoreError, queries, args...)
+			ret, err := conn.baseConn.ExecuteSQLWithIgnoreError(ctx, metrics.StmtHistogram, conn.Cfg.Name, ignoreError, queries, args...)
 			if err == nil {
 				cost := time.Since(startTime)
 				// duration seconds
@@ -252,7 +259,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *confi
 			}
 			return baseDB.GetBaseConn(tctx.Context())
 		}
-		conns = append(conns, &DBConn{BaseConn: baseConn, Cfg: cfg, ResetBaseConnFn: resetBaseConnFn})
+		conns = append(conns, &DBConn{baseConn: baseConn, Cfg: cfg, ResetBaseConnFn: resetBaseConnFn})
 	}
 	return baseDB, conns, nil
 }
