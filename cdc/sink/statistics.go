@@ -29,16 +29,35 @@ const (
 	flushMetricsInterval = 5 * time.Second
 )
 
+type sinkType int
+
+const (
+	sinkTypeDB sinkType = iota
+	sinkTypeMQ
+)
+
+func (t sinkType) String() string {
+	switch t {
+	case sinkTypeDB:
+		return "DB"
+	case sinkTypeMQ:
+		return "MQ"
+	}
+	return "unknown"
+}
+
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, name string) *Statistics {
+func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics := &Statistics{
-		name:                name,
+		sinkType:            t,
 		changefeedID:        util.ChangefeedIDFromCtx(ctx),
 		lastPrintStatusTime: time.Now(),
 	}
-	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.changefeedID)
+
+	s := t.String()
+	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.changefeedID, s)
+	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.changefeedID)
-	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.changefeedID)
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
@@ -68,7 +87,7 @@ func NewStatistics(ctx context.Context, name string) *Statistics {
 
 // Statistics maintains some status and metrics of the Sink
 type Statistics struct {
-	name             string
+	sinkType         sinkType
 	changefeedID     string
 	totalRows        uint64
 	totalFlushedRows uint64
@@ -111,8 +130,7 @@ func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 		b.metricExecErrCnt.Inc()
 		return err
 	}
-	castTime := time.Since(startTime).Seconds()
-	b.metricExecTxnHis.Observe(castTime)
+	b.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
 	b.metricExecBatchHis.Observe(float64(batchSize))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
 	return nil
@@ -149,7 +167,7 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 	atomic.StoreUint64(&b.totalDDLCount, 0)
 
 	log.Info("sink replication status",
-		zap.String("name", b.name),
+		zap.Stringer("sinkType", b.sinkType),
 		zap.String("changefeed", b.changefeedID),
 		util.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),

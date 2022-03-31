@@ -1272,7 +1272,7 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		}
 
 		subtask.SetCfg(subTaskCfg[stage.Task])
-		subtask.StartValidator(stage.Expect)
+		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen
 		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
