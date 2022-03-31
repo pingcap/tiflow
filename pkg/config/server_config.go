@@ -98,7 +98,7 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor: true,
 		TableActor: &TableActorConfig{
 			EventBatchSize: 32,
 		},

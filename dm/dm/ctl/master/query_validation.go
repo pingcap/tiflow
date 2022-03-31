@@ -115,6 +115,16 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 			strings.ToLower(pb.Stage_Stopped.String()),
 		)
 	}
+	var pbStage pb.Stage
+	switch stage {
+	case "":
+		// use invalid stage to represent `all` stages
+		pbStage = pb.Stage_InvalidStage
+	case strings.ToLower(pb.Stage_Running.String()):
+		pbStage = pb.Stage_Running
+	case strings.ToLower(pb.Stage_Stopped.String()):
+		pbStage = pb.Stage_Stopped
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -124,7 +134,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 		"GetValidationStatus",
 		&pb.GetValidationStatusRequest{
 			TaskName:     taskName,
-			FilterStatus: stage,
+			FilterStatus: pbStage,
 		},
 		&resp,
 	)
