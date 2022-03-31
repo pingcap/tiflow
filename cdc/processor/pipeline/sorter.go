@@ -88,16 +88,11 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	return n.start(ctx, false, &wg, 0, nil)
 }
 
-func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
-	n.isTableActorMode = isTableActorMode
-	n.eg = eg
-	stdCtx, cancel := context.WithCancel(ctx)
-	n.cancel = cancel
-	var eventSorter sorter.EventSorter
+func (n *sorterNode) createSorter(ctx pipeline.NodeContext) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	case model.SortInMemory:
-		eventSorter = memory.NewEntrySorter()
+		return memory.NewEntrySorter(), nil
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
@@ -115,22 +110,34 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
 			if err != nil {
-				return errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
-			eventSorter = levelSorter
-		} else {
-			// Sorter dir has been set and checked when server starts.
-			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
-			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-			var err error
-			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			return levelSorter, nil
 		}
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return unifiedSorter, nil
 	default:
-		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
+		return nil, cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
 	}
+}
+
+func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
+	n.isTableActorMode = isTableActorMode
+	n.eg = eg
+	stdCtx, cancel := context.WithCancel(ctx)
+	n.cancel = cancel
+
+	eventSorter, err := n.createSorter(ctx)
+	if err != nil {
+		return err
+	}
+
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
