@@ -2165,6 +2165,12 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 		s.updateStatusToUnbound(bound.Source)
 		unbounds = append(unbounds, bound.Source)
 	}
+	defer func() {
+		// renew last bounds after we finish this round of operation
+		for _, bound := range bounds {
+			s.lastBound[bound.Source] = bound
+		}
+	}()
 
 	// 6. change the stage (from Free) to Offline.
 	w.ToOffline()
@@ -2396,11 +2402,7 @@ func (s *Scheduler) updateStatusToBound(w *Worker, b ha.SourceBound) error {
 	if err := w.ToBound(b); err != nil {
 		return err
 	}
-	if lastW, ok := s.bounds[b.Source]; ok {
-		s.lastBound[b.Source] = ha.NewSourceBound(b.Source, lastW.BaseInfo().Name)
-	}
 	s.bounds[b.Source] = w
-	s.lastBound[b.Source] = b
 	return nil
 }
 

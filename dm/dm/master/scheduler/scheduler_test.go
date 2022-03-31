@@ -75,6 +75,12 @@ func (t *testSchedulerSuite) TearDownSuite() {
 	t.mockCluster.Terminate(t.T())
 }
 
+func (t *testSchedulerSuite) TearDownTest() {
+	t.clearTestInfoOperation()
+}
+
+var stageEmpty ha.Stage
+
 func checkRelaySource(t *testing.T, relaySources map[string]struct{}, sources ...string) {
 	t.Helper()
 	require.Len(t, relaySources, len(sources))
@@ -82,12 +88,6 @@ func checkRelaySource(t *testing.T, relaySources map[string]struct{}, sources ..
 		require.Contains(t, relaySources, s)
 	}
 }
-
-func (t *testSchedulerSuite) TearDownTest() {
-	t.clearTestInfoOperation()
-}
-
-var stageEmpty ha.Stage
 
 func getUnboundedSourcesWithLock(s *Scheduler) []string {
 	s.mu.RLock()
@@ -1488,6 +1488,7 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 	require.NoError(t.T(), s.StartRelay(sourceID1, []string{workerName2}))
 	require.Equal(t.T(), WorkerBound, worker2.Stage())
 	checkRelaySource(t.T(), worker2.RelaySources(), sourceID1)
+
 	worker3.ToOffline()
 	worker4.ToOffline()
 
@@ -1961,6 +1962,7 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 	s.etcdCli = t.etcdTestCli
 	sourceCfg.EnableRelay = true
 	sourceCfg.SourceID = sourceID1
+
 	_, err = ha.PutSourceCfg(t.etcdTestCli, sourceCfg)
 	require.NoError(t.T(), err)
 	_, err = ha.PutRelayConfig(t.etcdTestCli, ha.NewSourceBound(sourceID1, workerName1))
