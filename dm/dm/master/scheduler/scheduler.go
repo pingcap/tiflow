@@ -2250,19 +2250,19 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	boundSourcesNum := sourceNum
 	if len(relayWorkers) > 0 {
 		for _, bound := range s.lastBound {
-			workerName := bound.Worker
+			boundWorker := bound.Worker
 			if bound.Source == source {
-				w, ok := s.workers[workerName]
+				w, ok := s.workers[boundWorker]
 				if !ok {
 					// a not found worker
 					continue
 				}
 				// the worker is not Offline
-				if _, ok2 := relayWorkers[workerName]; ok2 && w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
+				if _, ok2 := relayWorkers[boundWorker]; ok2 && w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 					worker = w
 					boundSourcesNum = len(w.Bounds())
 					s.logger.Info("found history relay worker when source bound",
-						zap.String("worker", workerName),
+						zap.String("worker", boundWorker),
 						zap.String("source", source))
 				}
 			}
