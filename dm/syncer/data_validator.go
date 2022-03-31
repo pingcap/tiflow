@@ -15,6 +15,8 @@ package syncer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -22,8 +24,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -38,20 +40,26 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
 const (
-	checkInterval      = 5 * time.Second
-	validationInterval = 10 * time.Second
+	checkInterval           = 5 * time.Second
+	validationInterval      = 10 * time.Second
+	validatorStatusInterval = 30 * time.Second
+
+	moreColumnInBinlogMsg     = "binlog has more columns than current table"
+	tableWithoutPrimaryKeyMsg = "no primary key"
 )
+
+var errNoPrimaryKey = errors.New("no primary key")
 
 type validateTableInfo struct {
 	Source     *filter.Table
 	Info       *model.TableInfo
 	PrimaryKey *model.IndexInfo
 	Target     *filter.Table // target table after route
-	pkIndices  []int         // TODO: can we use offset of in indexColumn? may remove this field in that case
 }
 
 type rowChangeType int
@@ -60,6 +68,9 @@ const (
 	rowInsert rowChangeType = iota
 	rowDeleted
 	rowUpdated
+	flushCheckpoint
+
+	rowChangeTypeCount = 3
 )
 
 // change of table
@@ -70,17 +81,31 @@ type tableChange struct {
 	rows  map[string]*rowChange
 }
 
+func newTableChange(table *validateTableInfo) *tableChange {
+	return &tableChange{table: table, rows: make(map[string]*rowChange)}
+}
+
 // change of a row.
 // todo: this struct and some logic on it may reuse RowChange in pkg/sqlmodel
 // todo: maybe we can use reuse it later.
 type rowChange struct {
-	table      *validateTableInfo
-	key        string
-	pkValues   []string // todo: might be removed in later pr
-	data       []interface{}
-	tp         rowChangeType
-	lastMeetTS int64 // the last meet timestamp(in seconds)
-	failedCnt  int   // failed count
+	table *validateTableInfo
+	Key   string        `json:"key"`
+	Data  []interface{} `json:"data"`
+	Tp    rowChangeType `json:"tp"`
+	wg    *sync.WaitGroup
+
+	// timestamp of first validation of this row
+	// will reset when merge row changes
+	FirstValidateTS int64 `json:"first-validate-ts"`
+	FailedCnt       int   `json:"failed-cnt"` // failed count
+}
+
+type tableValidateStatus struct {
+	source  filter.Table
+	target  filter.Table
+	stage   pb.Stage // either Running or Stopped
+	message string
 }
 
 // DataValidator
@@ -95,6 +120,8 @@ type DataValidator struct {
 	sync.RWMutex
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
+	// whether validator starts together with subtask
+	startWithSubtask bool
 
 	stage        pb.Stage
 	wg           sync.WaitGroup
@@ -111,41 +138,58 @@ type DataValidator struct {
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
+	persistHelper      *validatorPersistHelper
 
 	result           pb.ProcessResult
 	validateInterval time.Duration
 	workers          []*validateWorker
-	changeEventCount []atomic.Int64
 	workerCnt        int
 
-	// such as table without primary key
-	unsupportedTable map[string]string
+	// whether the validation progress ever reached syncer
+	// if it's false, we don't mark failed row change as error to reduce false-positive
+	reachedSyncer atomic.Bool
+
+	processedRowCounts   []atomic.Int64
+	pendingRowCounts     []atomic.Int64
+	errorRowCounts       []atomic.Int64
+	lastFlushTime        time.Time
+	tableStatus          map[string]*tableValidateStatus
+	location             *binlog.Location
+	loadedPendingChanges map[string]*tableChange
 }
 
-func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer) *DataValidator {
+func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
 	v := &DataValidator{
-		cfg:    cfg,
-		syncer: syncerObj,
-		stage:  pb.Stage_Stopped,
+		cfg:              cfg,
+		syncer:           syncerObj,
+		startWithSubtask: startWithSubtask,
+		stage:            pb.Stage_Stopped,
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
-	v.changeEventCount = make([]atomic.Int64, 3)
+	v.processedRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 	v.workers = make([]*validateWorker, v.workerCnt)
 	v.validateInterval = validationInterval
-
-	v.unsupportedTable = make(map[string]string)
+	v.persistHelper = newValidatorCheckpointHelper(v)
+	v.tableStatus = make(map[string]*tableValidateStatus)
 
 	return v
 }
 
 func (v *DataValidator) initialize() error {
+	v.reachedSyncer.Store(false)
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.result.Reset()
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
+	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
+	v.errorRowCounts = make([]atomic.Int64, rowChangeTypeCount)
+
+	if err := v.persistHelper.init(v.tctx); err != nil {
+		return err
+	}
 
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
 	defer cancelFunc()
@@ -168,6 +212,8 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
 	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
 	if err != nil {
 		return err
@@ -191,6 +237,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 
+	v.L.Info("starting")
 	if v.stage == pb.Stage_Running {
 		v.L.Info("already started")
 		return
@@ -215,6 +262,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	go v.errorProcessRoutine()
 
 	v.stage = pb.Stage_Running
+	v.L.Info("started")
 }
 
 func (v *DataValidator) printStatusRoutine() {
@@ -223,12 +271,26 @@ func (v *DataValidator) printStatusRoutine() {
 		select {
 		case <-v.ctx.Done():
 			return
-		case <-time.After(checkInterval):
-			// todo: status about pending row changes
-			v.L.Info("processed event status",
-				zap.Int64("insert", v.changeEventCount[rowInsert].Load()),
-				zap.Int64("update", v.changeEventCount[rowUpdated].Load()),
-				zap.Int64("delete", v.changeEventCount[rowDeleted].Load()),
+		case <-time.After(validatorStatusInterval):
+			processed := []int64{
+				v.processedRowCounts[rowInsert].Load(),
+				v.processedRowCounts[rowUpdated].Load(),
+				v.processedRowCounts[rowDeleted].Load(),
+			}
+			pending := []int64{
+				v.pendingRowCounts[rowInsert].Load(),
+				v.pendingRowCounts[rowUpdated].Load(),
+				v.pendingRowCounts[rowDeleted].Load(),
+			}
+			errorCounts := []int64{
+				v.errorRowCounts[newValidateErrorRow].Load(),
+				v.errorRowCounts[ignoredValidateErrorRow].Load(),
+				v.errorRowCounts[resolvedValidateErrorRow].Load(),
+			}
+			v.L.Info("validator status",
+				zap.Int64s("processed(i, u, d)", processed),
+				zap.Int64s("pending(i, u, d)", pending),
+				zap.Int64s("error(new, ignored, resolved)", errorCounts),
 			)
 		}
 	}
@@ -253,6 +315,7 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 	if utils.IsContextCanceledError(err) {
 		v.L.Info("filter out context cancelled error", log.ShortError(err))
 	} else {
+		v.L.Error("error during validation", zap.Error(err))
 		v.result.Errors = append(v.result.Errors, unit.NewProcessError(err))
 	}
 }
@@ -270,23 +333,24 @@ func (v *DataValidator) errorProcessRoutine() {
 }
 
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
-	syncLoc := v.syncer.checkpoint.FlushedGlobalPoint()
+	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 	if cmp <= 0 {
 		return nil
 	}
 
+	v.reachedSyncer.Store(true)
 	for {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
-			syncLoc = v.syncer.checkpoint.FlushedGlobalPoint()
+			syncLoc = v.syncer.getFlushedGlobalPoint()
 			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 			if cmp <= 0 {
 				return nil
 			}
-			v.L.Info("wait syncer synced", zap.Reflect("loc", currLoc))
+			v.L.Debug("wait syncer synced", zap.Reflect("loc", currLoc))
 		}
 	}
 }
@@ -295,12 +359,14 @@ func (v *DataValidator) waitSyncerRunning() error {
 	if v.syncer.IsRunning() {
 		return nil
 	}
+	v.L.Info("wait until syncer running")
 	for {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
 		case <-time.After(checkInterval):
 			if v.syncer.IsRunning() {
+				v.L.Info("syncer is running, wait finished")
 				return nil
 			}
 		}
@@ -316,9 +382,30 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	// todo: if validator starts on task start, we need to make sure the location we got is the init location of syncer
-	// todo: right now, there's change they have a gap
-	location := v.syncer.checkpoint.FlushedGlobalPoint()
+	if err := v.loadPersistedData(v.tctx); err != nil {
+		v.errChan <- terror.Annotate(err, "failed to load persisted data")
+		return
+	}
+
+	var location binlog.Location
+	if v.location != nil {
+		location = *v.location
+	} else {
+		if v.startWithSubtask {
+			// in extreme case, this loc may still not be the first binlog location of this task:
+			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
+			location = v.syncer.getInitExecutedLoc()
+		} else {
+			location = v.syncer.getFlushedGlobalPoint()
+		}
+		// persist current location to make sure we start from the same location
+		// if fail-over happens before we flush checkpoint and data.
+		err := v.persistHelper.persist(location)
+		if err != nil {
+			v.errChan <- terror.Annotate(err, "failed to persist checkpoint")
+			return
+		}
+	}
 	// it's for test, some fields in streamerController is mocked, cannot call Start
 	if v.streamerController.IsClosed() {
 		err := v.streamerController.Start(v.tctx, location)
@@ -328,7 +415,6 @@ func (v *DataValidator) doValidate() {
 		}
 	}
 
-	v.L.Info("start continuous validation")
 	v.startValidateWorkers()
 	defer func() {
 		for _, worker := range v.workers {
@@ -336,12 +422,51 @@ func (v *DataValidator) doValidate() {
 		}
 	}()
 
+	// when gtid is enabled:
+	// gtid of currLoc need to be updated when meet gtid event, so we can compare with syncer
+	// gtid of locationForFlush is updated when we meet xid event, if error happened, we start sync from this location
+	//
+	// some events maybe processed again, but it doesn't matter for validation
+	// todo: maybe we can use curStartLocation/curEndLocation in locationRecorder
 	currLoc := location.CloneWithFlavor(v.cfg.Flavor)
+	// we don't flush checkpoint&data on exist, since checkpoint and pending data may not correspond with each other.
+	locationForFlush := currLoc.Clone()
+	v.lastFlushTime = time.Now()
 	for {
 		e, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
-			v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
-			return
+			switch {
+			case err == context.Canceled:
+				return
+			case err == context.DeadlineExceeded:
+				v.L.Info("deadline exceeded when fetching binlog event")
+				continue
+			case isDuplicateServerIDError(err):
+				// if the server id is already used, need to use a new server id
+				v.L.Info("server id is already used by another slave, will change to a new server id and get event again")
+				err1 := v.streamerController.UpdateServerIDAndResetReplication(v.tctx, locationForFlush)
+				if err1 != nil {
+					v.errChan <- terror.Annotate(err1, "fail to update UpdateServerIDAndResetReplication")
+					return
+				}
+				continue
+			case err == relay.ErrorMaybeDuplicateEvent:
+				continue
+			case isConnectionRefusedError(err):
+				v.errChan <- terror.Annotate(err, "fail to get event")
+				return
+			default:
+				if v.streamerController.CanRetry(err) {
+					err = v.streamerController.ResetReplicationSyncer(v.tctx, locationForFlush)
+					if err != nil {
+						v.errChan <- terror.Annotate(err, "fail to reset replication")
+						return
+					}
+					continue
+				}
+				v.errChan <- terror.Annotate(err, "fail to get binlog from stream controller")
+				return
+			}
 		}
 
 		switch ev := e.Event.(type) {
@@ -366,12 +491,35 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
-		if ev, ok := e.Event.(*replication.RowsEvent); ok {
+		switch ev := e.Event.(type) {
+		case *replication.RowsEvent:
 			if err = v.processRowsEvent(e.Header, ev); err != nil {
 				v.L.Warn("failed to process event: ", zap.Reflect("error", err))
 				v.errChan <- terror.Annotate(err, "failed to process event")
 				return
 			}
+			// update on success processed
+			locationForFlush.Position = currLoc.Position
+		case *replication.XIDEvent:
+			locationForFlush.Position = currLoc.Position
+			err = locationForFlush.SetGTID(ev.GSet)
+			if err != nil {
+				v.errChan <- terror.Annotate(err, "failed to set gtid")
+				return
+			}
+			if err = v.checkAndFlushCheckpoint(locationForFlush); err != nil {
+				v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
+				return
+			}
+		case *replication.GenericEvent:
+			if e.Header.EventType == replication.HEARTBEAT_EVENT {
+				if err = v.checkAndFlushCheckpoint(locationForFlush); err != nil {
+					v.errChan <- terror.Annotate(err, "failed to flush checkpoint")
+					return
+				}
+			}
+		default:
+			locationForFlush.Position = currLoc.Position
 		}
 	}
 }
@@ -384,6 +532,7 @@ func (v *DataValidator) Stop() {
 func (v *DataValidator) stopInner() {
 	v.Lock()
 	defer v.Unlock()
+	v.L.Info("stopping")
 	if v.stage != pb.Stage_Running {
 		v.L.Warn("not started")
 		return
@@ -393,11 +542,13 @@ func (v *DataValidator) stopInner() {
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
+	v.persistHelper.close()
 
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
 
 	v.stage = pb.Stage_Stopped
+	v.L.Info("stopped")
 }
 
 func (v *DataValidator) Started() bool {
@@ -422,6 +573,12 @@ func (v *DataValidator) startValidateWorkers() {
 			worker.run()
 		}()
 	}
+
+	for _, tblChange := range v.loadedPendingChanges {
+		for key, row := range tblChange.rows {
+			v.dispatchRowChange(key, row)
+		}
+	}
 }
 
 func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
@@ -429,39 +586,22 @@ func (v *DataValidator) dispatchRowChange(key string, row *rowChange) {
 	v.workers[hashVal].rowChangeCh <- row
 }
 
-func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
-	sourceTable := &filter.Table{
-		Schema: string(ev.Table.Schema),
-		Name:   string(ev.Table.Table),
-	}
-	fullTableName := sourceTable.String()
-	if _, ok := v.unsupportedTable[fullTableName]; ok {
-		return nil
-	}
-
-	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
-	if err != nil {
-		return err
-	}
-	if needSkip {
-		return nil
-	}
-
+func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*validateTableInfo, error) {
 	targetTable := v.syncer.route(sourceTable)
-	// todo: syncer will change schema in schemaTracker, will there be data race?
-	// todo: what if table is dropped while validator falls behind?
-	tableInfo, err := v.syncer.schemaTracker.GetTableInfo(sourceTable)
+	// there are 2 cases tracker may drop table:
+	// 1. checkpoint rollback, tracker may recreate tables and drop non-needed tables
+	// 2. when operate-schema
+	// in case 1, we add another layer synchronization to make sure we don't get a dropped table when recreation.
+	// 	for non-needed tables, we will not validate them.
+	// in case 2, validator should be paused
+	tableInfo, err := v.syncer.getTrackedTableInfo(sourceTable)
 	if err != nil {
-		if schema.IsTableNotExists(err) {
-			// not a table need to sync
-			return nil
-		}
-		return terror.Annotate(err, "failed to get table info")
+		return nil, err
 	}
-
-	if len(tableInfo.Columns) < int(ev.ColumnCount) {
-		v.unsupportedTable[fullTableName] = "binlog has more columns than current table"
-		return nil
+	table := &validateTableInfo{
+		Source: sourceTable,
+		Info:   tableInfo,
+		Target: targetTable,
 	}
 
 	var primaryIdx *model.IndexInfo
@@ -473,38 +613,77 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	// todo: PKIsHandle = true when table has primary key like "id int primary key CLUSTERED", since schema-tracker(we get from it)
 	// todo: only use downstream DDL when the task is incremental only, will support this case later.
 	if primaryIdx == nil {
-		// todo: for table without primary index, need to record in the failed table, will add it later together with checkpoint
-		v.unsupportedTable[fullTableName] = "without primary key"
-		return nil
+		// return partial initialized result
+		return table, errNoPrimaryKey
 	}
-
-	table := &validateTableInfo{
-		Source:     sourceTable,
-		Info:       tableInfo,
-		PrimaryKey: primaryIdx,
-		Target:     targetTable,
-	}
-
-	for _, cols := range ev.SkippedColumns {
-		if len(cols) > 0 {
-			err := errors.Errorf("unexpected skipped columns for table %s", sourceTable.String())
-			return err
-		}
-	}
-
-	changeType := getRowChangeType(header.EventType)
-	v.changeEventCount[changeType].Inc()
+	table.PrimaryKey = primaryIdx
 
 	columnMap := make(map[string]*model.ColumnInfo)
 	for _, col := range tableInfo.Columns {
 		columnMap[col.Name.O] = col
 	}
-	pk := table.PrimaryKey
-	pkIndices := make([]int, len(pk.Columns))
-	for i, col := range pk.Columns {
-		pkIndices[i] = columnMap[col.Name.O].Offset
+
+	return table, nil
+}
+
+func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
+	sourceTable := &filter.Table{
+		Schema: string(ev.Table.Schema),
+		Name:   string(ev.Table.Table),
 	}
-	table.pkIndices = pkIndices
+	fullTableName := sourceTable.String()
+	if state, ok := v.tableStatus[fullTableName]; ok && state.stage == pb.Stage_Stopped {
+		return nil
+	}
+
+	if err := checkLogColumns(ev.SkippedColumns); err != nil {
+		return errors.Errorf("unexpected skipped columns for table %s", sourceTable.String())
+	}
+
+	needSkip, err := v.syncer.skipRowsEvent(sourceTable, header.EventType)
+	if err != nil {
+		return err
+	}
+	if needSkip {
+		return nil
+	}
+
+	table, err := v.genValidateTableInfo(sourceTable)
+	if err != nil {
+		if schema.IsTableNotExists(err) {
+			// not a table need to sync
+			return nil
+		} else if err == errNoPrimaryKey {
+			v.tableStatus[fullTableName] = &tableValidateStatus{
+				source:  *sourceTable,
+				target:  *table.Target,
+				stage:   pb.Stage_Stopped,
+				message: tableWithoutPrimaryKeyMsg,
+			}
+			return nil
+		}
+		return terror.Annotate(err, "failed to get table info")
+	}
+
+	if len(table.Info.Columns) < int(ev.ColumnCount) {
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source:  *sourceTable,
+			target:  *table.Target,
+			stage:   pb.Stage_Stopped,
+			message: moreColumnInBinlogMsg,
+		}
+		return nil
+	}
+
+	if _, ok := v.tableStatus[fullTableName]; !ok {
+		v.tableStatus[fullTableName] = &tableValidateStatus{
+			source: *sourceTable,
+			target: *table.Target,
+			stage:  pb.Stage_Running,
+		}
+	}
+
+	changeType := getRowChangeType(header.EventType)
 
 	step := 1
 	if changeType == rowUpdated {
@@ -512,52 +691,135 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	for i := 0; i < len(ev.Rows); i += step {
 		row := ev.Rows[i]
-		pkValue := make([]string, len(pk.Columns))
-		for _, idx := range pkIndices {
-			pkValue[idx] = genColData(row[idx])
+		pkCols := table.PrimaryKey.Columns
+		pkValue := make([]string, len(pkCols))
+		for idx, col := range pkCols {
+			pkValue[idx] = genColData(row[col.Offset])
 		}
 		key := genRowKey(pkValue)
 
 		if changeType == rowUpdated {
 			afterRowChangeType := changeType
 			afterRow := ev.Rows[i+1]
-			afterPkValue := make([]string, len(pk.Columns))
-			for _, idx := range pkIndices {
-				afterPkValue[idx] = genColData(afterRow[idx])
+			afterPkValue := make([]string, len(pkCols))
+			for idx, col := range pkCols {
+				afterPkValue[idx] = genColData(afterRow[col.Offset])
 			}
 			afterKey := genRowKey(afterPkValue)
 			if afterKey != key {
 				// TODO: may reuse IsIdentityUpdated/SplitUpdate of RowChange in pkg/sqlmodel
 				v.dispatchRowChange(key, &rowChange{
-					table:      table,
-					key:        key,
-					pkValues:   pkValue,
-					data:       row,
-					tp:         rowDeleted,
-					lastMeetTS: int64(header.Timestamp),
+					table: table,
+					Key:   key,
+					Data:  row,
+					Tp:    rowDeleted,
 				})
+				v.processedRowCounts[rowDeleted].Inc()
 				afterRowChangeType = rowInsert
 			}
 			v.dispatchRowChange(afterKey, &rowChange{
-				table:      table,
-				key:        afterKey,
-				pkValues:   afterPkValue,
-				data:       afterRow,
-				tp:         afterRowChangeType,
-				lastMeetTS: int64(header.Timestamp),
+				table: table,
+				Key:   afterKey,
+				Data:  afterRow,
+				Tp:    afterRowChangeType,
 			})
+			v.processedRowCounts[afterRowChangeType].Inc()
 		} else {
 			v.dispatchRowChange(key, &rowChange{
-				table:      table,
-				key:        key,
-				pkValues:   pkValue,
-				data:       row,
-				tp:         changeType,
-				lastMeetTS: int64(header.Timestamp),
+				table: table,
+				Key:   key,
+				Data:  row,
+				Tp:    changeType,
 			})
+			v.processedRowCounts[changeType].Inc()
 		}
 	}
 	return nil
+}
+
+func (v *DataValidator) checkAndFlushCheckpoint(loc binlog.Location) error {
+	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
+	if time.Since(v.lastFlushTime) > metaFlushInterval {
+		v.lastFlushTime = time.Now()
+		if err := v.flushCheckpointAndData(loc); err != nil {
+			v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *DataValidator) flushCheckpointAndData(loc binlog.Location) error {
+	var wg sync.WaitGroup
+	wg.Add(v.workerCnt)
+	flushJob := &rowChange{
+		Tp: flushCheckpoint,
+		wg: &wg,
+	}
+	for _, worker := range v.workers {
+		worker.rowChangeCh <- flushJob
+	}
+	wg.Wait()
+
+	err := v.persistHelper.persist(loc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
+	var err error
+	v.location, err = v.persistHelper.loadCheckpoint(tctx)
+	if err != nil {
+		return err
+	}
+
+	var rev int64
+	v.loadedPendingChanges, rev, err = v.persistHelper.loadPendingChange(tctx)
+	if err != nil {
+		return err
+	}
+	// table info of pending change is not persisted in order to save space, so need to init them after load.
+	for _, tblChange := range v.loadedPendingChanges {
+		tblChange.table, err = v.genValidateTableInfo(tblChange.table.Source)
+		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
+		// see https://github.com/pingcap/tiflow/pull/4881#discussion_r834093316
+		if err != nil {
+			return err
+		}
+		for _, row := range tblChange.rows {
+			row.table = tblChange.table
+		}
+	}
+
+	v.persistHelper.setRevision(rev)
+
+	v.tableStatus, err = v.persistHelper.loadTableStatus(tctx)
+	if err != nil {
+		return err
+	}
+
+	countMap, err := v.persistHelper.loadErrorCount()
+	if err != nil {
+		return err
+	}
+	for i := range v.errorRowCounts {
+		v.errorRowCounts[i].Store(countMap[validateErrorStatus(i)])
+	}
+	return nil
+}
+
+func (v *DataValidator) incrErrorRowCount(status validateErrorStatus, cnt int) {
+	v.errorRowCounts[status].Add(int64(cnt))
+}
+
+func (v *DataValidator) hasReachedSyncer() bool {
+	return v.reachedSyncer.Load()
+}
+
+func (v *DataValidator) addPendingRowCount(tp rowChangeType, cnt int64) {
+	v.pendingRowCounts[tp].Add(cnt)
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent.
@@ -574,7 +836,17 @@ func getRowChangeType(t replication.EventType) rowChangeType {
 }
 
 func genRowKey(pkValues []string) string {
-	return strings.Join(pkValues, "-")
+	// TODO: in scenario below, the generated key may not unique, but it's rare
+	// suppose a table with multiple column primary key: (v1, v2)
+	// for below case, the generated key is the same:
+	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"
+	join := strings.Join(pkValues, "\t")
+	// if the key is too long, need to make sure it can be stored into database
+	if len(join) > maxRowKeyLength {
+		sum := sha256.Sum256([]byte(join))
+		return hex.EncodeToString(sum[:])
+	}
+	return join
 }
 
 func genColData(v interface{}) string {
