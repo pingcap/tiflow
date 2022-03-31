@@ -402,7 +402,16 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 	}
 }
 
-func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) error {
+func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			if err := w.messageHandlerManager.Clean(context.Background()); err != nil {
+				log.L().Warn("Failed to clean up message handlers",
+					zap.String("master-id", w.masterID),
+					zap.String("worker-id", w.id))
+			}
+		}
+	}()
 	topic := HeartbeatPongTopic(w.masterClient.MasterID(), w.id)
 	ok, err := w.messageHandlerManager.RegisterHandler(
 		ctx,
