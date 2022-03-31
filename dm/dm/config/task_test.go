@@ -22,8 +22,8 @@ import (
 
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/util/filter"
+	router "github.com/pingcap/tidb/util/table-router"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 
