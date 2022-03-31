@@ -810,15 +810,10 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schemaSnapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
-		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
-<<<<<<< HEAD
-			log.Info("ignore foregone DDL",
-				zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
-=======
+		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
 				zap.String("DDL", job.Query), zap.String("changefeed", s.id),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
->>>>>>> a9d5d5a6d (schema(cdc): fix DML construct error caused by 'rename tables' DDL (#5068))
 			return nil
 		}
 		snap = lastSnap.Clone()
@@ -826,10 +821,6 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = newEmptySchemaSnapshot(s.explicitTables)
 	}
 	if err := snap.handleDDL(job); err != nil {
-<<<<<<< HEAD
-		return errors.Trace(err)
-	}
-=======
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
 			zap.String("changefeed", s.id), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
@@ -839,7 +830,6 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.Stringer("job", job), zap.String("changefeed", s.id),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
->>>>>>> a9d5d5a6d (schema(cdc): fix DML construct error caused by 'rename tables' DDL (#5068))
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
