@@ -273,6 +273,9 @@ func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 	}
 	var syncerObj *syncer.Syncer
 	var ok bool
+	failpoint.Inject("MockValidationQuery", func(_ failpoint.Value) {
+		failpoint.Goto("StartValidatorWithoutCheck")
+	})
 	for _, u := range st.units {
 		if syncerObj, ok = u.(*syncer.Syncer); ok {
 			break
@@ -282,7 +285,7 @@ func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 		st.l.Warn("cannot start validator without syncer")
 		return
 	}
-
+	failpoint.Label("StartValidatorWithoutCheck")
 	if st.validator == nil {
 		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj, startWithSubtask)
 	}
@@ -295,6 +298,16 @@ func (st *SubTask) StopValidator() {
 		st.validator.Stop()
 	}
 	st.Unlock()
+}
+
+func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
+	st.Lock()
+	defer st.Unlock()
+	if st.validator != nil && st.validator.Started() {
+		return st.validator.GetValidationStatus()
+	}
+	st.l.Warn("validator not start")
+	return []*pb.ValidationStatus{}
 }
 
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
