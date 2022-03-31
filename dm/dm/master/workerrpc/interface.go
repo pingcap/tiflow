@@ -48,6 +48,8 @@ const (
 	CmdHandleError
 	CmdGetWorkerCfg
 	CmdCheckSubtasksCanUpdate
+
+	CmdGetValidationStatus
 )
 
 // Request wraps all dm-worker rpc requests.
@@ -65,6 +67,8 @@ type Request struct {
 	GetWorkerCfg  *pb.GetWorkerCfgRequest
 
 	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateRequest
+
+	GetValidationStatus *pb.GetValidationStatusRequest
 }
 
 // Response wraps all dm-worker rpc responses.
@@ -82,6 +86,8 @@ type Response struct {
 	GetWorkerCfg  *pb.GetWorkerCfgResponse
 
 	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateResponse
+
+	GetValidationStatus *pb.GetValidationStatusResponse
 }
 
 // Client is a client that sends RPC.
