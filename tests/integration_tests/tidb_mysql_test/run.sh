@@ -67,8 +67,8 @@ cases="bigint composite_index date_formats datetime_insert \
     type_time type_timestamp type_uint update \
     insert_select insert_update alter_table1 json\
     mysql_replace date_time_ddl"
-
 ./converter2.sh "$cases"
+
 # run mysql-test cases
 echo -e "mysql_test start\n"
 TEST_BIN_PATH=./mysql_test
