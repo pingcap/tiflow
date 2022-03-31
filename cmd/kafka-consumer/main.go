@@ -552,6 +552,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Panic("emit row changed event failed", zap.Error(err))
 				}
+				log.Info("emit row", zap.Any("row", row), zap.Int32("partition", partition))
 				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
 				if !ok || lastCommitTs.(uint64) < row.CommitTs {
 					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
