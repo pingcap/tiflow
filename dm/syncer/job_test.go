@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
