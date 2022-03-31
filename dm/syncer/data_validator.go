@@ -24,8 +24,9 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -236,6 +237,10 @@ func (v *DataValidator) initialize() error {
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
+	failpoint.Inject("MockValidationQuery", func() {
+		v.stage = pb.Stage_Running
+		failpoint.Return()
+	})
 
 	v.L.Info("starting")
 	if v.stage == pb.Stage_Running {
@@ -627,6 +632,8 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table) (*valida
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
+	v.Lock() // mutex lock to protect tableStatus and maybe other fields
+	defer v.Unlock()
 	sourceTable := &filter.Table{
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
@@ -858,4 +865,34 @@ func genColData(v interface{}) string {
 	}
 	s := fmt.Sprintf("%v", v)
 	return s
+}
+
+func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return([]*pb.ValidationStatus{
+			{
+				SrcTable:         "`testdb1`.`testtable1`",
+				DstTable:         "`dstdb`.`dsttable`",
+				ValidationStatus: pb.Stage_Running.String(),
+			},
+			{
+				SrcTable:         "`testdb2`.`testtable2`",
+				DstTable:         "`dstdb`.`dsttable`",
+				ValidationStatus: pb.Stage_Stopped.String(),
+				Message:          tableWithoutPrimaryKeyMsg,
+			},
+		})
+	})
+	v.RLock()
+	defer v.RUnlock()
+	result := make([]*pb.ValidationStatus, 0)
+	for _, tblStat := range v.tableStatus {
+		result = append(result, &pb.ValidationStatus{
+			SrcTable:         tblStat.source.String(),
+			DstTable:         tblStat.target.String(),
+			ValidationStatus: tblStat.stage.String(),
+			Message:          tblStat.message,
+		})
+	}
+	return result
 }

@@ -16,8 +16,8 @@ package loader
 import (
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 
 	. "github.com/pingcap/check"

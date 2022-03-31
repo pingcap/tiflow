@@ -14,9 +14,9 @@
 package filter
 
 import (
-	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
-	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filterV1 "github.com/pingcap/tidb/util/filter"
+	filterV2 "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

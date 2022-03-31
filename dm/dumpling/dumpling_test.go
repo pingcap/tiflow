@@ -21,9 +21,9 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/docker/go-units"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	tfilter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/util/filter"
+	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/prometheus/client_golang/prometheus"
 
 	. "github.com/pingcap/check"

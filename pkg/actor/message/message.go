@@ -13,64 +13,36 @@
 
 package message
 
-import (
-	"github.com/pingcap/tiflow/cdc/model"
-	sorter "github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
-)
-
 // Type is the type of Message
 type Type int
 
 // types of Message
 const (
 	TypeUnknown Type = iota
-	TypeTick
 	TypeStop
-	TypeBarrier
-	TypeSorterTask
-	// Add a new type when adding a new message.
+	TypeValue
 )
 
 // Message is a vehicle for transferring information between nodes
-type Message struct {
+type Message[T any] struct {
 	// Tp is the type of Message
 	Tp Type
-	// BarrierTs
-	BarrierTs model.Ts
-	// Leveldb sorter task
-	// TODO: find a way to hide it behind an interface while saving
-	//       memory allocation.
-	// See https://cs.opensource.google/go/go/+/refs/tags/go1.17.2:src/runtime/iface.go;l=325
-	SorterTask sorter.Task
-}
 
-// TickMessage creates the message of Tick
-func TickMessage() Message {
-	return Message{
-		Tp: TypeTick,
-	}
+	Value T
 }
 
 // StopMessage creates the message of Stop.
 // After receiving a Stop message, actor will be closed.
-func StopMessage() Message {
-	return Message{
+func StopMessage[T any]() Message[T] {
+	return Message[T]{
 		Tp: TypeStop,
 	}
 }
 
-// BarrierMessage creates the message of Command
-func BarrierMessage(barrierTs model.Ts) Message {
-	return Message{
-		Tp:        TypeBarrier,
-		BarrierTs: barrierTs,
-	}
-}
-
-// SorterMessage creates the message of sorter
-func SorterMessage(task sorter.Task) Message {
-	return Message{
-		Tp:         TypeSorterTask,
-		SorterTask: task,
+// ValueMessage creates the message of Value.
+func ValueMessage[T any](val T) Message[T] {
+	return Message[T]{
+		Tp:    TypeValue,
+		Value: val,
 	}
 }
