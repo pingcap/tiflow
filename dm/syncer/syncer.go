@@ -56,7 +56,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
@@ -757,70 +756,57 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) error {
 	// TODO: Switch to use the HTTP interface to retrieve the TableInfo directly if HTTP port is available
 	// use parser for downstream.
-	retryStrategy := retry.FiniteRetryStrategy{}
-	params := retry.Params{
-		RetryCount:         10,
-		FirstRetryDuration: retryTimeout,
-		BackoffStrategy:    retry.Stable,
-		IsRetryableFn: func(_ int, _ error) bool {
-			// retry until reaching limit
-			return true
-		},
+	parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
-	_, _, err := retryStrategy.Apply(tctx, params, func(tctx *tcontext.Context) (interface{}, error) {
-		parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
-		if err != nil {
-			return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
 
-		createSQL, err := dbconn.GetTableCreateSQL(tctx, s.ddlDBConn, targetTable.String())
-		if err != nil {
-			return nil, terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
+	createSQL, err := dbconn.GetTableCreateSQL(tctx, s.ddlDBConn, targetTable.String())
+	if err != nil {
+		return terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
 
-		// rename the table back to original.
-		var createNode ast.StmtNode
-		createNode, err = parser2.ParseOneStmt(createSQL, "", "")
-		if err != nil {
-			return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		createStmt := createNode.(*ast.CreateTableStmt)
-		createStmt.IfNotExists = true
-		createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
-		createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
+	// rename the table back to original.
+	var createNode ast.StmtNode
+	createNode, err = parser2.ParseOneStmt(createSQL, "", "")
+	if err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	createStmt := createNode.(*ast.CreateTableStmt)
+	createStmt.IfNotExists = true
+	createStmt.Table.Schema = model.NewCIStr(sourceTable.Schema)
+	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
 
-		// schema tracker sets non-clustered index, so can't handle auto_random.
-		if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
-			for _, col := range createStmt.Cols {
-				for i, opt := range col.Options {
-					if opt.Tp == ast.ColumnOptionAutoRandom {
-						// col.Options is unordered
-						col.Options[i] = col.Options[len(col.Options)-1]
-						col.Options = col.Options[:len(col.Options)-1]
-						break
-					}
+	// schema tracker sets non-clustered index, so can't handle auto_random.
+	if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
+		for _, col := range createStmt.Cols {
+			for i, opt := range col.Options {
+				if opt.Tp == ast.ColumnOptionAutoRandom {
+					// col.Options is unordered
+					col.Options[i] = col.Options[len(col.Options)-1]
+					col.Options = col.Options[:len(col.Options)-1]
+					break
 				}
 			}
 		}
+	}
 
-		var newCreateSQLBuilder strings.Builder
-		restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
-		if err = createStmt.Restore(restoreCtx); err != nil {
-			return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-		}
-		newCreateSQL := newCreateSQLBuilder.String()
-		tctx.L().Debug("reverse-synchronized table schema",
-			zap.Stringer("sourceTable", sourceTable),
-			zap.Stringer("targetTable", targetTable),
-			zap.String("sql", newCreateSQL),
-		)
-		if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
-			return nil, terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
+	var newCreateSQLBuilder strings.Builder
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
+	if err = createStmt.Restore(restoreCtx); err != nil {
+		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	newCreateSQL := newCreateSQLBuilder.String()
+	tctx.L().Debug("reverse-synchronized table schema",
+		zap.Stringer("sourceTable", sourceTable),
+		zap.Stringer("targetTable", targetTable),
+		zap.String("sql", newCreateSQL),
+	)
+	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
+		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
+	}
 
-		return nil, nil
-	})
-	return err
+	return nil
 }
 
 var dmlMetric = map[sqlmodel.RowChangeType]string{
