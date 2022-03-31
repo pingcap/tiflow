@@ -464,6 +464,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	var lastDMLCommitTs uint64
 	for message := range claim.Messages() {
 		var (
 			decoder codec.EventBatchDecoder
@@ -530,6 +531,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						)
 					}
 				}
+
+				if row.CommitTs < lastDMLCommitTs {
+					log.Warn("RowChangedEvent commitTs fallback, ignore it",
+						zap.Uint64("lastDMLCommitTs", lastDMLCommitTs),
+						zap.Any("row", row),
+						zap.Int32("partition", partition))
+					continue
+				}
+				lastDMLCommitTs = row.CommitTs
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
