@@ -5,6 +5,7 @@ set -e
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
+TIDB_CONFIG=$CUR/tidb_config.toml
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
@@ -12,7 +13,9 @@ function prepare() {
 	stop_tidb_cluster
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR
+    # Use '--tidb-config' here to suppress the default config for other integration tests
+    # Maybe it can specify some options for the rest test cases in the future
+	start_tidb_cluster --workdir $WORK_DIR --tidb-config=$TIDB_CONFIG
 	
     cd $WORK_DIR
 
@@ -26,9 +29,9 @@ function prepare() {
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	#run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	SINK_PARA="{\"force_replicate\":true, \"changefeed_id\":\"tidb-mysql-test\", \"sink_uri\":\"$SINK_URI\", \"start_ts\":$start_ts}"
-	curl -X POST -H "'Content-type':'application/json'" http://127.0.0.1:8300/api/v1/changefeeds -d "$SINK_PARA"
+	
+    SINK_PARA="{\"force_replicate\":true, \"changefeed_id\":\"tidb-mysql-test\", \"sink_uri\":\"$SINK_URI\", \"start_ts\":$start_ts}"
+	curl -X POST -H "'Content-type':'application/json'" http://$CDC_HOST:$CDC_PORT/api/v1/changefeeds -d "$SINK_PARA"
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
@@ -58,10 +61,12 @@ cd $MYSQL_TEST_PATH
 # convert test case
 cases="bigint composite_index date_formats datetime_insert \
     datetime_update drop concurrent_ddl gcol_alter_table \
-    partition_bug18198 update_stmt\
+    partition_bug18198 update_stmt alter_table alter_table_PK\
     partition_list partition_range single_delete_update time \
-    timestamp_insert timestamp_update type_decimal \
-    type_time type_timestamp type_uint update"
+    timestamp_insert timestamp_update type_decimal transaction_isolation_func\
+    type_time type_timestamp type_uint update \
+    insert_select insert_update alter_table1 json\
+    mysql_replace date_time_ddl"
 
 ./converter2.sh "$cases"
 # run mysql-test cases
