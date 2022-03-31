@@ -1,4 +1,10 @@
-USE `test`;
+-- This sql file is encoded in GBK by the 'iconv' command.
+-- DO NOT EDIT. 
+
+SET NAMES gbk;
+USE test;
+
+DROP TABLE IF EXISTS multi_data_type;
 
 CREATE TABLE multi_data_type
 (
@@ -56,7 +62,7 @@ INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smalli
                            , t_set, t_json)
 VALUES ( -1, 1, -129, 129, -65536, 65536, -16777216, 16777216, -2147483649, 2147483649
        , true, 123.456, 123.123, 123456789012.123456789012
-       , 'Êµã', 'ÊµãËØï', x'89504E470D0A1A0A', x'89504E470D0A1A0A', 'ÊµãËØïtinytext', 'ÊµãËØïtext', 'ÊµãËØïmediumtext', 'ÊµãËØïlongtext'
+       , '≤‚', '≤‚ ‘', x'89504E470D0A1A0A', x'89504E470D0A1A0A', '≤‚ ‘tinytext', '≤‚ ‘text', '≤‚ ‘mediumtext', '≤‚ ‘longtext'
        , 'tinyblob', 'blob', 'mediumblob', 'longblob'
        , '1977-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59'
        , 'enum2'
@@ -72,7 +78,7 @@ INSERT INTO multi_data_type( t_tinyint, t_tinyint_unsigned, t_smallint, t_smalli
                            , t_set, t_json)
 VALUES ( -2, 2, -130, 130, -65537, 65537, -16777217, 16777217, -2147483650, 2147483650
        , false, 123.4567, 123.1237, 123456789012.1234567890127
-       , '2', 'ÊµãËØï2', x'89504E470D0A1A0B', x'89504E470D0A1A0B', 'ÊµãËØï2tinytext', 'ÊµãËØï2text', 'ÊµãËØï2mediumtext', 'ÊµãËØïlongtext'
+       , '2', '≤‚ ‘2', x'89504E470D0A1A0B', x'89504E470D0A1A0B', '≤‚ ‘2tinytext', '≤‚ ‘2text', '≤‚ ‘2mediumtext', '≤‚ ‘longtext'
        , 'tinyblob2', 'blob2', 'mediumblob2', 'longblob2'
        , '2021-01-01', '2021-12-31 23:59:59', '19731230153000', '22:59:59'
        , 'enum1'
@@ -89,6 +95,8 @@ DELETE
 FROM multi_data_type
 WHERE id = 2;
 
+DROP TABLE IF EXISTS multi_charset;
+
 CREATE TABLE multi_charset (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -100,22 +108,24 @@ CREATE TABLE multi_charset (
 ) ENGINE = InnoDB CHARSET = utf8mb4;
 
 INSERT INTO multi_charset
-VALUES (1, 'ÊµãËØï', "‰∏≠ÂõΩ", "‰∏äÊµ∑", "‰Ω†Â•Ω,‰∏ñÁïå"
+VALUES (1, '≤‚ ‘', "÷–π˙", "…œ∫£", "ƒ„∫√, ¿ΩÁ"
 	, 0xC4E3BAC3CAC0BDE7);
 
 INSERT INTO multi_charset
-VALUES (2, 'ÈÉ®ÁΩ≤', "ÁæéÂõΩ", "Á∫ΩÁ∫¶", "‰∏ñÁïå,‰Ω†Â•Ω"
+VALUES (2, '≤ø ', "√¿π˙", "≈¶‘º", " ¿ΩÁ,ƒ„∫√"
 	, 0xCAC0BDE7C4E3BAC3);
 
 UPDATE multi_charset
-SET name = 'ÂºÄÂèë'
-WHERE name = 'ÊµãËØï';
+SET name = 'ø™∑¢'
+WHERE name = '≤‚ ‘';
 
 DELETE FROM multi_charset
-WHERE name = 'ÈÉ®ÁΩ≤'
-	AND country = 'ÁæéÂõΩ'
-	AND city = 'Á∫ΩÁ∫¶'
-	AND description = '‰∏ñÁïå,‰Ω†Â•Ω';
+WHERE name = '≤ø '
+	AND country = '√¿π˙'
+	AND city = '≈¶‘º'
+	AND description = ' ¿ΩÁ,ƒ„∫√';
+
+DROP TABLE IF EXISTS test_ddl1;
 
 CREATE TABLE test_ddl1
 (
@@ -124,12 +134,16 @@ CREATE TABLE test_ddl1
     PRIMARY KEY (id)
 );
 
+DROP TABLE IF EXISTS test_ddl2;
+
 CREATE TABLE test_ddl2
 (
     id INT AUTO_INCREMENT,
     c1 INT,
     PRIMARY KEY (id)
 );
+
+DROP TABLE IF EXISTS test_ddl;
 
 RENAME TABLE test_ddl1 TO test_ddl;
 
@@ -152,30 +166,36 @@ CREATE TABLE test_ddl2
     PRIMARY KEY (id)
 );
 
+DROP TABLE IF EXISTS test_ddl3;
+
 CREATE TABLE test_ddl3 (
 	id INT,
-	ÂêçÁß∞ varchar(128),
+	√˚≥∆ varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
 ALTER TABLE test_ddl3
-	ADD COLUMN ÂüéÂ∏Ç char(32);
+	ADD COLUMN ≥« – char(32);
 
 ALTER TABLE test_ddl3
-	MODIFY COLUMN ÂüéÂ∏Ç varchar(32);
+	MODIFY COLUMN ≥« – varchar(32);
 
 ALTER TABLE test_ddl3
-	DROP COLUMN ÂüéÂ∏Ç;
+	DROP COLUMN ≥« –;
 
-CREATE TABLE Ë°®1 (
+DROP TABLE IF EXISTS ±Ì1;
+
+DROP TABLE IF EXISTS ±Ì2;
+
+CREATE TABLE ±Ì1 (
 	id INT,
 	name varchar(128),
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB;
 
-RENAME TABLE Ë°®1 TO Ë°®2;
+RENAME TABLE ±Ì1 TO ±Ì2;
 
-DROP TABLE Ë°®2;
+DROP TABLE IF EXISTS binary_columns;
 
 CREATE TABLE binary_columns
 (

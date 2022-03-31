@@ -21,7 +21,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 )
 
 func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {

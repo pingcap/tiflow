@@ -22,9 +22,9 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	"github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
