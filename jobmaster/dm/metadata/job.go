@@ -19,7 +19,9 @@ const (
 	StageRunning
 	StagePaused
 	StageFinished
-	StageDelete
+	// UnScheduled means the task is not scheduled.
+	// This usually happens when the worker is offline.
+	StageUnscheduled
 )
 
 // Job represents the state of a job.
@@ -51,7 +53,7 @@ type Task struct {
 func NewTask(taskCfg *config.TaskCfg) *Task {
 	return &Task{
 		Cfg:   taskCfg,
-		Stage: StageInit,
+		Stage: StageRunning, // TODO: support set stage when create task.
 	}
 }
 
