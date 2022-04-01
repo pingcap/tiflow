@@ -61,6 +61,15 @@ type ClusterMaster struct {
 	Name   string `json:"name"`
 }
 
+// ClusterTopology defines model for ClusterTopology.
+type ClusterTopology struct {
+	AlertManagerTopology *AlertManagerTopology `json:"alert_manager_topology,omitempty"`
+	GrafanaTopology      *GrafanaTopology      `json:"grafana_topology,omitempty"`
+	MasterTopologyList   *[]MasterTopology     `json:"master_topology_list,omitempty"`
+	PrometheusTopology   *PrometheusTopology   `json:"prometheus_topology,omitempty"`
+	WorkerTopologyList   *[]WorkerTopology     `json:"worker_topology_list,omitempty"`
+}
+
 // ClusterWorker defines model for ClusterWorker.
 type ClusterWorker struct {
 	// address of the current master node
@@ -146,14 +155,9 @@ type ErrorWithMessage struct {
 
 // GetClusterInfoResponse defines model for GetClusterInfoResponse.
 type GetClusterInfoResponse struct {
-	AlertManagerTopology *AlertManagerTopology `json:"alert_manager_topology,omitempty"`
-
 	// cluster id
-	ClusterId          uint64              `json:"cluster_id"`
-	GrafanaTopology    *GrafanaTopology    `json:"grafana_topology,omitempty"`
-	MasterTopologyList *[]MasterTopology   `json:"master_topology_list,omitempty"`
-	PrometheusTopology *PrometheusTopology `json:"prometheus_topology,omitempty"`
-	WorkerTopologyList *[]WorkerTopology   `json:"worker_topology_list,omitempty"`
+	ClusterId uint64           `json:"cluster_id"`
+	Topology  *ClusterTopology `json:"topology,omitempty"`
 }
 
 // GetClusterMasterListResponse defines model for GetClusterMasterListResponse.
@@ -657,6 +661,9 @@ type WorkerTopology struct {
 	Port int    `json:"port"`
 }
 
+// DMAPIUpdateClusterInfoJSONBody defines parameters for DMAPIUpdateClusterInfo.
+type DMAPIUpdateClusterInfoJSONBody ClusterTopology
+
 // DMAPIGetSourceListParams defines parameters for DMAPIGetSourceList.
 type DMAPIGetSourceListParams struct {
 	// list source with status
@@ -755,6 +762,9 @@ type DMAPIGetTaskStatusParams struct {
 
 // DMAPIStopTaskJSONBody defines parameters for DMAPIStopTask.
 type DMAPIStopTaskJSONBody StopTaskRequest
+
+// DMAPIUpdateClusterInfoJSONRequestBody defines body for DMAPIUpdateClusterInfo for application/json ContentType.
+type DMAPIUpdateClusterInfoJSONRequestBody DMAPIUpdateClusterInfoJSONBody
 
 // DMAPICreateSourceJSONRequestBody defines body for DMAPICreateSource for application/json ContentType.
 type DMAPICreateSourceJSONRequestBody DMAPICreateSourceJSONBody

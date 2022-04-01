@@ -165,6 +165,31 @@ func (s *Server) DMAPIOfflineWorkerNode(c *gin.Context, workerName string) {
 	c.Status(http.StatusNoContent)
 }
 
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (GET /api/v1/cluster/info).
+func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
+	info, err := s.getClusterInfo(c.Request.Context())
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
+}
+
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (PUT /api/v1/cluster/info).
+func (s *Server) DMAPIUpdateClusterInfo(c *gin.Context) {
+	var req openapi.ClusterTopology
+	if err := c.Bind(&req); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	info, err := s.updateClusterInfo(c.Request.Context(), &req)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
+}
+
 // DMAPICreateSource url is:(POST /api/v1/sources).
 func (s *Server) DMAPICreateSource(c *gin.Context) {
 	var req openapi.CreateSourceRequest
@@ -842,13 +867,6 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, task)
-}
-
-// DMAPIGetClusterInfo return cluster id of dm cluster.
-func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
-	r := &openapi.GetClusterInfoResponse{}
-	r.ClusterId = s.ClusterID()
-	c.IndentedJSON(http.StatusOK, r)
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {

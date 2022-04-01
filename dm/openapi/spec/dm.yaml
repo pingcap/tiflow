@@ -1127,6 +1127,24 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/GetClusterInfoResponse"
+    put:
+      tags:
+        - cluster
+      summary: "update cluster info."
+      operationId: "DMAPIUpdateClusterInfo"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ClusterTopology"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetClusterInfoResponse"
   /api/v1/cluster/masters:
     get:
       tags:
@@ -1916,7 +1934,23 @@ components:
       required:
         - "host"
         - "port"
-
+    ClusterTopology:
+      type: object
+      properties:
+        master_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/MasterTopology"
+        worker_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerTopology"
+        grafana_topology:
+          $ref: "#/components/schemas/GrafanaTopology"
+        prometheus_topology:
+          $ref: "#/components/schemas/PrometheusTopology"
+        alert_manager_topology:
+          $ref: "#/components/schemas/AlertManagerTopology"
     WorkerNameList:
       description: worker name list
       type: array
@@ -2277,19 +2311,7 @@ components:
           type: integer
           format: uint64
           description: "cluster id"
-        master_topology_list:
-          type: array
-          items:
-            $ref: "#/components/schemas/MasterTopology"
-        worker_topology_list:
-          type: array
-          items:
-            $ref: "#/components/schemas/WorkerTopology"
-        grafana_topology:
-          $ref: "#/components/schemas/GrafanaTopology"
-        prometheus_topology:
-          $ref: "#/components/schemas/PrometheusTopology"
-        alert_manager_topology:
-          $ref: "#/components/schemas/AlertManagerTopology"
+        topology:
+          $ref: "#/components/schemas/ClusterTopology"
       required:
         - "cluster_id"
