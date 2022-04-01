@@ -601,7 +601,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if ts > resolvedTs {
 					for tableID, group := range eventGroups {
 						events := group.Resolve(ts)
-						if events == nil {
+						if len(events) == 0 {
 							continue
 						}
 						if err := sink.EmitRowChangedEvents(context.Background(), events...); err != nil {
