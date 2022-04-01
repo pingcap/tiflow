@@ -48,6 +48,8 @@ services:
                 restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
+                environment:
+                        - TZ=UTC
         frame-etcd-standalone:
                 image: quay.io/coreos/etcd
                 container_name: frame-etcd-standalone

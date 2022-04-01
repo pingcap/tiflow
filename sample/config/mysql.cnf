@@ -1,0 +1,8 @@
+[mysqld]
+server_id = 1001
+port = 3306
+log_bin = ON
+binlog_format = ROW
+gtid_mode = ON
+enforce_gtid_consistency = ON
+default_authentication_plugin = mysql_native_password
