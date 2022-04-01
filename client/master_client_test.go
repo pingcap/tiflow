@@ -34,13 +34,13 @@ func TestMasterClient(t *testing.T) {
 	require.Len(t, mcli.Endpoints(), 2)
 
 	// dial to an abonrmal server master, will silent error
-	mcli.UpdateClients(ctx, []string{abnormalHost}, "")
+	mcli.UpdateClients(ctx, join, "")
 	require.Len(t, mcli.Endpoints(), 2)
 
 	// abnormal server master comes back
 	srv := &servermaster.Server{}
 	_, err = mock.NewMasterServer(abnormalHost, srv)
 	require.Nil(t, err)
-	mcli.UpdateClients(ctx, []string{abnormalHost}, "")
+	mcli.UpdateClients(ctx, join, "")
 	require.Len(t, mcli.Endpoints(), 3)
 }

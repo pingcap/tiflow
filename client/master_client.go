@@ -2,14 +2,9 @@ package client
 
 import (
 	"context"
-	"reflect"
-	"runtime"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"google.golang.org/grpc"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -19,11 +14,6 @@ import (
 )
 
 const dialTimeout = 5 * time.Second
-
-type clientHolder struct {
-	conn   closeableConnIface
-	client pb.MasterClient
-}
 
 type MasterClient interface {
 	UpdateClients(ctx context.Context, urls []string, leaderURL string)
@@ -55,196 +45,63 @@ type MasterClient interface {
 }
 
 type MasterClientImpl struct {
-	urls        []string
-	leader      string
-	clientsLock sync.RWMutex
-	clients     map[string]*clientHolder
-	dialer      dialFunc
+	*rpcutil.FailoverRPCClients[pb.MasterClient]
 }
 
-type dialFunc func(ctx context.Context, addr string) (*clientHolder, error)
-
-var dialImpl = func(ctx context.Context, addr string) (*clientHolder, error) {
+var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.CloseableConnIface, error) {
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
 	}
-	return &clientHolder{
-		conn:   conn,
-		client: pb.NewMasterClient(conn),
-	}, nil
+	return pb.NewMasterClient(conn), conn, nil
 }
 
-var mockDialImpl = func(ctx context.Context, addr string) (*clientHolder, error) {
+var mockDialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.CloseableConnIface, error) {
 	conn, err := mock.Dial(addr)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
 	}
-	return &clientHolder{
-		conn:   conn,
-		client: mock.NewMasterClient(conn),
-	}, nil
-}
-
-// UpdateClients receives a list of server master addresses, dials to server
-// master that is not maintained in current MasterClient.
-func (c *MasterClientImpl) UpdateClients(ctx context.Context, urls []string, leaderURL string) {
-	c.clientsLock.Lock()
-	defer c.clientsLock.Unlock()
-
-	c.leader = leaderURL
-
-	notFound := make(map[string]struct{}, len(c.clients))
-	for addr := range c.clients {
-		notFound[addr] = struct{}{}
-	}
-
-	for _, addr := range urls {
-		// TODO: refine address with and without scheme
-		addr = strings.Replace(addr, "http://", "", 1)
-		delete(notFound, addr)
-		if _, ok := c.clients[addr]; !ok {
-			log.L().Info("add new server master client", zap.String("addr", addr))
-			cliH, err := c.dialer(ctx, addr)
-			if err != nil {
-				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
-				continue
-			}
-			c.urls = append(c.urls, addr)
-			c.clients[addr] = cliH
-		}
-	}
-
-	for k := range notFound {
-		if err := c.clients[k].conn.Close(); err != nil {
-			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
-		}
-		delete(c.clients, k)
-	}
-}
-
-func (c *MasterClientImpl) init(ctx context.Context, urls []string) error {
-	c.UpdateClients(ctx, urls, "")
-	if len(c.clients) == 0 {
-		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
-	}
-	return nil
+	return mock.NewMasterClient(conn), conn, nil
 }
 
 func NewMasterClient(ctx context.Context, join []string) (*MasterClientImpl, error) {
-	client := &MasterClientImpl{
-		clients: make(map[string]*clientHolder),
-		dialer:  dialImpl,
-	}
+	dialer := dialImpl
 	if test.GetGlobalTestFlag() {
-		client.dialer = mockDialImpl
+		dialer = mockDialImpl
 	}
-	err := client.init(ctx, join)
+	clients, err := rpcutil.NewFailoverRPCClients(ctx, join, dialer)
 	if err != nil {
 		return nil, err
 	}
-	// leader will be updated on heartbeat
-	client.leader = client.urls[0]
-	return client, nil
-}
-
-// Endpoints returns current server master addresses
-func (c *MasterClientImpl) Endpoints() []string {
-	return c.urls
-}
-
-// rpcWrap calls rpc to server master via pb.MasterClient in clients one by one,
-// until one client returns successfully.
-func (c *MasterClientImpl) rpcWrap(ctx context.Context, req interface{}, respPointer interface{}) error {
-	pc, _, _, _ := runtime.Caller(1)
-	fullMethodName := runtime.FuncForPC(pc).Name()
-	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
-
-	c.clientsLock.RLock()
-	defer c.clientsLock.RUnlock()
-	var err error
-
-	doRPC := func(addr string, cli pb.MasterClient) (ok bool) {
-		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(cli).MethodByName(methodName).Call(params)
-		// result's inner types should be (*pb.XXResponse, error), which is same as pb.MasterClient.XXRPCMethod
-		reflect.ValueOf(respPointer).Elem().Set(results[0])
-		errInterface := results[1].Interface()
-		// nil can't pass type conversion, so we handle it separately
-		if errInterface == nil {
-			err = nil
-		} else {
-			err = errInterface.(error)
-		}
-		if err == nil {
-			return true
-		}
-
-		log.L().Debug("rpc to server master failed",
-			zap.Any("payload", req), zap.String("method", methodName),
-			zap.String("addr", addr), zap.Error(err),
-		)
-		return false
-	}
-
-	// try leader first to avoid rpc forwarding in server master
-	if c.leader != "" {
-		cliH := c.clients[c.leader]
-		if cliH == nil {
-			log.L().Warn("leader is not in active master clients", zap.String("leader", c.leader))
-		} else if doRPC(c.leader, c.clients[c.leader].client) {
-			return nil
-		}
-	}
-
-	for addr, cliH := range c.clients {
-		if addr == c.leader {
-			continue
-		}
-		if doRPC(addr, cliH.client) {
-			return nil
-		}
-	}
-	// return the last error returned from rpc call
-	return err
+	return &MasterClientImpl{FailoverRPCClients: clients}, nil
 }
 
 // Heartbeat wraps Heartbeat rpc to master-server.
 func (c *MasterClientImpl) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, timeout time.Duration) (resp *pb.HeartbeatResponse, err error) {
-	ctx1, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	err = c.rpcWrap(ctx1, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.Heartbeat)
 }
 
 // RegisterExecutor to master-server.
 func (c *MasterClientImpl) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration) (resp *pb.RegisterExecutorResponse, err error) {
-	ctx1, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	err = c.rpcWrap(ctx1, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.RegisterExecutor)
 }
 
 func (c *MasterClientImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.SubmitJob)
 }
 
 func (c *MasterClientImpl) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.QueryJob)
 }
 
 func (c *MasterClientImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.PauseJob)
 }
 
 func (c *MasterClientImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.CancelJob)
 }
 
 func (c *MasterClientImpl) QueryMetaStore(
@@ -252,8 +109,7 @@ func (c *MasterClientImpl) QueryMetaStore(
 ) (resp *pb.QueryMetaStoreResponse, err error) {
 	ctx1, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	err = c.rpcWrap(ctx1, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx1, c.FailoverRPCClients, req, pb.MasterClient.QueryMetaStore)
 }
 
 // ScheduleTask sends TaskSchedulerRequest to server master and master
@@ -265,47 +121,19 @@ func (c *MasterClientImpl) ScheduleTask(
 ) (resp *pb.TaskSchedulerResponse, err error) {
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
-	err = c.rpcWrap(ctx1, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx1, c.FailoverRPCClients, req, pb.MasterClient.ScheduleTask)
 }
 
 func (c *MasterClientImpl) ReportExecutorWorkload(
 	ctx context.Context,
 	req *pb.ExecWorkloadRequest,
 ) (resp *pb.ExecWorkloadResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.ReportExecutorWorkload)
 }
 
 func (c *MasterClientImpl) PersistResource(
 	ctx context.Context,
 	req *pb.PersistResourceRequest,
 ) (resp *pb.PersistResourceResponse, err error) {
-	err = c.rpcWrap(ctx, req, &resp)
-	return
-}
-
-// Close closes underlying resources
-func (c *MasterClientImpl) Close() (err error) {
-	c.clientsLock.Lock()
-	defer c.clientsLock.Unlock()
-	for _, cliH := range c.clients {
-		err1 := cliH.conn.Close()
-		if err1 != nil {
-			err = err1
-		}
-	}
-	return
-}
-
-// GetLeaderClient exposes pb.MasterClient, note this can be used when c.leader
-// is up to date.
-func (c *MasterClientImpl) GetLeaderClient() pb.MasterClient {
-	c.clientsLock.RLock()
-	defer c.clientsLock.RUnlock()
-	leader, ok := c.clients[c.leader]
-	if !ok {
-		log.L().Panic("leader client not found", zap.String("leader", c.leader))
-	}
-	return leader.client
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.PersistResource)
 }
