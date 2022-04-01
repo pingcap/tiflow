@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 function run() {
 	# FIXME(hi-rustin): Now the kafka test is not very stable, so skip it for now.
-	if [[ "$SINK_TYPE" == "mysql" && "$SINK_TYPE" == "kafka" ]]; then
+	if [[ "$SINK_TYPE" == "mysql" || "$SINK_TYPE" == "kafka" ]]; then
 		return
 	fi
 
