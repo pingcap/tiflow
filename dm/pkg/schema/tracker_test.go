@@ -967,7 +967,7 @@ func TestTrackerRecreateTables(t *testing.T) {
 	defer db.Close()
 	con, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	dbConn := &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(con, nil)}
+	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(con, nil))
 	log.SetLevel(zapcore.ErrorLevel)
 
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
