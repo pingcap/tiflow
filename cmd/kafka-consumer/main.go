@@ -458,7 +458,7 @@ type eventsGroup struct {
 	events []*model.RowChangedEvent
 }
 
-func newEventsGroup(tableID int64) *eventsGroup {
+func newEventsGroup() *eventsGroup {
 	return &eventsGroup{
 		events: make([]*model.RowChangedEvent, 0),
 	}
@@ -581,7 +581,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 				group, ok := eventGroups[tableID]
 				if !ok {
-					group = newEventsGroup(tableID)
+					group = newEventsGroup()
 					eventGroups[tableID] = group
 				}
 				group.Append(row)
@@ -610,7 +610,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 								zap.Error(err),
 								zap.Int32("partition", partition))
 						}
-						log.Info("emit events", zap.Any("row", events), zap.Int32("partition", partition))
 						commitTs := events[len(events)-1].CommitTs
 						lastCommitTs, ok := sink.tablesMap.Load(tableID)
 						if !ok || lastCommitTs.(uint64) < commitTs {
