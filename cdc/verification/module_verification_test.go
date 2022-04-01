@@ -56,7 +56,7 @@ func TestNewModuleVerification(t *testing.T) {
 	v, err := task.Marshal()
 	require.Nil(t, err)
 	ch <- clientV3.WatchResponse{Events: []*clientV3.Event{{Kv: &mvccpb.KeyValue{Value: v}}}}
-	//close(ch)
+	// close(ch)
 	mockEtcdCli1 := &etcd.MockEtcdClient{}
 	mockEtcdCli1.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(clientV3.WatchChan(ch))
 	ctx2, cancel2 := context.WithCancel(context.Background())

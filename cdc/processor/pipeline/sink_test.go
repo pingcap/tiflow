@@ -131,7 +131,7 @@ func TestStatus(t *testing.T) {
 
 	// test stop at targetTs
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
 	require.Nil(t, node.Receive(
@@ -171,7 +171,7 @@ func TestStatus(t *testing.T) {
 
 	// test the stop at ts command
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
 	require.Nil(t, node.Receive(
@@ -202,7 +202,7 @@ func TestStatus(t *testing.T) {
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
 	require.Nil(t, node.Receive(
@@ -245,7 +245,7 @@ func TestStopStatus(t *testing.T) {
 
 	closeCh := make(chan interface{}, 1)
 	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -283,7 +283,7 @@ func TestManyTs(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -407,7 +407,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// empty row, no Columns and PreColumns.
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -429,7 +429,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// nil row.
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -487,7 +487,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// nil row.
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -628,7 +628,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	sink := &flushSink{}
 	// sNode is a sinkNode
 	sNode := newSinkNode(1, sink, 0, 10, flowController, nil)
-	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	sNode.barrierTs = 10
 
 	err := sNode.flushSink(context.Background(), uint64(8))

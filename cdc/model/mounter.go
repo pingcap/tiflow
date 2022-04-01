@@ -19,9 +19,9 @@ type PolymorphicEvent struct {
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV    *RawKVEntry
-	Row      *RowChangedEvent
-	TrackID  []byte
+	RawKV   *RawKVEntry
+	Row     *RowChangedEvent
+	TrackID []byte
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -30,10 +30,10 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
-		StartTs:  rawKV.StartTs,
-		CRTs:     rawKV.CRTs,
-		RawKV:    rawKV,
-		TrackID:  rawKV.Key,
+		StartTs: rawKV.StartTs,
+		CRTs:    rawKV.CRTs,
+		RawKV:   rawKV,
+		TrackID: rawKV.Key,
 	}
 }
 

@@ -183,7 +183,7 @@ func (n *cyclicMarkNode) sendNormalRowEventToNextNode(ctx pipeline.NodeContext, 
 				verification.Cyclic,
 				[]verification.TrackData{{TrackID: event.TrackID, CommitTs: event.CRTs}})
 		}
-		ctx.SendToNextNode(pipeline.PolymorphicEventMessage(event))
+		ctx.SendToNextNode(pmessage.PolymorphicEventMessage(event))
 	}
 }
 

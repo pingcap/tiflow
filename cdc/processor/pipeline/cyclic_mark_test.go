@@ -140,7 +140,7 @@ func TestCyclicMarkNode(t *testing.T) {
 			},
 		})
 		n := newCyclicMarkNode(markTableID, nil)
-		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
+		err := n.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil))
 		require.Nil(t, err)
 		outputCh := make(chan pmessage.Message)
 		var wg sync.WaitGroup

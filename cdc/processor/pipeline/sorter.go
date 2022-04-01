@@ -237,7 +237,7 @@ func (n *sorterNode) start(
 				if n.moduleVerifier != nil && msg.TrackID != nil {
 					n.moduleVerifier.SentTrackData(ctx, verification.Sorter, []verification.TrackData{{TrackID: msg.TrackID, CommitTs: msg.CRTs}})
 				}
-				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}
 		}
 	})
