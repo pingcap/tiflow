@@ -20,10 +20,10 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,10 +49,6 @@ func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) 
 	for _, col := range tableInfo.Columns {
 		columnMap[col.Name.O] = col
 	}
-	pkIndices := make([]int, len(primaryIdx.Columns))
-	for i, col := range primaryIdx.Columns {
-		pkIndices[i] = columnMap[col.Name.O].Offset
-	}
 	tableDiff := &validateTableInfo{
 		Source: &filter.Table{
 			Schema: schemaName,
@@ -64,7 +60,6 @@ func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) 
 			Schema: schemaName,
 			Name:   tableName,
 		},
-		pkIndices: pkIndices,
 	}
 	return tableDiff
 }

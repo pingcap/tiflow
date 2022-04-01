@@ -22,7 +22,7 @@ import (
 	"strings"
 	"unsafe"
 
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

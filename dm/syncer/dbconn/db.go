@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
