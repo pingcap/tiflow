@@ -52,7 +52,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
-		statistics: NewStatistics(ctx, "test"),
+		statistics: NewStatistics(ctx, sinkTypeDB),
 		params:     params,
 	}
 }

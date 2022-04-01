@@ -32,12 +32,12 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	toolutils "github.com/pingcap/tidb/util"
 	tidbmock "github.com/pingcap/tidb/util/mock"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -2366,4 +2366,77 @@ func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task
 	cfg, ok := v[source]
 	c.Assert(ok, check.IsTrue)
 	c.Assert(cfg.ValidatorCfg.Mode, check.Equals, expectMode)
+}
+
+func (t *testMaster) TestGetValidatorStatus(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	// test query all workers
+	for idx, worker := range workers {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().GetWorkerValidateStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationStatusResponse{
+			Result: true,
+			Status: []*pb.ValidationStatus{
+				{
+					SrcTable: "tbl1",
+				},
+			},
+		}, nil)
+		mockRevelantWorkerClient(mockWorkerClient, taskName, sources[idx], startReq)
+		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1. query existing task's status
+	statusReq := &pb.GetValidationStatusRequest{
+		TaskName: taskName,
+	}
+	resp, err := server.GetValidationStatus(context.Background(), statusReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Equals, "")
+	c.Assert(resp.Result, check.IsTrue)
+	c.Assert(len(resp.Status), check.Equals, 2)
+	// 2. query invalid task's status
+	statusReq.TaskName = "invalid-task"
+	resp, err = server.GetValidationStatus(context.Background(), statusReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Result, check.IsFalse)
+	// 3. query invalid stage
+	statusReq.TaskName = taskName
+	statusReq.FilterStatus = pb.Stage_Paused // invalid stage
+	resp, err = server.GetValidationStatus(context.Background(), statusReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*filtering stage should be either.*")
+	c.Assert(resp.Result, check.IsFalse)
 }
