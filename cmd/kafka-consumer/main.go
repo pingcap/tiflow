@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -453,9 +454,36 @@ func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
+type eventsGroup struct {
+	events []*model.RowChangedEvent
+}
+
+func newEventsGroup(tableID int64) *eventsGroup {
+	return &eventsGroup{
+		events: make([]*model.RowChangedEvent, 0),
+	}
+}
+
+func (g *eventsGroup) Append(e *model.RowChangedEvent) {
+	g.events = append(g.events, e)
+}
+
+func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
+	sort.Slice(g.events, func(i, j int) bool {
+		return g.events[i].CommitTs < g.events[j].CommitTs
+	})
+
+	i := sort.Search(len(g.events), func(i int) bool {
+		return g.events[i].CommitTs > resolveTs
+	})
+	result := g.events[:i]
+	g.events = g.events[i:]
+
+	return result
+}
+
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	ctx := context.TODO()
 	partition := claim.Partition()
 	c.sinksMu.Lock()
 	sink := c.sinks[partition]
@@ -464,7 +492,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
-	var lastDMLCommitTs uint64
+	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
 		var (
 			decoder codec.EventBatchDecoder
@@ -532,15 +560,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
-				if row.CommitTs < lastDMLCommitTs {
-					log.Warn("RowChangedEvent commitTs fallback, ignore it",
-						zap.Uint64("lastDMLCommitTs", lastDMLCommitTs),
-						zap.Any("row", row),
-						zap.Int32("partition", partition))
-					continue
-				}
-				lastDMLCommitTs = row.CommitTs
-
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
 					log.Warn("RowChangedEvent fallback row, ignore it",
@@ -557,16 +576,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				err = sink.EmitRowChangedEvents(ctx, row)
-				if err != nil {
-					log.Panic("emit row changed event failed", zap.Error(err))
+				tableID := c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = tableID
+
+				group, ok := eventGroups[tableID]
+				if !ok {
+					group = newEventsGroup(tableID)
+					eventGroups[tableID] = group
 				}
-				log.Info("emit row", zap.Any("row", row), zap.Int32("partition", partition))
-				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
-				if !ok || lastCommitTs.(uint64) < row.CommitTs {
-					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
-				}
+				group.Append(row)
 			case model.MqMessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -581,6 +599,24 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Int32("partition", partition))
 				}
 				if ts > resolvedTs {
+					for tableID, group := range eventGroups {
+						events := group.Resolve(ts)
+						if events == nil {
+							continue
+						}
+						if err := sink.EmitRowChangedEvents(context.Background(), events...); err != nil {
+							log.Panic("emit row changed event failed",
+								zap.Any("events", events),
+								zap.Error(err),
+								zap.Int32("partition", partition))
+						}
+						log.Info("emit events", zap.Any("row", events), zap.Int32("partition", partition))
+						commitTs := events[len(events)-1].CommitTs
+						lastCommitTs, ok := sink.tablesMap.Load(tableID)
+						if !ok || lastCommitTs.(uint64) < commitTs {
+							sink.tablesMap.Store(tableID, commitTs)
+						}
+					}
 					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
