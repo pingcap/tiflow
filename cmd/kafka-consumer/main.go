@@ -509,7 +509,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+
 		counter := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
