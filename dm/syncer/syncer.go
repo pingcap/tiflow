@@ -759,12 +759,12 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) error {
 	// TODO: Switch to use the HTTP interface to retrieve the TableInfo directly if HTTP port is available
 	// use parser for downstream.
-	parser2, err := utils.GetParserForConn(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn)
+	parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
 
-	createSQL, err := utils.GetTableCreateSQL(tctx.Ctx, s.ddlDBConn.BaseConn.DBConn, targetTable.String())
+	createSQL, err := dbconn.GetTableCreateSQL(tctx, s.ddlDBConn, targetTable.String())
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
 	}
