@@ -19,7 +19,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -30,7 +30,7 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot *entry.SingleSchemaSnapshot
+	schemaSnapshot *schema.SchemaSnapshot
 	filter         *filter.Filter
 	config         *config.ReplicaConfig
 
@@ -52,7 +52,7 @@ func newSchemaWrap4Owner(
 			return nil, errors.Trace(err)
 		}
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
+	schemaSnap, err := schema.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
