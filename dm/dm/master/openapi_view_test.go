@@ -75,70 +75,6 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
-func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create a new cluster
-	cfg1 := NewConfig()
-	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
-	cfg1.Name = "dm-master-1"
-	cfg1.DataDir = c.MkDir()
-	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg1.AdvertiseAddr = cfg1.MasterAddr
-	cfg1.PeerUrls = tempurl.Alloc()
-	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
-	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-	cfg1.OpenAPI = true
-
-	s1 := NewServer(cfg1)
-	c.Assert(s1.Start(ctx), check.IsNil)
-	defer s1.Close()
-	defer cancel()
-
-	// wait the first one become the leader
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader() && s1.scheduler.Started()
-	}), check.IsTrue)
-
-	// join to an existing cluster
-	cfg2 := NewConfig()
-	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
-	cfg2.Name = "dm-master-2"
-	cfg2.DataDir = c.MkDir()
-	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg2.AdvertiseAddr = cfg2.MasterAddr
-	cfg2.PeerUrls = tempurl.Alloc()
-	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
-	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
-	cfg2.OpenAPI = true
-
-	s2 := NewServer(cfg2)
-	c.Assert(s2.Start(ctx), check.IsNil)
-	defer s2.Close()
-	defer cancel() // this cancel must call before s.Close() to avoid deadlock
-
-	// wait the second master ready
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s2.election.IsLeader()
-	}), check.IsFalse)
-
-	baseURL := "/api/v1/sources"
-	// list source from leader
-	result := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s1.openapiHandles)
-	// check http status code
-	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	var resultListSource openapi.GetSourceListResponse
-	err := result.UnmarshalBodyToObject(&resultListSource)
-	c.Assert(err, check.IsNil)
-	c.Assert(resultListSource.Data, check.HasLen, 0)
-	c.Assert(resultListSource.Total, check.Equals, 0)
-
-	// list source not from leader will get a redirect
-	result2 := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s2.openapiHandles)
-	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
-}
-
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	// create a new cluster
 	cfg1 := NewConfig()
@@ -1063,6 +999,53 @@ func (s *OpenAPIViewSuite) TestClusterAPI() {
 	s.Equal(0, resultWorkers.Total)
 
 	cancel1()
+}
+
+func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	s1 := setupTestServer(ctx1, s.T())
+	defer func() {
+		cancel1()
+		s1.Close()
+	}()
+
+	// join a new master node to an existing cluster
+	cfg2 := NewConfig()
+	s.Nil(cfg2.FromContent(SampleConfig))
+	cfg2.Name = "dm-master-2"
+	cfg2.DataDir = s.T().TempDir()
+	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.PeerUrls = tempurl.Alloc()
+	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
+	cfg2.Join = s1.cfg.MasterAddr // join to an existing cluster
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
+	cfg2.OpenAPI = true
+	s2 := NewServer(cfg2)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	require.NoError(s.T(), s2.Start(ctx2))
+
+	defer func() {
+		cancel2()
+		s2.Close()
+	}()
+
+	// wait the second master ready
+	s.False(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}))
+
+	baseURL := "/api/v1/sources"
+	// list source from leader
+	result := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource))
+	s.Len(resultListSource.Data, 0)
+	s.Equal(0, resultListSource.Total)
+
+	// list source not from leader will get a redirect
+	result = testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s2.openapiHandles)
+	s.Equal(http.StatusTemporaryRedirect, result.Code())
 }
 
 func TestOpenAPIViewSuite(t *testing.T) {
