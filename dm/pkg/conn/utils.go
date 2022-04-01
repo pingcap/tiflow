@@ -30,7 +30,6 @@ func FetchTimeZoneSetting(ctx context.Context, cfg *config.DBConfig) (string, er
 	}
 	defer db.Close()
 	dur, err := dbutil.GetTimeZoneOffset(ctx, db.DB)
-	println(dur.String())
 	if err != nil {
 		return "", errors.Trace(err)
 	}
