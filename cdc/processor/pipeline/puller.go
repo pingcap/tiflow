@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/verification"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -110,7 +111,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 				if isActorMode {
 					sorter.handleRawEvent(ctx, pEvent)
 				} else {
-					ctx.SendToNextNode(pipeline.PolymorphicEventMessage(pEvent))
+					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(pEvent))
 				}
 			}
 		}

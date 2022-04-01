@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

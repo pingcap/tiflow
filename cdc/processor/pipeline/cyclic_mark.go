@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -88,13 +89,15 @@ func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
 	return err
 }
 
-func (n *cyclicMarkNode) TryHandleDataMessage(ctx pipeline.NodeContext, msg pipeline.Message) (bool, error) {
+func (n *cyclicMarkNode) TryHandleDataMessage(
+	ctx pipeline.NodeContext, msg pmessage.Message,
+) (bool, error) {
 	// limit the queue size when the table actor mode is enabled
 	if n.isTableActorMode && ctx.(*cyclicNodeContext).queue.Len() >= defaultSyncResolvedBatch {
 		return false, nil
 	}
 	switch msg.Tp {
-	case pipeline.MessageTypePolymorphicEvent:
+	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		n.flush(ctx, event.CRTs)
 		if event.RawKV.OpType == model.OpTypeResolved {
@@ -218,24 +221,24 @@ func newCyclicNodeContext(ctx *actorNodeContext) *cyclicNodeContext {
 
 // SendToNextNode implement the NodeContext interface, push the message to a queue
 // the queue size is limited by TryHandleDataMessage，size is defaultSyncResolvedBatch
-func (c *cyclicNodeContext) SendToNextNode(msg pipeline.Message) {
+func (c *cyclicNodeContext) SendToNextNode(msg pmessage.Message) {
 	c.queue.PushBack(msg)
 }
 
 // Message implements the NodeContext
-func (c *cyclicNodeContext) Message() pipeline.Message {
+func (c *cyclicNodeContext) Message() pmessage.Message {
 	msg := c.tryGetProcessedMessage()
 	if msg != nil {
 		return *msg
 	}
-	return pipeline.Message{}
+	return pmessage.Message{}
 }
 
-func (c *cyclicNodeContext) tryGetProcessedMessage() *pipeline.Message {
+func (c *cyclicNodeContext) tryGetProcessedMessage() *pmessage.Message {
 	el := c.queue.Front()
 	if el == nil {
 		return nil
 	}
-	msg := c.queue.Remove(el).(pipeline.Message)
+	msg := c.queue.Remove(el).(pmessage.Message)
 	return &msg
 }

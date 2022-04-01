@@ -9,7 +9,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/tinylib/msgp v1.1.6
 	github.com/golang/mock v1.6.0
-	github.com/golangci/golangci-lint v1.45.1-0.20220320213204-f05544153612
+	github.com/golangci/golangci-lint v1.45.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/mattn/goveralls v0.0.8
 	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
@@ -22,3 +22,8 @@ require (
 )
 
 require gotest.tools/gotestsum v1.7.0 // indirect
+
+replace (
+	// Remove this after https://github.com/axw/gocov/pull/91 is merged.
+	github.com/axw/gocov => github.com/jdemeyer/gocov v1.0.1-0.20220316125951-e6ea120e4bdf
+)

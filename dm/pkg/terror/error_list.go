@@ -1223,7 +1223,7 @@ var (
 	ErrWorkerStartService            = New(codeWorkerStartService, ClassDMWorker, ScopeInternal, LevelHigh, "start server", "")
 	ErrWorkerAlreadyClosed           = New(codeWorkerAlreadyClosed, ClassDMWorker, ScopeInternal, LevelHigh, "mysql source handler worker already closed", "")
 	ErrWorkerNotRunningStage         = New(codeWorkerNotRunningStage, ClassDMWorker, ScopeInternal, LevelHigh, "current stage is %s but not running, invalid", "")
-	ErrWorkerNotPausedStage          = New(codeWorkerNotPausedStage, ClassDMWorker, ScopeInternal, LevelHigh, "current stage is %s but not paused, invalid", "")
+	ErrWorkerNotPausedStage          = New(codeWorkerNotPausedStage, ClassDMWorker, ScopeInternal, LevelHigh, "current task or validator stage is %s but not paused, invalid", "")
 	ErrWorkerUpdateTaskStage         = New(codeWorkerUpdateTaskStage, ClassDMWorker, ScopeInternal, LevelHigh, "can only update task on Paused stage, but current stage is %s", "Please use `pause-task` command to pause the task.")
 	ErrWorkerMigrateStopRelay        = New(codeWorkerMigrateStopRelay, ClassDMWorker, ScopeInternal, LevelHigh, "relay unit has stopped, can not be migrated", "")
 	ErrWorkerSubTaskNotFound         = New(codeWorkerSubTaskNotFound, ClassDMWorker, ScopeInternal, LevelHigh, "sub task with name %s not found", "")

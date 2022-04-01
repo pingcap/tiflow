@@ -517,10 +517,10 @@ func TestReaderStateIterator(t *testing.T) {
 	// Prepare data, 1 txn.
 	db := prepareTxnData(t, r, 1, 1)
 	sema := semaphore.NewWeighted(1)
-	router := actor.NewRouter(t.Name())
-	compactMb := actor.NewMailbox(1, 1)
+	router := actor.NewRouter[message.Task](t.Name())
+	compactMb := actor.NewMailbox[message.Task](1, 1)
 	router.InsertMailbox4Test(compactMb.ID(), compactMb)
-	readerMb := actor.NewMailbox(2, 1)
+	readerMb := actor.NewMailbox[message.Task](2, 1)
 	router.InsertMailbox4Test(readerMb.ID(), readerMb)
 	state := r.state
 	state.readerID = readerMb.ID()
@@ -616,11 +616,11 @@ func TestReaderPoll(t *testing.T) {
 	defer cancel()
 
 	capacity := 4
-	router := actor.NewRouter(t.Name())
+	router := actor.NewRouter[message.Task](t.Name())
 	sema := semaphore.NewWeighted(1)
-	dbMb := actor.NewMailbox(1, capacity)
+	dbMb := actor.NewMailbox[message.Task](1, capacity)
 	router.InsertMailbox4Test(dbMb.ID(), dbMb)
-	readerMb := actor.NewMailbox(2, capacity)
+	readerMb := actor.NewMailbox[message.Task](2, capacity)
 	router.InsertMailbox4Test(readerMb.ID(), readerMb)
 	r := newTestReader()
 	r.common.dbRouter = router
@@ -795,8 +795,8 @@ func TestReaderPoll(t *testing.T) {
 		r.state.metricIterRelease = metricIterDuration.WithLabelValues("release")
 		for j, cs := range css {
 			t.Logf("test case #%d[%d], %v", i, j, cs)
-			msg := actormsg.SorterMessage(message.Task{ReadTs: cs.inputReadTs})
-			require.True(t, r.Poll(ctx, []actormsg.Message{msg}))
+			msg := actormsg.ValueMessage(message.Task{ReadTs: cs.inputReadTs})
+			require.True(t, r.Poll(ctx, []actormsg.Message[message.Task]{msg}))
 			require.EqualValues(t, cs.expectEvents, r.state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
 			require.EqualValues(t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
 			require.EqualValues(t, cs.expectMaxCommitTs, r.state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
@@ -827,16 +827,16 @@ func TestReaderPoll(t *testing.T) {
 }
 
 func handleTask(
-	t *testing.T, task actormsg.Message,
-	iterFn func(rg [2][]byte) *message.LimitedIterator, readerMb actor.Mailbox,
+	t *testing.T, task actormsg.Message[message.Task],
+	iterFn func(rg [2][]byte) *message.LimitedIterator, readerMb actor.Mailbox[message.Task],
 ) {
-	if task.SorterTask.IterReq == nil || iterFn == nil {
+	if task.Value.IterReq == nil || iterFn == nil {
 		return
 	}
-	iter := iterFn(task.SorterTask.IterReq.Range)
+	iter := iterFn(task.Value.IterReq.Range)
 	if iter != nil {
-		iter.ResolvedTs = task.SorterTask.IterReq.ResolvedTs
-		task.SorterTask.IterReq.IterCallback(iter)
+		iter.ResolvedTs = task.Value.IterReq.ResolvedTs
+		task.Value.IterReq.IterCallback(iter)
 		// Must notify reader
 		_, ok := readerMb.Receive()
 		require.True(t, ok)

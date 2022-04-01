@@ -21,8 +21,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -242,8 +242,7 @@ func (t *testShardingGroupSuite) TestKeeper(c *C) {
 	dbConn, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	k.db = conn.NewBaseDB(db)
-	k.dbConn = &dbconn.DBConn{Cfg: t.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
-
+	k.dbConn = dbconn.NewDBConn(t.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS `%s`", t.cfg.MetaSchema)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()

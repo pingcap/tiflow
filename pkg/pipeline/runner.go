@@ -19,12 +19,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/context"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
 type runner interface {
 	run(ctx context.Context) error
-	getOutputCh() chan Message
+	getOutputCh() chan pmessage.Message
 	getNode() Node
 	getName() string
 }
@@ -33,7 +34,7 @@ type nodeRunner struct {
 	name     string
 	node     Node
 	previous runner
-	outputCh chan Message
+	outputCh chan pmessage.Message
 }
 
 func newNodeRunner(name string, node Node, previous runner, outputChanSize int) *nodeRunner {
@@ -41,12 +42,12 @@ func newNodeRunner(name string, node Node, previous runner, outputChanSize int) 
 		name:     name,
 		node:     node,
 		previous: previous,
-		outputCh: make(chan Message, outputChanSize),
+		outputCh: make(chan pmessage.Message, outputChanSize),
 	}
 }
 
 func (r *nodeRunner) run(ctx context.Context) error {
-	nodeCtx := NewNodeContext(ctx, Message{}, r.outputCh)
+	nodeCtx := NewNodeContext(ctx, pmessage.Message{}, r.outputCh)
 	defer close(r.outputCh)
 	defer func() {
 		err := r.node.Destroy(nodeCtx)
@@ -69,7 +70,7 @@ func (r *nodeRunner) run(ctx context.Context) error {
 	return nil
 }
 
-func (r *nodeRunner) getOutputCh() chan Message {
+func (r *nodeRunner) getOutputCh() chan pmessage.Message {
 	return r.outputCh
 }
 
@@ -81,7 +82,7 @@ func (r *nodeRunner) getName() string {
 	return r.name
 }
 
-type headRunner chan Message
+type headRunner chan pmessage.Message
 
 func (h headRunner) getName() string {
 	return "header"
@@ -91,7 +92,7 @@ func (h headRunner) run(ctx context.Context) error {
 	panic("unreachable")
 }
 
-func (h headRunner) getOutputCh() chan Message {
+func (h headRunner) getOutputCh() chan pmessage.Message {
 	return h
 }
 
