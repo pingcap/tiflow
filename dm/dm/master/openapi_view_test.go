@@ -75,30 +75,6 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
-func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
-	// create a new cluster
-	cfg1 := NewConfig()
-	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
-	cfg1.Name = "dm-master-1"
-	cfg1.DataDir = c.MkDir()
-	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg1.AdvertiseAddr = cfg1.MasterAddr
-	cfg1.PeerUrls = tempurl.Alloc()
-	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
-	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
-
-	s1 := NewServer(cfg1)
-	ctx, cancel := context.WithCancel(context.Background())
-	c.Assert(s1.Start(ctx), check.IsNil)
-	// wait the first one become the leader
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader() && s1.scheduler.Started()
-	}), check.IsTrue)
-	c.Assert(s1.openapiHandles, check.IsNil)
-	defer s1.Close()
-	defer cancel()
-}
-
 func (t *openAPISuite) TestSourceAPI(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := setupTestServer(ctx, t.testT)
@@ -610,113 +586,6 @@ func (t *openAPISuite) TestTaskAPI(c *check.C) {
 	c.Assert(resultTaskList.Total, check.Equals, 0)
 }
 
-func (t *openAPISuite) TestTaskTemplatesAPI(c *check.C) {
-	ctx, cancel := context.WithCancel(context.Background())
-	s := setupTestServer(ctx, t.testT)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
-	checker.CheckSyncConfigFunc = mockCheckSyncConfig
-	defer func() {
-		checker.CheckSyncConfigFunc = checker.CheckSyncConfig
-		cancel()
-		s.Close()
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
-	}()
-
-	dbCfg := config.GetDBConfigForTest()
-	source1 := openapi.Source{
-		SourceName: source1Name,
-		EnableGtid: false,
-		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
-		Port:       dbCfg.Port,
-		User:       dbCfg.User,
-	}
-	createReq := openapi.CreateSourceRequest{Source: source1}
-	// create source
-	sourceURL := "/api/v1/sources"
-	result := testutil.NewRequest().Post(sourceURL).WithJsonBody(createReq).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	// check http status code
-	c.Assert(result.Code(), check.Equals, http.StatusCreated)
-
-	// create task config template
-	url := "/api/v1/tasks/templates"
-
-	task, err := fixtures.GenNoShardOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
-	// use a valid target db
-	task.TargetConfig.Host = dbCfg.Host
-	task.TargetConfig.Port = dbCfg.Port
-	task.TargetConfig.User = dbCfg.User
-	task.TargetConfig.Password = dbCfg.Password
-
-	// create one
-	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusCreated)
-	var createTaskResp openapi.Task
-	err = result.UnmarshalBodyToObject(&createTaskResp)
-	c.Assert(err, check.IsNil)
-	c.Assert(task.Name, check.Equals, createTaskResp.Name)
-
-	// create again will fail
-	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
-	var errResp openapi.ErrorWithMessage
-	err = result.UnmarshalBodyToObject(&errResp)
-	c.Assert(err, check.IsNil)
-	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigExist.Code()))
-
-	// list templates
-	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	var resultTaskList openapi.GetTaskListResponse
-	err = result.UnmarshalBodyToObject(&resultTaskList)
-	c.Assert(err, check.IsNil)
-	c.Assert(resultTaskList.Total, check.Equals, 1)
-	c.Assert(resultTaskList.Data[0].Name, check.Equals, task.Name)
-
-	// get detail
-	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
-	result = testutil.NewRequest().Get(oneURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	var respTask openapi.Task
-	err = result.UnmarshalBodyToObject(&respTask)
-	c.Assert(err, check.IsNil)
-	c.Assert(respTask.Name, check.Equals, task.Name)
-
-	// get not exist
-	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
-	result = testutil.NewRequest().Get(notExistURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
-	err = result.UnmarshalBodyToObject(&errResp)
-	c.Assert(err, check.IsNil)
-	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigNotExist.Code()))
-
-	// update
-	task.TaskMode = openapi.TaskTaskModeAll
-	result = testutil.NewRequest().Put(oneURL).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	err = result.UnmarshalBodyToObject(&respTask)
-	c.Assert(err, check.IsNil)
-	c.Assert(respTask.Name, check.Equals, task.Name)
-
-	// update not exist will fail
-	task.Name = "notexist"
-	result = testutil.NewRequest().Put(notExistURL).WithJsonBody(task).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusBadRequest)
-	err = result.UnmarshalBodyToObject(&errResp)
-	c.Assert(err, check.IsNil)
-	c.Assert(errResp.ErrorCode, check.Equals, int(terror.ErrOpenAPITaskConfigNotExist.Code()))
-
-	// delete task config template
-	result = testutil.NewRequest().Delete(oneURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusNoContent)
-	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(t.testT, s.openapiHandles)
-	c.Assert(result.Code(), check.Equals, http.StatusOK)
-	err = result.UnmarshalBodyToObject(&resultTaskList)
-	c.Assert(err, check.IsNil)
-	c.Assert(resultTaskList.Total, check.Equals, 0)
-}
-
 func (t *openAPISuite) testImportTaskTemplate(c *check.C, task *openapi.Task, s *Server) {
 	// test batch import task config
 	taskBatchImportURL := "/api/v1/tasks/templates/import"
@@ -1046,6 +915,128 @@ func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
 	// list source not from leader will get a redirect
 	result = testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s2.openapiHandles)
 	s.Equal(http.StatusTemporaryRedirect, result.Code())
+}
+
+func (s *OpenAPIViewSuite) TestOpenAPIWillNotStartInDefaultConfig() {
+	// create a new cluster
+	cfg1 := NewConfig()
+	s.NoError(cfg1.FromContent(SampleConfig))
+	cfg1.Name = "dm-master-1"
+	cfg1.DataDir = s.T().TempDir()
+	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
+	cfg1.PeerUrls = tempurl.Alloc()
+	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
+	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
+
+	s1 := NewServer(cfg1)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.NoError(s1.Start(ctx))
+	s.Nil(s1.openapiHandles)
+	cancel()
+	s1.Close()
+}
+
+func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s1 := setupTestServer(ctx, s.T())
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
+	checker.CheckSyncConfigFunc = mockCheckSyncConfig
+	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+
+	defer func() {
+		checker.CheckSyncConfigFunc = checker.CheckSyncConfig
+		checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+		cancel()
+		s1.Close()
+		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	}()
+
+	dbCfg := config.GetDBConfigForTest()
+	source1 := openapi.Source{
+		SourceName: source1Name,
+		EnableGtid: false,
+		Host:       dbCfg.Host,
+		Password:   dbCfg.Password,
+		Port:       dbCfg.Port,
+		User:       dbCfg.User,
+	}
+	createReq := openapi.CreateSourceRequest{Source: source1}
+	// create source
+	sourceURL := "/api/v1/sources"
+	result := testutil.NewRequest().Post(sourceURL).WithJsonBody(createReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	// check http status code
+	s.Equal(http.StatusCreated, result.Code())
+
+	// create task config template
+	url := "/api/v1/tasks/templates"
+
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	s.NoError(err)
+	// use a valid target db
+	task.TargetConfig.Host = dbCfg.Host
+	task.TargetConfig.Port = dbCfg.Port
+	task.TargetConfig.User = dbCfg.User
+	task.TargetConfig.Password = dbCfg.Password
+
+	// create one
+	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+	var createTaskResp openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
+	s.Equal(createTaskResp.Name, task.Name)
+
+	// create again will fail
+	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var errResp openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&errResp))
+	s.Equal(int(terror.ErrOpenAPITaskConfigExist.Code()), errResp.ErrorCode)
+
+	// list templates
+	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultTaskList openapi.GetTaskListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
+	s.Equal(1, resultTaskList.Total)
+	s.Equal(task.Name, resultTaskList.Data[0].Name)
+
+	// get detail
+	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
+	result = testutil.NewRequest().Get(oneURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var respTask openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&respTask))
+	s.Equal(task.Name, respTask.Name)
+
+	// get not exist
+	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
+	result = testutil.NewRequest().Get(notExistURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&errResp))
+	s.Equal(int(terror.ErrOpenAPITaskConfigNotExist.Code()), errResp.ErrorCode)
+
+	// update
+	task.TaskMode = openapi.TaskTaskModeAll
+	result = testutil.NewRequest().Put(oneURL).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&respTask))
+	s.Equal(task.Name, respTask.Name)
+
+	// update not exist will fail
+	task.Name = "notexist"
+	result = testutil.NewRequest().Put(notExistURL).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&errResp))
+	s.Equal(int(terror.ErrOpenAPITaskConfigNotExist.Code()), errResp.ErrorCode)
+
+	// delete task config template
+	result = testutil.NewRequest().Delete(oneURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusNoContent, result.Code())
+	result = testutil.NewRequest().Get(url).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
+	s.Equal(0, resultTaskList.Total)
 }
 
 func TestOpenAPIViewSuite(t *testing.T) {
