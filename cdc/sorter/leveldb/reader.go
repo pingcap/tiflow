@@ -49,7 +49,7 @@ type reader struct {
 
 var _ actor.Actor = (*reader)(nil)
 
-// setTaskDelete set delete range if there are too many events can be deleted or
+// setTaskDelete set delete range if there are too many events can be deleted, or
 // it has been a long time since last delete.
 func (r *reader) setTaskDelete(task *message.Task, deleteKeys []message.Key) {
 	if len(deleteKeys) <= 0 {
@@ -130,13 +130,13 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 
 // outputIterEvents nonblocking output resolved events that are buffered
 // in leveldb.
-// It appends outputted events's key to outputBuffer deleteKeys to delete them
+// It appends outputted event's key to outputBuffer deleteKeys to delete them
 // later, and appends resolved events to outputBuffer resolvedEvents to send
 // them later.
 //
 // It returns:
 //   * a bool to indicate whether it has read the last Next or not.
-//   * a uint64, if it is not 0, it means all resolved events before the ts
+//   * an uint64, if it is not 0, it means all resolved events before the ts
 //     are outputted.
 //   * an error if it occurs.
 //
@@ -251,12 +251,12 @@ type pollState struct {
 	// A threshold of triggering db compaction.
 	iterFirstSlowDuration time.Duration
 	// A timestamp when iterator was created.
-	// Iterator is released once it execced `iterMaxAliveDuration`.
+	// Iterator is released once it exceeds `iterMaxAliveDuration`.
 	iterAliveTime        time.Time
 	iterMaxAliveDuration time.Duration
 	// A channel for receiving iterator asynchronously.
 	iterCh chan *message.LimitedIterator
-	// A iterator for reading resolved events, up to the `iterResolvedTs`.
+	// AN iterator for reading resolved events, up to the `iterResolvedTs`.
 	iter           *message.LimitedIterator
 	iterResolvedTs uint64
 	// A flag to mark whether the current position has been read.
@@ -320,7 +320,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 	}
 
 	if state.iterCh == nil {
-		// We haven't send request.
+		// We haven't sent request.
 		iterCh := make(chan *message.LimitedIterator, 1)
 		state.iterCh = iterCh
 		readerRouter := state.readerRouter
@@ -345,7 +345,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		}, false
 	}
 
-	// Try receive iterator.
+	// Try to receive iterator.
 	select {
 	case iter := <-state.iterCh:
 		// Iterator received, reset state.iterCh
@@ -442,7 +442,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 				r.outputResolvedTs(r.state.maxResolvedTs)
 			}
 		}
-		// Release iterator as we does not need to read.
+		// Release iterator as we do not need to read.
 		err := r.state.tryReleaseIterator()
 		if err != nil {
 			r.reportError("failed to release iterator", err)

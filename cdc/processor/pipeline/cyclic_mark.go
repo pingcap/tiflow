@@ -46,11 +46,12 @@ type cyclicMarkNode struct {
 	verifier         verification.ModuleVerifier
 }
 
-func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
+func newCyclicMarkNode(markTableID model.TableID, verifier verification.ModuleVerifier) *cyclicMarkNode {
 	return &cyclicMarkNode{
 		markTableID:            markTableID,
 		unknownReplicaIDEvents: make(map[model.Ts][]*model.PolymorphicEvent),
 		currentReplicaIDs:      make(map[model.Ts]uint64),
+		verifier:               verifier,
 	}
 }
 
@@ -59,18 +60,6 @@ func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
 }
 
 func (n *cyclicMarkNode) InitTableActor(ctx pipeline.NodeContext, isTableActorMode bool) error {
-	if ctx.ChangefeedVars().Info.SyncPointEnabled {
-		verifier, err := verification.NewModuleVerification(ctx,
-			&verification.ModuleVerificationConfig{
-				ChangefeedID: ctx.ChangefeedVars().ID,
-				CyclicEnable: true,
-			},
-			ctx.GlobalVars().EtcdClient.Client)
-		if err != nil {
-			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "cyclic"))
-		}
-		n.verifier = verifier
-	}
 	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID

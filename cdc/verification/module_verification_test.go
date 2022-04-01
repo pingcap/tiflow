@@ -46,21 +46,8 @@ func TestNewModuleVerification(t *testing.T) {
 	require.Nil(t, err)
 	m1.SentTrackData(ctx, Puller, []TrackData{{[]byte("1"), 1}})
 
-	m2, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "1"}, mockEtcdCli)
-	require.Nil(t, err)
-	require.Equal(t, m1, m2)
-
-	ctx1, cancel1 := context.WithCancel(context.Background())
-	m3, err := NewModuleVerification(ctx1, &ModuleVerificationConfig{ChangefeedID: "2"}, mockEtcdCli)
-	require.Nil(t, err)
-	cancel1()
-	require.NotSame(t, m1, m3)
-	time.Sleep(time.Millisecond * 3)
-
 	m4, err := NewModuleVerification(ctx, &ModuleVerificationConfig{ChangefeedID: "2"}, mockEtcdCli)
 	require.Nil(t, err)
-	require.NotSame(t, m4, m3)
-
 	err = m4.GC(ctx, "")
 	require.Nil(t, err)
 
@@ -69,7 +56,7 @@ func TestNewModuleVerification(t *testing.T) {
 	v, err := task.Marshal()
 	require.Nil(t, err)
 	ch <- clientV3.WatchResponse{Events: []*clientV3.Event{{Kv: &mvccpb.KeyValue{Value: v}}}}
-	close(ch)
+	//close(ch)
 	mockEtcdCli1 := &etcd.MockEtcdClient{}
 	mockEtcdCli1.On("Watch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(clientV3.WatchChan(ch))
 	ctx2, cancel2 := context.WithCancel(context.Background())
@@ -77,6 +64,7 @@ func TestNewModuleVerification(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(time.Millisecond * 500)
 	cancel2()
+	time.Sleep(time.Millisecond * 500)
 	err = m.Close()
 	require.Nil(t, err)
 	err = m.Close()

@@ -85,11 +85,6 @@ type ModuleVerificationConfig struct {
 	CyclicEnable        bool
 }
 
-var (
-	verifications = map[string]*ModuleVerification{}
-	initLock      sync.Mutex
-)
-
 // NewModuleVerification return the module level verification per changefeed
 func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, etcdCli etcd.Cli) (*ModuleVerification, error) {
 	if cfg == nil {
@@ -97,13 +92,6 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, e
 	}
 	if etcdCli == nil {
 		return nil, cerror.WrapError(cerror.ErrVerificationConfigInvalid, errors.New("etcdCli can not be nil"))
-	}
-
-	initLock.Lock()
-	defer initLock.Unlock()
-
-	if v, ok := verifications[cfg.ChangefeedID]; ok {
-		return v, nil
 	}
 
 	totalMemory, err := memory.MemTotal()
@@ -133,7 +121,6 @@ func NewModuleVerification(ctx context.Context, cfg *ModuleVerificationConfig, e
 		wb:         wb,
 		etcdClient: etcdCli,
 	}
-	verifications[cfg.ChangefeedID] = m
 	go m.runVerify(ctx)
 
 	return m, nil
@@ -153,6 +140,7 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 		return
 	default:
 	}
+
 	if m.closed.Load() {
 		return
 	}
@@ -204,13 +192,15 @@ func decodeKey(key []byte) (Module, uint64, []byte) {
 func (m *ModuleVerification) runVerify(ctx context.Context) {
 	outChan := m.etcdClient.Watch(ctx, etcd.GetEtcdKeyVerification(m.cfg.ChangefeedID), "", clientv3.WithKeysOnly())
 	for {
+		log.Info("module verify running", zap.String("cf", m.cfg.ChangefeedID))
 		select {
 		case <-ctx.Done():
-			log.Info("module runVerify ctx cancel", zap.String("changefeed", m.cfg.ChangefeedID), zap.Error(ctx.Err()))
+			log.Info("module runVerify ctx cancel",
+				zap.String("changefeed", m.cfg.ChangefeedID),
+				zap.Error(ctx.Err()))
 			if err := m.Close(); err != nil {
 				log.Error("module runVerify Close fail", zap.String("changefeed", m.cfg.ChangefeedID), zap.Error(err))
 			}
-
 			return
 		case ret := <-outChan:
 			for _, event := range ret.Events {
@@ -223,15 +213,15 @@ func (m *ModuleVerification) runVerify(ctx context.Context) {
 
 					continue
 				}
-				if !info.EnoughCheck {
-					if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
-						log.Error("module verify ret",
-							zap.String("changefeed", m.cfg.ChangefeedID),
-							zap.String("startTs", info.StartTs),
-							zap.String("endTs", info.EndTs),
-							zap.Error(err))
-					}
+				// if !info.EnoughCheck {
+				if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
+					log.Error("module verify ret",
+						zap.String("changefeed", m.cfg.ChangefeedID),
+						zap.String("startTs", info.StartTs),
+						zap.String("endTs", info.EndTs),
+						zap.Error(err))
 				}
+				//}
 				if err := m.GC(ctx, info.EndTs); err != nil {
 					log.Error("module verify gc fail",
 						zap.String("changefeed", m.cfg.ChangefeedID),
@@ -371,7 +361,6 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 		}
 	}()
 	iter1.Seek([]byte{})
-	log.Debug("moduleDataEqual", zap.String("l", lower), zap.String("u", upper), zap.Bool("iter1", iter1.Valid()))
 
 	l2 := encodeKey(m2, l, nil)
 	u2 := encodeKey(m2, u, nil)
@@ -383,60 +372,65 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 		}
 	}()
 	iter2.Seek([]byte{})
-	log.Debug("moduleDataEqual", zap.String("l", lower), zap.String("u", upper), zap.Bool("iter2", iter2.Valid()))
 
 	for iter1.Valid() || iter2.Valid() {
 		if !iter1.Valid() || !iter2.Valid() {
+			if !iter2.Valid() {
+				_, _, k1 := decodeKey(iter1.Key())
+				if len(k1) == 0 {
+					iter1.Next()
+					continue
+				}
+			}
 			log.Error("moduleDataEqual data count is not equal",
 				zap.String("module1", m1.String()),
 				zap.String("module2", m2.String()))
 			return false
 		}
 
-		ret := keyEqual(iter1.Key(), iter2.Key())
+		ret, err := keyEqual(iter1.Key(), iter2.Key())
+		if err != nil {
+			log.Warn("keyEqual fail", zap.Error(err))
+			return false
+		}
+
 		if ret {
 			iter1.Next()
 			iter2.Next()
 			continue
 		}
-		return false
+		iter1.Next()
 	}
 	return true
 }
 
-func keyEqual(key1, key2 []byte) bool {
+func keyEqual(key1, key2 []byte) (bool, error) {
 	m1, c1, k1 := decodeKey(key1)
-	log.Debug("keyEqual k1",
-		zap.String("module", m1.String()),
-		zap.Uint64("commitTs", c1),
-		zap.ByteString("key1", k1))
 	m2, c2, k2 := decodeKey(key2)
-	log.Debug("keyEqual k2",
-		zap.String("module", m2.String()),
-		zap.Uint64("commitTs", c2),
-		zap.ByteString("key2", k2))
 	if c1 == c2 && bytes.Equal(k1, k2) {
-		return true
+		return true, nil
 	}
-	log.Warn("keyEqual fail",
-		zap.String("module1", m1.String()),
-		zap.Uint64("commitTs1", c1),
-		zap.ByteString("key1", k1),
-		zap.String("module2", m2.String()),
-		zap.Uint64("commitTs2", c2),
-		zap.ByteString("key2", k2))
-	return false
+	if len(k1) != 0 {
+		log.Warn("keyEqual fail",
+			zap.String("module1", m1.String()),
+			zap.Uint64("commitTs1", c1),
+			zap.ByteString("key1", k1),
+			zap.String("module2", m2.String()),
+			zap.Uint64("commitTs2", c2),
+			zap.ByteString("key2", k2))
+	}
+	if c1 < c2 || len(k1) == 0 {
+		return false, nil
+	}
+	return false, errors.New("keyEqual fail")
 }
 
 // Close implement the Close api
 func (m *ModuleVerification) Close() error {
-	initLock.Lock()
-	defer initLock.Unlock()
 	if m.closed.Load() {
 		return nil
 	}
 	defer m.closed.Store(true)
 
-	delete(verifications, m.cfg.ChangefeedID)
 	return cerror.WrapError(cerror.ErrPebbleDBError, m.db.Close())
 }

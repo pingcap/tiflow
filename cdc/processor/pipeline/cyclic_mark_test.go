@@ -138,7 +138,7 @@ func TestCyclicMarkNode(t *testing.T) {
 				},
 			},
 		})
-		n := newCyclicMarkNode(markTableID)
+		n := newCyclicMarkNode(markTableID, nil)
 		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
 		require.Nil(t, err)
 		outputCh := make(chan pipeline.Message)
@@ -204,7 +204,7 @@ func TestCyclicMarkNode(t *testing.T) {
 				},
 			},
 		}, nil, throwDoNothing))
-		n := newCyclicMarkNode(markTableID)
+		n := newCyclicMarkNode(markTableID, nil)
 		err := n.Init(ctx)
 		require.Nil(t, err)
 		output := []*model.RowChangedEvent{}

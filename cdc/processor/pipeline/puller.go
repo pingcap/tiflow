@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/verification"
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,17 +35,20 @@ type pullerNode struct {
 	changefeed  string
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
+	verifier    verification.ModuleVerifier
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName, changefeed string,
+	verifier verification.ModuleVerifier,
 ) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
 		changefeed:  changefeed,
+		verifier:    verifier,
 	}
 }
 
@@ -73,19 +74,6 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
 	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
-	syncPointEnabled := ctx.ChangefeedVars().Info.SyncPointEnabled
-	var verifier verification.ModuleVerifier
-	if syncPointEnabled {
-		var err error
-		verifier, err = verification.NewModuleVerification(ctxC,
-			&verification.ModuleVerificationConfig{
-				ChangefeedID: n.changefeed,
-				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
-			}, ctx.GlobalVars().EtcdClient.Client)
-		if err != nil {
-			log.Error("newModuleVerification fail", zap.String("changefeed", n.changefeed), zap.Error(err), zap.String("module", "puller"))
-		}
-	}
 	ctxC = util.PutRoleInCtx(ctxC, util.RoleProcessor)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
@@ -112,8 +100,12 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if syncPointEnabled && pEvent.TrackID != nil {
-					verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: pEvent.TrackID, CommitTs: pEvent.CRTs}})
+				if n.verifier != nil {
+					if pEvent.TrackID != nil {
+						n.verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: pEvent.TrackID, CommitTs: pEvent.CRTs}})
+					} else if pEvent.RawKV.OpType == model.OpTypeResolved {
+						n.verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: nil, CommitTs: pEvent.CRTs}})
+					}
 				}
 				if isActorMode {
 					sorter.handleRawEvent(ctx, pEvent)

@@ -22,7 +22,7 @@ import (
 
 // outputBuffer a struct that facilitate leveldb table sorter.
 type outputBuffer struct {
-	// A slice of keys need to be deleted.
+	// A slice of keys needs to be deleted.
 	deleteKeys []message.Key
 	// A slice of resolved events that have the same commit ts.
 	resolvedEvents []*model.PolymorphicEvent

@@ -85,7 +85,7 @@ type sinkNode struct {
 	verifier         verification.ModuleVerifier
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController, moduleVerifier verification.ModuleVerifier) *sinkNode {
 	return &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
@@ -96,6 +96,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 		barrierTs:    startTs,
 
 		flowController: flowController,
+		verifier:       moduleVerifier,
 	}
 }
 
@@ -107,18 +108,6 @@ func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
 	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
-	if ctx.ChangefeedVars().Info.SyncPointEnabled {
-		v, err := verification.NewModuleVerification(ctx,
-			&verification.ModuleVerificationConfig{
-				ChangefeedID: ctx.ChangefeedVars().ID,
-				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
-			},
-			ctx.GlobalVars().EtcdClient.Client)
-		if err != nil {
-			log.Error("newModuleVerification fail", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Error(err), zap.String("module", "sink"))
-		}
-		n.verifier = v
-	}
 	return nil
 }
 

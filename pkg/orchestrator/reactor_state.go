@@ -107,6 +107,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			s.pendingPatches = append(s.pendingPatches, changefeedState.getPatches())
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
+	case etcd.CDCKeyTypeVerification:
+		// do nothing
 	default:
 		log.Warn("receive an unexpected etcd event", zap.String("key", key.String()), zap.ByteString("value", value))
 	}

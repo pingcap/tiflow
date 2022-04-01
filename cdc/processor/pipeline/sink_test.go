@@ -129,7 +129,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	// test stop at targetTs
-	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -156,7 +156,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(10), node.CheckpointTs())
 
 	// test the stop at ts command
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -180,7 +180,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(2), node.CheckpointTs())
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -216,7 +216,7 @@ func TestStopStatus(t *testing.T) {
 	})
 
 	closeCh := make(chan interface{}, 1)
-	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
+	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
@@ -250,7 +250,7 @@ func TestManyTs(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -369,7 +369,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 
 	// empty row, no Columns and PreColumns.
@@ -388,7 +388,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 
 	// nil row.
@@ -444,7 +444,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, nil)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 
 	// nil row.
@@ -583,7 +583,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := &flushSink{}
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, 0, 10, flowController)
+	sNode := newSinkNode(1, sink, 0, 10, flowController, nil)
 	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
 	sNode.barrierTs = 10
 
