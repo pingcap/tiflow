@@ -197,7 +197,7 @@ func newMySQLSink(
 		filter:                          filter,
 		cyclic:                          sinkCyclic,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql"),
+		statistics:                      NewStatistics(ctx, sinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),

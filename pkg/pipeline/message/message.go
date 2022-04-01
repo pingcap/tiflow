@@ -11,16 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pipeline
+package message
 
 import "github.com/pingcap/tiflow/cdc/model"
 
-// MessageType is the type of Message
-type MessageType int
+// Type is the type of Message
+type Type int
 
 // types of Message
 const (
-	MessageTypeUnknown MessageType = iota
+	MessageTypeUnknown Type = iota
 	MessageTypeCommand
 	MessageTypePolymorphicEvent
 	MessageTypeBarrier
@@ -31,7 +31,7 @@ const (
 type Message struct {
 	// TODO add more kind of messages
 	// Tp is the type of Message
-	Tp MessageType
+	Tp Type
 	// Command is the command in this message
 	Command *Command
 	// PolymorphicEvent represents the row change event

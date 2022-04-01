@@ -175,7 +175,7 @@ func TestParseCfg(t *testing.T) {
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -318,7 +318,7 @@ server-worker-pool-size = 16
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -459,7 +459,7 @@ cert-allowed-cn = ["dd","ee"]
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -519,7 +519,7 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor: true,
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},

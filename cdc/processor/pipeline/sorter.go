@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -88,7 +89,10 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	return n.start(ctx, false, &wg, 0, nil)
 }
 
-func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group, tableActorID actor.ID, tableActorRouter *actor.Router) error {
+func (n *sorterNode) start(
+	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
+	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
+) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
@@ -166,11 +170,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					// DESIGN NOTE: We send the messages to the mounter in
-					// this separate goroutine to prevent blocking
-					// the whole pipeline.
-					msg.SetUpFinishedChan()
-					err := n.mounter.AddEntry(ctx, msg)
+					err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -186,18 +186,11 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 						}
 					}
 
-					// Must wait before accessing msg.Row
-					err = msg.WaitPrepare(ctx)
-					if err != nil {
-						if errors.Cause(err) != context.Canceled {
-							ctx.Throw(err)
-						}
-						return errors.Trace(err)
-					}
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
@@ -209,7 +202,8 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
-							ctx.SendToNextNode(pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCRTs)))
+							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 						}
 						return nil
 					})
@@ -230,12 +224,13 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 						continue
 					}
 					if isTableActorMode {
-						_ = tableActorRouter.Send(tableActorID, message.TickMessage())
+						msg := message.ValueMessage(pmessage.TickMessage())
+						_ = tableActorRouter.Send(tableActorID, msg)
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
-				ctx.SendToNextNode(pipeline.PolymorphicEventMessage(msg))
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}
 		}
 	})
@@ -281,12 +276,14 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 	n.sorter.AddEntry(ctx, event)
 }
 
-func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (n *sorterNode) TryHandleDataMessage(
+	ctx context.Context, msg pmessage.Message,
+) (bool, error) {
 	switch msg.Tp {
-	case pipeline.MessageTypePolymorphicEvent:
+	case pmessage.MessageTypePolymorphicEvent:
 		n.handleRawEvent(ctx, msg.PolymorphicEvent)
 		return true, nil
-	case pipeline.MessageTypeBarrier:
+	case pmessage.MessageTypeBarrier:
 		n.updateBarrierTs(msg.BarrierTs)
 		fallthrough
 	default:

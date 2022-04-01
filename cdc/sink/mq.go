@@ -96,7 +96,7 @@ func newMqSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	statistics := NewStatistics(ctx, "MQ")
+	statistics := NewStatistics(ctx, sinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{

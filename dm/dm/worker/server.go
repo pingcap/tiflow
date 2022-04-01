@@ -962,3 +962,21 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 	resp.Success = true
 	return resp, nil
 }
+
+func (s *Server) GetWorkerValidateStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	log.L().Info("", zap.String("request", "GetWorkerValidateStatus"), zap.Stringer("payload", req))
+
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	w := s.getSourceWorker(true)
+	if w == nil {
+		log.L().Warn("fail to call GetWorkerValidateStatus, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	res := w.GetValidateStatus(req.TaskName, req.FilterStatus)
+	resp.Status = res
+	return resp, nil
+}
