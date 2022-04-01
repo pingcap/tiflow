@@ -396,12 +396,50 @@ func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer,
 	}
 }
 
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 // parseFileAsPossible parses single relay log file as far as possible.
 func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer, relayLogFile string, offset int64, relayLogDir string, firstParse bool, currentUUID string, possibleLast bool) (needSwitch bool, latestPos int64, nextUUID string, nextBinlogName string, err error) {
 	var needReParse bool
 	latestPos = offset
 	replaceWithHeartbeat := false
 	r.tctx.L().Debug("start to parse relay log file", zap.String("file", relayLogFile), zap.Int64("position", latestPos), zap.String("directory", relayLogDir))
+=======
+type binlogFileParseState struct {
+	// readonly states
+	possibleLast              bool
+	fullPath                  string
+	relayLogFile, relayLogDir string
+
+	f *os.File
+
+	// states may change
+	skipGTID            bool
+	lastSkipGTIDHeader  *replication.EventHeader
+	formatDescEventRead bool
+	latestPos           int64
+}
+
+// parseFileAsPossible parses single relay log file as far as possible.
+func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer, relayLogFile string, offset int64, relayLogDir string, firstParse bool, possibleLast bool) (bool, int64, error) {
+	r.tctx.L().Debug("start to parse relay log file", zap.String("file", relayLogFile), zap.Int64("position", offset), zap.String("directory", relayLogDir))
+
+	fullPath := filepath.Join(relayLogDir, relayLogFile)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return false, 0, errors.Trace(err)
+	}
+	defer f.Close()
+
+	state := &binlogFileParseState{
+		possibleLast: possibleLast,
+		fullPath:     fullPath,
+		relayLogFile: relayLogFile,
+		relayLogDir:  relayLogDir,
+		f:            f,
+		latestPos:    offset,
+		skipGTID:     false,
+	}
+>>>>>>> 012ee38ab (relay(dm): send one heartbeat for successive skipped GTID (#5070)):dm/relay/local_reader.go
 
 	for {
 		select {
@@ -447,6 +485,8 @@ func (r *BinlogReader) parseFile(
 		r.tctx.L().Debug("read event", zap.Reflect("header", e.Header))
 		r.latestServerID = e.Header.ServerID // record server_id
 
+		lastSkipGTID := state.skipGTID
+
 		switch ev := e.Event.(type) {
 		case *replication.FormatDescriptionEvent:
 			// go-mysql will send a duplicate FormatDescriptionEvent event when offset > 4, ignore it
@@ -482,8 +522,16 @@ func (r *BinlogReader) parseFile(
 				latestPos = int64(e.Header.LogPos)
 				break
 			}
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 			u, _ := uuid.FromBytes(ev.SID)
 			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%s:%d", u.String(), ev.GNO))
+=======
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
+>>>>>>> 012ee38ab (relay(dm): send one heartbeat for successive skipped GTID (#5070)):dm/relay/local_reader.go
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -493,8 +541,16 @@ func (r *BinlogReader) parseFile(
 				latestPos = int64(e.Header.LogPos)
 				break
 			}
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 			GTID := ev.GTID
 			replaceWithHeartbeat, err = r.advanceCurrentGtidSet(fmt.Sprintf("%d-%d-%d", GTID.DomainID, GTID.ServerID, GTID.SequenceNumber))
+=======
+			gtidStr, err2 := event.GetGTIDStr(e)
+			if err2 != nil {
+				return errors.Trace(err2)
+			}
+			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
+>>>>>>> 012ee38ab (relay(dm): send one heartbeat for successive skipped GTID (#5070)):dm/relay/local_reader.go
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -511,18 +567,32 @@ func (r *BinlogReader) parseFile(
 		}
 
 		// align with MySQL
+<<<<<<< HEAD:dm/pkg/streamer/reader.go
 		// if an event's gtid has been contained by given gset
 		// replace it with HEARTBEAT event
 		// for Mariadb, it will bee replaced with MARIADB_GTID_LIST_EVENT
 		// In DM, we replace both of them with HEARTBEAT event
 		if replaceWithHeartbeat {
+=======
+		// ref https://github.com/pingcap/tiflow/issues/5063#issuecomment-1082678211
+		// heartbeat period is implemented in LocalStreamer.GetEvent
+		if state.skipGTID {
+>>>>>>> 012ee38ab (relay(dm): send one heartbeat for successive skipped GTID (#5070)):dm/relay/local_reader.go
 			switch e.Event.(type) {
 			// Only replace transaction event
 			// Other events such as FormatDescriptionEvent, RotateEvent, etc. should be the same as before
-			case *replication.RowsEvent, *replication.QueryEvent, *replication.GTIDEvent, *replication.XIDEvent, *replication.TableMapEvent:
+			case *replication.RowsEvent, *replication.QueryEvent, *replication.GTIDEvent,
+				*replication.MariadbGTIDEvent, *replication.XIDEvent, *replication.TableMapEvent:
 				// replace with heartbeat event
-				e = event.GenHeartbeatEvent(e.Header)
+				state.lastSkipGTIDHeader = e.Header
 			default:
+			}
+			return nil
+		} else if lastSkipGTID && state.lastSkipGTIDHeader != nil {
+			// skipGTID is turned off after this event
+			select {
+			case s.ch <- event.GenHeartbeatEvent(state.lastSkipGTIDHeader):
+			case <-ctx.Done():
 			}
 		}
 
