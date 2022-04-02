@@ -25,7 +25,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/deepmap/oapi-codegen/pkg/testutil"
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -48,315 +47,6 @@ import (
 var (
 	source1Name = "mysql-replica-01"
 )
-
-// func (t *openAPISuite) TestTaskAPI(c *check.C) {
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	s := setupTestServer(ctx, s.T())
-// 	s.Equal(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
-// 	s.Equal(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`), check.IsNil)
-// 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
-// 	ctrl := gomock.NewController(c)
-// 	defer func() {
-// 		checker.CheckSyncConfigFunc = checker.CheckSyncConfig
-// 		cancel()
-// 		s.Close()
-// 		ctrl.Finish()
-// 		s.Equal(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
-// 		s.Equal(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData"), check.IsNil)
-// 	}()
-
-// 	dbCfg := config.GetDBConfigForTest()
-// 	source1 := openapi.Source{
-// 		Enable:     true,
-// 		SourceName: source1Name,
-// 		EnableGtid: false,
-// 		Host:       dbCfg.Host,
-// 		Password:   dbCfg.Password,
-// 		Port:       dbCfg.Port,
-// 		User:       dbCfg.User,
-// 	}
-// 	// create source
-// 	sourceURL := "/api/v1/sources"
-// 	createSourceReq := openapi.CreateSourceRequest{Source: source1}
-// 	result := testutil.NewRequest().Post(sourceURL).WithJsonBody(createSourceReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	// check http status code
-// 	s.Equal(http.StatusCreated,result.Code())
-
-// 	// add mock worker  start workers, the unbounded sources should be bounded
-// 	ctx1, cancel1 := context.WithCancel(ctx)
-// 	defer cancel1()
-// 	workerName1 := "worker-1"
-// s.NoError(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"))
-// 	go func(ctx context.Context, workerName string) {
-// 		s.Equal(ha.KeepAlive(ctx, s.etcdClient, workerName, keepAliveTTL), check.IsNil)
-// 	}(ctx1, workerName1)
-// 	// wait worker ready
-// 	s.Equal(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-// 		w := s1.scheduler.GetWorkerBySource(source1.SourceName)
-// 		return w != nil
-// 	}), check.IsTrue)
-
-// 	// create task
-// 	taskURL := "/api/v1/tasks"
-
-// 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
-// 	s.NoError(err)
-// 	// use a valid target db
-// 	task.TargetConfig.Host = dbCfg.Host
-// 	task.TargetConfig.Port = dbCfg.Port
-// 	task.TargetConfig.User = dbCfg.User
-// 	task.TargetConfig.Password = dbCfg.Password
-
-// 	// create task
-// 	createTaskReq := openapi.CreateTaskRequest{Task: task}
-// 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusCreated,result.Code())
-// 	var createTaskResp openapi.Task
-// 	err = result.UnmarshalBodyToObject(&createTaskResp)
-// 	s.NoError(err)
-// 	s.Equal(task.Name, check.Equals, createTaskResp.Name)
-// 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
-// 	s.Equal(len(subTaskM) == 1, check.IsTrue)
-// 	s.Equal(subTaskM[source1Name].Name, check.Equals, task.Name)
-
-// 	// get task
-// 	task1URL := fmt.Sprintf("%s/%s", taskURL, task.Name)
-// 	var task1FromHTTP openapi.Task
-// 	result = testutil.NewRequest().Get(task1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(result.UnmarshalBodyToObject(&task1FromHTTP), check.IsNil)
-// 	s.Equal(task.Name, check.Equals, task1FromHTTP.Name)
-
-// 	// update a task
-// 	s.Equal(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`), check.IsNil)
-// 	clone := task
-// 	batch := 1000
-// 	clone.SourceConfig.IncrMigrateConf.ReplBatch = &batch
-// 	updateReq := openapi.UpdateTaskRequest{Task: clone}
-// 	result = testutil.NewRequest().Put(task1URL).WithJsonBody(updateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(result.UnmarshalBodyToObject(&task1FromHTTP), check.IsNil)
-// 	s.Equal(clone.SourceConfig.IncrMigrateConf.ReplBatch, check.DeepEquals, task1FromHTTP.SourceConfig.IncrMigrateConf.ReplBatch)
-// 	s.Equal(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"), check.IsNil)
-
-// 	// list tasks
-// 	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	var resultTaskList openapi.GetTaskListResponse
-// 	err = result.UnmarshalBodyToObject(&resultTaskList)
-// 	s.NoError(err)
-// 	s.Equal(resultTaskList.Total, check.Equals, 1)
-// 	s.Equal(resultTaskList.Data[0].Name, check.Equals, task.Name)
-
-// 	t.testImportTaskTemplate(c, &task, s)
-
-// 	// start task
-// 	startTaskURL := fmt.Sprintf("%s/%s/start", taskURL, task.Name)
-// 	result = testutil.NewRequest().Post(startTaskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Running)
-
-// 	// get task status
-// 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-// 	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, false)
-// 	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
-// 	taskStatusURL := fmt.Sprintf("%s/%s/status", taskURL, task.Name)
-// 	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	var resultTaskStatus openapi.GetTaskStatusResponse
-// 	err = result.UnmarshalBodyToObject(&resultTaskStatus)
-// 	s.NoError(err)
-// 	s.Equal(resultTaskStatus.Total, check.Equals, 1) // only 1 subtask
-// 	s.Equal(resultTaskStatus.Data[0].Name, check.Equals, task.Name)
-// 	s.Equal(resultTaskStatus.Data[0].Stage, check.Equals, openapi.TaskStageRunning)
-// 	s.Equal(resultTaskStatus.Data[0].WorkerName, check.Equals, workerName1)
-// 	s.Equal(resultTaskStatus.Data[0].DumpStatus.CompletedTables, check.Equals, float64(0))
-// 	s.Equal(resultTaskStatus.Data[0].DumpStatus.TotalTables, check.Equals, int64(1))
-// 	s.Equal(resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows, check.Equals, float64(10))
-
-// 	// get task status with source name
-// 	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
-// 	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	var resultTaskStatusWithStatus openapi.GetTaskStatusResponse
-// 	err = result.UnmarshalBodyToObject(&resultTaskStatusWithStatus)
-// 	s.NoError(err)
-// 	s.Equal(resultTaskStatusWithStatus, check.DeepEquals, resultTaskStatus)
-
-// 	// list task with status
-// 	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	var resultListTask openapi.GetTaskListResponse
-// 	err = result.UnmarshalBodyToObject(&resultListTask)
-// 	s.NoError(err)
-// 	s.Equal(resultListTask.Data, check.HasLen, 1)
-// 	s.Equal(resultListTask.Total, check.Equals, 1)
-// 	s.Equal(resultListTask.Data[0].StatusList, check.NotNil)
-// 	statusList := *resultListTask.Data[0].StatusList
-// 	status := statusList[0]
-// 	s.Equal(status.WorkerName, check.Equals, workerName1)
-// 	s.Equal(status.Name, check.Equals, task.Name)
-
-// 	// list with filter
-// 	result = testutil.NewRequest().Get(taskURL+"?stage=Stopped").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	resultListTask = openapi.GetTaskListResponse{} // reset
-// 	err = result.UnmarshalBodyToObject(&resultListTask)
-// 	s.NoError(err)
-// 	s.Equal(resultListTask.Data, check.HasLen, 0)
-
-// 	result = testutil.NewRequest().Get(taskURL+"?stage=Running").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	resultListTask = openapi.GetTaskListResponse{} // reset
-// 	err = result.UnmarshalBodyToObject(&resultListTask)
-// 	s.NoError(err)
-// 	s.Equal(resultListTask.Data, check.HasLen, 1)
-
-// 	result = testutil.NewRequest().Get(taskURL+"?stage=Running&source_name_list=notsource").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	resultListTask = openapi.GetTaskListResponse{} // reset
-// 	err = result.UnmarshalBodyToObject(&resultListTask)
-// 	s.NoError(err)
-// 	s.Equal(resultListTask.Data, check.HasLen, 0)
-
-// 	result = testutil.NewRequest().Get(taskURL+"?stage=Running&source_name_list="+source1Name).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	resultListTask = openapi.GetTaskListResponse{} // reset
-// 	err = result.UnmarshalBodyToObject(&resultListTask)
-// 	s.NoError(err)
-// 	s.Equal(resultListTask.Data, check.HasLen, 1)
-
-// 	// get task with status
-// 	result = testutil.NewRequest().Get(task1URL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(result.UnmarshalBodyToObject(&task1FromHTTP), check.IsNil)
-// 	s.Equal(task.Name, check.Equals, task1FromHTTP.Name)
-// 	statusList = *task1FromHTTP.StatusList
-// 	s.Equal(statusList, check.HasLen, 1)
-// 	s.Equal(statusList[0].WorkerName, check.Equals, workerName1)
-// 	s.Equal(statusList[0].Name, check.Equals, task.Name)
-
-// 	// test some error happened on worker
-// 	mockWorkerClient = pbmock.NewMockWorkerClient(ctrl)
-// 	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, true)
-// 	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
-// 	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(result.UnmarshalBodyToObject(&resultListTask), check.IsNil)
-// 	s.Equal(resultListTask.Data, check.HasLen, 1)
-// 	s.Equal(resultListTask.Total, check.Equals, 1)
-// 	s.Equal(resultListTask.Data[0].StatusList, check.NotNil)
-// 	statusList = *resultListTask.Data[0].StatusList
-// 	s.Equal(statusList, check.HasLen, 1)
-// 	status = statusList[0]
-// 	s.Equal(status.ErrorMsg, check.NotNil)
-
-// 	// test convertTaskConfig
-// 	convertReq := openapi.ConverterTaskRequest{}
-// 	convertResp := openapi.ConverterTaskResponse{}
-// 	convertURL := fmt.Sprintf("%s/%s", taskURL, "converters")
-// 	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusBadRequest,result.Code()) // not valid req
-
-// 	// from task to taskConfig
-// 	convertReq.Task = &task
-// 	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	err = result.UnmarshalBodyToObject(&convertResp)
-// 	s.NoError(err)
-// 	s.Equal(convertResp.Task, check.NotNil)
-// 	s.Equal(convertResp.TaskConfigFile, check.NotNil)
-// 	taskConfigFile := convertResp.TaskConfigFile
-
-// 	// from taskCfg to task
-// 	convertReq.Task = nil
-// 	convertReq.TaskConfigFile = &taskConfigFile
-// 	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	err = result.UnmarshalBodyToObject(&convertResp)
-// 	s.NoError(err)
-// 	s.Equal(convertResp.Task, check.NotNil)
-// 	s.Equal(convertResp.TaskConfigFile, check.NotNil)
-// 	taskConfigFile2 := convertResp.TaskConfigFile
-// 	s.Equal(taskConfigFile, check.Equals, taskConfigFile2)
-
-// 	t.testSourceOperationWithTask(c, &source1, &task, s)
-
-// 	// stop task
-// 	stopTaskURL := fmt.Sprintf("%s/%s/stop", taskURL, task.Name)
-// 	stopTaskReq := openapi.StopTaskRequest{}
-// 	result = testutil.NewRequest().Post(stopTaskURL).WithJsonBody(stopTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	s.Equal(s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Stopped)
-
-// 	// delete task
-// 	result = testutil.NewRequest().Delete(task1URL+"?force=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusNoContent,result.Code())
-// 	subTaskM = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
-// 	s.Equal(len(subTaskM) == 0, check.IsTrue)
-
-// 	// list tasks
-// 	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK,result.Code())
-// 	resultListTask = openapi.GetTaskListResponse{} // reset
-// 	err = result.UnmarshalBodyToObject(&resultTaskList)
-// 	s.NoError(err)
-// 	s.Equal(resultTaskList.Total, check.Equals, 0)
-// }
-
-// func (t *openAPISuite) testImportTaskTemplate(c *check.C, task *openapi.Task, s *Server) {
-// 	// test batch import task config
-// 	taskBatchImportURL := "/api/v1/tasks/templates/import"
-// 	req := openapi.TaskTemplateRequest{Overwrite: false}
-// 	result := testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(result.Code(), check.Equals, http.StatusAccepted)
-// 	var resp openapi.TaskTemplateResponse
-// 	s.Equal(result.UnmarshalBodyToObject(&resp), check.IsNil)
-// 	s.Equal(resp.SuccessTaskList, check.HasLen, 1)
-// 	s.Equal(resp.SuccessTaskList[0], check.Equals, task.Name)
-// 	s.Equal(resp.FailedTaskList, check.HasLen, 0)
-
-// 	// import again without overwrite will fail
-// 	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(result.Code(), check.Equals, http.StatusAccepted)
-// 	s.Equal(result.UnmarshalBodyToObject(&resp), check.IsNil)
-// 	s.Equal(resp.SuccessTaskList, check.HasLen, 0)
-// 	s.Equal(resp.FailedTaskList, check.HasLen, 1)
-// 	s.Equal(resp.FailedTaskList[0].TaskName, check.Equals, task.Name)
-
-// 	// import again with overwrite will success
-// 	req.Overwrite = true
-// 	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(result.UnmarshalBodyToObject(&resp), check.IsNil)
-// 	s.Equal(resp.SuccessTaskList, check.HasLen, 1)
-// 	s.Equal(resp.SuccessTaskList[0], check.Equals, task.Name)
-// 	s.Equal(resp.FailedTaskList, check.HasLen, 0)
-// }
-
-// func (t *openAPISuite) testSourceOperationWithTask(c *check.C, source *openapi.Source, task *openapi.Task, s *Server) {
-// 	source1URL := fmt.Sprintf("/api/v1/sources/%s", source.SourceName)
-// 	disableSource1URL := fmt.Sprintf("%s/disable", source1URL)
-// 	enableSource1URL := fmt.Sprintf("%s/enable", source1URL)
-// 	transferSource1URL := fmt.Sprintf("%s/transfer", source1URL)
-
-// 	// disable
-// 	result := testutil.NewRequest().Post(disableSource1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK, result.Code())
-// 	s.Equal(s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Stopped)
-
-// 	// enable again
-// 	result = testutil.NewRequest().Post(enableSource1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusOK, result.Code())
-// 	s.Equal(s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect, check.Equals, pb.Stage_Running)
-
-// 	// test transfer failed,success transfer is tested in IT test
-// 	req := openapi.WorkerNameRequest{WorkerName: "not exist"}
-// 	result = testutil.NewRequest().Post(transferSource1URL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-// 	s.Equal(http.StatusBadRequest, result.Code())
-// 	var resp openapi.ErrorWithMessage
-// 	s.Equal(result.UnmarshalBodyToObject(&resp), check.IsNil)
-// 	s.Equal(resp.ErrorCode, check.Equals, int(terror.ErrSchedulerWorkerNotExist.Code()))
-// }
 
 func setupTestServer(ctx context.Context, t *testing.T) *Server {
 	t.Helper()
@@ -468,12 +158,14 @@ func (s *OpenAPIViewSuite) SetupSuite() {
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`))
 }
 
 func (s *OpenAPIViewSuite) TearDownSuite() {
 	checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
-	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"))
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData"))
 }
 
 func (s *OpenAPIViewSuite) TestClusterAPI() {
@@ -1008,6 +700,298 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	s.Len(resultListSource2.Data, 0)
 	s.Equal(0, resultListSource2.Total)
 }
+
+func (s *OpenAPIViewSuite) testImportTaskTemplate(task *openapi.Task, s1 *Server) {
+	// test batch import task config
+	taskBatchImportURL := "/api/v1/tasks/templates/import"
+	req := openapi.TaskTemplateRequest{Overwrite: false}
+	result := testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusAccepted, result.Code())
+	var resp openapi.TaskTemplateResponse
+	s.NoError(result.UnmarshalBodyToObject(&resp))
+	s.Len(resp.SuccessTaskList, 1)
+	s.Equal(task.Name, resp.SuccessTaskList[0])
+	s.Len(resp.FailedTaskList, 0)
+
+	// import again without overwrite will fail
+	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusAccepted, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resp))
+	s.Len(resp.SuccessTaskList, 0)
+	s.Len(resp.FailedTaskList, 1)
+	s.Equal(task.Name, resp.FailedTaskList[0].TaskName)
+
+	// import again with overwrite will success
+	req.Overwrite = true
+	result = testutil.NewRequest().Post(taskBatchImportURL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.NoError(result.UnmarshalBodyToObject(&resp))
+	s.Len(resp.SuccessTaskList, 1)
+	s.Equal(task.Name, resp.SuccessTaskList[0])
+	s.Len(resp.FailedTaskList, 0)
+}
+
+func (s *OpenAPIViewSuite) testSourceOperationWithTask(source *openapi.Source, task *openapi.Task, s1 *Server) {
+	source1URL := fmt.Sprintf("/api/v1/sources/%s", source.SourceName)
+	disableSource1URL := fmt.Sprintf("%s/disable", source1URL)
+	enableSource1URL := fmt.Sprintf("%s/enable", source1URL)
+	transferSource1URL := fmt.Sprintf("%s/transfer", source1URL)
+
+	// disable
+	result := testutil.NewRequest().Post(disableSource1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.Equal(pb.Stage_Stopped, s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect)
+
+	// enable again
+	result = testutil.NewRequest().Post(enableSource1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.Equal(pb.Stage_Running, s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect)
+
+	// test transfer failed,success transfer is tested in IT test
+	req := openapi.WorkerNameRequest{WorkerName: "not exist"}
+	result = testutil.NewRequest().Post(transferSource1URL).WithJsonBody(req).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var resp openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&resp))
+	s.Equal(int(terror.ErrSchedulerWorkerNotExist.Code()), resp.ErrorCode)
+}
+
+func (s *OpenAPIViewSuite) TestTaskAPI() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s1 := setupTestServer(ctx, s.T())
+	ctrl := gomock.NewController(s.T())
+	defer func() {
+		cancel()
+		s1.Close()
+		ctrl.Finish()
+	}()
+
+	dbCfg := config.GetDBConfigForTest()
+	source1 := openapi.Source{
+		Enable:     true,
+		SourceName: source1Name,
+		EnableGtid: false,
+		Host:       dbCfg.Host,
+		Password:   dbCfg.Password,
+		Port:       dbCfg.Port,
+		User:       dbCfg.User,
+	}
+	// create source
+	sourceURL := "/api/v1/sources"
+	createSourceReq := openapi.CreateSourceRequest{Source: source1}
+	result := testutil.NewRequest().Post(sourceURL).WithJsonBody(createSourceReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	// check http status code
+	s.Equal(http.StatusCreated, result.Code())
+
+	// add mock worker  start workers, the unbounded sources should be bounded
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
+	workerName1 := "worker-1"
+	s.NoError(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"))
+	go func(ctx context.Context, workerName string) {
+		s.NoError(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL))
+	}(ctx1, workerName1)
+	// wait worker ready
+	s.True(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		w := s1.scheduler.GetWorkerBySource(source1.SourceName)
+		return w != nil
+	}), true)
+
+	// create task
+	taskURL := "/api/v1/tasks"
+
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	s.NoError(err)
+	// use a valid target db
+	task.TargetConfig.Host = dbCfg.Host
+	task.TargetConfig.Port = dbCfg.Port
+	task.TargetConfig.User = dbCfg.User
+	task.TargetConfig.Password = dbCfg.Password
+
+	// create task
+	createTaskReq := openapi.CreateTaskRequest{Task: task}
+	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+	var createTaskResp openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
+	s.Equal(createTaskResp.Name, task.Name)
+	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Len(subTaskM, 1)
+	s.Equal(task.Name, subTaskM[source1Name].Name)
+
+	// get task
+	task1URL := fmt.Sprintf("%s/%s", taskURL, task.Name)
+	var task1FromHTTP openapi.Task
+	result = testutil.NewRequest().Get(task1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
+	s.Equal(task1FromHTTP.Name, task.Name)
+
+	// update a task
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
+	clone := task
+	batch := 1000
+	clone.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	updateReq := openapi.UpdateTaskRequest{Task: clone}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(updateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
+	s.EqualValues(task1FromHTTP.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
+
+	// list tasks
+	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultTaskList openapi.GetTaskListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
+	s.Equal(1, resultTaskList.Total)
+	s.Equal(task.Name, resultTaskList.Data[0].Name)
+
+	s.testImportTaskTemplate(&task, s1)
+
+	// start task
+	startTaskURL := fmt.Sprintf("%s/%s/start", taskURL, task.Name)
+	result = testutil.NewRequest().Post(startTaskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.Equal(pb.Stage_Running, s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect)
+
+	// get task status
+	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, false)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
+	taskStatusURL := fmt.Sprintf("%s/%s/status", taskURL, task.Name)
+	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultTaskStatus openapi.GetTaskStatusResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskStatus))
+	s.Equal(1, resultTaskStatus.Total) // only 1 subtask
+	s.Equal(task.Name, resultTaskStatus.Data[0].Name)
+	s.Equal(openapi.TaskStageRunning, resultTaskStatus.Data[0].Stage)
+	s.Equal(workerName1, resultTaskStatus.Data[0].WorkerName)
+	s.Equal(float64(0), resultTaskStatus.Data[0].DumpStatus.CompletedTables)
+	s.Equal(int64(1), resultTaskStatus.Data[0].DumpStatus.TotalTables)
+	s.Equal(float64(10), resultTaskStatus.Data[0].DumpStatus.EstimateTotalRows)
+
+	// get task status with source name
+	taskStatusURL = fmt.Sprintf("%s/%s/status?source_name_list=%s", taskURL, task.Name, source1Name)
+	result = testutil.NewRequest().Get(taskStatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultTaskStatusWithStatus openapi.GetTaskStatusResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskStatusWithStatus))
+	s.EqualValues(resultTaskStatus, resultTaskStatusWithStatus)
+
+	// list task with status
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListTask openapi.GetTaskListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 1)
+	s.Equal(1, resultListTask.Total)
+	s.NotNil(resultListTask.Data[0].StatusList)
+	statusList := *resultListTask.Data[0].StatusList
+	status := statusList[0]
+	s.Equal(workerName1, status.WorkerName)
+	s.Equal(task.Name, status.Name)
+
+	// list with filter
+	result = testutil.NewRequest().Get(taskURL+"?stage=Stopped").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	resultListTask = openapi.GetTaskListResponse{} // reset
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 0)
+
+	result = testutil.NewRequest().Get(taskURL+"?stage=Running").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	resultListTask = openapi.GetTaskListResponse{} // reset
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 1)
+
+	result = testutil.NewRequest().Get(taskURL+"?stage=Running&source_name_list=notsource").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	resultListTask = openapi.GetTaskListResponse{} // reset
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 0)
+
+	result = testutil.NewRequest().Get(taskURL+"?stage=Running&source_name_list="+source1Name).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	resultListTask = openapi.GetTaskListResponse{} // reset
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 1)
+
+	// get task with status
+	result = testutil.NewRequest().Get(task1URL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
+	s.Equal(task1FromHTTP.Name, task.Name)
+	statusList = *task1FromHTTP.StatusList
+	s.Len(statusList, 1)
+	s.Equal(workerName1, statusList[0].WorkerName)
+	s.Equal(task.Name, statusList[0].Name)
+
+	// test some error happened on worker
+	mockWorkerClient = pbmock.NewMockWorkerClient(ctrl)
+	mockTaskQueryStatus(mockWorkerClient, task.Name, source1.SourceName, workerName1, true)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
+	result = testutil.NewRequest().Get(taskURL+"?with_status=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultListTask))
+	s.Len(resultListTask.Data, 1)
+	s.Equal(1, resultListTask.Total)
+	s.NotNil(resultListTask.Data[0].StatusList)
+	statusList = *resultListTask.Data[0].StatusList
+	s.Len(statusList, 1)
+	status = statusList[0]
+	s.NotNil(status.ErrorMsg)
+
+	// test convertTaskConfig
+	convertReq := openapi.ConverterTaskRequest{}
+	convertResp := openapi.ConverterTaskResponse{}
+	convertURL := fmt.Sprintf("%s/%s", taskURL, "converters")
+	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code()) // not valid req
+
+	// from task to taskConfig
+	convertReq.Task = &task
+	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&convertResp))
+	s.NotNil(convertResp.Task)
+	s.NotNil(convertResp.TaskConfigFile)
+	taskConfigFile := convertResp.TaskConfigFile
+
+	// from taskCfg to task
+	convertReq.Task = nil
+	convertReq.TaskConfigFile = &taskConfigFile
+	result = testutil.NewRequest().Post(convertURL).WithJsonBody(convertReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&convertResp))
+	s.NotNil(convertResp.Task)
+	s.NotNil(convertResp.TaskConfigFile)
+	taskConfigFile2 := convertResp.TaskConfigFile
+	s.Equal(taskConfigFile2, taskConfigFile)
+
+	s.testSourceOperationWithTask(&source1, &task, s1)
+
+	// stop task
+	stopTaskURL := fmt.Sprintf("%s/%s/stop", taskURL, task.Name)
+	stopTaskReq := openapi.StopTaskRequest{}
+	result = testutil.NewRequest().Post(stopTaskURL).WithJsonBody(stopTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.Equal(pb.Stage_Stopped, s1.scheduler.GetExpectSubTaskStage(task.Name, source1Name).Expect)
+
+	// delete task
+	result = testutil.NewRequest().Delete(task1URL+"?force=true").GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusNoContent, result.Code())
+	subTaskM = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Len(subTaskM, 0)
+
+	// list tasks
+	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	resultListTask = openapi.GetTaskListResponse{} // reset
+	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
+	s.Equal(0, resultTaskList.Total)
+}
+
 func TestOpenAPIViewSuite(t *testing.T) {
 	suite.Run(t, new(OpenAPIViewSuite))
 }
