@@ -51,6 +51,19 @@ const (
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
+<<<<<<< HEAD
+=======
+	// etcdClientTimeoutDuration represents the timeout duration for
+	// etcd client to execute a remote call
+	etcdClientTimeoutDuration = 30 * time.Second
+)
+
+var (
+	txnEmptyCmps    = []clientV3.Cmp{}
+	txnEmptyOpsThen = []clientV3.Op{}
+	// TxnEmptyOpsElse is a no-op operation.
+	TxnEmptyOpsElse = []clientV3.Op{}
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -92,21 +105,39 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
+<<<<<<< HEAD
 // Put delegates request to clientv3.KV.Put
 func (c *Client) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
+=======
+// Put delegates request to clientV3.KV.Put
+func (c *Client) Put(
+	ctx context.Context, key, val string, opts ...clientV3.OpOption,
+) (resp *clientV3.PutResponse, err error) {
+	putCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
-		resp, inErr = c.cli.Put(ctx, key, val, opts...)
+		resp, inErr = c.cli.Put(putCtx, key, val, opts...)
 		return inErr
 	})
 	return
 }
 
+<<<<<<< HEAD
 // Get delegates request to clientv3.KV.Get
 func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.GetResponse, err error) {
+=======
+// Get delegates request to clientV3.KV.Get
+func (c *Client) Get(
+	ctx context.Context, key string, opts ...clientV3.OpOption,
+) (resp *clientV3.GetResponse, err error) {
+	getCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
-		resp, inErr = c.cli.Get(ctx, key, opts...)
+		resp, inErr = c.cli.Get(getCtx, key, opts...)
 		return inErr
 	})
 	return
@@ -117,10 +148,13 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOpti
 	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
+	delCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	// We don't retry on delete operation. It's dangerous.
-	return c.cli.Delete(ctx, key, opts...)
+	return c.cli.Delete(delCtx, key, opts...)
 }
 
+<<<<<<< HEAD
 // Txn delegates request to clientv3.KV.Txn
 func (c *Client) Txn(ctx context.Context) clientv3.Txn {
 	if metric, ok := c.metrics[EtcdTxn]; ok {
@@ -131,9 +165,32 @@ func (c *Client) Txn(ctx context.Context) clientv3.Txn {
 
 // Grant delegates request to clientv3.Lease.Grant
 func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGrantResponse, err error) {
+=======
+// Txn delegates request to clientV3.KV.Txn. The error returned can only be a non-retryable error,
+// such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
+func (c *Client) Txn(
+	ctx context.Context, cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op,
+) (resp *clientV3.TxnResponse, err error) {
+	txnCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
+		var inErr error
+		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		return inErr
+	})
+	return
+}
+
+// Grant delegates request to clientV3.Lease.Grant
+func (c *Client) Grant(
+	ctx context.Context, ttl int64,
+) (resp *clientV3.LeaseGrantResponse, err error) {
+	grantCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
-		resp, inErr = c.cli.Grant(ctx, ttl)
+		resp, inErr = c.cli.Grant(grantCtx, ttl)
 		return inErr
 	})
 	return
@@ -155,21 +212,39 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 	}
 }
 
+<<<<<<< HEAD
 // Revoke delegates request to clientv3.Lease.Revoke
 func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
+=======
+// Revoke delegates request to clientV3.Lease.Revoke
+func (c *Client) Revoke(
+	ctx context.Context, id clientV3.LeaseID,
+) (resp *clientV3.LeaseRevokeResponse, err error) {
+	revokeCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
-		resp, inErr = c.cli.Revoke(ctx, id)
+		resp, inErr = c.cli.Revoke(revokeCtx, id)
 		return inErr
 	})
 	return
 }
 
+<<<<<<< HEAD
 // TimeToLive delegates request to clientv3.Lease.TimeToLive
 func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+=======
+// TimeToLive delegates request to clientV3.Lease.TimeToLive
+func (c *Client) TimeToLive(
+	ctx context.Context, lease clientV3.LeaseID, opts ...clientV3.LeaseOption,
+) (resp *clientV3.LeaseTimeToLiveResponse, err error) {
+	timeToLiveCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
-		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
+		resp, inErr = c.cli.TimeToLive(timeToLiveCtx, lease, opts...)
 		return inErr
 	})
 	return
