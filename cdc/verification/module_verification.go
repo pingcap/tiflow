@@ -141,12 +141,12 @@ func (m *ModuleVerification) SentTrackData(ctx context.Context, module Module, d
 	default:
 	}
 
+	m.commitMu.Lock()
+	defer m.commitMu.Unlock()
+
 	if m.closed.Load() {
 		return
 	}
-
-	m.commitMu.Lock()
-	defer m.commitMu.Unlock()
 
 	for _, datum := range data {
 		key := encodeKey(module, datum.CommitTs, datum.TrackID)
@@ -373,10 +373,12 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 	}()
 	iter2.Seek([]byte{})
 
+	ignoreErr := true
 	for iter1.Valid() || iter2.Valid() {
 		if !iter1.Valid() || !iter2.Valid() {
 			if !iter2.Valid() {
 				_, _, k1 := decodeKey(iter1.Key())
+				// skip model.OpTypeResolved data
 				if len(k1) == 0 {
 					iter1.Next()
 					continue
@@ -388,45 +390,60 @@ func (m *ModuleVerification) moduleDataEqual(m1, m2 Module, lower, upper string)
 			return false
 		}
 
-		ret, err := keyEqual(iter1.Key(), iter2.Key())
-		if err != nil {
-			log.Warn("keyEqual fail", zap.Error(err))
+		if err := keyEqual(iter1.Key(), iter2.Key()); err != nil {
+			if err == errKeyEqualIgnore || err == errKeyEqualMayIgnore {
+				if err == errKeyEqualIgnore {
+					ignoreErr = true
+				} else if err == errKeyEqualMayIgnore {
+					ignoreErr = false
+				}
+				iter1.Next()
+				continue
+			}
 			return false
 		}
 
-		if ret {
-			iter1.Next()
-			iter2.Next()
-			continue
-		}
 		iter1.Next()
+		iter2.Next()
 	}
-	return true
+	return ignoreErr
 }
 
-func keyEqual(key1, key2 []byte) (bool, error) {
+var (
+	errKeyEqualMayIgnore = errors.New("keyEqual may ignore")
+	errKeyEqualIgnore    = errors.New("keyEqual ignore")
+)
+
+func keyEqual(key1, key2 []byte) error {
 	m1, c1, k1 := decodeKey(key1)
 	m2, c2, k2 := decodeKey(key2)
 	if c1 == c2 && bytes.Equal(k1, k2) {
-		return true, nil
+		return nil
 	}
 	if len(k1) != 0 {
 		log.Warn("keyEqual fail",
 			zap.String("module1", m1.String()),
 			zap.Uint64("commitTs1", c1),
-			zap.ByteString("key1", k1),
+			zap.String("key1", string(k1)),
 			zap.String("module2", m2.String()),
 			zap.Uint64("commitTs2", c2),
-			zap.ByteString("key2", k2))
+			zap.String("key2", string(k2)))
 	}
-	if c1 < c2 || len(k1) == 0 {
-		return false, nil
+	// ignore model.OpTypeResolved data
+	if len(k1) == 0 {
+		return errKeyEqualIgnore
 	}
-	return false, errors.New("keyEqual fail")
+	if c1 < c2 {
+		return errKeyEqualMayIgnore
+	}
+	return errors.New("keyEqual fail")
 }
 
 // Close implement the Close api
 func (m *ModuleVerification) Close() error {
+	m.commitMu.Lock()
+	defer m.commitMu.Unlock()
+
 	if m.closed.Load() {
 		return nil
 	}

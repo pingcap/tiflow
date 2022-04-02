@@ -64,7 +64,7 @@ func TestNewModuleVerification(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(time.Millisecond * 500)
 	cancel2()
-	time.Sleep(time.Millisecond * 500)
+	// time.Sleep(time.Millisecond * 500)
 	err = m.Close()
 	require.Nil(t, err)
 	err = m.Close()
