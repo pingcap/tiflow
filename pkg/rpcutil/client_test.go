@@ -17,7 +17,8 @@ type (
 var req *Request = nil
 
 type mockRPCClient struct {
-	cnt int
+	addr string
+	cnt  int
 }
 
 func (c *mockRPCClient) MockRPC(ctx context.Context, req *Request, opts ...grpc.CallOption) (*Response, error) {
@@ -57,4 +58,30 @@ func TestFailoverRpcClients(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, 3, testClient.cnt)
 	require.Len(t, clients.Endpoints(), 3)
+}
+
+type closer struct{}
+
+func (c *closer) Close() error {
+	return nil
+}
+
+func mockDailWithAddr(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
+	return &mockRPCClient{addr: addr}, &closer{}, nil
+}
+
+func TestValidLeaderAfterUpdateClients(t *testing.T) {
+	ctx := context.Background()
+	clients, err := NewFailoverRPCClients(ctx, []string{"url1", "url2"}, mockDailWithAddr)
+	require.NoError(t, err)
+	require.NotNil(t, clients.GetLeaderClient())
+
+	clients.UpdateClients(ctx, []string{"url1", "url2", "url3"}, "url1")
+	require.Equal(t, "url1", clients.GetLeaderClient().addr)
+
+	clients.UpdateClients(ctx, []string{"url1", "url2", "url3"}, "not-in-set")
+	require.NotNil(t, clients.GetLeaderClient())
+
+	clients.UpdateClients(ctx, []string{}, "")
+	require.Nil(t, clients.GetLeaderClient())
 }

@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -98,7 +100,15 @@ func TestUpdateServerMembers(t *testing.T) {
 		etcd:       etcd,
 		membership: &EtcdMembership{etcdCli: etcdCli},
 	}
-	leader, exists := s.checkLeader()
+	preRPCHooker := rpcutil.NewPreRPCHooker[pb.MasterClient](
+		id,
+		&s.leader,
+		s.leaderCli,
+		&s.initialized,
+		s.rpcLogRL,
+	)
+	s.preRPCHooker = preRPCHooker
+	leader, exists := s.preRPCHooker.CheckLeader()
 	require.Nil(t, leader)
 	require.False(t, exists)
 

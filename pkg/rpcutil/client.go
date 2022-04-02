@@ -31,7 +31,7 @@ type clientHolder[T FailoverRPCClientType] struct {
 // FailoverRPCClients represent RPC on this type of client can use any client
 // to connect to the server.
 type FailoverRPCClients[T FailoverRPCClientType] struct {
-	leader      string
+	leader      string // a key in clients. When clients is empty, this key is ""
 	clientsLock sync.RWMutex
 	clients     map[string]*clientHolder[T] // addr -> clientHolder
 	dialer      DialFunc[T]
@@ -47,18 +47,11 @@ func NewFailoverRPCClients[T FailoverRPCClientType](
 		dialer:  dialer,
 	}
 	err := ret.init(ctx, urls)
-	if err != nil {
-		return nil, err
-	}
-	// leader will be updated on heartbeat
-	for k := range ret.clients {
-		ret.leader = k
-		break
-	}
-	return ret, nil
+	return ret, err
 }
 
 func (c *FailoverRPCClients[T]) init(ctx context.Context, urls []string) error {
+	// leader will be updated on heartbeat
 	c.UpdateClients(ctx, urls, "")
 	if len(c.clients) == 0 {
 		return errors.ErrGrpcBuildConn.GenWithStack("failed to dial to master, urls: %v", urls)
@@ -67,12 +60,16 @@ func (c *FailoverRPCClients[T]) init(ctx context.Context, urls []string) error {
 }
 
 // UpdateClients receives a list of rpc server addresses, dials to server that is
-// not maintained in current FailoverRPCClients and close redundant clients.
+// not maintained in current FailoverRPCClients and close redundant clients. If
+// the dialing fails, the client will not be added to FailoverRPCClients.
+// if leaderURL is empty or fail to dial leader, it will pick any one as leader.
 func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string, leaderURL string) {
 	c.clientsLock.Lock()
 	defer c.clientsLock.Unlock()
 
-	c.leader = leaderURL
+	trimURL := func(url string) string {
+		return strings.Replace(url, "http://", "", 1)
+	}
 
 	notFound := make(map[string]struct{}, len(c.clients))
 	for addr := range c.clients {
@@ -81,7 +78,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 
 	for _, addr := range urls {
 		// TODO: refine address with and without scheme
-		addr = strings.Replace(addr, "http://", "", 1)
+		addr = trimURL(addr)
 		delete(notFound, addr)
 
 		if _, ok := c.clients[addr]; !ok {
@@ -103,6 +100,16 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
+	}
+
+	c.leader = trimURL(leaderURL)
+	// we also handle "" because "" is not in clients map
+	if _, ok := c.clients[c.leader]; !ok {
+		// note that when c.clients is empty, c.leader is ""
+		for k := range c.clients {
+			c.leader = k
+			break
+		}
 	}
 }
 
@@ -128,9 +135,18 @@ func (c *FailoverRPCClients[T]) Close() (err error) {
 	return
 }
 
+// GetLeaderClient tries to return the client of the leader.
+// When leader is unavailable it may return a leader to other server. When all
+// servers are unavailable, it will return zero value.
 func (c *FailoverRPCClients[T]) GetLeaderClient() T {
+	var zeroT T
+
 	c.clientsLock.RLock()
 	defer c.clientsLock.RUnlock()
+	if c.leader == "" {
+		return zeroT
+	}
+
 	leader, ok := c.clients[c.leader]
 	if !ok {
 		log.L().Panic("leader client not found", zap.String("leader", c.leader))

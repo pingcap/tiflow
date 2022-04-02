@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -156,49 +155,6 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	_, err = ioutil.ReadAll(resp.Body)
 	require.Nil(t, err)
-}
-
-func TestCheckLeaderAndNeedForward(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	cfg := NewConfig()
-	etcdName := "test-check-leader-and-need-forward"
-	cfg.Etcd.Name = etcdName
-	id := genServerMasterUUID(etcdName)
-	s := &Server{id: id, cfg: cfg}
-	isLeader, needForward := s.isLeaderAndNeedForward(ctx)
-	require.False(t, isLeader)
-	require.False(t, needForward)
-
-	var wg sync.WaitGroup
-	cctx, cancel := context.WithCancel(ctx)
-	startTime := time.Now()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		isLeader, needForward := s.isLeaderAndNeedForward(cctx)
-		require.False(t, isLeader)
-		require.False(t, needForward)
-	}()
-	cancel()
-	wg.Wait()
-	// should not wait too long time
-	require.Less(t, time.Since(startTime), time.Second)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		isLeader, needForward := s.isLeaderAndNeedForward(ctx)
-		require.True(t, isLeader)
-		require.True(t, needForward)
-	}()
-	time.Sleep(time.Second)
-	s.leaderClient.Lock()
-	s.leaderClient.cli = &client.MasterClientImpl{}
-	s.leaderClient.Unlock()
-	s.leader.Store(&Member{Name: id})
-	wg.Wait()
 }
 
 // Server master requires etcd/gRPC service as the minimum running environment,

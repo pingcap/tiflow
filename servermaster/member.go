@@ -7,6 +7,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -15,25 +16,7 @@ import (
 // uuid length = 36, plus one "-" symbol
 const idSuffixLen = 37
 
-// Member stores server member information
-// TODO: make it a protobuf field and can be shared by gRPC API
-type Member struct {
-	IsServLeader  bool   `json:"is-serv-leader"`
-	IsEtcdLeader  bool   `json:"is-etcd-leader"`
-	Name          string `json:"name"`
-	AdvertiseAddr string `json:"advertise-addr"`
-}
-
-// String implements json marshal
-func (m *Member) String() (string, error) {
-	b, err := json.Marshal(m)
-	return string(b), err
-}
-
-// Unmarshal unmarshals data into a member
-func (m *Member) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, m)
-}
+type Member = rpcutil.Member
 
 // Membership defines the interface to query member information in metastore
 type Membership interface {
@@ -97,7 +80,7 @@ func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLe
 }
 
 func (s *Server) updateServerMasterMembers(ctx context.Context) error {
-	leader, exists := s.checkLeader()
+	leader, exists := s.preRPCHooker.CheckLeader()
 	if !exists {
 		leader = nil
 	}
