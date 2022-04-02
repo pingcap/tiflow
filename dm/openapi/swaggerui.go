@@ -16,6 +16,8 @@ package openapi
 import (
 	"bytes"
 	"html/template"
+
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
 const (
@@ -112,15 +114,17 @@ func GetSwaggerHTML(config *SwaggerConfig) (html string, err error) {
 	return buf.String(), nil
 }
 
-// GetSwaggerJSON returns the swagger json.
-func GetSwaggerJSON() ([]byte, error) {
+// GetSwaggerWithServerURL replace server url in generated swagger.
+func GetSwaggerWithServerURL(serverURL string) (*openapi3.T, error) {
 	swagger, err := GetSwagger()
 	if err != nil {
 		return nil, err
 	}
-	swaggerJSON, err := swagger.MarshalJSON()
-	if err != nil {
-		return nil, err
+	// replace server url
+	if serverURL != "" {
+		for idx := range swagger.Servers {
+			swagger.Servers[idx].URL = serverURL
+		}
 	}
-	return swaggerJSON, nil
+	return swagger, nil
 }

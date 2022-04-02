@@ -85,7 +85,20 @@ func (s *Server) InitOpenAPIHandles() error {
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
 func (s *Server) GetDocJSON(c *gin.Context) {
-	swagger, err := openapi.GetSwagger()
+	var masterURL string
+	if info, err := s.getClusterInfo(c.Request.Context()); err != nil {
+		_ = c.Error(err)
+		return
+	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
+		// set real master addr in swagger so user can play api in docs view.
+		masterTopos := *info.Topology.MasterTopologyList
+		schema := "http"
+		if useTLS.Load() {
+			schema = "https"
+		}
+		masterURL = fmt.Sprintf("%s://%s:%d", schema, masterTopos[0].Host, masterTopos[0].Port)
+	}
+	swagger, err := openapi.GetSwaggerWithServerURL(masterURL)
 	if err != nil {
 		_ = c.Error(err)
 		return
