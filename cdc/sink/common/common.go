@@ -83,7 +83,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 			// fail-fast check
 			if len(txns) != 0 && txns[len(txns)-1].commitTs > row.CommitTs {
 				log.Panic("the commitTs of the emit row is less than the received row",
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].commitTs),
+					zap.Uint64("lastReceivedCommitTs", txns[len(txns)-1].commitTs),
 					zap.Any("row", row))
 			}
 			txns = append(txns, &txnsWithTheSameCommitTs{
