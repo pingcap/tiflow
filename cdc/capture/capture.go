@@ -81,9 +81,17 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDC
 }
 
 func (c *Capture) reset(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
+	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	conf := config.GetGlobalServerConfig()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
@@ -93,11 +101,14 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.session != nil {
 		c.session.Close() //nolint:errcheck
 	}
+<<<<<<< HEAD
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
+=======
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 	c.session = sess
 	c.election = concurrency.NewElection(sess, kv.CaptureOwnerKey)
 
