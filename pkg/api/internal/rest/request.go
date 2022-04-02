@@ -75,7 +75,7 @@ func NewRequest(c *CDCRESTClient) *Request {
 
 	var timeout time.Duration
 	if c.Client != nil {
-		timeout = c.Client.Timeout
+		timeout = c.Client.Timeout()
 	}
 
 	r := &Request{

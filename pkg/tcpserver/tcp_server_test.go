@@ -225,7 +225,7 @@ func testWithHTTPWorkload(_ context.Context, t *testing.T, server TCPServer, add
 	require.NoError(t, err)
 
 	uri := fmt.Sprintf("%s://%s/", scheme, addr)
-	resp, err := cli.Get(uri)
+	resp, err := cli.Get(context.Background(), uri)
 	require.NoError(t, err)
 	defer func() {
 		_ = resp.Body.Close()
@@ -346,7 +346,7 @@ func TestTcpServerClose(t *testing.T) {
 	require.NoError(t, err)
 
 	uri := fmt.Sprintf("http://%s/", addr)
-	resp, err := cli.Get(uri)
+	resp, err := cli.Get(context.Background(), uri)
 	require.NoError(t, err)
 	defer func() {
 		_ = resp.Body.Close()

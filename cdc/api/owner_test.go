@@ -14,6 +14,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/v3/concurrency"
 )
@@ -67,7 +69,9 @@ func testHandleChangefeedQuery(t *testing.T, addr string) {
 }
 
 func testRequestNonOwnerFailed(t *testing.T, uri string) {
-	resp, err := http.PostForm(uri, url.Values{})
+	cli, err := httputil.NewClient(nil)
+	require.Nil(t, err)
+	resp, err := cli.PostForm(context.Background(), uri, url.Values{})
 	require.Nil(t, err)
 	data, err := io.ReadAll(resp.Body)
 	require.Nil(t, err)

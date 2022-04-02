@@ -385,12 +385,13 @@ func (s *AvroSchemaRegistrySuite) TestGetCachedOrRegister(c *check.C) {
 
 func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
-	payload := []byte("test")
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
-	c.Assert(err, check.IsNil)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
+
+	payload := []byte("test")
+	req, err := http.NewRequestWithContext(ctx,
+		"POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
+	c.Assert(err, check.IsNil)
 
 	resp, err := httpRetry(ctx, nil, req, false)
 	c.Assert(err, check.IsNil)

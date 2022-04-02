@@ -176,6 +176,8 @@ func TestBatch(t *testing.T) {
 	batch := make([]mqEvent, 3)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

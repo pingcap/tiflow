@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -69,10 +70,13 @@ func TestCheckClusterVersion(t *testing.T) {
 		srv.ListenAndServe()
 	}()
 	defer srv.Close()
+	cli, err := httputil.NewClient(nil)
+	require.Nil(t, err)
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
-		_, err := http.Get(pdAddr)
+		resp, err := cli.Get(context.Background(), pdAddr)
 		if err == nil {
+			_ = resp.Body.Close()
 			break
 		}
 

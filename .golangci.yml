@@ -22,6 +22,12 @@ linters:
     - asciicheck
     - exportloopref
     - makezero
+    - tparallel
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx
+    - bodyclose
+    - misspell
 
 linters-settings:
   revive:

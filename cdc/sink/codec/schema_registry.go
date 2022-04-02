@@ -77,15 +77,11 @@ func NewAvroSchemaManager(
 ) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
-	req, err := http.NewRequestWithContext(ctx, "GET", registryURL, nil)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
-	}
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp, err := httpCli.Do(req)
+	resp, err := httpCli.Get(ctx, registryURL)
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Test connection to Schema Registry failed")
@@ -337,6 +333,7 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
 		log.Info("Clearing Registry successful")

@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -54,7 +55,7 @@ func TestPProfPath(t *testing.T) {
 	}
 	for _, api := range apis {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(api.method, api.url, nil)
+		req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 		router.ServeHTTP(w, req)
 		require.Equal(t, 200, w.Code, api.String())
 	}
@@ -66,7 +67,7 @@ func TestHandleFailpoint(t *testing.T) {
 	fp := "github.com/pingcap/tiflow/cdc/TestHandleFailpoint"
 	uri := fmt.Sprintf("/debug/fail/%s", fp)
 	body := bytes.NewReader([]byte("return(true)"))
-	req, err := http.NewRequest("PUT", uri, body)
+	req, err := http.NewRequestWithContext(context.Background(), "PUT", uri, body)
 	require.Nil(t, err)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -78,7 +79,7 @@ func TestHandleFailpoint(t *testing.T) {
 	})
 	require.True(t, failpointHit)
 
-	req, err = http.NewRequest("DELETE", uri, body)
+	req, err = http.NewRequestWithContext(context.Background(), "DELETE", uri, body)
 	require.Nil(t, err)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
