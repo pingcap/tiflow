@@ -67,7 +67,7 @@ type mysqlInstance struct {
 	targetDB     *conn.BaseDB
 	targetDBInfo *dbutil.DBConfig
 
-	bw *filter.Filter
+	bAList *filter.Filter
 }
 
 // Checker performs pre-check of data synchronization.
@@ -210,7 +210,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
-				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.bw))
+				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.bAList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
 				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
@@ -252,11 +252,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 }
 
 func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstance) (map[string][]*filter.Table, error) {
-	bw, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
+	bAList, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
 	if err != nil {
 		return nil, terror.ErrTaskCheckGenBAList.Delegate(err)
 	}
-	instance.bw = bw
+	instance.bAList = bAList
 	r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 	if err != nil {
 		return nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
@@ -290,7 +290,7 @@ func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstan
 	if err != nil {
 		return nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, instance.bw, r)
+	return utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, instance.bAList, r)
 }
 
 func (c *Checker) displayCheckingItems() string {
