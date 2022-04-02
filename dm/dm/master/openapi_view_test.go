@@ -155,13 +155,16 @@ type OpenAPIViewSuite struct {
 
 func (s *OpenAPIViewSuite) SetupSuite() {
 	s.NoError(log.InitLogger(&log.Config{}))
+}
+
+func (s *OpenAPIViewSuite) SetupTest() {
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
 	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`))
 }
 
-func (s *OpenAPIViewSuite) TearDownSuite() {
+func (s *OpenAPIViewSuite) TearDownTest() {
 	checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
 	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"))
