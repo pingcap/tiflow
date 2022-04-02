@@ -125,7 +125,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	// prepare source target do dbs concurrently
 	eg, ctx2 := errgroup.WithContext(ctx)
-	sourceTargetM := make(map[*mysqlInstance]map[string][]*filter.Table)
+	// sourceID => source targetDB mapping, only writing need used mu to avoid concurrent write map
+	var mu sync.Mutex
+	sourceTargetM := make(map[string]map[string][]*filter.Table)
 	for idx := range c.instances {
 		i := idx
 		eg.Go(func() error {
@@ -133,14 +135,15 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			if fetchErr != nil {
 				return fetchErr
 			}
-			sourceTargetM[c.instances[i]] = mapping
+			mu.Lock()
+			sourceTargetM[c.instances[i].cfg.SourceID] = mapping
+			mu.Unlock()
 			return nil
 		})
 	}
 	if egErr := eg.Wait(); egErr != nil {
 		return egErr
 	}
-
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
@@ -159,7 +162,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if _, ok := c.checkingItems[config.VersionChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-		mapping := sourceTargetM[instance]
+		mapping := sourceTargetM[instance.cfg.SourceID]
 		err = sameTableNameDetection(mapping)
 		if err != nil {
 			return err
