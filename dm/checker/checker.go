@@ -124,12 +124,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
 
 	// prepare source target do dbs concurrently
-	eg, ctx := errgroup.WithContext(ctx)
+	eg, ctx2 := errgroup.WithContext(ctx)
 	sourceTargetM := make(map[*mysqlInstance]map[string][]*filter.Table)
 	for idx := range c.instances {
 		i := idx
 		eg.Go(func() error {
-			mapping, fetchErr := c.fetchSourceTargetDB(ctx, c.instances[i])
+			mapping, fetchErr := c.fetchSourceTargetDB(ctx2, c.instances[i])
 			if fetchErr != nil {
 				return fetchErr
 			}
