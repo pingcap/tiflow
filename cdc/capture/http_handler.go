@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -41,8 +40,6 @@ const (
 	apiOpVarCaptureID = "capture_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
-	// getOwnerRetryMaxTime is the retry max time to get an owner
-	getOwnerRetryMaxTime = 3
 )
 
 // HTTPHandler is a  HTTPHandler of capture
@@ -751,6 +748,7 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 
 	var owner *model.CaptureInfo
 	// get owner
+<<<<<<< HEAD:cdc/capture/http_handler.go
 	err := retry.Do(ctx, func() error {
 		o, err := h.capture.GetOwner(ctx)
 		if err != nil {
@@ -760,7 +758,11 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		owner = o
 		return nil
 	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(getOwnerRetryMaxTime))
+=======
+	owner, err := h.capture.GetOwnerCaptureInfo(ctx)
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788)):cdc/api/open.go
 	if err != nil {
+		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
 		return
 	}

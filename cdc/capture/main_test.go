@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright 2021 PingCAP, Inc.
+=======
+// Copyright 2022 PingCAP, Inc.
+>>>>>>> 7fb7097e1 (capture(ticdc): fix the problem that openapi is blocked when pd is abnormal (#4788))
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
