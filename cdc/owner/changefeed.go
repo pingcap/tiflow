@@ -204,10 +204,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		)
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	c.metricsChangefeedBarrierTsGauge.Set(float64(barrierTs))
 	if barrierTs < checkpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
@@ -388,6 +390,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	changefeedTickDuration.DeleteLabelValues(c.id)
 	c.metricsChangefeedTickDuration = nil
+
+	changefeedBarrierTsGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedBarrierTsGauge = nil
 
 	c.initialized = false
 }
