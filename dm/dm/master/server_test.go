@@ -188,10 +188,6 @@ func TestMaster(t *testing.T) {
 	s := testSuite.(*testMaster)
 	s.testT = t
 
-	// inject *testing.T to openAPISuite
-	os := openAPITestSuite.(*openAPISuite)
-	os.testT = t
-
 	check.TestingT(t)
 }
 
