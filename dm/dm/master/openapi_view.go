@@ -90,7 +90,6 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
-		// set real master addr in swagger so user can play api in docs view.
 		masterTopos := *info.Topology.MasterTopologyList
 		schema := "http"
 		if useTLS.Load() {
@@ -98,10 +97,14 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 		}
 		masterURL = fmt.Sprintf("%s://%s:%d", schema, masterTopos[0].Host, masterTopos[0].Port)
 	}
-	swagger, err := openapi.GetSwaggerWithServerURL(masterURL)
+	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		_ = c.Error(err)
 		return
+	} else if masterURL != "" {
+		for idx := range swagger.Servers {
+			swagger.Servers[idx].URL = masterURL
+		}
 	}
 	c.JSON(http.StatusOK, swagger)
 }
