@@ -71,7 +71,8 @@ const (
 	rowUpdated
 	flushCheckpoint
 
-	rowChangeTypeCount = 3
+	rowChangeTypeCount  = 3
+	errorStateTypeCount = 5 // pb.ValidateErrorState_*
 )
 
 // change of table
@@ -186,7 +187,7 @@ func (v *DataValidator) initialize() error {
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
 	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.errorRowCounts = make([]atomic.Int64, rowChangeTypeCount)
+	v.errorRowCounts = make([]atomic.Int64, errorStateTypeCount)
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -288,9 +289,9 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
 			errorCounts := []int64{
-				v.errorRowCounts[newValidateErrorRow].Load(),
-				v.errorRowCounts[ignoredValidateErrorRow].Load(),
-				v.errorRowCounts[resolvedValidateErrorRow].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load(),
 			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
@@ -812,12 +813,12 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		return err
 	}
 	for i := range v.errorRowCounts {
-		v.errorRowCounts[i].Store(countMap[validateErrorStatus(i)])
+		v.errorRowCounts[i].Store(countMap[pb.ValidateErrorState(i)])
 	}
 	return nil
 }
 
-func (v *DataValidator) incrErrorRowCount(status validateErrorStatus, cnt int) {
+func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int) {
 	v.errorRowCounts[status].Add(int64(cnt))
 }
 
@@ -895,4 +896,19 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 		})
 	}
 	return result
+}
+
+func (v *DataValidator) GetValidationError(errState pb.ValidateErrorState) []*pb.ValidationError {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return(
+			[]*pb.ValidationError{
+				{Id: "1"}, {Id: "2"},
+			},
+		)
+	})
+	ret, err := v.persistHelper.loadError(errState)
+	if err != nil {
+		v.L.Warn("fail to load validator error", zap.Error(err))
+	}
+	return ret
 }

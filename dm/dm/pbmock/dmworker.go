@@ -56,6 +56,26 @@ func (mr *MockWorkerClientMockRecorder) CheckSubtasksCanUpdate(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSubtasksCanUpdate", reflect.TypeOf((*MockWorkerClient)(nil).CheckSubtasksCanUpdate), varargs...)
 }
 
+// GetValidationError mocks base method.
+func (m *MockWorkerClient) GetValidationError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetValidationError", varargs...)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationError indicates an expected call of GetValidationError.
+func (mr *MockWorkerClientMockRecorder) GetValidationError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationError", reflect.TypeOf((*MockWorkerClient)(nil).GetValidationError), varargs...)
+}
+
 // GetWorkerCfg mocks base method.
 func (m *MockWorkerClient) GetWorkerCfg(arg0 context.Context, arg1 *pb.GetWorkerCfgRequest, arg2 ...grpc.CallOption) (*pb.GetWorkerCfgResponse, error) {
 	m.ctrl.T.Helper()
@@ -232,6 +252,21 @@ func (m *MockWorkerServer) CheckSubtasksCanUpdate(arg0 context.Context, arg1 *pb
 func (mr *MockWorkerServerMockRecorder) CheckSubtasksCanUpdate(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSubtasksCanUpdate", reflect.TypeOf((*MockWorkerServer)(nil).CheckSubtasksCanUpdate), arg0, arg1)
+}
+
+// GetValidationError mocks base method.
+func (m *MockWorkerServer) GetValidationError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidationError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidationError indicates an expected call of GetValidationError.
+func (mr *MockWorkerServerMockRecorder) GetValidationError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidationError", reflect.TypeOf((*MockWorkerServer)(nil).GetValidationError), arg0, arg1)
 }
 
 // GetWorkerCfg mocks base method.

@@ -1333,3 +1333,13 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	}
 	return subTask.CheckUnitCfgCanUpdate(cfg)
 }
+
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.GetValidatorError(errState)
+	}
+	return []*pb.ValidationError{}
+}

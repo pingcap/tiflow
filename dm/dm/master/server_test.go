@@ -2440,3 +2440,77 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	c.Assert(resp.Msg, check.Matches, ".*filtering stage should be either.*")
 	c.Assert(resp.Result, check.IsFalse)
 }
+
+func (t *testMaster) TestGetValidationError(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	// test query all workers
+	for idx, worker := range workers {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().GetValidationError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationErrorResponse{
+			Result: true,
+			Error: []*pb.ValidationError{
+				{
+					Id: "1",
+				},
+			},
+		}, nil)
+		mockRevelantWorkerClient(mockWorkerClient, taskName, sources[idx], startReq)
+		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1. query existing task's error
+	errReq := &pb.GetValidationErrorRequest{
+		TaskName: taskName,
+		ErrState: pb.ValidateErrorState_AllValidateError,
+	}
+	resp, err := server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Equals, "")
+	c.Assert(resp.Result, check.IsTrue)
+	c.Assert(len(resp.Error), check.Equals, 2)
+	// 2. query invalid task's error
+	errReq.TaskName = "invalid-task"
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Result, check.IsFalse)
+	// 3. query invalid state
+	errReq.TaskName = taskName
+	errReq.ErrState = pb.ValidateErrorState_InvalidValidateError // invalid state
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*only support querying `all`, `unprocessed`, and `ignored` error.*")
+	c.Assert(resp.Result, check.IsFalse)
+}

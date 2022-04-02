@@ -301,8 +301,8 @@ func (st *SubTask) StopValidator() {
 }
 
 func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
-	st.Lock()
-	defer st.Unlock()
+	st.RLock()
+	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
 		return st.validator.GetValidationStatus()
 	}
@@ -893,4 +893,19 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 	} else {
 		taskState.WithLabelValues(task, sourceID, workerName).Set(float64(stage))
 	}
+}
+
+func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return([]*pb.ValidationError{
+			{Id: "1"},
+		})
+	})
+	st.RLock()
+	defer st.RUnlock()
+	if st.validator != nil && st.validator.Started() {
+		return st.validator.GetValidationError(errState)
+	}
+	st.l.Warn("validator not start")
+	return []*pb.ValidationError{}
 }

@@ -42,7 +42,6 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
-	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -2736,18 +2735,13 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		workerRespMu sync.Mutex
 		wg           sync.WaitGroup
 	)
-	appendResp := func(resp *pb.GetValidationStatusResponse) {
-		workerRespMu.Lock()
-		workerResps = append(workerResps, resp)
-		workerRespMu.Unlock()
-	}
 	handleError := func(err error, source, worker string) {
 		log.L().Error("query validation status error", zap.Error(err), zap.String("source", source), zap.String("worker", worker))
 		resp = &pb.GetValidationStatusResponse{
 			Result: false,
 			Msg:    err.Error(),
 		}
-		appendResp(resp)
+		appendWorkerResp(&workerRespMu, &workerResps, resp)
 	}
 	for taskName, mSource := range subTaskCfgs {
 		for sourceID := range mSource {
@@ -2771,7 +2765,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 				if err != nil {
 					handleError(err, sourceID, worker.BaseInfo().Name)
 				} else {
-					appendResp(resp.GetValidationStatus)
+					appendWorkerResp(&workerRespMu, &workerResps, resp.GetValidationStatus)
 				}
 			}, func(args ...interface{}) {
 				defer wg.Done()
@@ -2812,9 +2806,9 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
+	if req.ErrState == pb.ValidateErrorState_ResolvedValidateError || req.ErrState == pb.ValidateErrorState_InvalidValidateError {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
+		resp.Msg = "only support querying `all`, `unprocessed`, and `ignored` error"
 		return resp, nil
 	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
@@ -2824,8 +2818,61 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: get validation error from worker
 	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	var (
+		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	handleError := func(err error, source, worker string) {
+		log.L().Error("query validation error error", zap.Error(err), zap.String("source", source), zap.String("worker", worker))
+		resp = &pb.GetValidationErrorResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+		appendWorkerResp(&workerRespMu, &workerResps, resp)
+	}
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			worker := s.scheduler.GetWorkerBySource(sourceID)
+			if worker == nil {
+				err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
+				handleError(err, sourceID, "")
+				continue
+			}
+			wg.Add(1)
+			go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+				// send request in parallel
+				defer wg.Done()
+				newReq := &workerrpc.Request{
+					GetValidationError: &pb.GetValidationErrorRequest{},
+					Type:               workerrpc.CmdGetValidationError,
+				}
+				*newReq.GetValidationError = *req
+				newReq.GetValidationError.TaskName = taskName
+				resp, err := worker.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
+				if err != nil {
+					handleError(err, sourceID, worker.BaseInfo().Name)
+				} else {
+					appendWorkerResp(&workerRespMu, &workerResps, resp.GetValidationError)
+				}
+			}, func(args ...interface{}) {
+				defer wg.Done()
+				workerName := worker.BaseInfo().Name
+				handleError(terror.ErrMasterNoEmitToken.Generate(sourceID), sourceID, workerName)
+			})
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+			continue
+		}
+		resp.Error = append(resp.Error, wresp.Error...)
+	}
 	return resp, err
 }
 
@@ -2862,4 +2909,10 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 	// TODO: operate validation error at worker
 	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
 	return resp, err
+}
+
+func appendWorkerResp[T any](workerRespMu *sync.Mutex, workerResps *[]T, resp T) {
+	workerRespMu.Lock()
+	*workerResps = append(*workerResps, resp)
+	workerRespMu.Unlock()
 }

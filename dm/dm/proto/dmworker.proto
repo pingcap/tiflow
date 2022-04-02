@@ -24,6 +24,8 @@ service Worker {
     rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
 
     rpc GetWorkerValidateStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
+
+    rpc GetValidationError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
 }
 
 enum TaskOp {
@@ -424,4 +426,35 @@ message GetValidationStatusResponse {
     bool result = 1;
     string msg = 2;
     repeated ValidationStatus status = 3;
+}
+message GetValidationErrorRequest {
+    ValidateErrorState errState = 1;
+    string taskName = 2;
+}
+
+message ValidationError {
+    string id = 1; // error-id
+    string source = 2;
+    string srcTable = 3;
+    string srcData = 4;
+    string dstTable = 5;
+    string dstData = 6;
+    string errorType = 7;
+    ValidateErrorState status = 8;
+    string time = 9;
+    string message = 10;
+}
+
+message GetValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationError error = 3;
+}
+
+enum ValidateErrorState {
+    InvalidValidateError = 0;
+    UnprocessedValidateError = 1;
+    IgnoredValidateError = 2;
+    ResolvedValidateError = 3;
+    AllValidateError = 4;
 }

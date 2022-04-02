@@ -308,8 +308,8 @@ func TestValidatorDoValidate(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(newValidateErrorRow, 2).AddRow(ignoredValidateErrorRow, 3).
-			AddRow(resolvedValidateErrorRow, 4))
+		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_UnprocessedValidateError, 2).AddRow(pb.ValidateErrorState_IgnoredValidateError, 3).
+			AddRow(pb.ValidateErrorState_ResolvedValidateError, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
@@ -472,9 +472,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
-	require.Equal(t, int64(2), validator.errorRowCounts[newValidateErrorRow].Load())
-	require.Equal(t, int64(3), validator.errorRowCounts[ignoredValidateErrorRow].Load())
-	require.Equal(t, int64(4), validator.errorRowCounts[resolvedValidateErrorRow].Load())
+	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
+	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
@@ -613,4 +613,71 @@ func TestGetValidationStatus(t *testing.T) {
 		require.Equal(t, ok, true)
 		require.EqualValues(t, ent, result)
 	}
+}
+
+func TestGetValidationError(t *testing.T) {
+	db, dbMock, err := sqlmock.New()
+	require.Equal(t, log.InitLogger(&log.Config{}), nil)
+	require.NoError(t, err)
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.persistHelper.tctx = validator.tctx
+	// all error
+	dbMock.ExpectQuery("SELECT .* FROM " + validator.persistHelper.errorChangeTableName).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
+			1, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data", "unexpected data", 2, 1, "2022-03-01",
+		),
+	)
+	// filter by status
+	dbMock.ExpectQuery("SELECT .* FROM " + validator.persistHelper.errorChangeTableName + " WHERE status=.*").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
+			2, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data1", "unexpected data1", 2, 2, "2022-03-01",
+		).AddRow(
+			3, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data2", "unexpected data2", 2, 2, "2022-03-01",
+		),
+	)
+	expected := [][]*pb.ValidationError{
+		{
+			{
+				Id:        "1",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data",
+				DstData:   "unexpected data",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_UnprocessedValidateError,
+			},
+		},
+		{
+			{
+				Id:        "2",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data1",
+				DstData:   "unexpected data1",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_IgnoredValidateError,
+			},
+			{
+				Id:        "3",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data2",
+				DstData:   "unexpected data2",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_IgnoredValidateError,
+			},
+		},
+	}
+	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	res := validator.GetValidationError(pb.ValidateErrorState_AllValidateError)
+	require.EqualValues(t, expected[0], res)
+	res = validator.GetValidationError(pb.ValidateErrorState_IgnoredValidateError)
+	require.EqualValues(t, expected[1], res)
 }

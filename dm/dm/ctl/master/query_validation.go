@@ -30,7 +30,15 @@ const (
 	ValidationAllErr         = "all"
 	ValidationIgnoredErr     = "ignored"
 	ValidationUnprocessedErr = "unprocessed"
+	ValidationResolvedErr    = "resolved"
 )
+
+var mapStr2ErrState = map[string]pb.ValidateErrorState{
+	ValidationAllErr:         pb.ValidateErrorState_AllValidateError,
+	ValidationIgnoredErr:     pb.ValidateErrorState_IgnoredValidateError,
+	ValidationUnprocessedErr: pb.ValidateErrorState_UnprocessedValidateError,
+	ValidationResolvedErr:    pb.ValidateErrorState_ResolvedValidateError,
+}
 
 func NewQueryValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,8 +52,10 @@ func NewQueryValidationErrorCmd() *cobra.Command {
 
 func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	var (
-		errState string
-		taskName string
+		errState   string
+		taskName   string
+		pbErrState pb.ValidateErrorState
+		ok         bool
 	)
 	if len(cmd.Flags().Args()) != 1 {
 		return errors.New("task name should be specified")
@@ -55,7 +65,8 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	if err != nil {
 		return err
 	}
-	if errState != ValidationAllErr && errState != ValidationIgnoredErr && errState != ValidationUnprocessedErr {
+	if pbErrState, ok = mapStr2ErrState[errState]; !ok || errState == ValidationResolvedErr {
+		// todo: support querying resolved error?
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
 		return errors.Errorf("error flag should be either `%s`, `%s`, or `%s`", ValidationAllErr, ValidationIgnoredErr, ValidationUnprocessedErr)
@@ -67,7 +78,7 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 		ctx,
 		"GetValidationError",
 		&pb.GetValidationErrorRequest{
-			ErrState: errState,
+			ErrState: pbErrState,
 			TaskName: taskName,
 		},
 		&resp,

@@ -37,18 +37,15 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-type validateErrorStatus int
-
 const (
-	// todo: maybe move to some common place, dmctl may use it
-	newValidateErrorRow validateErrorStatus = iota
-	//nolint
-	ignoredValidateErrorRow
-	//nolint
-	resolvedValidateErrorRow
-
 	maxRowKeyLength = 64
 )
+
+var mapErrType2Str = map[validateFailedType]string{
+	deletedRowExists: "Deleted rows exist",
+	rowNotExist:      "Expected rows not exist",
+	rowDifferent:     "Column data not matched",
+}
 
 var maxRowKeyLengthStr = strconv.Itoa(maxRowKeyLength)
 
@@ -300,7 +297,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			args = append(args, []interface{}{
 				c.cfg.SourceID, table.Source.Schema, table.Source.Name, r.srcRow.Key,
 				table.Target.Schema, table.Target.Name,
-				srcDataStr, dstDataStr, r.tp, newValidateErrorRow,
+				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_UnprocessedValidateError,
 			})
 		}
 	}
@@ -452,8 +449,8 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	return res, nil
 }
 
-func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64, error) {
-	res := make(map[validateErrorStatus]int64)
+func (c *validatorPersistHelper) loadErrorCount() (map[pb.ValidateErrorState]int64, error) {
+	res := make(map[pb.ValidateErrorState]int64)
 	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
 	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
 	if err != nil {
@@ -468,7 +465,7 @@ func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64
 		if err != nil {
 			return nil, err
 		}
-		res[validateErrorStatus(status)] = count
+		res[pb.ValidateErrorState(status)] = count
 	}
 
 	if err = rows.Err(); err != nil {
@@ -480,4 +477,43 @@ func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64
 
 func (c *validatorPersistHelper) setRevision(rev int64) {
 	c.revision = rev
+}
+
+func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+	res := make([]*pb.ValidationError, 0)
+	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
+		"FROM " + c.errorChangeTableName
+	if filterState != pb.ValidateErrorState_AllValidateError {
+		sql += " WHERE status=" + strconv.Itoa(int(filterState))
+	}
+	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	if err != nil {
+		return res, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id, status, errType                                                                 int
+			source, srcSchemaName, srcTableName, dstSchemaName, dstTableName, data, dstData, ts string
+		)
+		err = rows.Scan(&id, &source, &srcSchemaName, &srcTableName, &dstSchemaName, &dstTableName, &data, &dstData, &errType, &status, &ts)
+		if err != nil {
+			return []*pb.ValidationError{}, err
+		}
+		res = append(res, &pb.ValidationError{
+			Id:        strconv.Itoa(id),
+			Source:    source,
+			SrcTable:  dbutil.TableName(srcSchemaName, srcTableName),
+			DstTable:  dbutil.TableName(dstSchemaName, dstTableName),
+			SrcData:   data,
+			DstData:   dstData,
+			ErrorType: mapErrType2Str[validateFailedType(errType)],
+			Status:    pb.ValidateErrorState(status),
+		})
+	}
+	if err = rows.Err(); err != nil {
+		return []*pb.ValidationError{}, err
+	}
+	c.tctx.L().Info("checkpoint error loaded", zap.Reflect("errors", res))
+	return res, nil
 }

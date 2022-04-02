@@ -514,30 +514,6 @@ message StopValidationResponse {
 }
 
 
-message GetValidationErrorRequest {
-    string errState = 1;
-    string taskName = 2;
-}
-
-message ValidationError {
-    string id = 1; // error-id
-    string source = 2;
-    string srcTable = 3;
-    string srcData = 4;
-    string dstTable = 5;
-    string dstData = 6;
-    string errorType = 7;
-    string status = 8;
-    string time = 9;
-    string message = 10;
-}
-
-message GetValidationErrorResponse {
-    bool result = 1;
-    string msg = 2;
-    repeated ValidationError error = 3;
-}
-
 enum ValidationErrOp {
   InvalidValidationTaskOp = 0;
   IgnoreValidationErrOp = 1;

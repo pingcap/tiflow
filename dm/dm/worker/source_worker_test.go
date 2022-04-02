@@ -810,3 +810,34 @@ func (t *testServer) TestQueryValidator(c *C) {
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
 }
+
+func (t *testServer) GetWorkerValidatorErr(c *C) {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	// when subtask name not exists
+	// return empty array
+	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_AllValidateError)), Equals, 0)
+	// subtask match
+	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_AllValidateError)), Equals, 1)
+}
