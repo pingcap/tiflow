@@ -300,6 +300,14 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
+	// Notice: We must call Partitions here,
+	// which will be responsible for automatically creating topics when they don't exist.
+	// If it is not called here and kafka has auto-creation of topic turned on,
+	// then the auto-created topic will not be created as configured by ticdc.
+	_, err = k.topicManager.Partitions(topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = k.asyncFlushToPartitionZero(ctx, topic, msg)
 	return errors.Trace(err)
 }
@@ -399,7 +407,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)
-	if err := topicManager.CreateTopic(topic); err != nil {
+	if _, err := topicManager.CreateTopic(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
