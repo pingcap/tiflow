@@ -3,9 +3,10 @@ package runtime
 import (
 	"encoding/json"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/pingcap/errors"
 )
 
 type TaskStatus interface {

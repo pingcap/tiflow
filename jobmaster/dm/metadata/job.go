@@ -3,11 +3,12 @@ package metadata
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/pingcap/errors"
 )
 
 // TODO: use Stage in lib or move Stage to lib.

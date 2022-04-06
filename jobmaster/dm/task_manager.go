@@ -5,13 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // TODO: use OperateType in lib or move OperateType to lib.
@@ -21,7 +22,8 @@ type OperateType int
 // NOTICE: consider to only use Update cmd to add/remove task.
 // e.g. start-task/stop-task -s source in origin DM will be replaced by update-job now.
 const (
-	Pause OperateType = iota
+	Create OperateType = iota
+	Pause
 	Resume
 	Update
 	Delete
@@ -73,10 +75,10 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 	var stage metadata.TaskStage
 	switch op {
+	case Create, Update:
+		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Delete:
 		return tm.jobStore.Delete(ctx)
-	case Update:
-		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Resume:
 		stage = metadata.StageRunning
 	case Pause:
@@ -107,6 +109,7 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 // TickImpl removes tasks that are not in the job config.
 // TickImpl checks and operates task if needed.
 func (tm *TaskManager) TickImpl(ctx context.Context) error {
+	log.L().Info("start to check and operate tasks")
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil {
 		log.L().Error("get job state failed", zap.Error(err))

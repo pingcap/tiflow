@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
 type DummyState struct {

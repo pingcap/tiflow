@@ -3,7 +3,6 @@ package dm
 import (
 	"context"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -20,22 +19,15 @@ const (
 	jobTemplatePath = "./config/job_template.yaml"
 )
 
-func TestMain(m *testing.M) {
-	TaskNormalInterval = time.Hour
-	TaskErrorInterval = 100 * time.Millisecond
-	m.Run()
-}
-
-func TestUpdateTaskStatus(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
-	require.Len(t, taskManager.TaskStatus(), 0)
+	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
 	dumpStatus1 := &runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -55,11 +47,11 @@ func TestUpdateTaskStatus(t *testing.T) {
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	taskStatusMap := taskManager.TaskStatus()
-	require.Len(t, taskStatusMap, 2)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[0].SourceID)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[1].SourceID)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[0].SourceID], dumpStatus1)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+	require.Len(t.T(), taskStatusMap, 2)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], dumpStatus1)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	loadStatus1 := &runtime.LoadStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -70,30 +62,30 @@ func TestUpdateTaskStatus(t *testing.T) {
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
-	require.Len(t, taskStatusMap, 2)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[0].SourceID)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[1].SourceID)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+	require.Len(t.T(), taskStatusMap, 2)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	// offline
 	offlineStatus := runtime.NewOfflineStatus(jobCfg.Upstreams[1].SourceID)
 	taskManager.UpdateTaskStatus(offlineStatus)
 	taskStatusMap = taskManager.TaskStatus()
-	require.Len(t, taskStatusMap, 2)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[0].SourceID)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[1].SourceID)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[1].SourceID], offlineStatus)
+	require.Len(t.T(), taskStatusMap, 2)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], offlineStatus)
 
 	// online
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	taskStatusMap = taskManager.TaskStatus()
-	require.Len(t, taskStatusMap, 2)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[0].SourceID)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[1].SourceID)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+	require.Len(t.T(), taskStatusMap, 2)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	// mock jobmaster recover
 	taskStatusList := make([]runtime.TaskStatus, 0, len(taskStatusMap))
@@ -102,62 +94,64 @@ func TestUpdateTaskStatus(t *testing.T) {
 	}
 	taskManager = NewTaskManager(taskStatusList, jobStore, nil)
 	taskStatusMap = taskManager.TaskStatus()
-	require.Len(t, taskStatusMap, 2)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[0].SourceID)
-	require.Contains(t, taskStatusMap, jobCfg.Upstreams[1].SourceID)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
-	require.Equal(t, taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+	require.Len(t.T(), taskStatusMap, 2)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
+	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
+	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 }
 
-func TestOperateTask(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	job := metadata.NewJob(jobCfg)
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 
 	state, err := jobStore.Get(context.Background())
-	require.NoError(t, err)
-	job = state.(*metadata.Job)
-	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
-	require.Equal(t, job.Tasks[source2].Stage, metadata.StageRunning)
+	require.EqualError(t.T(), err, "state not found")
+	require.Nil(t.T(), state)
 
-	taskManager.OperateTask(context.Background(), Pause, nil, []string{source1, source2})
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Create, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
-	require.NoError(t, err)
-	job = state.(*metadata.Job)
-	require.Equal(t, job.Tasks[source1].Stage, metadata.StagePaused)
-	require.Equal(t, job.Tasks[source2].Stage, metadata.StagePaused)
+	require.NoError(t.T(), err)
+	job := state.(*metadata.Job)
+	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
 
-	taskManager.OperateTask(context.Background(), Resume, nil, []string{source1})
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Pause, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
-	require.NoError(t, err)
+	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
-	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
-	require.Equal(t, job.Tasks[source2].Stage, metadata.StagePaused)
+	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StagePaused)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
-	taskManager.OperateTask(context.Background(), Update, jobCfg, nil)
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Resume, nil, []string{source1}))
 	state, err = jobStore.Get(context.Background())
-	require.NoError(t, err)
+	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
-	require.Equal(t, job.Tasks[source1].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
+
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Update, jobCfg, nil))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t.T(), err)
+	job = state.(*metadata.Job)
+	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	// TODO: should it be paused?
-	require.Equal(t, job.Tasks[source2].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
 
-	taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2})
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
-	require.EqualError(t, err, "state not found")
-	require.Nil(t, state)
+	require.EqualError(t.T(), err, "state not found")
+	require.Nil(t.T(), state)
 
-	require.EqualError(t, taskManager.OperateTask(context.Background(), -1, nil, nil), "unknown operate type")
+	require.EqualError(t.T(), taskManager.OperateTask(context.Background(), -1, nil, nil), "unknown operate type")
 }
 
-func TestClearTaskStatus(t *testing.T) {
+func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager := NewTaskManager(nil, nil, nil)
 	syncStatus1 := &runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -176,49 +170,48 @@ func TestClearTaskStatus(t *testing.T) {
 
 	taskManager.UpdateTaskStatus(syncStatus1)
 	taskManager.UpdateTaskStatus(syncStatus2)
-	require.Len(t, taskManager.TaskStatus(), 2)
+	require.Len(t.T(), taskManager.TaskStatus(), 2)
 
 	job := metadata.NewJob(&config.JobCfg{})
 	job.Tasks["source1"] = metadata.NewTask(&config.TaskCfg{})
 
 	taskManager.removeTaskStatus(job)
-	require.Len(t, taskManager.TaskStatus(), 1)
+	require.Len(t.T(), taskManager.TaskStatus(), 1)
 
 	job.Tasks["source3"] = metadata.NewTask(&config.TaskCfg{})
 	taskManager.removeTaskStatus(job)
-	require.Len(t, taskManager.TaskStatus(), 1)
+	require.Len(t.T(), taskManager.TaskStatus(), 1)
 
 	taskManager.onJobNotExist(context.Background())
-	require.Len(t, taskManager.TaskStatus(), 0)
+	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
 	taskManager.onJobNotExist(context.Background())
-	require.Len(t, taskManager.TaskStatus(), 0)
+	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 
-func TestTaskAsExpected(t *testing.T) {
-	require.True(t, taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
+func (t *testDMJobmasterSuite) TestTaskAsExpected() {
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StagePaused}}))
-	require.True(t, taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageRunning}}))
-	require.False(t, taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
+	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageRunning}}))
 
 	// TODO: change below results if needed.
-	require.False(t, taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
+	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StagePaused}}))
-	require.False(t, taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
+	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
 		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageFinished}}))
 }
 
-func TestCheckAndOperateTasks(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	mockAgent := &MockAgent{}
+	mockAgent := &MockTaskAgent{}
 	taskManager := NewTaskManager(nil, nil, mockAgent)
 
-	require.EqualError(t, taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
+	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
 	dumpStatus1 := &runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -236,25 +229,24 @@ func TestCheckAndOperateTasks(t *testing.T) {
 	}
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
-	require.NoError(t, taskManager.checkAndOperateTasks(context.Background(), job))
+	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 
 	mockAgent.SetStages(map[string]metadata.TaskStage{jobCfg.Upstreams[0].SourceID: metadata.StageRunning, jobCfg.Upstreams[1].SourceID: metadata.StagePaused})
 	dumpStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	e := errors.New("operate task failed")
 	mockAgent.SetResult([]error{e})
-	require.EqualError(t, taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
+	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
 }
 
-func TestTaskManager(t *testing.T) {
-	t.Parallel()
+func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
-	require.NoError(t, jobStore.Put(context.Background(), job))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
-	mockAgent := &MockAgent{}
+	mockAgent := &MockTaskAgent{}
 	taskManager := NewTaskManager(nil, jobStore, mockAgent)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -307,7 +299,7 @@ func TestTaskManager(t *testing.T) {
 	// mock check by interval
 	taskManager.SetNextCheckTime(time.Now().Add(time.Second))
 	// resumed eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		mockAgent.Lock()
 		defer mockAgent.Unlock()
 		return len(mockAgent.results) == 0 && mockAgent.stages[source1] == metadata.StageRunning
@@ -319,7 +311,7 @@ func TestTaskManager(t *testing.T) {
 	taskManager.OperateTask(ctx, Pause, nil, []string{source2})
 	mockAgent.SetResult([]error{agentError, agentError, agentError, nil})
 	// paused eventually
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		mockAgent.Lock()
 		defer mockAgent.Unlock()
 		return len(mockAgent.results) == 0 && mockAgent.stages[source2] == metadata.StagePaused
@@ -327,7 +319,7 @@ func TestTaskManager(t *testing.T) {
 	syncStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus2)
 
-	// task2 offline
+	// worker of task2 offline
 	taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(source2))
 	// mock check by interval
 	taskManager.SetNextCheckTime(time.Now().Add(time.Millisecond))
@@ -340,7 +332,7 @@ func TestTaskManager(t *testing.T) {
 	// mock remove task2 by update-job
 	jobCfg.Upstreams = jobCfg.Upstreams[:1]
 	taskManager.OperateTask(ctx, Update, jobCfg, nil)
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		mockAgent.Lock()
 		defer mockAgent.Unlock()
 		return len(mockAgent.results) == 0 && len(taskManager.TaskStatus()) == 1
@@ -348,7 +340,7 @@ func TestTaskManager(t *testing.T) {
 
 	// mock delete job
 	taskManager.OperateTask(ctx, Delete, nil, nil)
-	require.Eventually(t, func() bool {
+	require.Eventually(t.T(), func() bool {
 		mockAgent.Lock()
 		defer mockAgent.Unlock()
 		return len(mockAgent.results) == 0 && len(taskManager.TaskStatus()) == 0
@@ -358,25 +350,25 @@ func TestTaskManager(t *testing.T) {
 	wg.Wait()
 }
 
-type MockAgent struct {
+type MockTaskAgent struct {
 	sync.Mutex
 	results []error
 	stages  map[string]metadata.TaskStage
 }
 
-func (mockAgent *MockAgent) SetResult(results []error) {
+func (mockAgent *MockTaskAgent) SetResult(results []error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	mockAgent.results = append(mockAgent.results, results...)
 }
 
-func (mockAgent *MockAgent) SetStages(stages map[string]metadata.TaskStage) {
+func (mockAgent *MockTaskAgent) SetStages(stages map[string]metadata.TaskStage) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	mockAgent.stages = stages
 }
 
-func (mockAgent *MockAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
+func (mockAgent *MockTaskAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.results) == 0 {

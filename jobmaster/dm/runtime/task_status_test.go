@@ -3,9 +3,10 @@ package runtime
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/lib"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTaskStatus(t *testing.T) {
@@ -15,6 +16,11 @@ func TestTaskStatus(t *testing.T) {
 	require.Equal(t, offlineStatus.GetUnit(), lib.WorkerType(0))
 	require.Equal(t, offlineStatus.GetTask(), "task_status_test")
 	require.Equal(t, offlineStatus.GetStage(), metadata.StageUnscheduled)
+	bytes, err := MarshalTaskStatus(offlineStatus)
+	require.NoError(t, err)
+	newOfflineStatus, err := UnmarshalTaskStatus(bytes)
+	require.EqualError(t, err, "unknown unit: 0")
+	require.Nil(t, newOfflineStatus)
 
 	dumpStatus := &DumpStatus{
 		DefaultTaskStatus: DefaultTaskStatus{
@@ -28,7 +34,7 @@ func TestTaskStatus(t *testing.T) {
 		FinishedRows:      3.0,
 		EstimateTotalRows: 100.0,
 	}
-	bytes, err := MarshalTaskStatus(dumpStatus)
+	bytes, err = MarshalTaskStatus(dumpStatus)
 	require.Nil(t, err)
 	newDumpStatus, err := UnmarshalTaskStatus(bytes)
 	require.Nil(t, err)
