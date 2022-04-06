@@ -209,7 +209,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.metricsChangefeedBarrierTsGauge.Set(float64(barrierTs))
 	if barrierTs < checkpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
@@ -487,6 +486,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
+	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
+	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	switch barrierTp {
 	case ddlJobBarrier:
