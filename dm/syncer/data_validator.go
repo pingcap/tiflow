@@ -906,9 +906,19 @@ func (v *DataValidator) GetValidationError(errState pb.ValidateErrorState) []*pb
 			},
 		)
 	})
+	// todo: validation error in workers cannot be returned
+	// because the errID is only allocated when the error rows are flushed
+	// user cannot handle errorRows without errID
 	ret, err := v.persistHelper.loadError(errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
 	}
 	return ret
+}
+
+func (v *DataValidator) OperateValidationError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+	failpoint.Inject("MockValidationOperation", func() {
+		failpoint.Return(nil)
+	})
+	return v.persistHelper.operateError(validateOp, errID, isAll)
 }

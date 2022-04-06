@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -62,6 +63,7 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			isAll    bool
 			errID    string
 			err      error
+			intErrID int
 		)
 		if len(cmd.Flags().Args()) < 1 {
 			cmd.SetOut(os.Stdout)
@@ -86,6 +88,12 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			common.PrintCmdUsage(cmd)
 			return errors.New("either `--all` or `error-id` should be set")
 		}
+		intErrID, err = strconv.Atoi(errID)
+		if err != nil {
+			cmd.SetOut(os.Stdout)
+			common.PrintCmdUsage(cmd)
+			return errors.New("`error-id` should be integer")
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		resp = &pb.OperateValidationErrorResponse{}
@@ -95,7 +103,7 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			&pb.OperateValidationErrorRequest{
 				Op:         typ,
 				TaskName:   taskName,
-				ErrId:      errID,
+				ErrId:      uint64(intErrID),
 				IsAllError: isAll,
 			},
 			&resp,

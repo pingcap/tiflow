@@ -1343,3 +1343,13 @@ func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.Valida
 	}
 	return []*pb.ValidationError{}
 }
+
+func (w *SourceWorker) OperateWorkerValidateErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.OperateValidatorError(op, errID, isAll)
+	}
+	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+}

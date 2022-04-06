@@ -176,6 +176,26 @@ func (mr *MockWorkerClientMockRecorder) OperateV1Meta(arg0, arg1 interface{}, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateV1Meta", reflect.TypeOf((*MockWorkerClient)(nil).OperateV1Meta), varargs...)
 }
 
+// OperateValidationError mocks base method.
+func (m *MockWorkerClient) OperateValidationError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "OperateValidationError", varargs...)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidationError indicates an expected call of OperateValidationError.
+func (mr *MockWorkerClientMockRecorder) OperateValidationError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidationError", reflect.TypeOf((*MockWorkerClient)(nil).OperateValidationError), varargs...)
+}
+
 // PurgeRelay mocks base method.
 func (m *MockWorkerClient) PurgeRelay(arg0 context.Context, arg1 *pb.PurgeRelayRequest, arg2 ...grpc.CallOption) (*pb.CommonWorkerResponse, error) {
 	m.ctrl.T.Helper()
@@ -342,6 +362,21 @@ func (m *MockWorkerServer) OperateV1Meta(arg0 context.Context, arg1 *pb.OperateV
 func (mr *MockWorkerServerMockRecorder) OperateV1Meta(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateV1Meta", reflect.TypeOf((*MockWorkerServer)(nil).OperateV1Meta), arg0, arg1)
+}
+
+// OperateValidationError mocks base method.
+func (m *MockWorkerServer) OperateValidationError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperateValidationError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidationError indicates an expected call of OperateValidationError.
+func (mr *MockWorkerServerMockRecorder) OperateValidationError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidationError", reflect.TypeOf((*MockWorkerServer)(nil).OperateValidationError), arg0, arg1)
 }
 
 // PurgeRelay mocks base method.

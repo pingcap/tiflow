@@ -995,3 +995,25 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 	resp.Error = w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
 	return resp, nil
 }
+
+func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	w := s.getSourceWorker(true)
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to call validator error, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	err := w.OperateWorkerValidateErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		//nolint:nilerr
+		return resp, nil
+	}
+	//nolint:nilerr
+	return resp, nil
+}

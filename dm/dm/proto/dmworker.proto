@@ -26,6 +26,8 @@ service Worker {
     rpc GetWorkerValidateStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
 
     rpc GetValidationError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
+
+  rpc OperateValidationError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
 }
 
 enum TaskOp {
@@ -457,4 +459,23 @@ enum ValidateErrorState {
     IgnoredValidateError = 2;
     ResolvedValidateError = 3;
     AllValidateError = 4;
+}
+
+message OperateValidationErrorRequest {
+    ValidationErrOp op = 1;
+    bool isAllError = 2;
+    string taskName = 3;
+    uint64 errId = 4; // error-id
+}
+
+message OperateValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum ValidationErrOp {
+  InvalidValidationTaskOp = 0;
+  IgnoreValidationErrOp = 1;
+  ResolveValidationErrOp = 2;
+  ClearValidationErrOp = 3;
 }

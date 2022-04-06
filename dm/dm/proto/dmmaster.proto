@@ -513,22 +513,3 @@ message StopValidationResponse {
     repeated CommonWorkerResponse sources = 3;
 }
 
-
-enum ValidationErrOp {
-  InvalidValidationTaskOp = 0;
-  IgnoreValidationErrOp = 1;
-  ResolveValidationErrOp = 2;
-  ClearValidationErrOp = 3;
-}
-
-message OperateValidationErrorRequest {
-    ValidationErrOp op = 1;
-    bool isAllError = 2;
-    string taskName = 3;
-    string errId = 4; // error-id
-}
-
-message OperateValidationErrorResponse {
-    bool result = 1;
-    string msg = 2;
-}

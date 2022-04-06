@@ -241,6 +241,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	args = append(args, []interface{}{nextRevision})
 
 	// unsupported table info
+	c.validator.RLock() // protect tableStatus, which can be accessed concurrently
 	for _, state := range c.validator.tableStatus {
 		sql := `INSERT INTO ` + c.tableStatusTableName + `
 					(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)
@@ -260,6 +261,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		},
 		)
 	}
+	c.validator.RUnlock()
 	// error rows
 	for _, worker := range c.validator.workers {
 		for _, r := range worker.getErrorRows() {
@@ -484,9 +486,9 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
 		"FROM " + c.errorChangeTableName
 	if filterState != pb.ValidateErrorState_AllValidateError {
-		sql += " WHERE status=" + strconv.Itoa(int(filterState))
+		sql += " WHERE status=?"
 	}
-	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	rows, err := c.dbConn.QuerySQL(c.tctx, sql, int(filterState))
 	if err != nil {
 		return res, err
 	}
@@ -516,4 +518,40 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	}
 	c.tctx.L().Info("checkpoint error loaded", zap.Reflect("errors", res))
 	return res, nil
+}
+
+func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+	if validateOp == pb.ValidationErrOp_ClearValidationErrOp {
+		return c.deleteError(errID, isAll)
+	}
+	sql := "UPDATE " + c.errorChangeTableName + " SET status=?"
+	if !isAll {
+		sql += " WHERE id=?"
+	}
+	var setStatus pb.ValidateErrorState
+	switch validateOp {
+	case pb.ValidationErrOp_IgnoreValidationErrOp:
+		setStatus = pb.ValidateErrorState_IgnoredValidateError
+	case pb.ValidationErrOp_ResolveValidationErrOp:
+		setStatus = pb.ValidateErrorState_ResolvedValidateError
+	default:
+		// unsupported op should be caught by caller
+		c.tctx.L().Warn("unsupported validator error operation", zap.Reflect("op", validateOp))
+		return nil
+	}
+	if isAll {
+		_, err := c.dbConn.QuerySQL(c.tctx, sql, int(setStatus))
+		return err
+	}
+	_, err := c.dbConn.QuerySQL(c.tctx, sql, int(setStatus), errID)
+	return err
+}
+
+func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
+	sql := "DELETE FROM " + c.errorChangeTableName
+	if !isAll {
+		sql += " WHERE id=?"
+	}
+	_, err := c.dbConn.QuerySQL(c.tctx, sql, errID)
+	return err
 }

@@ -412,6 +412,28 @@ func (t *testServer) TestServerQueryValidatorError(c *C) {
 	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
 }
 
+func (t *testServer) TestServerOperateValidatorError(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.OperateValidationError(context.Background(), &pb.OperateValidationErrorRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
 func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	var (
 		masterAddr   = tempurl.Alloc()[len("http://"):]

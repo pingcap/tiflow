@@ -307,6 +307,7 @@ func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
 		return st.validator.GetValidationStatus()
 	}
 	st.l.Warn("validator not start")
+	// todo: should it inform the user of this error
 	return []*pb.ValidationStatus{}
 }
 
@@ -896,16 +897,24 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 }
 
 func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return([]*pb.ValidationError{
-			{Id: "1"},
-		})
-	})
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
 		return st.validator.GetValidationError(errState)
 	}
 	st.l.Warn("validator not start")
+	// todo: should it inform the user of this error
 	return []*pb.ValidationError{}
+}
+
+func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	st.RLock()
+	defer st.RUnlock()
+	if st.validator != nil && st.validator.Started() {
+		return st.validator.OperateValidationError(op, errID, isAll)
+	}
+	st.l.Warn("validator not start")
+	// todo: should it inform the user of this error
+	// silently exists
+	return nil
 }

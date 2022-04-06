@@ -681,3 +681,48 @@ func TestGetValidationError(t *testing.T) {
 	res = validator.GetValidationError(pb.ValidateErrorState_IgnoredValidateError)
 	require.EqualValues(t, expected[1], res)
 }
+
+func TestOperateValidationError(t *testing.T) {
+	var err error
+	db, dbMock, err := sqlmock.New()
+	require.Equal(t, log.InitLogger(&log.Config{}), nil)
+	require.NoError(t, err)
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.persistHelper.tctx = validator.tctx
+	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	// 1. clear all error
+	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName).WillReturnRows()
+	// 2. clear error of errID
+	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE id=?").WithArgs(1).WillReturnRows()
+	// 3. mark all error as resolved
+	dbMock.ExpectQuery("UPDATE " + validator.persistHelper.errorChangeTableName + " SET status=?").WithArgs(int(pb.ValidateErrorState_ResolvedValidateError)).WillReturnRows()
+	// 4. mark all error as ignored
+	dbMock.ExpectQuery("UPDATE " + validator.persistHelper.errorChangeTableName + " SET status=?").WithArgs(int(pb.ValidateErrorState_IgnoredValidateError)).WillReturnRows()
+	// 5. mark error as resolved of errID
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE id=\\?").WithArgs(int(pb.ValidateErrorState_ResolvedValidateError), 1).WillReturnRows()
+	// 6. mark error as ignored of errID
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE id=\\?").WithArgs(int(pb.ValidateErrorState_IgnoredValidateError), 1).WillReturnRows()
+
+	// clear all error
+	err = validator.OperateValidationError(pb.ValidationErrOp_ClearValidationErrOp, 0, true)
+	require.NoError(t, err)
+	// clear error with id
+	err = validator.OperateValidationError(pb.ValidationErrOp_ClearValidationErrOp, 1, false)
+	require.NoError(t, err)
+	// mark all as resolved
+	err = validator.OperateValidationError(pb.ValidationErrOp_ResolveValidationErrOp, 0, true)
+	require.NoError(t, err)
+	// mark all as ignored
+	err = validator.OperateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp, 0, true)
+	require.NoError(t, err)
+	// mark error as resolved with id
+	err = validator.OperateValidationError(pb.ValidationErrOp_ResolveValidationErrOp, 1, false)
+	require.NoError(t, err)
+	// mark error as ignored with id
+	err = validator.OperateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp, 1, false)
+	require.NoError(t, err)
+}
