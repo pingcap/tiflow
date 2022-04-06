@@ -15,14 +15,17 @@ package etcd
 
 import (
 	"context"
+	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 )
@@ -41,6 +44,26 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+	// If no msg comes from an etcd watchCh for etcdWatchChTimeoutDuration long,
+	// we should cancel the watchCh and request a new watchCh from etcd client
+	etcdWatchChTimeoutDuration = 10 * time.Second
+	// If no msg comes from an etcd watchCh for etcdRequestProgressDuration long,
+	// we should call RequestProgress of etcd client
+	etcdRequestProgressDuration = 1 * time.Second
+	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
+	etcdWatchChBufferSize = 16
+	// etcdTxnTimeoutDuration represents the timeout duration for committing a
+	// transaction to Etcd
+	etcdTxnTimeoutDuration = 30 * time.Second
+)
+
+var (
+	// TxnEmptyCmps represents empty compare-opration of an etcd Txn
+	TxnEmptyCmps = []clientv3.Cmp{}
+	// TxnEmptyOpsThen represents empty then-opration of an etcd Txn
+	TxnEmptyOpsThen = []clientv3.Op{}
+	// TxnEmptyOpsElse represents empty else-opration of an etcd Txn
+	TxnEmptyOpsElse = []clientv3.Op{}
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -50,11 +73,13 @@ var maxTries int64 = 8
 type Client struct {
 	cli     *clientv3.Client
 	metrics map[string]prometheus.Counter
+	// clock is for making it easier to mock time-related data structures in unit tests
+	clock clock.Clock
 }
 
 // Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics}
+	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
 // Unwrap returns a clientv3.Client
@@ -109,12 +134,25 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOpti
 	return c.cli.Delete(ctx, key, opts...)
 }
 
-// Txn delegates request to clientv3.KV.Txn
-func (c *Client) Txn(ctx context.Context) clientv3.Txn {
+// TxnWithoutRetry delegates request to clientv3.KV.Txn
+func (c *Client) TxnWithoutRetry(ctx context.Context) clientv3.Txn {
 	if metric, ok := c.metrics[EtcdTxn]; ok {
 		metric.Inc()
 	}
 	return c.cli.Txn(ctx)
+}
+
+// Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
+// such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
+func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
+	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	defer cancel()
+	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
+		var inErr error
+		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		return inErr
+	})
+	return
 }
 
 // Grant delegates request to clientv3.Lease.Grant
@@ -132,11 +170,17 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 		if !cerrors.IsRetryableError(err) {
 			return false
 		}
-		if rpcName == EtcdRevoke {
-			if etcdErr, ok := err.(rpctypes.EtcdError); ok && etcdErr.Code() == codes.NotFound {
-				// it means the etcd lease is already expired or revoked
+
+		switch rpcName {
+		case EtcdRevoke:
+			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// It means the etcd lease is already expired or revoked
 				return false
 			}
+		case EtcdTxn:
+			return errorutil.IsRetryableEtcdError(err)
+		default:
+			// For other types of operation, we retry directly without handling errors
 		}
 
 		return true
@@ -164,16 +208,23 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
+<<<<<<< HEAD
 func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 <<<<<<< HEAD
 	return c.cli.Watch(ctx, key, opts...)
 =======
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, opts...)
+=======
+func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
+	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
+	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
+>>>>>>> upstream/release-5.2
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
+<<<<<<< HEAD
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
@@ -185,6 +236,19 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+=======
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
+	defer func() {
+		close(outCh)
+		log.Info("WatchWithChan exited", zap.String("role", role))
+	}()
+	var lastRevision int64
+	watchCtx, cancel := context.WithCancel(ctx)
+	defer func() {
+		// Using closures to handle changes to the cancel function
+		cancel()
+	}()
+>>>>>>> upstream/release-5.2
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
@@ -194,7 +258,10 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	for {
 		select {
 		case <-ctx.Done():
+<<<<<<< HEAD
 			cancel()
+=======
+>>>>>>> upstream/release-5.2
 			return
 		case response := <-watchCh:
 			lastReceivedResponseTime = c.clock.Now()
@@ -208,13 +275,22 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			for {
 				select {
 				case <-ctx.Done():
+<<<<<<< HEAD
 					cancel()
+=======
+>>>>>>> upstream/release-5.2
 					return
 				case outCh <- response: // it may block here
 					break Loop
 				case <-ticker.C:
 					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
+<<<<<<< HEAD
 						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
+=======
+						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck",
+							zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+							zap.String("role", role))
+>>>>>>> upstream/release-5.2
 					}
 				}
 			}
@@ -226,16 +302,31 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
+<<<<<<< HEAD
 				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
 				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
+=======
+				log.Warn("etcd client watchCh blocking too long, reset the watchCh",
+					zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
+					zap.Stack("stack"),
+					zap.String("role", role))
+				cancel()
+				watchCtx, cancel = context.WithCancel(ctx)
+				// to avoid possible context leak warning from govet
+				_ = cancel
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+>>>>>>> upstream/release-5.2
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
 		}
 	}
+<<<<<<< HEAD
 >>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
+=======
+>>>>>>> upstream/release-5.2
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.

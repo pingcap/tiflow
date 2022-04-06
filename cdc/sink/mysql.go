@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -92,10 +91,10 @@ type mysqlSink struct {
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	txnCache      *common.UnresolvedTxnCache
-	workers       []*mysqlSinkWorker
-	resolvedTs    uint64
-	maxResolvedTs uint64
+	txnCache           *common.UnresolvedTxnCache
+	workers            []*mysqlSinkWorker
+	tableCheckpointTs  sync.Map
+	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
@@ -120,13 +119,11 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 
 // FlushRowChangedEvents will flushes all received events, we don't allow mysql
 // sink to receive events before resolving
-func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	if atomic.LoadUint64(&s.maxResolvedTs) < resolvedTs {
-		atomic.StoreUint64(&s.maxResolvedTs, resolvedTs)
+func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+	v, ok := s.tableMaxResolvedTs.Load(tableID)
+	if !ok || v.(uint64) < resolvedTs {
+		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	// resolvedTs can be fallen back, such as a new table is added into this sink
-	// with a smaller start-ts
-	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
 	s.resolvedNotifier.Notify()
 
 	// check and throw error
@@ -136,13 +133,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	default:
 	}
 
-	checkpointTs := resolvedTs
-	for _, worker := range s.workers {
-		workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
-		if workerCheckpointTs < checkpointTs {
-			checkpointTs = workerCheckpointTs
-		}
-	}
+	checkpointTs := s.getTableCheckpointTs(tableID)
 	s.statistics.PrintStatus(ctx)
 	return checkpointTs, nil
 }
@@ -159,27 +150,18 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			return
 		case <-receiver.C:
 		}
-		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
+		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 		if len(resolvedTxnsMap) == 0 {
-			for _, worker := range s.workers {
-				atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
-			}
-			s.txnCache.UpdateCheckpoint(resolvedTs)
+			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
+				s.tableCheckpointTs.Store(key, value)
+				return true
+			})
 			continue
 		}
-
-		if !config.NewReplicaImpl && s.cyclic != nil {
-			// Filter rows if it is origined from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for _, worker := range s.workers {
-			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
+		for tableID, resolvedTs := range flushedResolvedTsMap {
+			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
-		s.txnCache.UpdateCheckpoint(resolvedTs)
 	}
 }
 
@@ -201,11 +183,6 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
-}
-
-// Initialize is no-op for Mysql sink
-func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	return nil
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
@@ -600,7 +577,7 @@ func newMySQLSink(
 		params:                          params,
 		filter:                          filter,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql", opts),
+		statistics:                      NewStatistics(ctx, "mysql"),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
@@ -731,7 +708,6 @@ type mysqlSinkWorker struct {
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
-	checkpointTs     uint64
 	closedCh         chan struct{}
 }
 
@@ -774,10 +750,9 @@ func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows   []*model.RowChangedEvent
-		replicaID    uint64
-		txnNum       int
-		lastCommitTs uint64
+		toExecRows []*model.RowChangedEvent
+		replicaID  uint64
+		txnNum     int
 	)
 
 	// mark FinishWg before worker exits, all data txns can be omitted.
@@ -815,7 +790,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum = 0
 			return err
 		}
-		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
@@ -845,7 +819,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			replicaID = txn.ReplicaID
 			toExecRows = append(toExecRows, txn.Rows...)
-			lastCommitTs = txn.CommitTs
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
@@ -882,7 +855,7 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
-func (s *mysqlSink) Barrier(ctx context.Context) error {
+func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
@@ -891,15 +864,23 @@ func (s *mysqlSink) Barrier(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
+			maxResolvedTs, ok := s.tableMaxResolvedTs.Load(tableID)
 			log.Warn("Barrier doesn't return in time, may be stuck",
-				zap.Uint64("resolved-ts", atomic.LoadUint64(&s.maxResolvedTs)),
-				zap.Uint64("checkpoint-ts", s.checkpointTs()))
+				zap.Int64("tableID", tableID),
+				zap.Bool("has resolvedTs", ok),
+				zap.Any("resolvedTs", maxResolvedTs),
+				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
-			maxResolvedTs := atomic.LoadUint64(&s.maxResolvedTs)
-			if s.checkpointTs() >= maxResolvedTs {
+			v, ok := s.tableMaxResolvedTs.Load(tableID)
+			if !ok {
+				log.Info("No table resolvedTs is found", zap.Int64("table-id", tableID))
 				return nil
 			}
-			checkpointTs, err := s.FlushRowChangedEvents(ctx, maxResolvedTs)
+			maxResolvedTs := v.(uint64)
+			if s.getTableCheckpointTs(tableID) >= maxResolvedTs {
+				return nil
+			}
+			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolvedTs)
 			if err != nil {
 				return err
 			}
@@ -912,15 +893,12 @@ func (s *mysqlSink) Barrier(ctx context.Context) error {
 	}
 }
 
-func (s *mysqlSink) checkpointTs() uint64 {
-	checkpointTs := atomic.LoadUint64(&s.resolvedTs)
-	for _, worker := range s.workers {
-		workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
-		if workerCheckpointTs < checkpointTs {
-			checkpointTs = workerCheckpointTs
-		}
+func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+	v, ok := s.tableCheckpointTs.Load(tableID)
+	if ok {
+		return v.(uint64)
 	}
-	return checkpointTs
+	return uint64(0)
 }
 
 func logDMLTxnErr(err error) error {
@@ -1073,8 +1051,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				}
 			} else {
 				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-				sqls = append(sqls, query)
-				values = append(values, args)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

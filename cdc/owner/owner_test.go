@@ -57,8 +57,8 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	}
 	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func() DDLSink {
+		return &mockDDLSink{}
 	},
 		ctx.GlobalVars().PDClient,
 	)
@@ -79,6 +79,9 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -146,6 +149,9 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -187,10 +193,51 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
+func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Mismatched state and admin job.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		Config:         config.GetDefaultReplicaConfig(),
+		CreatorVersion: "4.0.14",
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
+}
+
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := "test-changefeed"
@@ -225,6 +272,9 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 func (s *ownerSuite) TestAdminJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
@@ -272,6 +322,8 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 

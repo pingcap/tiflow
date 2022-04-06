@@ -327,7 +327,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if err != nil {
 		return errors.Trace(err)
 	}
-	resp, err := c.Client.Txn(ctx).If(
+	resp, err := c.Client.TxnWithoutRetry(ctx).If(
 		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
 		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
 	).Then(
@@ -674,7 +674,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 			return errors.Trace(err)
 		}
 
-		resp, err := c.Client.Txn(ctx).If(writeCmp).Then(
+		resp, err := c.Client.TxnWithoutRetry(ctx).If(writeCmp).Then(
 			clientv3.OpPut(key, value),
 		).Commit()
 		if err != nil {
@@ -731,7 +731,7 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 	}
 
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-	resp, err := c.Client.Txn(ctx).If(
+	resp, err := c.Client.TxnWithoutRetry(ctx).If(
 		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
 		clientv3.Compare(clientv3.Value(key), "=", data),
 	).Else(clientv3.OpPut(key, data)).Commit()
@@ -799,7 +799,7 @@ func (c CDCEtcdClient) SetChangeFeedStatusTTL(
 // PutAllChangeFeedStatus puts ChangeFeedStatus of each changefeed into etcd
 func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	var (
-		txn = c.Client.Txn(ctx)
+		txn = c.Client.TxnWithoutRetry(ctx)
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
 	)
 	for changefeedID, info := range infos {
@@ -814,7 +814,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 			}
-			txn = c.Client.Txn(ctx)
+			txn = c.Client.TxnWithoutRetry(ctx)
 			ops = ops[:0]
 		}
 	}

@@ -17,10 +17,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
 type clientSuite struct {
@@ -46,22 +48,35 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+func (m *mockClient) Txn(ctx context.Context) clientv3.Txn {
+	return &mockTxn{ctx: ctx}
+}
+
+>>>>>>> upstream/release-5.2
 type mockWatcher struct {
 	clientv3.Watcher
 	watchCh      chan clientv3.WatchResponse
 	resetCount   *int
 	requestCount *int
+<<<<<<< HEAD
 	rev          *int64
+=======
+>>>>>>> upstream/release-5.2
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	*m.resetCount++
+<<<<<<< HEAD
 	op := &clientv3.Op{}
 	for _, opt := range opts {
 		opt(op)
 	}
 	*m.rev = op.Rev()
+=======
+>>>>>>> upstream/release-5.2
 	return m.watchCh
 }
 
@@ -70,7 +85,10 @@ func (m mockWatcher) RequestProgress(ctx context.Context) error {
 	return nil
 }
 
+<<<<<<< HEAD
 >>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
+=======
+>>>>>>> upstream/release-5.2
 func (s *clientSuite) TestRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	originValue := maxTries
@@ -87,6 +105,32 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	_, err = retrycli.Put(context.TODO(), "", "")
 	c.Assert(err, check.NotNil)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Test Txn case
+	// case 0: normal
+	rsp, err := retrycli.Txn(ctx, nil, nil, nil)
+	c.Assert(err, check.IsNil)
+	c.Assert(rsp.Succeeded, check.IsFalse)
+
+	// case 1: errors.ErrReachMaxTry
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, nil, nil)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
+
+	// case 2: errors.ErrReachMaxTry
+	_, err = retrycli.Txn(ctx, nil, TxnEmptyOpsThen, nil)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
+
+	// case 3: context.DeadlineExceeded
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, nil)
+	c.Assert(err, check.Equals, context.DeadlineExceeded)
+
+	// other case: mock error
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, TxnEmptyOpsElse)
+	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+
 	maxTries = originValue
 }
 
@@ -118,6 +162,7 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 // test no data lost when WatchCh blocked
@@ -129,6 +174,18 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+=======
+
+// test no data lost when WatchCh blocked
+func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	cli := clientv3.NewCtxClient(context.TODO())
+	resetCount := 0
+	requestCount := 0
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+>>>>>>> upstream/release-5.2
 	cli.Watcher = watcher
 
 	sentRes := []clientv3.WatchResponse{
@@ -157,7 +214,11 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 	defer cancel()
 
 	go func() {
+<<<<<<< HEAD
 		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+=======
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
+>>>>>>> upstream/release-5.2
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -168,9 +229,12 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
+<<<<<<< HEAD
 		if len(receivedRes) == len(sentRes) {
 			cancel()
 		}
+=======
+>>>>>>> upstream/release-5.2
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
@@ -183,15 +247,26 @@ func (s *clientSuite) TestWatchChBlocked(c *check.C) {
 }
 
 // test no data lost when OutCh blocked
+<<<<<<< HEAD
 func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func (s *etcdSuite) TestOutChBlocked(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+>>>>>>> upstream/release-5.2
 
 	cli := clientv3.NewCtxClient(context.TODO())
 	resetCount := 0
 	requestCount := 0
+<<<<<<< HEAD
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+=======
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+>>>>>>> upstream/release-5.2
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -217,7 +292,11 @@ func (s *clientSuite) TestOutChBlocked(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
+<<<<<<< HEAD
 		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+=======
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
+>>>>>>> upstream/release-5.2
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -228,14 +307,18 @@ func (s *clientSuite) TestOutChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
+<<<<<<< HEAD
 		if len(receivedRes) == len(sentRes) {
 			cancel()
 		}
+=======
+>>>>>>> upstream/release-5.2
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 }
 
+<<<<<<< HEAD
 func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cli := clientv3.NewCtxClient(context.TODO())
@@ -282,3 +365,45 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	c.Assert(*watcher.rev, check.Equals, revision)
 }
 >>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
+=======
+type mockTxn struct {
+	ctx  context.Context
+	mode int
+}
+
+func (txn *mockTxn) If(cs ...clientv3.Cmp) clientv3.Txn {
+	if cs != nil {
+		txn.mode += 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Then(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Else(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 2
+	}
+	return txn
+}
+
+func (txn *mockTxn) Commit() (*clientv3.TxnResponse, error) {
+	switch txn.mode {
+	case 0:
+		return &clientv3.TxnResponse{}, nil
+	case 1:
+		return nil, rpctypes.ErrNoSpace
+	case 2:
+		return nil, rpctypes.ErrTimeoutDueToLeaderFail
+	case 3:
+		return nil, context.DeadlineExceeded
+	default:
+		return nil, errors.New("mock error")
+	}
+}
+>>>>>>> upstream/release-5.2

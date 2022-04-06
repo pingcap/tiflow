@@ -192,7 +192,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval)
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, model.NewGlobalState(), processorFlushInterval, "processor")
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	go func() {
@@ -260,7 +260,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)
-		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval)
+		err = c.runEtcdWorker(ctx, owner, model.NewGlobalState(), ownerFlushInterval, "owner")
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -276,12 +276,19 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(ctx cdcContext.Context, reactor orchestrator.Reactor, reactorState orchestrator.ReactorState, timerInterval time.Duration) error {
+func (c *Capture) runEtcdWorker(
+	ctx cdcContext.Context,
+	reactor orchestrator.Reactor,
+	reactorState orchestrator.ReactorState,
+	timerInterval time.Duration,
+	role string,
+) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, kv.EtcdKeyBase, reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := etcdWorker.Run(ctx, c.session, timerInterval); err != nil {
+	captureAddr := c.info.AdvertiseAddr
+	if err := etcdWorker.Run(ctx, c.session, timerInterval, captureAddr, role); err != nil {
 		// We check ttl of lease instead of check `session.Done`, because
 		// `session.Done` is only notified when etcd client establish a
 		// new keepalive request, there could be a time window as long as
