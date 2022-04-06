@@ -1778,9 +1778,10 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 		Msg:    "source is added but there is no free worker to bound",
 		Source: sourceID,
 	}})
-	unBoundSources := s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 1)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
+	sourceCfgs := s1.scheduler.GetSourceCfgs()
+	c.Assert(sourceCfgs, check.HasLen, 1)
+	c.Assert(sourceCfgs, check.HasKey, sourceID)
+	c.Assert(s1.scheduler.BoundSources(), check.HasLen, 0)
 
 	// 3. try to add multiple source
 	// 3.1 duplicated source id
@@ -1814,11 +1815,12 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 		Msg:    "source is added but there is no free worker to bound",
 		Source: sourceID3,
 	}})
-	unBoundSources = s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 3)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
-	c.Assert(unBoundSources[1], check.Equals, sourceID2)
-	c.Assert(unBoundSources[2], check.Equals, sourceID3)
+	sourceCfgs = s1.scheduler.GetSourceCfgs()
+	c.Assert(sourceCfgs, check.HasLen, 3)
+	c.Assert(sourceCfgs, check.HasKey, sourceID)
+	c.Assert(sourceCfgs, check.HasKey, sourceID2)
+	c.Assert(sourceCfgs, check.HasKey, sourceID3)
+	c.Assert(s1.scheduler.BoundSources(), check.HasLen, 0)
 
 	// 4. try to stop a non-exist-source
 	req.Op = pb.SourceOp_StopSource

@@ -92,7 +92,7 @@ func checkRelaySource(t *testing.T, relaySources map[string]struct{}, sources ..
 func getUnboundedSourcesWithLock(s *Scheduler) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.UnboundSources()
+	return s.getUnboundSources()
 }
 
 func (t *testSchedulerSuite) TestScheduler() {
