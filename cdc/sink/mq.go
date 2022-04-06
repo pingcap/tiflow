@@ -302,7 +302,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 	// Notice: We must call Partitions here,
 	// which will be responsible for automatically creating topics when they don't exist.
-	// If it is not called here and kafka has auto-creation of topic turned on,
+	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
 	_, err = k.topicManager.Partitions(topic)
 	if err != nil {
