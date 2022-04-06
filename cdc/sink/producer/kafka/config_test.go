@@ -73,10 +73,10 @@ func TestNewSaramaConfig(t *testing.T) {
 	saslConfig := NewConfig()
 	saslConfig.Version = "2.6.0"
 	saslConfig.ClientID = "test-sasl-scram"
-	saslConfig.SaslScram = &security.SaslScram{
-		SaslUser:      "user",
-		SaslPassword:  "password",
-		SaslMechanism: sarama.SASLTypeSCRAMSHA256,
+	saslConfig.SASL = &security.SASL{
+		SASLUser:      "user",
+		SASLPassword:  "password",
+		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
 	cfg, err := NewSaramaConfig(ctx, saslConfig)
