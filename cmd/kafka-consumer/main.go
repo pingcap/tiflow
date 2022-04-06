@@ -484,6 +484,7 @@ func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	ctx := context.Background()
 	partition := claim.Partition()
 	c.sinksMu.Lock()
 	sink := c.sinks[partition]
@@ -576,7 +577,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				tableID := c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				tableID := c.fakeTableIDGenerator.
+					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				row.Table.TableID = tableID
 
 				group, ok := eventGroups[tableID]
@@ -604,7 +606,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						if len(events) == 0 {
 							continue
 						}
-						if err := sink.EmitRowChangedEvents(context.Background(), events...); err != nil {
+						if err := sink.EmitRowChangedEvents(ctx, events...); err != nil {
 							log.Panic("emit row changed event failed",
 								zap.Any("events", events),
 								zap.Error(err),
