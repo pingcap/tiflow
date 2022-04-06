@@ -12,19 +12,6 @@ CDC_COUNT=3
 DB_COUNT=4
 MAX_RETRIES=20
 
-function check_changefeed_state() {
-	pd_addr=$1
-	changefeed_id=$2
-	expected=$3
-	state=$(cdc cli --pd=$pd_addr changefeed query -s -c $changefeed_id | jq -r ".state")
-	if [[ "$state" != "$expected" ]]; then
-		echo "unexpected state $state, expected $expected"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_state
-
 function run() {
 	# test kafka sink only in this case
 	if [ "$SINK_TYPE" == "mysql" ]; then
@@ -51,9 +38,9 @@ function run() {
 	run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "error"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "error" "null" ""
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
 
 	check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "kafka_sink_error_resume.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
