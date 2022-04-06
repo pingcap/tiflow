@@ -112,7 +112,8 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 	}
 }
 
-// CreateTopic creates a topic with the given name.
+// CreateTopic creates a topic with the given name
+// and returns the number of partitions.
 func (m *TopicManager) CreateTopic(topicName string) (int32, error) {
 	start := time.Now()
 	topics, err := m.admin.ListTopics()
@@ -138,7 +139,10 @@ func (m *TopicManager) CreateTopic(topicName string) (int32, error) {
 
 	// Maybe our cache has expired information, so we just return it.
 	if t, ok := topics[topicName]; ok {
-		log.Info("topic already exists and the cached information has expired", zap.String("topic", topicName))
+		log.Info(
+			"topic already exists and the cached information has expired",
+			zap.String("topic", topicName),
+		)
 		return t.NumPartitions, nil
 	}
 
