@@ -208,47 +208,25 @@ func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ..
 }
 
 // Watch delegates request to clientv3.Watcher.Watch
-<<<<<<< HEAD
-func (c *Client) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-<<<<<<< HEAD
-	return c.cli.Watch(ctx, key, opts...)
-=======
-	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
-	go c.WatchWithChan(ctx, watchCh, key, opts...)
-=======
 func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
->>>>>>> upstream/release-5.2
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-<<<<<<< HEAD
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, opts ...clientv3.OpOption) {
-	defer func() {
-		close(outCh)
-		log.Info("WatchWithChan exited")
-	}()
-
-	// get initial revision from opts to avoid revision fall back
-	lastRevision := getRevisionFromWatchOpts(opts...)
-
-	watchCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-=======
 func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
-	var lastRevision int64
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer func() {
 		// Using closures to handle changes to the cancel function
 		cancel()
 	}()
->>>>>>> upstream/release-5.2
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
@@ -258,10 +236,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 	for {
 		select {
 		case <-ctx.Done():
-<<<<<<< HEAD
-			cancel()
-=======
->>>>>>> upstream/release-5.2
 			return
 		case response := <-watchCh:
 			lastReceivedResponseTime = c.clock.Now()
@@ -275,22 +249,14 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			for {
 				select {
 				case <-ctx.Done():
-<<<<<<< HEAD
-					cancel()
-=======
->>>>>>> upstream/release-5.2
 					return
 				case outCh <- response: // it may block here
 					break Loop
 				case <-ticker.C:
 					if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
-<<<<<<< HEAD
-						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)))
-=======
 						log.Warn("etcd client outCh blocking too long, the etcdWorker may be stuck",
 							zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
 							zap.String("role", role))
->>>>>>> upstream/release-5.2
 					}
 				}
 			}
@@ -302,12 +268,6 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 			}
 			if c.clock.Since(lastReceivedResponseTime) >= etcdWatchChTimeoutDuration {
 				// cancel the last cancel func to reset it
-<<<<<<< HEAD
-				log.Warn("etcd client watchCh blocking too long, reset the watchCh", zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)), zap.Stack("stack"))
-				cancel()
-				watchCtx, cancel = context.WithCancel(ctx)
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
-=======
 				log.Warn("etcd client watchCh blocking too long, reset the watchCh",
 					zap.Duration("duration", c.clock.Since(lastReceivedResponseTime)),
 					zap.Stack("stack"),
@@ -316,17 +276,12 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 				watchCtx, cancel = context.WithCancel(ctx)
 				// to avoid possible context leak warning from govet
 				_ = cancel
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
->>>>>>> upstream/release-5.2
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
 		}
 	}
-<<<<<<< HEAD
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
-=======
->>>>>>> upstream/release-5.2
 }
 
 // RequestProgress requests a progress notify response be sent in all watch channels.

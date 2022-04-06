@@ -22,8 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
-type codecInterfaceSuite struct {
-}
+type codecInterfaceSuite struct{}
 
 var _ = check.Suite(&codecInterfaceSuite{})
 

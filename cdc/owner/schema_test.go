@@ -28,8 +28,7 @@ import (
 
 var _ = check.Suite(&schemaSuite{})
 
-type schemaSuite struct {
-}
+type schemaSuite struct{}
 
 func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer testleak.AfterTest(c)()

@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -25,8 +26,7 @@ import (
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
-type clientSuite struct {
-}
+type clientSuite struct{}
 
 var _ = check.Suite(&clientSuite{})
 
@@ -47,48 +47,33 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 	return nil, errors.New("mock error")
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
 func (m *mockClient) Txn(ctx context.Context) clientv3.Txn {
 	return &mockTxn{ctx: ctx}
 }
 
->>>>>>> upstream/release-5.2
 type mockWatcher struct {
 	clientv3.Watcher
 	watchCh      chan clientv3.WatchResponse
-	resetCount   *int
-	requestCount *int
-<<<<<<< HEAD
+	resetCount   *int32
+	requestCount *int32
 	rev          *int64
-=======
->>>>>>> upstream/release-5.2
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	*m.resetCount++
-<<<<<<< HEAD
+	atomic.AddInt32(m.resetCount, 1)
 	op := &clientv3.Op{}
 	for _, opt := range opts {
 		opt(op)
 	}
-	*m.rev = op.Rev()
-=======
->>>>>>> upstream/release-5.2
+	atomic.StoreInt64(m.rev, op.Rev())
 	return m.watchCh
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
-	*m.requestCount++
+	atomic.AddInt32(m.requestCount, 1)
 	return nil
 }
 
-<<<<<<< HEAD
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
-=======
->>>>>>> upstream/release-5.2
 func (s *clientSuite) TestRetry(c *check.C) {
 	defer testleak.AfterTest(c)()
 	originValue := maxTries
@@ -161,31 +146,17 @@ func (s *etcdSuite) TestDelegateLease(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(ttlResp.TTL, check.Equals, int64(-1))
 }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
-// test no data lost when WatchCh blocked
-func (s *clientSuite) TestWatchChBlocked(c *check.C) {
-	defer testleak.AfterTest(c)()
-	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
-	rev := int64(0)
-	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
-=======
 
 // test no data lost when WatchCh blocked
 func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
+	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
->>>>>>> upstream/release-5.2
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
 	cli.Watcher = watcher
 
 	sentRes := []clientv3.WatchResponse{
@@ -214,11 +185,7 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer cancel()
 
 	go func() {
-<<<<<<< HEAD
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
-=======
 		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
->>>>>>> upstream/release-5.2
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -229,44 +196,28 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
-<<<<<<< HEAD
-		if len(receivedRes) == len(sentRes) {
-			cancel()
-		}
-=======
->>>>>>> upstream/release-5.2
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 	// make sure watchCh has been reset since timeout
-	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	c.Assert(atomic.LoadInt32(watcher.resetCount) > 1, check.IsTrue)
 	// make sure RequestProgress has been call since timeout
-	c.Assert(*watcher.requestCount > 1, check.IsTrue)
+	c.Assert(atomic.LoadInt32(watcher.requestCount) > 1, check.IsTrue)
 	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
 	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
 }
 
 // test no data lost when OutCh blocked
-<<<<<<< HEAD
-func (s *clientSuite) TestOutChBlocked(c *check.C) {
-	defer testleak.AfterTest(c)()
-=======
 func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
->>>>>>> upstream/release-5.2
 
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
-<<<<<<< HEAD
+	resetCount := int32(0)
+	requestCount := int32(0)
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
-=======
-	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
->>>>>>> upstream/release-5.2
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -292,11 +243,7 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
-<<<<<<< HEAD
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
-=======
 		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
->>>>>>> upstream/release-5.2
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -307,24 +254,17 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 
 	for r := range outCh {
 		receivedRes = append(receivedRes, r)
-<<<<<<< HEAD
-		if len(receivedRes) == len(sentRes) {
-			cancel()
-		}
-=======
->>>>>>> upstream/release-5.2
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 }
 
-<<<<<<< HEAD
 func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	defer testleak.AfterTest(c)()
 	cli := clientv3.NewCtxClient(context.TODO())
 
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
 	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
 	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
@@ -351,21 +291,20 @@ func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "test", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	// wait for WatchWithChan set up
 	<-outCh
 	// move time forward
 	mockClock.Add(time.Second * 30)
 	// make sure watchCh has been reset since timeout
-	c.Assert(*watcher.resetCount > 1, check.IsTrue)
-	// make suer revision in WatchWitchChan does not fall back
+	c.Assert(atomic.LoadInt32(watcher.resetCount) > 1, check.IsTrue)
+	// make sure revision in WatchWitchChan does not fall back
 	// even if there has not any response been received from WatchCh
 	// while WatchCh was reset
-	c.Assert(*watcher.rev, check.Equals, revision)
+	c.Assert(atomic.LoadInt64(watcher.rev), check.Equals, revision)
 }
->>>>>>> f90ca46e7 (etcd/client (ticdc): Prevent revision in WatchWitchChan fallback. (#3851))
-=======
+
 type mockTxn struct {
 	ctx  context.Context
 	mode int
@@ -406,4 +345,3 @@ func (txn *mockTxn) Commit() (*clientv3.TxnResponse, error) {
 		return nil, errors.New("mock error")
 	}
 }
->>>>>>> upstream/release-5.2

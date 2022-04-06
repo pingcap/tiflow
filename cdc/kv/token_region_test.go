@@ -26,8 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type tokenRegionSuite struct {
-}
+type tokenRegionSuite struct{}
 
 var _ = check.Suite(&tokenRegionSuite{})
 
