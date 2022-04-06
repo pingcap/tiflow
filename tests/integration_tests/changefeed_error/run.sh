@@ -25,9 +25,6 @@ function check_no_capture() {
 	fi
 }
 
-export -f check_changefeed_mark_failed_regex
-export -f check_changefeed_mark_stopped_regex
-export -f check_changefeed_mark_stopped
 export -f check_no_changefeed
 export -f check_no_capture
 
