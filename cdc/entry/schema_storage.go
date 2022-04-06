@@ -165,7 +165,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 			return nil
 		}
-		snap = lastSnap.Clone()
+		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySchemaSnapshot(s.forceReplicate)
 	}

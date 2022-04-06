@@ -1,6 +1,10 @@
 package schema
 
 import (
+	"fmt"
+	"unsafe"
+
+	"github.com/google/btree"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -60,42 +64,50 @@ func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceR
 	return NewSchemaSnapshotFromMeta(meta, currentTs, forceReplicate)
 }
 
-// SchemaSnapshot stores the source TiDB all schema information
-// SchemaSnapshot is a READ ONLY struct
+// SchemaSnapshot stores the source TiDB all schema information and it should be READ-ONLY!
 type SchemaSnapshot struct {
-	tableNameToID  map[model.TableName]int64
-	schemaNameToID map[string]int64
+	// map[versionedEntityName] -> int64
+	// The ID can be `-1` which means the table is deleted.
+	tableNameToID *btree.BTree
 
-	schemas        map[int64]*timodel.DBInfo
-	tables         map[int64]*model.TableInfo
-	partitionTable map[int64]*model.TableInfo
+	// map[versionedEntityName] -> int64
+	// The ID can be `-1` which means the table is deleted.
+	schemaNameToID *btree.BTree
 
-	// key is schemaID and value is tableIDs
-	tableInSchema map[int64][]int64
+	// map[versionedID] -> *timodel.DBInfo
+	// The target can be `nil` which means the entity is deleted.
+	schemas *btree.BTree
 
-	truncateTableID   map[int64]struct{}
-	ineligibleTableID map[int64]struct{}
+	// map[versionedID] -> *model.TableInfo
+	// The target can be `nil` which means the entity is deleted.
+	tables *btree.BTree
 
-	currentTs uint64
+	// map[versionedID] -> struct{}
+	truncatedTables *btree.BTree
+
+	// map[versionedID] -> struct{}
+	partitionTables *btree.BTree
+
+	// map[versionedID] -> struct{}
+	ineligibleTables *btree.BTree
 
 	// if forceReplicate is true, treat ineligible tables as eligible.
 	forceReplicate bool
+
+	currentTs uint64
 }
 
 func NewEmptySchemaSnapshot(forceReplicate bool) *SchemaSnapshot {
 	return &SchemaSnapshot{
-		tableNameToID:  make(map[model.TableName]int64),
-		schemaNameToID: make(map[string]int64),
-
-		schemas:        make(map[int64]*timodel.DBInfo),
-		tables:         make(map[int64]*model.TableInfo),
-		partitionTable: make(map[int64]*model.TableInfo),
-
-		tableInSchema:     make(map[int64][]int64),
-		truncateTableID:   make(map[int64]struct{}),
-		ineligibleTableID: make(map[int64]struct{}),
-
-		forceReplicate: forceReplicate,
+		tableNameToID:    btree.New(16),
+		schemaNameToID:   btree.New(16),
+		schemas:          btree.New(16),
+		tables:           btree.New(16),
+		truncatedTables:  btree.New(16),
+		partitionTables:  btree.New(16),
+		ineligibleTables: btree.New(16),
+		forceReplicate:   forceReplicate,
+		currentTs:        0,
 	}
 }
 
@@ -105,40 +117,70 @@ func NewSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
+	tag := negative(currentTs)
+
 	for _, dbinfo := range dbinfos {
-		snap.schemas[dbinfo.ID] = dbinfo
-		snap.schemaNameToID[dbinfo.Name.O] = dbinfo.ID
-	}
-	for schemaID, dbinfo := range snap.schemas {
-		tableInfos, err := meta.ListTables(schemaID)
+		vid := newVersionedID(dbinfo.ID, tag)
+		vid.target = unsafe.Pointer(dbinfo)
+		snap.schemas.ReplaceOrInsert(vid)
+
+		vname := newVersionedEntityName(dbinfo.Name.O, "", tag)
+		vname.target = dbinfo.ID
+		snap.schemaNameToID.ReplaceOrInsert(vname)
+
+		tableInfos, err := meta.ListTables(dbinfo.ID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
-		snap.tableInSchema[schemaID] = make([]int64, 0, len(tableInfos))
 		for _, tableInfo := range tableInfos {
-			snap.tableInSchema[schemaID] = append(snap.tableInSchema[schemaID], tableInfo.ID)
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
-			snap.tables[tableInfo.ID] = tableInfo
-			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
+			snap.tables.ReplaceOrInsert(versionedID{
+				id:     tableInfo.ID,
+				tag:    tag,
+				target: unsafe.Pointer(tableInfo),
+			})
+			snap.tableNameToID.ReplaceOrInsert(versionedEntityName{
+				schema: dbinfo.Name.O,
+				table:  tableInfo.Name.O,
+				tag:    tag,
+				target: tableInfo.ID,
+			})
+
 			isEligible := tableInfo.IsEligible(forceReplicate)
 			if !isEligible {
-				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
+				snap.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
-					snap.partitionTable[partition.ID] = tableInfo
+					snap.partitionTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					if !isEligible {
-						snap.ineligibleTableID[partition.ID] = struct{}{}
+						snap.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
 				}
 			}
 		}
 	}
+
 	snap.currentTs = currentTs
 	return snap, nil
 }
 
+func (s *SchemaSnapshot) Copy() *SchemaSnapshot {
+	return &SchemaSnapshot{
+		tableNameToID:    s.tableNameToID,
+		schemaNameToID:   s.schemaNameToID,
+		schemas:          s.schemas,
+		tables:           s.tables,
+		truncatedTables:  s.truncatedTables,
+		partitionTables:  s.partitionTables,
+		ineligibleTables: s.ineligibleTables,
+		forceReplicate:   s.forceReplicate,
+		currentTs:        s.currentTs,
+	}
+}
+
 func (s *SchemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
+	/*************
 	logger("[SchemaSnap] Start to print status", zap.Uint64("currentTs", s.currentTs))
 	for id, dbInfo := range s.schemas {
 		logger("[SchemaSnap] --> Schemas", zap.Int64("schemaID", id), zap.Reflect("dbInfo", dbInfo))
@@ -166,161 +208,135 @@ func (s *SchemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
 		}
 	}
-	for pid, table := range s.partitionTable {
+	for pid, table := range s.partitionTables {
 		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID))
 	}
-	truncateTableID := make([]int64, 0, len(s.truncateTableID))
-	for id := range s.truncateTableID {
-		truncateTableID = append(truncateTableID, id)
+	truncatedTables := make([]int64, 0, len(s.truncatedTables))
+	for id := range s.truncatedTables {
+		truncatedTables = append(truncatedTables, id)
 	}
-	logger("[SchemaSnap] TruncateTableIDs", zap.Int64s("ids", truncateTableID))
+	logger("[SchemaSnap] TruncateTableIDs", zap.Int64s("ids", truncatedTables))
 
-	ineligibleTableID := make([]int64, 0, len(s.ineligibleTableID))
-	for id := range s.ineligibleTableID {
-		ineligibleTableID = append(ineligibleTableID, id)
+	ineligibleTables := make([]int64, 0, len(s.ineligibleTables))
+	for id := range s.ineligibleTables {
+		ineligibleTables = append(ineligibleTables, id)
 	}
-	logger("[SchemaSnap] IneligibleTableIDs", zap.Int64s("ids", ineligibleTableID))
+	logger("[SchemaSnap] IneligibleTableIDs", zap.Int64s("ids", ineligibleTables))
+	*************/
 }
 
-// Clone clones Storage
-func (s *SchemaSnapshot) Clone() *SchemaSnapshot {
-	clone := *s
-
-	tableNameToID := make(map[model.TableName]int64, len(s.tableNameToID))
-	for k, v := range s.tableNameToID {
-		tableNameToID[k] = v
-	}
-	clone.tableNameToID = tableNameToID
-
-	schemaNameToID := make(map[string]int64, len(s.schemaNameToID))
-	for k, v := range s.schemaNameToID {
-		schemaNameToID[k] = v
-	}
-	clone.schemaNameToID = schemaNameToID
-
-	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
-	for k, v := range s.schemas {
-		// DBInfo is readonly in TiCDC, shallow copy to reduce memory
-		schemas[k] = v.Copy()
-	}
-	clone.schemas = schemas
-
-	tables := make(map[int64]*model.TableInfo, len(s.tables))
-	for k, v := range s.tables {
-		tables[k] = v
-	}
-	clone.tables = tables
-
-	tableInSchema := make(map[int64][]int64, len(s.tableInSchema))
-	for k, v := range s.tableInSchema {
-		cloneV := make([]int64, len(v))
-		copy(cloneV, v)
-		tableInSchema[k] = cloneV
-	}
-	clone.tableInSchema = tableInSchema
-
-	partitionTable := make(map[int64]*model.TableInfo, len(s.partitionTable))
-	for k, v := range s.partitionTable {
-		partitionTable[k] = v
-	}
-	clone.partitionTable = partitionTable
-
-	truncateTableID := make(map[int64]struct{}, len(s.truncateTableID))
-	for k, v := range s.truncateTableID {
-		truncateTableID[k] = v
-	}
-	clone.truncateTableID = truncateTableID
-
-	ineligibleTableID := make(map[int64]struct{}, len(s.ineligibleTableID))
-	for k, v := range s.ineligibleTableID {
-		ineligibleTableID[k] = v
-	}
-	clone.ineligibleTableID = ineligibleTableID
-
-	return &clone
+// SchemaByID returns the DBInfo by schema id.
+// The second returned value is false if no schema with the specified id is found.
+// NOTE: The returned table info should always be READ-ONLY!
+func (s *SchemaSnapshot) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
+	tag := negative(s.currentTs)
+	start := versionedID{id: id, tag: tag, target: nil}
+	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
+	s.schemas.AscendRange(start, end, func(i btree.Item) bool {
+		val = (*timodel.DBInfo)(i.(versionedID).target)
+		ok = val != nil
+		return false
+	})
+	return
 }
 
-// GetTableNameByID looks up a TableName with the given table id
-func (s *SchemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
-	tableInfo, ok := s.tables[id]
+// TableByID returns the TableInfo by table id or partition id.
+// The second returned value is false if no table with the specified id is found.
+// NOTE: The returned table info should always be READ-ONLY!
+func (s *SchemaSnapshot) TableByID(id int64) (tableInfo *model.TableInfo, ok bool) {
+	tag := negative(s.currentTs)
+	start := versionedID{id: id, tag: tag, target: nil}
+	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
+	s.tables.AscendRange(start, end, func(i btree.Item) bool {
+		tableInfo = (*model.TableInfo)(i.(versionedID).target)
+		ok = tableInfo != nil
+		return false
+	})
 	if !ok {
 		// Try partition, it could be a partition table.
-		partInfo, ok := s.partitionTable[id]
-		if !ok {
-			return model.TableName{}, false
-		}
-		// Must exists an table that contains the partition.
-		tableInfo = s.tables[partInfo.ID]
+		s.partitionTables.AscendRange(start, end, func(i btree.Item) bool {
+			tableInfo = (*model.TableInfo)(i.(versionedID).target)
+			ok = tableInfo != nil
+			return false
+		})
 	}
-	return tableInfo.TableName, true
+	return
 }
 
-// GetTableIDByName returns the tableID by table schemaName and tableName
-func (s *SchemaSnapshot) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
-	id, ok := s.tableNameToID[model.TableName{
-		Schema: schemaName,
-		Table:  tableName,
-	}]
-	return id, ok
+// TableIDByName returns the tableID by table schemaName and tableName.
+// The second returned value is false if no table with the specified name is found.
+// NOTE: The returned table info should always be READ-ONLY!
+func (s *SchemaSnapshot) TableIDByName(schema string, table string) (id int64, ok bool) {
+	tag := negative(s.currentTs)
+	start := newVersionedEntityName(schema, table, tag)
+	end := newVersionedEntityName(schema, table, negative(uint64(0)))
+	s.tableNameToID.AscendRange(start, end, func(i btree.Item) bool {
+		id = i.(versionedEntityName).target
+		ok = id >= 0 // negative values are treated as invalid.
+		return false
+	})
+	return
 }
 
 // GetTableByName queries a table by name,
-// the second returned value is false if no table with the specified name is found.
-func (s *SchemaSnapshot) GetTableByName(schema, table string) (info *model.TableInfo, ok bool) {
-	id, ok := s.GetTableIDByName(schema, table)
+// The second returned value is false if no table with the specified name is found.
+// NOTE: The returned table info should always be READ-ONLY!
+func (s *SchemaSnapshot) TableByName(schema, table string) (info *model.TableInfo, ok bool) {
+	id, ok := s.TableIDByName(schema, table)
 	if !ok {
 		return nil, ok
 	}
 	return s.TableByID(id)
 }
 
-// SchemaByID returns the DBInfo by schema id
-func (s *SchemaSnapshot) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
-	val, ok = s.schemas[id]
-	return
-}
-
-// SchemaByTableID returns the schema ID by table ID
+// SchemaByTableID returns the schema ID by table ID.
 func (s *SchemaSnapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) {
-	tableInfo, ok := s.tables[tableID]
+	tableInfo, ok := s.TableByID(tableID)
 	if !ok {
 		return nil, false
 	}
-	schemaID, ok := s.schemaNameToID[tableInfo.TableName.Schema]
-	if !ok {
-		return nil, false
-	}
-	return s.SchemaByID(schemaID)
+	return s.SchemaByID(tableInfo.SchemaID)
 }
 
-// TableByID returns the TableInfo by table id
-func (s *SchemaSnapshot) TableByID(id int64) (val *model.TableInfo, ok bool) {
-	val, ok = s.tables[id]
-	return
-}
-
-// PhysicalTableByID returns the TableInfo by table id or partition ID.
-func (s *SchemaSnapshot) PhysicalTableByID(id int64) (val *model.TableInfo, ok bool) {
-	val, ok = s.tables[id]
-	if !ok {
-		val, ok = s.partitionTable[id]
-	}
-	return
-}
-
-// IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
+// IsTruncateTableID returns true if the table id have been truncated by truncate table DDL.
 func (s *SchemaSnapshot) IsTruncateTableID(id int64) bool {
-	_, ok := s.truncateTableID[id]
-	return ok
+	tag, ok := s.tableTagByID(id)
+	return ok && s.truncatedTables.Get(newVersionedID(id, tag)) != nil
 }
 
-// IsIneligibleTableID returns true if the table is ineligible
-func (s *SchemaSnapshot) IsIneligibleTableID(id int64) bool {
-	_, ok := s.ineligibleTableID[id]
-	return ok
+// IsIneligibleTableID returns true if the table is ineligible.
+func (s *SchemaSnapshot) IsIneligibleTableID(id int64) (ok bool) {
+	tag, ok := s.tableTagByID(id)
+	return ok && s.ineligibleTables.Get(newVersionedID(id, tag)) != nil
 }
 
-// FillSchemaName fills the schema name in ddl job
+func (s *SchemaSnapshot) tableTagByID(id int64) (foundTag uint64, ok bool) {
+	tag := negative(s.currentTs)
+	start := newVersionedID(id, tag)
+	end := newVersionedID(id, negative(uint64(0)))
+	s.tables.AscendRange(start, end, func(i btree.Item) bool {
+		tableInfo := (*timodel.TableInfo)(i.(versionedID).target)
+		if tableInfo != nil {
+			foundTag = i.(versionedID).tag
+			ok = true
+		}
+		return false
+	})
+	if !ok {
+		// Try partition, it could be a partition table.
+		s.partitionTables.AscendRange(start, end, func(i btree.Item) bool {
+			tableInfo := (*timodel.TableInfo)(i.(versionedID).target)
+			if tableInfo != nil {
+				foundTag = i.(versionedID).tag
+				ok = true
+			}
+			return false
+		})
+	}
+	return
+}
+
+// FillSchemaName fills the schema name in ddl job.
 func (s *SchemaSnapshot) FillSchemaName(job *timodel.Job) error {
 	if job.Type == timodel.ActionRenameTables {
 		// DDLs on multiple schema or tables, ignore them.
@@ -339,200 +355,177 @@ func (s *SchemaSnapshot) FillSchemaName(job *timodel.Job) error {
 	return nil
 }
 
-func (s *SchemaSnapshot) dropSchema(id int64) error {
-	schema, ok := s.schemas[id]
+func (s *SchemaSnapshot) dropSchema(id int64, currentTs uint64) error {
+	dbInfo, ok := s.SchemaByID(id)
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(id)
 	}
-
-	for _, tableID := range s.tableInSchema[id] {
-		tableName := s.tables[tableID].TableName
-		if pi := s.tables[tableID].GetPartitionInfo(); pi != nil {
-			for _, partition := range pi.Definitions {
-				delete(s.partitionTable, partition.ID)
-			}
-		}
-		delete(s.tables, tableID)
-		delete(s.tableNameToID, tableName)
-	}
-
-	delete(s.schemas, id)
-	delete(s.tableInSchema, id)
-	delete(s.schemaNameToID, schema.Name.O)
-
+	tag := negative(currentTs)
+	s.schemas.ReplaceOrInsert(newVersionedID(id, tag))
+	s.schemaNameToID.ReplaceOrInsert(newVersionedEntityName(dbInfo.Name.O, "", tag))
+	s.currentTs = currentTs
+	log.Debug("drop schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
 	return nil
 }
 
-func (s *SchemaSnapshot) createSchema(db *timodel.DBInfo) error {
-	if _, ok := s.schemas[db.ID]; ok {
-		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(db.Name, db.ID)
-	}
-
-	s.schemas[db.ID] = db.Copy()
-	s.schemaNameToID[db.Name.O] = db.ID
-	s.tableInSchema[db.ID] = []int64{}
-
-	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
-	return nil
-}
-
-func (s *SchemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
-	_, ok := s.schemas[db.ID]
-	if !ok {
-		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
-	}
-	s.schemas[db.ID] = db.Copy()
-	s.schemaNameToID[db.Name.O] = db.ID
-	return nil
-}
-
-func (s *SchemaSnapshot) dropTable(id int64) error {
-	table, ok := s.tables[id]
-	if !ok {
-		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
-	}
-	tableInSchema, ok := s.tableInSchema[table.SchemaID]
-	if !ok {
-		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table(%d)'s schema", id)
-	}
-
-	for i, tableID := range tableInSchema {
-		if tableID == id {
-			copy(tableInSchema[i:], tableInSchema[i+1:])
-			s.tableInSchema[table.SchemaID] = tableInSchema[:len(tableInSchema)-1]
-			break
-		}
-	}
-
-	tableName := s.tables[id].TableName
-	delete(s.tables, id)
-	if pi := table.GetPartitionInfo(); pi != nil {
-		for _, partition := range pi.Definitions {
-			delete(s.partitionTable, partition.ID)
-			delete(s.ineligibleTableID, partition.ID)
-		}
-	}
-	delete(s.tableNameToID, tableName)
-	delete(s.ineligibleTableID, id)
-
-	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
-	return nil
-}
-
-func (s *SchemaSnapshot) updatePartition(tbl *model.TableInfo) error {
-	id := tbl.ID
-	table, ok := s.tables[id]
-	if !ok {
-		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
-	}
-	oldPi := table.GetPartitionInfo()
-	if oldPi == nil {
-		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", id)
-	}
-	oldIDs := make(map[int64]struct{}, len(oldPi.Definitions))
-	for _, p := range oldPi.Definitions {
-		oldIDs[p.ID] = struct{}{}
-	}
-
-	newPi := tbl.GetPartitionInfo()
-	if newPi == nil {
-		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", id)
-	}
-	s.tables[id] = tbl
-	for _, partition := range newPi.Definitions {
-		// update table info.
-		if _, ok := s.partitionTable[partition.ID]; ok {
-			log.Debug("add table partition success",
-				zap.String("name", tbl.Name.O), zap.Int64("tid", id),
-				zap.Int64("add partition id", partition.ID))
-		}
-		s.partitionTable[partition.ID] = tbl
-		if !tbl.IsEligible(s.forceReplicate) {
-			s.ineligibleTableID[partition.ID] = struct{}{}
-		}
-		delete(oldIDs, partition.ID)
-	}
-
-	// drop old partition.
-	for pid := range oldIDs {
-		s.truncateTableID[pid] = struct{}{}
-		delete(s.partitionTable, pid)
-		delete(s.ineligibleTableID, pid)
-		log.Debug("drop table partition success",
-			zap.String("name", tbl.Name.O), zap.Int64("tid", id),
-			zap.Int64("truncated partition id", pid))
-	}
-
-	return nil
-}
-
-func (s *SchemaSnapshot) createTable(table *model.TableInfo) error {
-	schema, ok := s.schemas[table.SchemaID]
-	if !ok {
-		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", table.SchemaID)
-	}
-	tableInSchema, ok := s.tableInSchema[table.SchemaID]
-	if !ok {
-		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", table.SchemaID)
-	}
-	_, ok = s.tables[table.ID]
+// Create a new schema in the snapshot. `dbInfo` will be deep copied.
+func (s *SchemaSnapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
+	x, ok := s.SchemaByID(dbInfo.ID)
 	if ok {
-		return cerror.ErrSnapshotTableExists.GenWithStackByArgs(schema.Name, table.Name)
+		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(x.Name, x.ID)
 	}
-	tableInSchema = append(tableInSchema, table.ID)
-	s.tableInSchema[table.SchemaID] = tableInSchema
+	s.doCreateSchema(dbInfo, currentTs)
+	log.Debug("create schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
+	return nil
+}
 
-	s.tables[table.ID] = table
-	if !table.IsEligible(s.forceReplicate) {
-		// Sequence is not supported yet, and always ineligible.
-		// Skip Warn to avoid confusion.
-		// See https://github.com/pingcap/tiflow/issues/4559
-		if !table.IsSequence() {
-			log.Warn("this table is ineligible to replicate",
-				zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
-		}
-		s.ineligibleTableID[table.ID] = struct{}{}
+func (s *SchemaSnapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
+	if _, ok := s.SchemaByID(dbInfo.ID); !ok {
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", dbInfo.Name, dbInfo.ID)
 	}
-	if pi := table.GetPartitionInfo(); pi != nil {
-		for _, partition := range pi.Definitions {
-			s.partitionTable[partition.ID] = table
-			if !table.IsEligible(s.forceReplicate) {
-				s.ineligibleTableID[partition.ID] = struct{}{}
-			}
-		}
-	}
-	s.tableNameToID[table.TableName] = table.ID
+	s.doCreateSchema(dbInfo, currentTs)
+	log.Debug("replace schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
+	return nil
+}
 
-	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
+func (s *SchemaSnapshot) doCreateSchema(dbInfo *timodel.DBInfo, currentTs uint64) {
+	tag := negative(currentTs)
+	vid := newVersionedID(dbInfo.ID, tag)
+	vid.target = unsafe.Pointer(dbInfo.Clone())
+	s.schemas.ReplaceOrInsert(vid)
+	vname := newVersionedEntityName(dbInfo.Name.O, "", tag)
+	vname.target = dbInfo.ID
+	s.schemaNameToID.ReplaceOrInsert(vname)
+	s.currentTs = currentTs
+}
+
+func (s *SchemaSnapshot) dropTable(id int64, currentTs uint64) error {
+	tbInfo, ok := s.TableByID(id)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
+	}
+	tag := negative(currentTs)
+	s.tables.ReplaceOrInsert(newVersionedID(id, tag))
+	s.tableNameToID.ReplaceOrInsert(newVersionedEntityName(tbInfo.TableName.Schema, tbInfo.TableName.Table, tag))
+	s.currentTs = currentTs
+	log.Debug("drop table success",
+		zap.String("schema", tbInfo.TableName.Schema),
+		zap.String("table", tbInfo.TableName.Table),
+		zap.Int64("id", tbInfo.ID))
+	return nil
+}
+
+func (s *SchemaSnapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs uint64) (err error) {
+	old, ok := s.TableByID(id)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
+	}
+	tag := negative(currentTs)
+	s.tables.ReplaceOrInsert(newVersionedID(id, tag))
+	s.tableNameToID.ReplaceOrInsert(newVersionedEntityName(old.TableName.Schema, old.TableName.Table, tag))
+
+	s.doCreateTable(tbInfo, currentTs)
+	s.truncatedTables.ReplaceOrInsert(newVersionedID(tbInfo.ID, tag))
+
+	log.Debug("truncate table success",
+		zap.String("schema", tbInfo.TableName.Schema),
+		zap.String("table", tbInfo.TableName.Table),
+		zap.Int64("id", tbInfo.ID))
+	return
+}
+
+// Create a new table in the snapshot. `tbInfo` will be deep copied.
+func (s *SchemaSnapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error {
+	if _, ok := s.SchemaByID(tbInfo.SchemaID); !ok {
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
+	}
+	if _, ok := s.TableByID(tbInfo.ID); ok {
+		return cerror.ErrSnapshotTableExists.GenWithStackByArgs(tbInfo.TableName.Schema, tbInfo.TableName.Table)
+	}
+	s.doCreateTable(tbInfo, currentTs)
+	log.Debug("create table success", zap.Int64("id", tbInfo.ID),
+		zap.String("name", fmt.Sprintf("%s.%s", tbInfo.TableName.Schema, tbInfo.TableName.Table)))
 	return nil
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *SchemaSnapshot) replaceTable(table *model.TableInfo) error {
-	_, ok := s.tables[table.ID]
-	if !ok {
-		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", table.Name, table.ID)
+func (s *SchemaSnapshot) replaceTable(tbInfo *model.TableInfo, currentTs uint64) error {
+	if _, ok := s.SchemaByID(tbInfo.SchemaID); !ok {
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
 	}
-	s.tables[table.ID] = table
-	if !table.IsEligible(s.forceReplicate) {
+	if _, ok := s.TableByID(tbInfo.ID); !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", tbInfo.Name, tbInfo.ID)
+	}
+	s.doCreateTable(tbInfo, currentTs)
+	log.Debug("replace table success", zap.String("name", tbInfo.Name.O), zap.Int64("id", tbInfo.ID))
+	return nil
+}
+
+func (s *SchemaSnapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
+	tag := negative(currentTs)
+	vid := newVersionedID(tbInfo.ID, tag)
+	vid.target = unsafe.Pointer(tbInfo.Clone())
+	s.tables.ReplaceOrInsert(vid)
+
+	vname := newVersionedEntityName(tbInfo.TableName.Schema, tbInfo.TableName.Table, tag)
+	vname.target = tbInfo.ID
+	s.tableNameToID.ReplaceOrInsert(vname)
+
+	ineligible := !tbInfo.IsEligible(s.forceReplicate)
+	if ineligible {
 		// Sequence is not supported yet, and always ineligible.
 		// Skip Warn to avoid confusion.
 		// See https://github.com/pingcap/tiflow/issues/4559
-		if !table.IsSequence() {
+		if !tbInfo.IsSequence() {
 			log.Warn("this table is ineligible to replicate",
-				zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+				zap.String("tableName", tbInfo.Name.O), zap.Int64("tableID", tbInfo.ID))
 		}
-		s.ineligibleTableID[table.ID] = struct{}{}
+		s.ineligibleTables.ReplaceOrInsert(newVersionedID(tbInfo.ID, tag))
 	}
-	if pi := table.GetPartitionInfo(); pi != nil {
+	if pi := tbInfo.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			s.partitionTable[partition.ID] = table
-			if !table.IsEligible(s.forceReplicate) {
-				s.ineligibleTableID[partition.ID] = struct{}{}
+			s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+			if ineligible {
+				s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 			}
 		}
 	}
+	s.currentTs = currentTs
+}
 
+// updatePartition updates partition info for `tbInfo`.
+func (s *SchemaSnapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) error {
+	oldTbInfo, ok := s.TableByID(tbInfo.ID)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(tbInfo.ID)
+	}
+	oldPi := oldTbInfo.GetPartitionInfo()
+	if oldPi == nil {
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", tbInfo.ID)
+	}
+	newPi := tbInfo.GetPartitionInfo()
+	if newPi == nil {
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", tbInfo.ID)
+	}
+
+	tag := negative(currentTs)
+	vid := newVersionedID(tbInfo.ID, tag)
+	vid.target = unsafe.Pointer(tbInfo.Clone())
+	s.tables.ReplaceOrInsert(vid)
+	ineligible := !tbInfo.IsEligible(s.forceReplicate)
+	if ineligible {
+		s.ineligibleTables.ReplaceOrInsert(newVersionedID(tbInfo.ID, tag))
+	}
+	for _, partition := range newPi.Definitions {
+		s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		if ineligible {
+			s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		}
+	}
+	// TODO: is it necessary to print changes detailly?
+	log.Debug("adjust partition success",
+		zap.String("schema", tbInfo.TableName.Schema),
+		zap.String("table", tbInfo.TableName.Table))
 	return nil
 }
 
@@ -548,62 +541,55 @@ func (s *SchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	switch job.Type {
 	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
-		err := s.createSchema(job.BinlogInfo.DBInfo)
+		err := s.createSchema(job.BinlogInfo.DBInfo, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		err := s.replaceSchema(job.BinlogInfo.DBInfo)
+		err := s.replaceSchema(job.BinlogInfo.DBInfo, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionDropSchema:
-		err := s.dropSchema(job.SchemaID)
+		err := s.dropSchema(job.SchemaID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
 		// first drop the table
-		err := s.dropTable(job.TableID)
+		err := s.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// create table
-		err = s.createTable(getWrapTableInfo(job))
+		err = s.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionRenameTables:
-		err := s.renameTables(job)
+		err := s.renameTables(job, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
-		err := s.createTable(getWrapTableInfo(job))
+		err := s.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionDropTable, timodel.ActionDropView:
-		err := s.dropTable(job.TableID)
+		err := s.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 	case timodel.ActionTruncateTable:
 		// job.TableID is the old table id, different from table.ID
-		err := s.dropTable(job.TableID)
+		err := s.truncateTable(job.TableID, getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		err = s.createTable(getWrapTableInfo(job))
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		s.truncateTableID[job.TableID] = struct{}{}
 	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
-		err := s.updatePartition(getWrapTableInfo(job))
+		err := s.updatePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -618,7 +604,7 @@ func (s *SchemaSnapshot) HandleDDL(job *timodel.Job) error {
 			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
 			return nil
 		}
-		err := s.replaceTable(getWrapTableInfo(job))
+		err := s.replaceTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -627,7 +613,7 @@ func (s *SchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	return nil
 }
 
-func (s *SchemaSnapshot) renameTables(job *timodel.Job) error {
+func (s *SchemaSnapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 	var newTableNames, oldSchemaNames []*timodel.CIStr
 	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs, &newTableNames, &oldTableIDs, &oldSchemaNames)
@@ -639,7 +625,7 @@ func (s *SchemaSnapshot) renameTables(job *timodel.Job) error {
 	}
 	// NOTE: should handle failures in halfway better.
 	for _, tableID := range oldTableIDs {
-		if err := s.dropTable(tableID); err != nil {
+		if err := s.dropTable(tableID, currentTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -649,8 +635,8 @@ func (s *SchemaSnapshot) renameTables(job *timodel.Job) error {
 			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
 		newSchemaName := newSchema.Name.L
-		err = s.createTable(model.WrapTableInfo(
-			newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo))
+		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
+		err = s.createTable(tbInfo, currentTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -660,10 +646,54 @@ func (s *SchemaSnapshot) renameTables(job *timodel.Job) error {
 
 // Tables return a map between table id and table info
 // the returned map must be READ-ONLY. Any modified of this map will lead to the internal state confusion in schema storage
-func (s *SchemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
-	return s.tables
-}
+// func (s *SchemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
+// 	return s.tables
+// }
 
 func (s *SchemaSnapshot) CurrentTs() uint64 {
 	return s.currentTs
+}
+
+////////////////////////////////////////////////////////////////
+
+// Entity(schema or table) name with finish timestamp of the associated DDL job.
+type versionedEntityName struct {
+	schema string
+	table  string
+	// tag is `uint64.MAX - finish_timestamp`.
+	tag uint64
+	// the associated entity id, negative values are treated as invalid.
+	target int64
+}
+
+// ID with finish timestamp of the associated DDL job.
+type versionedID struct {
+	id  int64
+	tag uint64
+	// the associated entity pointer.
+	target unsafe.Pointer
+}
+
+func (v1 versionedEntityName) Less(than btree.Item) bool {
+	v2 := than.(versionedEntityName)
+	return v1.schema < v2.schema || (v1.schema == v2.schema && v1.table < v2.table)
+}
+
+func (v1 versionedID) Less(than btree.Item) bool {
+	v2 := than.(versionedID)
+	return v1.id < v2.id
+}
+
+func negative(x uint64) uint64 {
+	return ^x
+}
+
+func newVersionedEntityName(schema string, table string, tag uint64) versionedEntityName {
+	var target int64 = -1
+	return versionedEntityName{schema, table, tag, target}
+}
+
+func newVersionedID(id int64, tag uint64) versionedID {
+	var target unsafe.Pointer = unsafe.Pointer(nil)
+	return versionedID{id, tag, target}
 }
