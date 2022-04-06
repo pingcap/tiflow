@@ -110,7 +110,7 @@ func (n *sorterNode) createSorter(ctx pipeline.NodeContext) (sorter.EventSorter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, err
 			}
 			return levelSorter, nil
 		}
@@ -119,7 +119,7 @@ func (n *sorterNode) createSorter(ctx pipeline.NodeContext) (sorter.EventSorter,
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, err
 		}
 		return unifiedSorter, nil
 	default:
@@ -135,7 +135,7 @@ func (n *sorterNode) start(ctx pipeline.NodeContext, isTableActorMode bool, eg *
 
 	eventSorter, err := n.createSorter(ctx)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	failpoint.Inject("ProcessorAddTableError", func() {
