@@ -2,11 +2,9 @@ package servermaster
 
 import (
 	"sync"
-	"time"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/clock"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -15,7 +13,6 @@ import (
 type jobHolder struct {
 	lib.WorkerHandle
 	*lib.MasterMetaKVData
-	waitAckStartTime time.Time
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
@@ -71,7 +68,6 @@ type JobFsm struct {
 	pendingJobs map[lib.MasterID]*lib.MasterMetaKVData
 	waitAckJobs map[lib.MasterID]*jobHolder
 	onlineJobs  map[lib.MasterID]*jobHolder
-	clocker     clock.Clock
 }
 
 // JobStats defines a statistics interface for JobFsm
@@ -84,7 +80,6 @@ func NewJobFsm() *JobFsm {
 		pendingJobs: make(map[lib.MasterID]*lib.MasterMetaKVData),
 		waitAckJobs: make(map[lib.MasterID]*jobHolder),
 		onlineJobs:  make(map[lib.MasterID]*jobHolder),
-		clocker:     clock.New(),
 	}
 }
 
@@ -171,7 +166,6 @@ func (fsm *JobFsm) JobDispatched(job *lib.MasterMetaKVData, addFromFailover bool
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &jobHolder{
 		MasterMetaKVData: job,
-		waitAckStartTime: fsm.clocker.Now(),
 		addFromFailover:  addFromFailover,
 	}
 }
@@ -189,7 +183,6 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *lib.MasterMetaKVData)
 		job.ID = id
 		fsm.waitAckJobs[id] = &jobHolder{
 			MasterMetaKVData: job,
-			waitAckStartTime: fsm.clocker.Now(),
 		}
 		log.L().Info("job master recovered", zap.Any("job", job))
 	}
@@ -202,20 +195,15 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *lib.MasterMetaKVData)
 	defer fsm.jobsMu.Unlock()
 
 	for id, job := range fsm.waitAckJobs {
-		duration := fsm.clocker.Since(job.waitAckStartTime)
-		if duration > defaultWorkerTimeout {
-			if !job.addFromFailover {
-				log.L().Debug("job master offline delay",
-					zap.Any("job", job), zap.Duration("duration", duration))
-				continue
-			}
-			_, err := dispatchJobFn(job.MasterMetaKVData)
-			if err != nil {
-				return err
-			}
-			fsm.waitAckJobs[id].waitAckStartTime = fsm.clocker.Now()
-			log.L().Info("job master doesn't receive heartbeat in time, recreate it", zap.Any("job", job))
+		if !job.addFromFailover {
+			continue
 		}
+		_, err := dispatchJobFn(job.MasterMetaKVData)
+		if err != nil {
+			return err
+		}
+		fsm.waitAckJobs[id].addFromFailover = false
+		log.L().Info("tombstone job master doesn't receive heartbeat in time, recreate it", zap.Any("job", job))
 	}
 
 	return nil

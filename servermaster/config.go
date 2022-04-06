@@ -41,9 +41,6 @@ const (
 	defaultCampaignTimeout    = 5 * time.Second
 	defaultDiscoverTicker     = 3 * time.Second
 	defaultMetricInterval     = 15 * time.Second
-	// TODO: make it configurable, and must be larger than the
-	// workerTimeoutDuration (15s by default) in executor
-	defaultWorkerTimeout = 16 * time.Second
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew

@@ -21,13 +21,28 @@ func TestJobFsmStateTrans(t *testing.T) {
 		Config: []byte("simple config"),
 	}
 	worker := lib.NewTombstoneWorkerHandle(id, libModel.WorkerStatus{Code: libModel.WorkerStatusNormal}, nil)
+	createWorkerCount := 0
 
-	// create new job, enter into WaitAckack job queue
-	fsm.JobDispatched(job, false)
+	// Failover, job fsm loads tombstone job master
+	fsm.JobDispatched(job, true)
+	err := fsm.IterWaitAckJobs(func(job *lib.MasterMetaKVData) (string, error) {
+		createWorkerCount++
+		return id, nil
+	})
+	require.Nil(t, err)
+	require.Equal(t, 1, createWorkerCount)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
+	// job that is not added from failover won't be processed
+	err = fsm.IterWaitAckJobs(func(job *lib.MasterMetaKVData) (string, error) {
+		createWorkerCount++
+		return id, nil
+	})
+	require.Nil(t, err)
+	require.Equal(t, 1, createWorkerCount)
+
 	// OnWorkerOnline, WaitAck -> Online
-	err := fsm.JobOnline(worker)
+	err = fsm.JobOnline(worker)
 	require.Nil(t, err)
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_online))
