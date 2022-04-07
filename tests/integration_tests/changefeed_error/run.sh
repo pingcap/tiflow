@@ -92,7 +92,7 @@ function run() {
 
 	changefeedid_2="changefeed-error-2"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_2
-	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "failed" "[CDC:ErrStartTsBeforeGC]" ""
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "failed" "[CDC:ErrSnapshotLostByGC]" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid_2
 	export GO_FAILPOINTS=''
