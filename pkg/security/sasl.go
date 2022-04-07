@@ -14,7 +14,6 @@
 package security
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Shopify/sarama"
@@ -50,7 +49,7 @@ func SASLMechanismFormString(s string) (SASLMechanism, error) {
 	case "gssapi":
 		return GSSAPIMechanism, nil
 	default:
-		return UnknownMechanism, errors.Errorf("unknown SASL mechanism %s", s)
+		return UnknownMechanism, errors.Errorf("unknown %s SASL mechanism", s)
 	}
 }
 
@@ -82,7 +81,7 @@ func AuthTypeFromString(s string) (GSSAPIAuthType, error) {
 	case "keytab":
 		return KeyTabAuth, nil
 	default:
-		return UnknownAuth, errors.New(fmt.Sprintf("unknown %s auth type", s))
+		return UnknownAuth, errors.Errorf("unknown %s auth type", s)
 	}
 }
 

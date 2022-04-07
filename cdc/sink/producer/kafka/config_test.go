@@ -421,3 +421,73 @@ func TestConfigurationCombinations(t *testing.T) {
 		_ = adminClient.Close()
 	}
 }
+
+func TestApplySASL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		URI       string
+		exceptErr string
+	}{
+		{
+			name:      "no params",
+			URI:       "kafka://127.0.0.1:9092/abc",
+			exceptErr: "",
+		},
+		{
+			name: "valid PLAIN SASL",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-username=user&sasl-password=password&sasl-mechanism=plain",
+			exceptErr: "",
+		},
+		{
+			name: "valid SCRAM SASL",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-username=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
+			exceptErr: "",
+		},
+		{
+			name: "valid GSSAPI user auth SASL",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=USER&sasl-gssapi-kerberos-config-path=/root/config" +
+				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user&sasl-gssapi-password=pwd" +
+				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
+			exceptErr: "",
+		},
+		{
+			name: "valid GSSAPI keytab auth SASL",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab&sasl-gssapi-kerberos-config-path=/root/config" +
+				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user&sasl-gssapi-keytab-path=/root/keytab" +
+				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
+			exceptErr: "",
+		},
+		{
+			name: "invalid mechanism",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-mechanism=a",
+			exceptErr: "unknown a SASL mechanism",
+		},
+		{
+			name: "invalid GSSAPI auth type",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-mechanism=gssapi&sasl-gssapi-auth-type=keyta1b",
+			exceptErr: "unknown keyta1b auth type",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := NewConfig()
+			sinkURI, err := url.Parse(test.URI)
+			require.Nil(t, err)
+			if test.exceptErr == "" {
+				require.Nil(t, cfg.applySASL(sinkURI.Query()))
+			} else {
+				require.Regexp(t, test.exceptErr, cfg.applySASL(sinkURI.Query()).Error())
+			}
+		})
+	}
+}
