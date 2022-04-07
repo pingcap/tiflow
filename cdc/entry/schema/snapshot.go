@@ -82,11 +82,11 @@ type SchemaSnapshot struct {
 	// The target can be `nil` which means the entity is deleted.
 	tables *btree.BTree
 
-	// map[versionedID] -> struct{}
-	truncatedTables *btree.BTree
+	// map[versionedID] -> *model.TableInfo
+	partitionTables *btree.BTree
 
 	// map[versionedID] -> struct{}
-	partitionTables *btree.BTree
+	truncatedTables *btree.BTree
 
 	// map[versionedID] -> struct{}
 	ineligibleTables *btree.BTree
@@ -103,8 +103,8 @@ func NewEmptySchemaSnapshot(forceReplicate bool) *SchemaSnapshot {
 		schemaNameToID:   btree.New(16),
 		schemas:          btree.New(16),
 		tables:           btree.New(16),
-		truncatedTables:  btree.New(16),
 		partitionTables:  btree.New(16),
+		truncatedTables:  btree.New(16),
 		ineligibleTables: btree.New(16),
 		forceReplicate:   forceReplicate,
 		currentTs:        0,
@@ -152,7 +152,9 @@ func NewSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
-					snap.partitionTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
+					vid := newVersionedID(partition.ID, tag)
+					vid.target = unsafe.Pointer(tableInfo)
+					snap.partitionTables.ReplaceOrInsert(vid)
 					if !isEligible {
 						snap.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
@@ -171,8 +173,8 @@ func (s *SchemaSnapshot) Copy() *SchemaSnapshot {
 		schemaNameToID:   s.schemaNameToID,
 		schemas:          s.schemas,
 		tables:           s.tables,
-		truncatedTables:  s.truncatedTables,
 		partitionTables:  s.partitionTables,
+		truncatedTables:  s.truncatedTables,
 		ineligibleTables: s.ineligibleTables,
 		forceReplicate:   s.forceReplicate,
 		currentTs:        s.currentTs,
@@ -407,6 +409,11 @@ func (s *SchemaSnapshot) dropTable(id int64, currentTs uint64) error {
 	tag := negative(currentTs)
 	s.tables.ReplaceOrInsert(newVersionedID(id, tag))
 	s.tableNameToID.ReplaceOrInsert(newVersionedEntityName(tbInfo.TableName.Schema, tbInfo.TableName.Table, tag))
+	if pi := tbInfo.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		}
+	}
 	s.currentTs = currentTs
 	log.Debug("drop table success",
 		zap.String("schema", tbInfo.TableName.Schema),
@@ -462,9 +469,10 @@ func (s *SchemaSnapshot) replaceTable(tbInfo *model.TableInfo, currentTs uint64)
 }
 
 func (s *SchemaSnapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
+	tbInfo = tbInfo.Clone()
 	tag := negative(currentTs)
 	vid := newVersionedID(tbInfo.ID, tag)
-	vid.target = unsafe.Pointer(tbInfo.Clone())
+	vid.target = unsafe.Pointer(tbInfo)
 	s.tables.ReplaceOrInsert(vid)
 
 	vname := newVersionedEntityName(tbInfo.TableName.Schema, tbInfo.TableName.Table, tag)
@@ -484,7 +492,9 @@ func (s *SchemaSnapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64
 	}
 	if pi := tbInfo.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+			vid := newVersionedID(partition.ID, tag)
+			vid.target = unsafe.Pointer(tbInfo)
+			s.partitionTables.ReplaceOrInsert(vid)
 			if ineligible {
 				s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 			}
@@ -517,7 +527,9 @@ func (s *SchemaSnapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint
 		s.ineligibleTables.ReplaceOrInsert(newVersionedID(tbInfo.ID, tag))
 	}
 	for _, partition := range newPi.Definitions {
-		s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		vid := newVersionedID(partition.ID, tag)
+		vid.target = unsafe.Pointer(tbInfo)
+		s.partitionTables.ReplaceOrInsert(vid)
 		if ineligible {
 			s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 		}
@@ -644,14 +656,58 @@ func (s *SchemaSnapshot) renameTables(job *timodel.Job, currentTs uint64) error 
 	return nil
 }
 
-// Tables return a map between table id and table info
-// the returned map must be READ-ONLY. Any modified of this map will lead to the internal state confusion in schema storage
-// func (s *SchemaSnapshot) Tables() map[model.TableID]*model.TableInfo {
-// 	return s.tables
-// }
-
 func (s *SchemaSnapshot) CurrentTs() uint64 {
 	return s.currentTs
+}
+
+// TableCount counts tables in the snapshot.
+func (s *SchemaSnapshot) TableCount() (count int) {
+	s.IterTables(true, func(i *model.TableInfo) { count += 1 })
+	return
+}
+
+// TableCount counts ineligible tables in the snapshot.
+func (s *SchemaSnapshot) IneligibleTableCount() (count int) {
+	s.IterTables(true, func(i *model.TableInfo) {
+		if !i.IsEligible(s.forceReplicate) {
+			count += 1
+		}
+	})
+	return
+}
+
+// IterTables iterates all table in the snapshot.
+func (s *SchemaSnapshot) IterTables(includeIneligible bool, f func(i *model.TableInfo)) {
+	tag := negative(s.currentTs)
+	for _, tables := range [2]*btree.BTree{s.tables, s.partitionTables} {
+		var tableID int64 = -1
+		tables.Ascend(func(i btree.Item) bool {
+			x := i.(versionedID)
+			if x.id != tableID && x.tag >= tag {
+				tableID = x.id
+				if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
+					f((*model.TableInfo)(x.target))
+				}
+			}
+			return true
+		})
+	}
+	return
+}
+
+func (s *SchemaSnapshot) IterSchemas(f func(i *timodel.DBInfo)) {
+	tag := negative(s.currentTs)
+	var schemaID int64 = -1
+	s.schemas.Ascend(func(i btree.Item) bool {
+		x := i.(versionedID)
+		if x.id != schemaID && x.tag >= tag {
+			schemaID = x.id
+			if x.target != nil {
+				f((*timodel.DBInfo)(x.target))
+			}
+		}
+		return true
+	})
 }
 
 ////////////////////////////////////////////////////////////////
@@ -696,4 +752,37 @@ func newVersionedEntityName(schema string, table string, tag uint64) versionedEn
 func newVersionedID(id int64, tag uint64) versionedID {
 	var target unsafe.Pointer = unsafe.Pointer(nil)
 	return versionedID{id, tag, target}
+}
+
+// TidySchemaSnapshot is for tests.
+func TidySchemaSnapshot(snap *SchemaSnapshot) {
+	snap.IterSchemas(func(dbInfo *timodel.DBInfo) {
+		if len(dbInfo.Tables) == 0 {
+			dbInfo.Tables = nil
+		}
+	})
+	snap.IterTables(true, func(tableInfo *model.TableInfo) {
+		tableInfo.TableInfoVersion = 0
+		if len(tableInfo.Columns) == 0 {
+			tableInfo.Columns = nil
+		}
+		if len(tableInfo.Indices) == 0 {
+			tableInfo.Indices = nil
+		}
+		if len(tableInfo.ForeignKeys) == 0 {
+			tableInfo.ForeignKeys = nil
+		}
+	})
+
+	// the snapshot from meta doesn't know which ineligible tables that have existed in history
+	// so we delete the ineligible tables which are already not exist
+	// FIXME: correct it.
+	// for tableID := range snap.ineligibleTableID {
+	// 	if _, ok := snap.tables[tableID]; !ok {
+	// 		delete(snap.ineligibleTableID, tableID)
+	// 	}
+	// }
+	// the snapshot from meta doesn't know which tables are truncated, so we just ignore it
+
+	snap.truncatedTables.Clear(true)
 }

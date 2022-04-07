@@ -276,7 +276,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		err := scheamStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}
-	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
+	tableInfo, ok := scheamStorage.GetLastSnapshot().TableByName("test", tc.tableName)
 	require.True(t, ok)
 	if tableInfo.IsCommonHandle {
 		// we can check this log to make sure if the clustered-index is enabled
