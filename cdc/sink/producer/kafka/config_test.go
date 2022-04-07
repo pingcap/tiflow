@@ -450,16 +450,20 @@ func TestApplySASL(t *testing.T) {
 		{
 			name: "valid GSSAPI user auth SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=USER&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user&sasl-gssapi-password=pwd" +
+				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=USER" +
+				"&sasl-gssapi-kerberos-config-path=/root/config" +
+				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
+				"&sasl-gssapi-password=pwd" +
 				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
 			exceptErr: "",
 		},
 		{
 			name: "valid GSSAPI keytab auth SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user&sasl-gssapi-keytab-path=/root/keytab" +
+				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab" +
+				"&sasl-gssapi-kerberos-config-path=/root/config" +
+				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
+				"&sasl-gssapi-keytab-path=/root/keytab" +
 				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
 			exceptErr: "",
 		},
@@ -490,4 +494,37 @@ func TestApplySASL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompleteSaramaSASLConfig(t *testing.T) {
+	t.Parallel()
+
+	// Test that SASL is turned on correctly.
+	cfg := NewConfig()
+	cfg.SASL = &security.SASL{
+		SASLUser:      "user",
+		SASLPassword:  "password",
+		SASLMechanism: "",
+		GSSAPI:        security.GSSAPI{},
+	}
+	saramaConfig := sarama.NewConfig()
+	completeSaramaSASLConfig(saramaConfig, cfg)
+	require.False(t, saramaConfig.Net.SASL.Enable)
+	cfg.SASL.SASLMechanism = "plain"
+	completeSaramaSASLConfig(saramaConfig, cfg)
+	require.True(t, saramaConfig.Net.SASL.Enable)
+	// Test that the SCRAMClientGeneratorFunc is set up correctly.
+	cfg = NewConfig()
+	cfg.SASL = &security.SASL{
+		SASLUser:      "user",
+		SASLPassword:  "password",
+		SASLMechanism: "plain",
+		GSSAPI:        security.GSSAPI{},
+	}
+	saramaConfig = sarama.NewConfig()
+	completeSaramaSASLConfig(saramaConfig, cfg)
+	require.Nil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
+	cfg.SASL.SASLMechanism = "SCRAM-SHA-512"
+	completeSaramaSASLConfig(saramaConfig, cfg)
+	require.NotNil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
 }
