@@ -455,10 +455,9 @@ message GetValidationErrorResponse {
 
 enum ValidateErrorState {
     InvalidValidateError = 0;
-    UnprocessedValidateError = 1;
+    NewValidateError = 1;
     IgnoredValidateError = 2;
     ResolvedValidateError = 3;
-    AllValidateError = 4;
 }
 
 message OperateValidationErrorRequest {

@@ -247,7 +247,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	vw.setPendingRowCounts(newPendingCnt)
 	vw.pendingChangesMap = newPendingChanges
 	vw.errorRows = append(vw.errorRows, allErrorRows...)
-	vw.validator.incrErrorRowCount(pb.ValidateErrorState_UnprocessedValidateError, len(allErrorRows))
+	vw.validator.incrErrorRowCount(pb.ValidateErrorState_NewValidateError, len(allErrorRows))
 }
 
 func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {

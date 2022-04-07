@@ -2528,7 +2528,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	// 1. query existing task's error
 	errReq := &pb.GetValidationErrorRequest{
 		TaskName: taskName,
-		ErrState: pb.ValidateErrorState_AllValidateError,
+		ErrState: pb.ValidateErrorState_InvalidValidateError,
 	}
 	resp, err := server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
@@ -2543,14 +2543,14 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. query invalid state
 	errReq.TaskName = taskName
-	errReq.ErrState = pb.ValidateErrorState_InvalidValidateError // invalid state
+	errReq.ErrState = pb.ValidateErrorState_ResolvedValidateError // invalid state
 	resp, err = server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Matches, ".*only support querying `all`, `unprocessed`, and `ignored` error.*")
 	c.Assert(resp.Result, check.IsFalse)
 	// 4. worker error
 	errReq.TaskName = taskName
-	errReq.ErrState = pb.ValidateErrorState_AllValidateError
+	errReq.ErrState = pb.ValidateErrorState_InvalidValidateError
 	resp, err = server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)

@@ -88,11 +88,13 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			common.PrintCmdUsage(cmd)
 			return errors.New("either `--all` or `error-id` should be set")
 		}
-		intErrID, err = strconv.Atoi(errID)
-		if err != nil {
-			cmd.SetOut(os.Stdout)
-			common.PrintCmdUsage(cmd)
-			return errors.New("`error-id` should be integer")
+		if errID != "" {
+			intErrID, err = strconv.Atoi(errID)
+			if err != nil {
+				cmd.SetOut(os.Stdout)
+				common.PrintCmdUsage(cmd)
+				return errors.New("`error-id` should be integer when `--all` is not set")
+			}
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

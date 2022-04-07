@@ -72,7 +72,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			require.Zero(t, validator.pendingRowCounts[rowDeleted].Load())
 			require.Zero(t, len(worker.pendingChangesMap))
 			require.Zero(t, len(worker.errorRows))
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 		}
@@ -109,7 +109,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 		if mode == config.ValidationFull {
@@ -152,7 +152,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
 		require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 
@@ -196,7 +196,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].rows["aa"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl3.String()].rows["aa"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 
@@ -251,7 +251,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].rows["3"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 
@@ -275,7 +275,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["3"].Tp)
 			require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].rows["3"].FailedCnt) // fail again
 			require.Len(t, worker.errorRows, 0)
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 		} else {
@@ -320,7 +320,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].rows["1"].Tp)
 		require.Zero(t, worker.pendingChangesMap[tbl1.String()].rows["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 
@@ -352,7 +352,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Zero(t, validator.pendingRowCounts[rowDeleted].Load())
 		require.Zero(t, len(worker.pendingChangesMap))
 		require.Len(t, worker.errorRows, 1)
-		require.Equal(t, int64(1), validator.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load())
+		require.Equal(t, int64(1), validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
 		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
 	}

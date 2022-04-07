@@ -14,6 +14,7 @@
 package syncer
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -183,7 +184,9 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 }
 
 func (c *validatorPersistHelper) persist(loc binlog.Location) error {
-	count := len(c.validator.tableStatus)
+	// get snapshot of the current table status
+	tableStatus := c.validator.getTableStatus()
+	count := len(tableStatus)
 	for _, worker := range c.validator.workers {
 		for _, tblChange := range worker.getPendingChangesMap() {
 			count += len(tblChange.rows)
@@ -241,8 +244,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	args = append(args, []interface{}{nextRevision})
 
 	// unsupported table info
-	c.validator.RLock() // protect tableStatus, which can be accessed concurrently
-	for _, state := range c.validator.tableStatus {
+	for _, state := range tableStatus {
 		sql := `INSERT INTO ` + c.tableStatusTableName + `
 					(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)
 					VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
@@ -261,7 +263,6 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		},
 		)
 	}
-	c.validator.RUnlock()
 	// error rows
 	for _, worker := range c.validator.workers {
 		for _, r := range worker.getErrorRows() {
@@ -299,7 +300,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			args = append(args, []interface{}{
 				c.cfg.SourceID, table.Source.Schema, table.Source.Name, r.srcRow.Key,
 				table.Target.Schema, table.Target.Name,
-				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_UnprocessedValidateError,
+				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_NewValidateError,
 			})
 		}
 	}
@@ -482,13 +483,21 @@ func (c *validatorPersistHelper) setRevision(rev int64) {
 }
 
 func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
 	res := make([]*pb.ValidationError, 0)
-	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
-		"FROM " + c.errorChangeTableName
-	if filterState != pb.ValidateErrorState_AllValidateError {
-		sql += " WHERE status=?"
+	args := []interface{}{
+		c.cfg.SourceID,
 	}
-	rows, err := c.dbConn.QuerySQL(c.tctx, sql, int(filterState))
+	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
+		"FROM " + c.errorChangeTableName + " WHERE source=?"
+	if filterState != pb.ValidateErrorState_InvalidValidateError {
+		sql += " AND status=?"
+		args = append(args, int(filterState))
+	}
+	rows, err = c.dbConn.QuerySQL(c.tctx, sql, args...)
 	if err != nil {
 		return res, err
 	}
@@ -511,12 +520,13 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 			DstData:   dstData,
 			ErrorType: mapErrType2Str[validateFailedType(errType)],
 			Status:    pb.ValidateErrorState(status),
+			Time:      ts,
 		})
 	}
 	if err = rows.Err(); err != nil {
 		return []*pb.ValidationError{}, err
 	}
-	c.tctx.L().Info("checkpoint error loaded", zap.Reflect("errors", res))
+	c.tctx.L().Info("load validator errors", zap.Reflect("errors", res))
 	return res, nil
 }
 
@@ -524,10 +534,7 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 	if validateOp == pb.ValidationErrOp_ClearValidationErrOp {
 		return c.deleteError(errID, isAll)
 	}
-	sql := "UPDATE " + c.errorChangeTableName + " SET status=?"
-	if !isAll {
-		sql += " WHERE id=?"
-	}
+	sql := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
 	var setStatus pb.ValidateErrorState
 	switch validateOp {
 	case pb.ValidationErrOp_IgnoreValidationErrOp:
@@ -539,19 +546,27 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 		c.tctx.L().Warn("unsupported validator error operation", zap.Reflect("op", validateOp))
 		return nil
 	}
-	if isAll {
-		_, err := c.dbConn.QuerySQL(c.tctx, sql, int(setStatus))
-		return err
+	args := []interface{}{
+		int(setStatus),
+		c.cfg.SourceID,
 	}
-	_, err := c.dbConn.QuerySQL(c.tctx, sql, int(setStatus), errID)
+	if !isAll {
+		args = append(args, errID)
+		sql += " AND id=?"
+	}
+	_, err := c.dbConn.QuerySQL(c.tctx, sql, args...)
 	return err
 }
 
 func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
-	sql := "DELETE FROM " + c.errorChangeTableName
-	if !isAll {
-		sql += " WHERE id=?"
+	args := []interface{}{
+		c.cfg.SourceID,
 	}
-	_, err := c.dbConn.QuerySQL(c.tctx, sql, errID)
+	sql := "DELETE FROM " + c.errorChangeTableName + " WHERE source=?"
+	if !isAll {
+		sql += " AND id=?"
+		args = append(args, errID)
+	}
+	_, err := c.dbConn.QuerySQL(c.tctx, sql, args...)
 	return err
 }

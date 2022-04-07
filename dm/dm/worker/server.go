@@ -987,7 +987,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		Result: true,
 	}
 	if w == nil {
-		log.L().Warn("fail to call validator error, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to get validator error, because no mysql source is being handled in the worker")
 		resp.Result = false
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
@@ -1002,7 +1002,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		Result: true,
 	}
 	if w == nil {
-		log.L().Warn("fail to call validator error, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to operate validator error, because no mysql source is being handled in the worker")
 		resp.Result = false
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil

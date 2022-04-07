@@ -57,7 +57,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_UnprocessedValidateError, 2).AddRow(pb.ValidateErrorState_IgnoredValidateError, 3).
+		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewValidateError, 2).AddRow(pb.ValidateErrorState_IgnoredValidateError, 3).
 			AddRow(pb.ValidateErrorState_ResolvedValidateError, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)

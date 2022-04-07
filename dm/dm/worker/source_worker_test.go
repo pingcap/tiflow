@@ -843,20 +843,12 @@ func (t *testServer) TestGetWorkerValidatorErr(c *C) {
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
-	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_AllValidateError)), Equals, 0)
+	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidValidateError)), Equals, 0)
 	// subtask match
-	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_AllValidateError)), Equals, 2)
+	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidValidateError)), Equals, 2)
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array

@@ -289,7 +289,7 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
 			errorCounts := []int64{
-				v.errorRowCounts[pb.ValidateErrorState_UnprocessedValidateError].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load(),
 				v.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load(),
 				v.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load(),
 			}
@@ -921,4 +921,17 @@ func (v *DataValidator) OperateValidationError(validateOp pb.ValidationErrOp, er
 		failpoint.Return(nil)
 	})
 	return v.persistHelper.operateError(validateOp, errID, isAll)
+}
+
+// return snapshot of the current table status
+func (v *DataValidator) getTableStatus() map[string]*tableValidateStatus {
+	v.RLock()
+	defer v.RUnlock()
+	tblStatus := make(map[string]*tableValidateStatus)
+	for key, tblStat := range v.tableStatus {
+		stat := &tableValidateStatus{}
+		*stat = *tblStat // deep copy
+		tblStatus[key] = stat
+	}
+	return tblStatus
 }

@@ -2778,7 +2778,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState == pb.ValidateErrorState_ResolvedValidateError || req.ErrState == pb.ValidateErrorState_InvalidValidateError {
+	if req.ErrState == pb.ValidateErrorState_ResolvedValidateError {
 		resp.Result = false
 		resp.Msg = "only support querying `all`, `unprocessed`, and `ignored` error"
 		return resp, nil
@@ -2893,7 +2893,7 @@ func sendValidationRequest[T any](
 	worker := s.scheduler.GetWorkerBySource(sourceID)
 	if worker == nil {
 		err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
-		resp := genWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+		resp := genWorkerErrorResp(req, err, logMsg, "", sourceID)
 		appendWorkerResp(workerRespMu, workerResps, resp.(T))
 		return
 	}

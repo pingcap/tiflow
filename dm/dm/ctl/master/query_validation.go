@@ -34,9 +34,9 @@ const (
 )
 
 var mapStr2ErrState = map[string]pb.ValidateErrorState{
-	ValidationAllErr:         pb.ValidateErrorState_AllValidateError,
+	ValidationAllErr:         pb.ValidateErrorState_InvalidValidateError,
 	ValidationIgnoredErr:     pb.ValidateErrorState_IgnoredValidateError,
-	ValidationUnprocessedErr: pb.ValidateErrorState_UnprocessedValidateError,
+	ValidationUnprocessedErr: pb.ValidateErrorState_NewValidateError,
 	ValidationResolvedErr:    pb.ValidateErrorState_ResolvedValidateError,
 }
 
@@ -78,7 +78,7 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 		ctx,
 		"GetValidationError",
 		&pb.GetValidationErrorRequest{
-			ErrState: pbErrState,
+			ErrState: pbErrState, // using InvalidValidateError to represent `all``
 			TaskName: taskName,
 		},
 		&resp,
