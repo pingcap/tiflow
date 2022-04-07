@@ -136,7 +136,7 @@ type Scheduler struct {
 	// see `Cases trigger a source-to-worker binding try` above.
 	bounds map[string]*Worker
 
-	// a mirror of bounds whose element is not deleted when worker is unbound. source -> SourceBound
+	// sources last bound workers when worker is unbound. source -> SourceBound
 	lastBound map[string]ha.SourceBound
 
 	// expectant relay stages for sources, source ID -> stage.
