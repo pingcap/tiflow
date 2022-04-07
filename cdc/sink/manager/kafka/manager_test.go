@@ -91,11 +91,13 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	manager := NewTopicManager(client, adminClient, cfg)
-	err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
+	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
+	require.Equal(t, int32(3), partitionNum)
 
-	err = manager.CreateTopic("new-topic")
+	partitionNum, err = manager.CreateTopic("new-topic")
 	require.Nil(t, err)
+	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.Partitions("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionsNum)
@@ -103,7 +105,7 @@ func TestCreateTopic(t *testing.T) {
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
 	manager = NewTopicManager(client, adminClient, cfg)
-	err = manager.CreateTopic("new-topic2")
+	_, err = manager.CreateTopic("new-topic2")
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
