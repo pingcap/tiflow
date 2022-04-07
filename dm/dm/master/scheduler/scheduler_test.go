@@ -1452,7 +1452,7 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 	require.Equal(t.T(), []*Worker{worker2}, workers)
 
 	// failed on not-same-source worker and not exist worker
-	require.True(t.T(), terror.ErrSchedulerRelayWorkersWrongRelay.Equal(s.StopRelay(sourceID1, []string{workerName2})))
+	require.NoError(t.T(), s.StopRelay(sourceID1, []string{workerName2}))
 	require.True(t.T(), terror.ErrSchedulerWorkerNotExist.Equal(s.StopRelay(sourceID1, []string{"not-exist"})))
 
 	// nothing changed

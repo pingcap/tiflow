@@ -178,8 +178,10 @@ func (w *Worker) StopRelay(source string) {
 	defer w.mu.Unlock()
 
 	if _, ok := w.relaySources[source]; !ok {
-		log.L().DPanic("StopRelay for a Free worker should not happen",
-			zap.String("worker name", w.baseInfo.Name))
+		log.L().Debug("StopRelay on worker without this relay",
+			zap.String("worker name", w.baseInfo.Name),
+			zap.String("source", source))
+		return
 	}
 	delete(w.relaySources, source)
 
