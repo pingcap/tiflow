@@ -99,7 +99,6 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 func TestBatch(t *testing.T) {
 	t.Parallel()
 
-	worker, _ := newTestWorker()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -174,10 +173,12 @@ func TestBatch(t *testing.T) {
 	var wg sync.WaitGroup
 	ctx := context.Background()
 	batch := make([]mqEvent, 3)
-	for _, test := range tests {
+	for i := range tests {
+		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
+			worker, _ := newTestWorker()
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
