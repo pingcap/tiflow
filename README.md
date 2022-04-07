@@ -6,7 +6,7 @@ This repo implements a new prototype of distributed task scheduler.
 
 ## Prepare for building
 
-**Go** version no less than 1.16
+**Go** version no less than 1.18
 
 ## Build
 
