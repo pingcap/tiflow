@@ -36,7 +36,7 @@ function run() {
 	fi
 
 	retry_time=10
-	ensure $retry_time check_changefeed_mark_normal $pd_addr $changefeed_id "normal" "null" ""
+	ensure $retry_time check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
 
 	for i in $(seq 1 10); do
 		run_sql "INSERT INTO processor_err_chan.t$i values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
