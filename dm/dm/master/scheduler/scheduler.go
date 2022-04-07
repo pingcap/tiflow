@@ -16,7 +16,6 @@ package scheduler
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -49,21 +48,25 @@ const (
 // - schedule data migration subtask operations.
 // - holds agents of DM-worker instances.
 // NOTE: the DM-master server MUST wait for this scheduler become started before handling client requests.
-// Cases trigger a source-to-worker bound try:
+// Cases trigger a source-to-worker binding try:
 // - a worker from Offline to Free:
 //   - receive keep-alive.
-// - a worker from Bound to Free:
-//   - trigger by unbound: `a source removed`.
+// - trigger a rebalance:
+//   - periodically rebalance job.
+//   - rebalance request from user.
 // - a new source added:
 //   - add source request from user.
 // - a source unbound from another worker:
-//   - trigger by unbound: `a worker from Bound to Offline`.
+//   - trigger by unbinding: `a worker from Bound to Offline`.
 //   - TODO(csuzhangxc): design a strategy to ensure the old worker already shutdown its work.
-// Cases trigger a source-to-worker unbound try.
+// Cases trigger a source-to-worker unbinding try.
 // - a worker from Bound to Offline:
 //   - lost keep-alive.
 // - a source removed:
 //   - remove source request from user.
+// - trigger a rebalance:
+//   - periodically rebalance job.
+//   - rebalance request from user.
 // TODO: try to handle the return `err` of etcd operations,
 //   because may put into etcd, but the response to the etcd client interrupted.
 // Relay scheduling:
@@ -130,15 +133,15 @@ type Scheduler struct {
 	// - when bind a source to a worker, in updateStatusToBound
 	// delete:
 	// - when unbind a source from a worker, in updateStatusToUnbound
-	// see `Cases trigger a source-to-worker bound try` above.
+	// see `Cases trigger a source-to-worker binding try` above.
 	bounds map[string]*Worker
 
-	// a mirror of bounds whose element is not deleted when worker unbound. source -> SourceBound
+	// a mirror of bounds whose element is not deleted when worker is unbound. source -> SourceBound
 	lastBound map[string]ha.SourceBound
 
 	// expectant relay stages for sources, source ID -> stage.
 	// add:
-	// - bound the source to a worker (at first time).
+	// - bind the source to a worker (at first time).
 	// - recover from etcd (calling `recoverSources`).
 	// update:
 	// - update stage by user request (calling `UpdateExpectRelayStage`).
@@ -1450,9 +1453,8 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 
 	var (
-		notExistWorkers                    []string
-		unmatchedWorkers, unmatchedSources []string
-		alreadyStopped                     []string
+		notExistWorkers []string
+		alreadyStopped  []string
 	)
 	for _, workerName := range workers {
 		var (
@@ -1466,25 +1468,13 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 		}
 
 		relaySources := worker.RelaySources()
-		if len(relaySources) == 0 {
-			alreadyStopped = append(alreadyStopped, workerName)
-			continue
-		}
-
 		if _, ok := relaySources[source]; !ok {
-			unmatchedWorkers = append(unmatchedWorkers, workerName)
-			relaySourcesArr := make([]string, 0, len(relaySources))
-			for relaySource := range relaySources {
-				relaySourcesArr = append(relaySourcesArr, relaySource)
-			}
-			unmatchedSources = append(unmatchedSources, strings.Join(relaySourcesArr, ","))
+			// treat as already stopped
+			alreadyStopped = append(alreadyStopped, workerName)
 		}
 	}
 	if len(notExistWorkers) > 0 {
 		return terror.ErrSchedulerWorkerNotExist.Generate(notExistWorkers)
-	}
-	if len(unmatchedWorkers) > 0 {
-		return terror.ErrSchedulerRelayWorkersWrongRelay.Generate(unmatchedWorkers, unmatchedSources)
 	}
 	if len(alreadyStopped) > 0 {
 		s.logger.Warn("some workers already stopped relay",
@@ -2264,7 +2254,6 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	}
 	if worker == nil {
 		// then a relay worker for this source...
-		boundSourcesNum = sourceNum
 		for workerName := range relayWorkers {
 			w, ok := s.workers[workerName]
 			if !ok {
@@ -2284,7 +2273,6 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	}
 	if worker == nil {
 		// then a history worker for this source...
-		boundSourcesNum = sourceNum
 		if bound, ok := s.lastBound[source]; ok {
 			w, ok := s.workers[bound.Worker]
 			if !ok {
@@ -2305,7 +2293,6 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 
 	if worker == nil {
 		// and then a Free worker with lease sources.
-		boundSourcesNum = sourceNum
 		for _, w := range s.workers {
 			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 				worker = w

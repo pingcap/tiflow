@@ -39,27 +39,20 @@ type WorkerStage string
 // valid transformation:
 //   - Offline -> Free, receive keep-alive.
 //   - Free -> Offline, lost keep-alive.
-//   - Free -> Bound, bind source.
-//   - Free -> Relay, start relay for a source.
+//   - Free -> Bound, bind at least one source.
 //   - Bound -> Offline, lost keep-alive, when receive keep-alive again, it should become Free.
-//   - Bound -> Free, unbind source.
-//   - Bound -> Relay, commands like transfer-source that gracefully unbind a worker which has started relay.
-//   - Relay -> Offline, lost keep-alive.
-//   - Relay -> Free, stop relay.
-//   - Relay -> Bound, old bound worker becomes offline so bind source to this worker, which has started relay.
+//   - Bound -> Free, unbind all sources.
 // invalid transformation:
 //   - Offline -> Bound, must become Free first.
-//   - Offline -> Relay, must become Free first.
 // in Bound stage relay can be turned on/off, the difference with Bound-Relay transformation is
 //   - Bound stage turning on/off represents a bound DM worker receives start-relay/stop-relay, source bound relation is
 //     not changed.
-//   - Bound-Relay transformation represents source bound relation is changed.
 // caller should ensure the correctness when invoke below transformation methods successively. For example, call ToBound
 //   twice with different arguments.
 const (
 	WorkerOffline WorkerStage = "offline" // the worker is not online yet.
 	WorkerFree    WorkerStage = "free"    // the worker is online, but no upstream source assigned to it yet.
-	WorkerBound   WorkerStage = "bound"   // the worker is online, and one upstream source already assigned to it.
+	WorkerBound   WorkerStage = "bound"   // the worker is online, and at least one source already assigned to it.
 )
 
 var (
@@ -157,7 +150,7 @@ func (w *Worker) Unbound(source string) error {
 	defer w.mu.Unlock()
 	if _, ok := w.bounds[source]; !ok {
 		// caller should not do this.
-		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a source %s that is not bound with worker %s.", source, w.baseInfo.Name)
+		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbind a source %s that is not bound with worker %s.", source, w.baseInfo.Name)
 	}
 
 	delete(w.bounds, source)
