@@ -32,7 +32,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 
@@ -175,7 +174,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// try get events back, not firstParse should have no fake RotateEvent
 	firstParse = false
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsFalse)
@@ -211,7 +210,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	c.Assert(err, IsNil)
 
 	// latest is still the end_log_pos of the last event, not the next relay file log file's position
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsFalse)
@@ -224,7 +223,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 
 	// parse from a non-zero offset
 	offset = int64(rotateEv.Header.LogPos - rotateEv.Header.EventSize)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsFalse)
@@ -315,7 +314,7 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), parseFileTimeout)
 	defer cancel2()
 	t.createMetaFile(c, nextRelayDir, filename, uint32(offset), notUsedGTIDSetStr)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx2, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsTrue)
@@ -382,7 +381,7 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), parseFileTimeout)
 	defer cancel2()
 	r.notifier = newDummyEventNotifier(1)
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx2, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsFalse)
