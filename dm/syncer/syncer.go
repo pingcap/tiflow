@@ -74,10 +74,6 @@ import (
 )
 
 var (
-	maxRetryCount = 100
-
-	retryTimeout = 3 * time.Second
-
 	waitTime = 10 * time.Millisecond
 
 	// MaxDDLConnectionTimeoutMinute also used by SubTask.ExecuteDDL.
@@ -1754,8 +1750,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.running.Store(true)
 	defer s.running.Store(false)
 
-	tryReSync := true
-
 	// safeMode makes syncer reentrant.
 	// we make each operator reentrant to make syncer reentrant.
 	// `replace` and `delete` are naturally reentrant.
@@ -1788,7 +1782,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 
 		s.locations.reset(currentLocation)
-		err3 := s.streamerController.RedirectStreamer(s.tctx, currentLocation)
+		err3 := s.streamerController.ResetReplicationSyncer(s.tctx, currentLocation)
 		if err3 != nil {
 			return err3
 		}
@@ -1854,7 +1848,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// if suffix>0, we are replacing error
 			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 			s.locations.reset(shardingReSync.currLocation)
-			err = s.streamerController.RedirectStreamer(s.runCtx, shardingReSync.currLocation)
+			err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
 			if err != nil {
 				return err
 			}
@@ -1891,6 +1885,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case err == context.DeadlineExceeded:
 			s.tctx.L().Info("deadline exceeded when fetching binlog event")
 			continue
+		// TODO: if we can maintain the lastLocation inside streamerController, no need to expose this logic to syncer
 		case isDuplicateServerIDError(err):
 			// if the server id is already used, need to use a new server id
 			s.tctx.L().Info("server id is already used by another slave, will change to a new server id and get event again")
@@ -1915,6 +1910,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return err
 			}
 
+			// TODO: if we can maintain the lastLocation inside streamerController, no need to expose this logic to syncer
 			if s.streamerController.CanRetry(err) {
 				// GlobalPoint is the last finished transaction location
 				err = s.streamerController.ResetReplicationSyncer(s.tctx, s.checkpoint.GlobalPoint())
@@ -1925,17 +1921,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if err = maybeSkipNRowsEvent(eventIndex); err != nil {
 					return err
 				}
-				continue
-			}
-
-			// try to re-sync in gtid mode
-			if tryReSync && s.cfg.EnableGTID && utils.IsErrBinlogPurged(err) && s.cfg.AutoFixGTID {
-				time.Sleep(retryTimeout)
-				err = s.reSyncBinlog(*s.runCtx, lastLocation)
-				if err != nil {
-					return err
-				}
-				tryReSync = false
 				continue
 			}
 
@@ -1953,8 +1938,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		metrics.BinlogReadDurationHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 		startTime = time.Now() // reset start time for the next metric.
 
-		// get binlog event, reset tryReSync, so we can re-sync binlog while syncer meets errors next time
-		tryReSync = true
 		metrics.BinlogPosGauge.WithLabelValues("syncer", s.cfg.Name, s.cfg.SourceID).Set(float64(e.Header.LogPos))
 		index, err := binlog.GetFilenameIndex(lastLocation.Position.Name)
 		if err != nil {
@@ -2053,7 +2036,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
 					// replace operator need redirect to currentLocation
-					if err = s.streamerController.RedirectStreamer(s.runCtx, currentLocation); err != nil {
+					if err = s.streamerController.ResetReplicationSyncer(s.runCtx, currentLocation); err != nil {
 						return err
 					}
 				}
@@ -2103,7 +2086,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			closeShardingResync: closeShardingResync,
 			traceSource:         traceSource,
 			safeMode:            s.safeMode.Enable(),
-			tryReSync:           tryReSync,
 			startTime:           startTime,
 			shardingReSyncCh:    &shardingReSyncCh,
 		}
@@ -2233,7 +2215,6 @@ type eventContext struct {
 	// safeMode is the value of syncer.safeMode when process this event
 	// syncer.safeMode's value may change on the fly, e.g. after event by pass the safeModeExitPoint
 	safeMode         bool
-	tryReSync        bool
 	startTime        time.Time
 	shardingReSyncCh *chan *ShardingReSync
 }
@@ -3434,14 +3415,6 @@ func (s *Syncer) flushJobs() error {
 	return err
 }
 
-func (s *Syncer) reSyncBinlog(tctx tcontext.Context, location binlog.Location) error {
-	if err := s.retrySyncGTIDs(); err != nil {
-		return err
-	}
-	// close still running sync
-	return s.streamerController.ReopenWithRetry(&tctx, location)
-}
-
 func (s *Syncer) route(table *filter.Table) *filter.Table {
 	if table.Schema == "" {
 		return table
@@ -3714,15 +3687,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	return nil
 }
 
-// assume that reset master before switching to new master, and only the new master would write
-// it's a weak function to try best to fix gtid set while switching master/slave.
-func (s *Syncer) retrySyncGTIDs() error {
-	// NOTE: our (per-table based) checkpoint does not support GTID yet, implement it if needed
-	// TODO: support GTID
-	s.tctx.L().Warn("our (per-table based) checkpoint does not support GTID yet")
-	return nil
-}
-
 // checkpointID returns ID which used for checkpoint table.
 func (s *Syncer) checkpointID() string {
 	if len(s.cfg.SourceID) > 0 {
@@ -3863,7 +3827,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	}
 	s.saveGlobalPoint(location)
 	// redirect streamer for new gtid set location
-	err = s.streamerController.RedirectStreamer(tctx, location)
+	err = s.streamerController.ResetReplicationSyncer(tctx, location)
 	if err != nil {
 		s.tctx.L().Warn("fail to redirect streamer for global location", zap.Stringer("pos", location),
 			zap.String("adjusted_gtid", gs.String()), zap.Error(err))
