@@ -105,7 +105,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	r = NewBinlogReader(newDummyEventNotifier(1), log.L(), cfg)
 
 	// relay log file not exists, failed
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, ErrorMatches, ".*(no such file or directory|The system cannot find the path specified).*")
 	c.Assert(needSwitch, IsFalse)
@@ -121,7 +121,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	f, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	c.Assert(err, IsNil)
 	defer f.Close()
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(errors.Cause(err), Equals, io.EOF)
 	c.Assert(needSwitch, IsFalse)
@@ -142,7 +142,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	t.purgeStreamer(c, s)
 
 	// base test with only one valid binlog file
-	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, header, err = r.parseFile(
+	needSwitch, needReParse, latestPos, nextUUID, nextBinlogName, skipGTID, _, err = r.parseFile(
 		ctx, s, filename, offset, relayDir, firstParse, currentUUID, possibleLast, false, nil)
 	c.Assert(err, IsNil)
 	c.Assert(needSwitch, IsFalse)
