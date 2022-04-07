@@ -242,6 +242,7 @@ def list_processor():
 
 
 def get_processor():
+    # list processor to get changefeed_id and capture_id 
     base_url = BASE_URL0 + "/processors"
     resp = rq.get(base_url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok

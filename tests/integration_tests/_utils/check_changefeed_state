@@ -21,11 +21,13 @@ else
 fi
 
 echo "$info"
+
 state=$(echo $info | jq -r '.state')
 if [[ ! "$state" == "$expected_state" ]]; then
 	echo "changefeed state $state does not equal to $expected_state"
 	exit 1
 fi
+
 message=$(echo $info | jq -r '.error.message')
 if [[ ! "$message" =~ "$error_msg" ]]; then
 	echo "error message '$message' is not as expected '$error_msg'"
