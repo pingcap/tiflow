@@ -18561,7 +18561,7 @@
         "options": [],
         "query": {
           "query": "label_values(go_goroutines, k8s_cluster)",
-          "refId": "playground-k8s_cluster-Variable-Query"
+          "refId": "test-cluster-k8s_cluster-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18588,7 +18588,7 @@
         "options": [],
         "query": {
           "query": "label_values(go_goroutines{k8s_cluster=\"$k8s_cluster\"}, tidb_cluster)",
-          "refId": "playground-tidb_cluster-Variable-Query"
+          "refId": "test-cluster-tidb_cluster-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18615,7 +18615,7 @@
         "options": [],
         "query": {
           "query": "label_values(ticdc_processor_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, changefeed)",
-          "refId": "playground-changefeed-Variable-Query"
+          "refId": "test-cluster-changefeed-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18642,7 +18642,7 @@
         "options": [],
         "query": {
           "query": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
-          "refId": "playground-ticdc_instance-Variable-Query"
+          "refId": "test-cluster-ticdc_instance-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18669,7 +18669,7 @@
         "options": [],
         "query": {
           "query": "label_values(tikv_engine_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, instance)",
-          "refId": "playground-tikv_instance-Variable-Query"
+          "refId": "test-cluster-tikv_instance-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18751,7 +18751,7 @@
         "options": [],
         "query": {
           "query": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
-          "refId": "playground-runtime_instance-Variable-Query"
+          "refId": "test-cluster-runtime_instance-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
@@ -18778,7 +18778,7 @@
         "options": [],
         "query": {
           "query": "label_values(ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, name)",
-          "refId": "playground-actor_name-Variable-Query"
+          "refId": "test-cluster-actor_name-Variable-Query"
         },
         "refresh": 2,
         "regex": "",
