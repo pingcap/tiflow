@@ -691,9 +691,10 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 
 	var allEvents []*replication.BinlogEvent
 	var allResults []string
+	var eventsNumOfFirstServer int
 
 	// generate binlog file
-	for _, subDir := range testCase {
+	for i, subDir := range testCase {
 		lastPos = 4
 		lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, subDir.gtidStr)
 		c.Assert(err, IsNil)
@@ -725,6 +726,9 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 			}
 			f.Close()
 			t.createMetaFile(c, uuidDir, fileEventResult.filename, lastPos, previousGset.String())
+		}
+		if i == 0 {
+			eventsNumOfFirstServer = len(allEvents)
 		}
 	}
 
@@ -776,7 +780,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	// StartSyncByGtid exclude first uuid
 	s, err = r.StartSyncByGTID(excludeGset)
 	c.Assert(err, IsNil)
-	obtainBaseEvents = readNEvents(ctx, c, s, len(allEvents))
+	obtainBaseEvents = readNEvents(ctx, c, s, eventsNumOfFirstServer)
 
 	gset := excludeGset.Clone()
 	// should not receive any event not from first server
