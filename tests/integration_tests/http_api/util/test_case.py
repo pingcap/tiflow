@@ -253,7 +253,7 @@ def get_processor():
     if (resp.status_code != rq.codes.ok):
         print("request url", url)
         print("response status code:", resp.status_code)
-        print("response body:", resp.json()[0])
+        print("response body:", resp.text())
     assert resp.status_code == rq.codes.ok
 
     # test capture_id error and cdc server no panic
