@@ -251,6 +251,7 @@ def get_processor():
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     # print error message for debug 
     if (resp.status_code != rq.codes.ok):
+        print("request url", url)
         print("response status code:", resp.status_code)
         print("response body:", resp.json()[0])
     assert resp.status_code == rq.codes.ok
