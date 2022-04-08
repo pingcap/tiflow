@@ -254,7 +254,11 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 // handleRawEvent process the raw kv event,send it to sorter
 func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.PolymorphicEvent) {
 	rawKV := event.RawKV
-	if rawKV != nil && rawKV.OpType == model.OpTypeResolved {
+	if rawKV == nil {
+		log.Panic("event rawKV is nil", zap.Any("event", event))
+	}
+
+	if rawKV.OpType == model.OpTypeResolved {
 		// Puller resolved ts should not fall back.
 		resolvedTs := rawKV.CRTs
 		oldResolvedTs := atomic.SwapUint64(&n.resolvedTs, resolvedTs)
@@ -264,7 +268,6 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("oldResolvedTs", oldResolvedTs))
 		}
-		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
 		if resolvedTs > n.BarrierTs() &&
 			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
