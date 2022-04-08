@@ -923,7 +923,7 @@ func (v *DataValidator) OperateValidationError(validateOp pb.ValidationErrOp, er
 	return v.persistHelper.operateError(validateOp, errID, isAll)
 }
 
-// return snapshot of the current table status
+// return snapshot of the current table status.
 func (v *DataValidator) getTableStatus() map[string]*tableValidateStatus {
 	v.RLock()
 	defer v.RUnlock()
