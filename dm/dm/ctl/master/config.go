@@ -331,6 +331,22 @@ func getSourceCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, error
 	return sourceCfgsMap, nil
 }
 
+// getRelayCfgs gets all relay cfgs.
+func getRelayCfgs(cli *clientv3.Client) (map[string]map[string]struct{}, error) {
+	relayCfgsMap, _, err := ha.GetAllRelayConfig(cli)
+	if err != nil {
+		return nil, err
+	}
+	// try to get all source cfgs before v6.1.0
+	if len(relayCfgsMap) == 0 {
+		relayCfgsMap, _, err = ha.GetAllRelayConfigBeforeV610(cli)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return relayCfgsMap, nil
+}
+
 func getAllCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, map[string]map[string]config.SubTaskConfig, map[string]map[string]struct{}, error) {
 	// get all source cfgs
 	sourceCfgsMap, err := getSourceCfgs(cli)
@@ -345,7 +361,7 @@ func getAllCfgs(cli *clientv3.Client) (map[string]*config.SourceConfig, map[stri
 		return nil, nil, nil, err
 	}
 	// get all relay configs.
-	relayWorkers, _, err := ha.GetAllRelayConfig(cli)
+	relayWorkers, err := getRelayCfgs(cli)
 	if err != nil {
 		common.PrintLinesf("can not get relay workers from etcd")
 		return nil, nil, nil, err

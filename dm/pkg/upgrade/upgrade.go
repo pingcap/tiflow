@@ -15,10 +15,14 @@ package upgrade
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
@@ -42,6 +46,7 @@ var upgrades = []func(cli *clientv3.Client, uctx Context) error{
 // upgradesBeforeScheduler records all upgrade functions before scheduler start. e.g. etcd key changed.
 var upgradesBeforeScheduler = []func(ctx context.Context, cli *clientv3.Client) error{
 	upgradeToVer3,
+	upgradeToVer5,
 }
 
 // Context is used to pass something to TryUpgrade
@@ -274,4 +279,78 @@ func upgradeToVer3(ctx context.Context, cli *clientv3.Client) error {
 // version 3 (v2.0.2) has some bugs and user may downgrade.
 func upgradeToVer4(cli *clientv3.Client, uctx Context) error {
 	return nil
+}
+
+// upgradeToVer5 does upgrade operations from Ver4 (v2.0.2) to Ver5 (v6.1.0) to upgrade etcd key encodings.
+// This func should be called before scheduler start.
+func upgradeToVer5(ctx context.Context, cli *clientv3.Client) error {
+	etcdKeyUpgrades := []struct {
+		old common.KeyAdapter
+		new common.KeyAdapter
+	}{
+		{
+			common.UpstreamBoundWorkerKeyAdapterV1,
+			common.UpstreamBoundWorkerKeyAdapter,
+		},
+		{
+			common.UpstreamLastBoundWorkerKeyAdapterV1,
+			common.UpstreamLastBoundWorkerKeyAdapter,
+		},
+		{
+			common.UpstreamRelayWorkerKeyAdapterV1,
+			common.UpstreamRelayWorkerKeyAdapter,
+		},
+	}
+	generateNewKey := func(kv *mvccpb.KeyValue, old, new common.KeyAdapter) (string, error) {
+		keys, err := old.Decode(string(kv.Key))
+		if err != nil {
+			return "", err
+		}
+		switch old {
+		case common.UpstreamBoundWorkerKeyAdapterV1:
+			var b ha.SourceBound
+			err = json.Unmarshal(kv.Value, &b)
+			if err != nil {
+				return "", err
+			}
+			keys = append(keys, b.Source)
+			return new.Encode(keys...), nil
+		case common.UpstreamLastBoundWorkerKeyAdapterV1:
+			var b ha.SourceBound
+			err = json.Unmarshal(kv.Value, &b)
+			if err != nil {
+				return "", err
+			}
+			return new.Encode(b.Source), nil
+		case common.UpstreamRelayWorkerKeyAdapterV1:
+			keys = append(keys, string(kv.Value))
+			return new.Encode(keys...), nil
+		}
+		return "", errors.Errorf("unknown old key adapter: %s", old)
+	}
+
+	ops := make([]clientv3.Op, 0, len(etcdKeyUpgrades))
+	for _, pair := range etcdKeyUpgrades {
+		resp, err := cli.Get(ctx, pair.old.Path(), clientv3.WithPrefix())
+		if err != nil {
+			return err
+		}
+		if len(resp.Kvs) == 0 {
+			log.L().Info("no old KVs, skipping", zap.String("etcd path", pair.old.Path()))
+			continue
+		}
+		for _, kv := range resp.Kvs {
+			newKey, err2 := generateNewKey(kv, pair.old, pair.new)
+			if err2 != nil {
+				return err2
+			}
+
+			// note that we lost CreateRevision, Lease, ModRevision, Version
+			ops = append(ops, clientv3.OpPut(newKey, string(kv.Value)))
+		}
+		// delete old key to provide idempotence
+		ops = append(ops, clientv3.OpDelete(pair.old.Path(), clientv3.WithPrefix()))
+	}
+	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	return err
 }

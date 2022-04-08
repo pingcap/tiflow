@@ -95,6 +95,42 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 	return ret, resp.Header.Revision, nil
 }
 
+// GetAllRelayConfigBeforeV610 gets all upstream relay configs before v6.1.0.
+// This func only use for config export command.
+func GetAllRelayConfigBeforeV610(cli *clientv3.Client) (map[string]map[string]struct{}, int64, error) {
+	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapterV1.Path(), clientv3.WithPrefix())
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ret := map[string]map[string]struct{}{}
+	for _, kv := range resp.Kvs {
+		keys, err2 := common.UpstreamRelayWorkerKeyAdapterV1.Decode(string(kv.Key))
+		if err2 != nil {
+			return nil, 0, err2
+		}
+		if len(keys) != 1 {
+			// should not happened
+			return nil, 0, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapterV1")
+		}
+		worker, source := keys[0], string(kv.Value)
+		var (
+			ok      bool
+			workers map[string]struct{}
+		)
+		if workers, ok = ret[source]; !ok {
+			workers = map[string]struct{}{}
+			ret[source] = workers
+		}
+		workers[worker] = struct{}{}
+	}
+
+	return ret, resp.Header.Revision, nil
+}
+
 // GetRelayConfig returns the source config which the given worker need to pull relay log from etcd, with revision.
 func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, int64, error) {
 	var (
