@@ -23,7 +23,7 @@ MINIO_PID=$!
 i=0
 while ! curl -o /dev/null -v -s "http://$S3_ENDPOINT/"; do
 	i=$(($i + 1))
-	if [ $i -gt 7 ]; then
+	if [ $i -gt 30 ]; then
 		echo 'Failed to start minio'
 		exit 1
 	fi
