@@ -170,15 +170,15 @@ func TestBatch(t *testing.T) {
 		},
 	}
 
-	var wg sync.WaitGroup
 	ctx := context.Background()
-	batch := make([]mqEvent, 3)
 	for i := range tests {
 		test := tests[i]
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
+			batch := make([]mqEvent, 3)
 			worker, _ := newTestWorker()
+			var wg sync.WaitGroup
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
