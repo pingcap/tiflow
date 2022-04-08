@@ -194,3 +194,49 @@ func TestGenEpoch(t *testing.T) {
 	defer cli.Close()
 	testGenerator(t, cli)
 }
+
+func TestMockTxn(t *testing.T) {
+	t.Parallel()
+
+	cli := NewMetaMock()
+	defer cli.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// prepare data
+	_, err := cli.Put(ctx, "key1", "value1")
+	require.Nil(t, err)
+	_, err = cli.Put(ctx, "key2", "value2")
+	require.Nil(t, err)
+
+	txn := cli.Txn(ctx)
+	txn.Do(metaclient.OpGet("key1"))
+	txn.Do(metaclient.OpPut("key3", "value3"))
+	txn.Do(metaclient.OpDelete("key2"))
+	txn.Do(metaclient.OpGet("key2"))
+	txnRsp, err := txn.Commit()
+	require.Nil(t, err)
+	require.Len(t, txnRsp.Responses, 4)
+
+	getRsp := txnRsp.Responses[0].GetResponseGet()
+	require.Len(t, getRsp.Kvs, 1)
+	require.Equal(t, "key1", string(getRsp.Kvs[0].Key))
+	require.Equal(t, "value1", string(getRsp.Kvs[0].Value))
+
+	putRsp := txnRsp.Responses[1].GetResponsePut()
+	require.NotNil(t, putRsp)
+
+	delRsp := txnRsp.Responses[2].GetResponseDelete()
+	require.NotNil(t, delRsp)
+
+	getRsp = txnRsp.Responses[3].GetResponseGet()
+	require.Len(t, getRsp.Kvs, 0)
+
+	rsp, err := cli.Txn(ctx).Do(metaclient.OpTxn([]metaclient.Op{metaclient.EmptyOp})).Commit()
+	require.Nil(t, rsp)
+	require.Error(t, err)
+
+	rsp, err = cli.Txn(ctx).Do(metaclient.EmptyOp).Commit()
+	require.Nil(t, rsp)
+	require.Error(t, err)
+}

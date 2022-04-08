@@ -2,6 +2,7 @@ package etcdkv
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -162,7 +163,10 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 		txnRsp := makeTxnResp(rsp)
 		return txnRsp.OpResponse(), nil
 	default:
-		panic("Unknown op")
+	}
+
+	return metaclient.OpResponse{}, &etcdError{
+		displayed: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 	}
 }
 

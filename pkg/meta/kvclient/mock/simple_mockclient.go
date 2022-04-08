@@ -2,9 +2,11 @@ package mock
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
+	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	metaclient "github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
@@ -20,24 +22,52 @@ func (t *mockTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 }
 
 func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
-	var err metaclient.Error
+	txnRsp := &metaclient.TxnResponse{
+		Header: &metaclient.ResponseHeader{
+			ClusterID: "mock_cluster",
+		},
+		Responses: make([]metaclient.ResponseOp, 0, len(t.ops)),
+	}
+
+	// we lock the MetaMock to simulate the SERIALIZABLE isolation
+	t.m.Lock()
+	defer t.m.Unlock()
+
 	for _, op := range t.ops {
-		switch {
-		case op.IsPut():
-			_, err = t.m.Put(t.c, string(op.KeyBytes()), string(op.ValueBytes()))
-		case op.IsDelete():
-			_, err = t.m.Delete(t.c, string(op.KeyBytes()))
-		default:
-		}
+		rsp, err := t.m.DoNoLock(t.c, op)
 		if err != nil {
 			return nil, err
 		}
-
+		switch {
+		case op.IsGet():
+			txnRsp.Responses = append(txnRsp.Responses, metaclient.ResponseOp{
+				Response: &metaclient.ResponseOpResponseGet{
+					ResponseGet: rsp.Get(),
+				},
+			})
+		case op.IsPut():
+			txnRsp.Responses = append(txnRsp.Responses, metaclient.ResponseOp{
+				Response: &metaclient.ResponseOpResponsePut{
+					ResponsePut: rsp.Put(),
+				},
+			})
+		case op.IsDelete():
+			txnRsp.Responses = append(txnRsp.Responses, metaclient.ResponseOp{
+				Response: &metaclient.ResponseOpResponseDelete{
+					ResponseDelete: rsp.Del(),
+				},
+			})
+		default:
+			return nil, &mockError{
+				caused: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
+			}
+		}
 	}
-	return nil, nil
+
+	return txnRsp, nil
 }
 
-// not support Option/txn yet
+// not support Option yet
 type MetaMock struct {
 	sync.Mutex
 	store    map[string]string
@@ -53,6 +83,11 @@ func NewMetaMock() *MetaMock {
 func (m *MetaMock) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
+
+	return m.DeleteNoLock(ctx, key, opts...)
+}
+
+func (m *MetaMock) DeleteNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	delete(m.store, key)
 	m.revision++
 	return &metaclient.DeleteResponse{
@@ -65,6 +100,11 @@ func (m *MetaMock) Delete(ctx context.Context, key string, opts ...metaclient.Op
 func (m *MetaMock) Put(ctx context.Context, key, value string) (*metaclient.PutResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
+
+	return m.PutNoLock(ctx, key, value)
+}
+
+func (m *MetaMock) PutNoLock(ctx context.Context, key, value string) (*metaclient.PutResponse, metaclient.Error) {
 	m.store[key] = value
 	m.revision++
 	return &metaclient.PutResponse{
@@ -77,6 +117,11 @@ func (m *MetaMock) Put(ctx context.Context, key, value string) (*metaclient.PutR
 func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
+
+	return m.GetNoLock(ctx, key, opts...)
+}
+
+func (m *MetaMock) GetNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	ret := &metaclient.GetResponse{
 		Header: &metaclient.ResponseHeader{
 			ClusterID: "mock_cluster",
@@ -95,28 +140,38 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 }
 
 func (m *MetaMock) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
+	m.Lock()
+	defer m.Unlock()
+
+	return m.DoNoLock(ctx, op)
+}
+
+func (m *MetaMock) DoNoLock(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	switch {
 	case op.IsGet():
-		rsp, err := m.Get(ctx, string(op.KeyBytes()))
+		rsp, err := m.GetNoLock(ctx, string(op.KeyBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
 		return rsp.OpResponse(), nil
 	case op.IsDelete():
-		rsp, err := m.Delete(ctx, string(op.KeyBytes()))
+		rsp, err := m.DeleteNoLock(ctx, string(op.KeyBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
 		return rsp.OpResponse(), nil
 	case op.IsPut():
-		rsp, err := m.Put(ctx, string(op.KeyBytes()), string(op.ValueBytes()))
+		rsp, err := m.PutNoLock(ctx, string(op.KeyBytes()), string(op.ValueBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
 		return rsp.OpResponse(), nil
+	default:
 	}
 
-	panic("unsupport op type")
+	return metaclient.OpResponse{}, &mockError{
+		caused: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
+	}
 }
 
 func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
@@ -133,6 +188,19 @@ func (m *MetaMock) Close() error {
 func (m *MetaMock) GenEpoch(ctx context.Context) (int64, error) {
 	m.Lock()
 	defer m.Unlock()
+
 	m.revision++
 	return m.revision, nil
+}
+
+type mockError struct {
+	caused error
+}
+
+func (e *mockError) IsRetryable() bool {
+	return false
+}
+
+func (e *mockError) Error() string {
+	return e.caused.Error()
 }
