@@ -74,13 +74,11 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
-	tables := s.schemaSnapshot.Tables()
-	s.allPhysicalTablesCache = make([]model.TableID, 0, len(tables))
-	for _, tblInfo := range tables {
+	s.allPhysicalTablesCache = make([]model.TableID, 0)
+	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if s.shouldIgnoreTable(tblInfo) {
-			continue
+			return
 		}
-
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
 				s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, partition.ID)
@@ -88,22 +86,18 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 		} else {
 			s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
 		}
-	}
+	})
 	return s.allPhysicalTablesCache
 }
 
 // AllTableNames returns the table names of all tables that are being replicated.
 func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
-	tables := s.schemaSnapshot.Tables()
-	names := make([]model.TableName, 0, len(tables))
-	for _, tblInfo := range tables {
-		if s.shouldIgnoreTable(tblInfo) {
-			continue
+	names := make([]model.TableName, 0)
+	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
+		if !s.shouldIgnoreTable(tblInfo) {
+			names = append(names, tblInfo.TableName)
 		}
-
-		names = append(names, tblInfo.TableName)
-	}
-
+	})
 	return names
 }
 

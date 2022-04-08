@@ -220,20 +220,20 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 		return nil, nil, errors.Trace(err)
 	}
 
-	for _, tableInfo := range snap.Tables() {
+	snap.IterTables(true, func(tableInfo *model.TableInfo) {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
+			return
 		}
 		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if tableInfo.IsSequence() {
-			continue
+			return
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
-	}
+	})
 	return
 }

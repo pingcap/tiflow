@@ -222,6 +222,9 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 		}
 	}
 
+	// NOTE: Drop must be called to remove stale versions.
+	s.snaps[startIdx-1].Drop()
+
 	// copy the part of the slice that is needed instead of re-slicing it
 	// to maximize efficiency of Go runtime GC.
 	newSnaps := make([]*schema.SchemaSnapshot, len(s.snaps)-startIdx)

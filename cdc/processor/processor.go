@@ -940,7 +940,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName = nil
 	retry.Do(ctx, func() error { //nolint:errcheck
-		if x, ok := p.schemaStorage.GetLastSnapshot().TableByID(tableID); ok {
+		if x, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
 			tableName = &x.TableName
 			return nil
 		}
@@ -952,7 +952,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		var markTableID model.TableID
 		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
-				x, exist := p.schemaStorage.GetLastSnapshot().TableByID(tableID)
+				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
 				}
