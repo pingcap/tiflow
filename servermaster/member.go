@@ -80,7 +80,7 @@ func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLe
 }
 
 func (s *Server) updateServerMasterMembers(ctx context.Context) error {
-	leader, exists := s.preRPCHooker.CheckLeader()
+	leader, exists := s.masterRPCHook.CheckLeader()
 	if !exists {
 		leader = nil
 	}

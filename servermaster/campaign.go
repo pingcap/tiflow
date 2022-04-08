@@ -9,6 +9,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -131,21 +132,19 @@ func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
-	s.leaderCli.Lock()
-	s.leaderCli.Inner = cli.FailoverRPCClients
-	s.leaderCli.Unlock()
+	s.masterCli.Set(cli.FailoverRPCClients)
+
+	cli2, err := manager.NewResourceClient(ctx, endpoints)
+	if err != nil {
+		log.L().Error("create resource client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		return
+	}
+	s.resourceCli.Set(cli2)
 }
 
 func (s *Server) closeLeaderClient() {
-	s.leaderCli.Lock()
-	defer s.leaderCli.Unlock()
-	if s.leaderCli.Inner != nil {
-		err := s.leaderCli.Inner.Close()
-		if err != nil {
-			log.L().Warn("close leader client met error", zap.Error(err))
-		}
-		s.leaderCli.Inner = nil
-	}
+	s.masterCli.Close()
+	s.resourceCli.Close()
 }
 
 func (s *Server) isEtcdLeader() bool {

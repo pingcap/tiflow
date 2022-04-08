@@ -173,7 +173,11 @@ func TestRunLeaderService(t *testing.T) {
 	s, err := NewServer(cfg, nil)
 	require.Nil(t, err)
 
-	s.registerMetaStore()
+	// meta operation fail:context deadline exceeded
+	_ = s.registerMetaStore()
+
+	err = s.startResourceManager()
+	require.NoError(t, err)
 
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -258,6 +262,14 @@ func (m *mockExecutorManager) RegisterExec(info *model.NodeInfo) {
 }
 
 func (m *mockExecutorManager) Start(ctx context.Context) {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) HasExecutor(executorID string) bool {
+	panic("not implemented")
+}
+
+func (m *mockExecutorManager) ListExecutors() []string {
 	panic("not implemented")
 }
 

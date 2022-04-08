@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/gogo/status"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 
 	"github.com/hanfei1991/microcosm/pb"
@@ -65,7 +68,15 @@ var serviceMockData = []*resourcemeta.ResourceMeta{
 func newServiceTestSuite() *serviceTestSuite {
 	execPro := NewMockExecutorInfoProvider()
 	meta := mock.NewMetaMock()
-	srvc := NewService(meta, execPro)
+	id := "leader"
+	leaderVal := &atomic.Value{}
+	leaderVal.Store(&rpcutil.Member{Name: id})
+	srvc := NewService(meta, execPro, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
+		id,
+		leaderVal,
+		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+		atomic.NewBool(true),
+		&rate.Limiter{}))
 	return &serviceTestSuite{
 		service:              srvc,
 		executorInfoProvider: execPro,

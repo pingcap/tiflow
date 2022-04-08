@@ -26,6 +26,8 @@ type ExecutorManager interface {
 	Start(ctx context.Context)
 	// Count returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
+	HasExecutor(executorID string) bool
+	ListExecutors() []string
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -158,6 +160,23 @@ func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (
 
 func (e *ExecutorManagerImpl) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
 	return e.rescMgr.Allocate(tasks)
+}
+
+func (e *ExecutorManagerImpl) HasExecutor(executorID string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, ok := e.executors[model.ExecutorID(executorID)]
+	return ok
+}
+
+func (e *ExecutorManagerImpl) ListExecutors() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	ret := make([]string, 0, len(e.executors))
+	for id := range e.executors {
+		ret = append(ret, string(id))
+	}
+	return ret
 }
 
 // Executor records the status of an executor instance.

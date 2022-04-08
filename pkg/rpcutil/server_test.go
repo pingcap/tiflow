@@ -15,7 +15,7 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 
 	serverID := "server1"
 	ctx := context.Background()
-	h := &PreRPCHooker[int]{
+	h := &PreRPCHook[int]{
 		id:        serverID,
 		leader:    &atomic.Value{},
 		leaderCli: &LeaderClientWithLock[int]{},
@@ -48,9 +48,7 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 		require.True(t, needForward)
 	}()
 	time.Sleep(time.Second)
-	h.leaderCli.Lock()
-	h.leaderCli.Inner = &FailoverRPCClients[int]{}
-	h.leaderCli.Unlock()
+	h.leaderCli.Set(&FailoverRPCClients[int]{})
 	h.leader.Store(&Member{Name: serverID})
 	wg.Wait()
 }
