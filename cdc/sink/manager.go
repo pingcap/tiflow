@@ -32,7 +32,6 @@ import (
 // Manager is thread-safe.
 type Manager struct {
 	bufSink                *bufferSink
-	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
 	changeFeedCheckpointTs uint64
@@ -103,9 +102,8 @@ func (m *Manager) Close(ctx context.Context) error {
 func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {
 	checkpointTs, err := m.bufSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 	if err != nil {
-		return m.getCheckpointTs(tableID), errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
-	m.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	return checkpointTs, nil
 }
 
@@ -125,16 +123,6 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	case <-callback:
 	}
 	return m.bufSink.Barrier(ctx, tableID)
-}
-
-func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
-	checkPoints, ok := m.tableCheckpointTsMap.Load(tableID)
-	if ok {
-		return checkPoints.(uint64)
-	}
-	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
-	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
-	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
 }
 
 // UpdateChangeFeedCheckpointTs updates changedfeed level checkpointTs,

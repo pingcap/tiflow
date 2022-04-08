@@ -25,12 +25,12 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/filter"
 	timock "github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -67,7 +67,7 @@ func (s *trackerSuite) SetUpSuite(c *C) {
 	c.Assert(err, IsNil)
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	s.dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(con, nil)}
+	s.dbConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(con, nil))
 }
 
 func (s *trackerSuite) TearDownSuite(c *C) {
@@ -88,7 +88,7 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	// user give correct session config
 
 	t, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
@@ -690,7 +690,7 @@ func (s *trackerSuite) TestNotSupportedVariable(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -717,7 +717,7 @@ func (s *trackerSuite) TestInitDownStreamSQLModeAndParser(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
@@ -755,7 +755,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -797,7 +797,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -889,7 +889,7 @@ func (s *trackerSuite) TestVarchar20000(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -929,7 +929,7 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -967,7 +967,7 @@ func TestTrackerRecreateTables(t *testing.T) {
 	defer db.Close()
 	con, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	dbConn := &dbconn.DBConn{Cfg: cfg, BaseConn: conn.NewBaseConn(con, nil)}
+	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(con, nil))
 	log.SetLevel(zapcore.ErrorLevel)
 
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)

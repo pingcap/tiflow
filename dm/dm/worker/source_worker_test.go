@@ -759,3 +759,54 @@ func (t *testServer) testSourceWorker(c *C) {
 	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
 }
+
+func (t *testServer) TestQueryValidator(c *C) {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	expected := []*pb.ValidationStatus{
+		{
+			Source:           "127.0.0.1:3306",
+			SrcTable:         "`testdb1`.`testtable1`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Running.String(),
+		},
+		{
+			Source:           "127.0.0.1:3306",
+			SrcTable:         "`testdb2`.`testtable2`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Stopped.String(),
+			Message:          "no primary key",
+		},
+	}
+	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[0])
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[1])
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(len(ret), Equals, 2)
+	c.Assert(ret, DeepEquals, expected)
+}
