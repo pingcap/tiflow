@@ -928,16 +928,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
-func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
-	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
-			errors.Cause(errors.Cause(err)) == context.Canceled {
-			return nil
-		}
-		p.sendError(err)
-		return nil
-	})
-
+func (p *processor) getTableNameByID(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (string, error) {
 	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
@@ -948,6 +939,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
+
 	// TODO: remove this feature flag after table actor is GA
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
 		// Retry to find mark table ID
@@ -969,16 +961,31 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			return nil
 		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return strconv.Itoa(int(tableID)), err
 		}
 		replicaInfo.MarkTableID = markTableID
 	}
-	var tableNameStr string
+
 	if tableName == nil {
 		log.Warn("failed to get table name for metric")
-		tableNameStr = strconv.Itoa(int(tableID))
-	} else {
-		tableNameStr = tableName.QuoteString()
+		return strconv.Itoa(int(tableID)), nil
+	}
+	return tableName.QuoteString(), nil
+}
+
+func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
+		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
+			errors.Cause(errors.Cause(err)) == context.Canceled {
+			return nil
+		}
+		p.sendError(err)
+		return nil
+	})
+
+	tableName, err := p.getTableNameByID(ctx, tableID, replicaInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
@@ -989,7 +996,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			ctx,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs())
@@ -1001,7 +1008,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			ctx,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs(),
