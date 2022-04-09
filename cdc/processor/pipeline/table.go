@@ -22,12 +22,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/common"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/resource"
 	"go.uber.org/zap"
 )
 
@@ -196,7 +196,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
-	flowController := common.NewTableFlowController(perTableMemoryQuota)
+	flowController := resource.NewTableFlowController(perTableMemoryQuota)
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
