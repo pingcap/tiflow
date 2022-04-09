@@ -72,7 +72,7 @@ type tableActor struct {
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
-	replicConfig   *serverConfig.ReplicaConfig
+	replicaConfig  *serverConfig.ReplicaConfig
 	changefeedVars *cdcContext.ChangefeedVars
 	globalVars     *cdcContext.GlobalVars
 	// these fields below are used in logs and metrics only
@@ -124,7 +124,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
-		replicConfig:  config,
+		replicaConfig: config,
 		tableSink:     sink,
 		targetTs:      targetTs,
 		started:       false,
@@ -139,7 +139,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -151,14 +151,14 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
 }
 
-// Close implements Actor interface.
+// OnClose implements Actor interface.
 // TODO: implements table actor stop here.
 func (t *tableActor) OnClose() {
 }
@@ -265,7 +265,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicConfig,
+		t.mounter, t.replicaConfig,
 	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
@@ -280,11 +280,11 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	t.pullerNode = pullerNode
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
-	t.pullerNode = pullerNode
 	if err := startPuller(t, pullerActorNodeContext); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
@@ -301,7 +301,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
 		t.targetTs, flowController)
-	actorSinkNode.initWithReplicaConfig(true, t.replicConfig)
+	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
@@ -407,7 +407,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replicConfig.Consistent.Level) {
+	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
 		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()

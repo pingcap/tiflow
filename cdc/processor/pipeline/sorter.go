@@ -255,6 +255,7 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.PolymorphicEvent) {
 	rawKV := event.RawKV
 	if rawKV == nil {
+		// this should never happen, just make sure the consumption.
 		log.Panic("event rawKV is nil", zap.Any("event", event))
 	}
 
@@ -280,7 +281,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			// resolved ts, conflicts to this change.
 			// TODO: Remove redolog check once redolog decouples for global
 			//       resolved ts.
-			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
+			event.SetResolvedTsByBarrierTs(n.BarrierTs())
 		}
 	}
 	n.sorter.AddEntry(ctx, event)

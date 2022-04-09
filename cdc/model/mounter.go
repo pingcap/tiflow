@@ -48,3 +48,10 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
+
+// SetResolvedTsByBarrierTs set the `CRTs` by the given `barrierTs`
+func (e *PolymorphicEvent) SetResolvedTsByBarrierTs(barrierTs uint64) {
+	e.CRTs = barrierTs
+	e.RawKV.CRTs = barrierTs
+	e.RawKV.RegionID = 0
+}
