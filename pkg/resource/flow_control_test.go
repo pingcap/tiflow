@@ -47,7 +47,7 @@ func (c *mockCallBacker) cb() error {
 func (s *flowControlSuite) TestMemoryQuotaBasic(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemoryQuota(1024)
+	controller := NewMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -89,7 +89,7 @@ func (s *flowControlSuite) TestMemoryQuotaBasic(c *check.C) {
 func (s *flowControlSuite) TestMemoryQuotaForceConsume(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemoryQuota(1024)
+	controller := NewMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -137,7 +137,7 @@ func (s *flowControlSuite) TestMemoryQuotaForceConsume(c *check.C) {
 func (s *flowControlSuite) TestMemoryQuotaAbort(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemoryQuota(1024)
+	controller := NewMemoryQuota(1024)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -162,7 +162,7 @@ func (s *flowControlSuite) TestMemoryQuotaAbort(c *check.C) {
 func (s *flowControlSuite) TestMemoryQuotaReleaseZero(c *check.C) {
 	defer testleak.AfterTest(c)()
 
-	controller := NewTableMemoryQuota(1024)
+	controller := NewMemoryQuota(1024)
 	controller.Release(0)
 }
 
