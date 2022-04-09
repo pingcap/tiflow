@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/flow"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -57,7 +58,8 @@ type processor struct {
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
 
-	tables map[model.TableID]tablepipeline.TablePipeline
+	tables         map[model.TableID]tablepipeline.TablePipeline
+	flowController *flow.ProcessorFlowController
 
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
@@ -228,7 +230,10 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	conf := config.GetGlobalServerConfig()
 	p := &processor{
-		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
+		tables: make(map[model.TableID]tablepipeline.TablePipeline),
+		// todo: figure out how to set the quota for each processor, use 1GB at the moment.
+		flowController: flow.NewProcessorFlowController(changefeedID, 1*1024*1024*1024),
+
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
@@ -999,7 +1004,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			tableName,
 			replicaInfo,
 			sink,
-			p.changefeed.Info.GetTargetTs())
+			p.changefeed.Info.GetTargetTs(),
+			p.flowController)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1012,7 +1018,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs(),
-		)
+			p.flowController)
 	}
 
 	if p.redoManager.Enabled() {

@@ -25,9 +25,9 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/flow"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
-	"github.com/pingcap/tiflow/pkg/resource"
 	"go.uber.org/zap"
 )
 
@@ -77,7 +77,7 @@ type tablePipelineImpl struct {
 
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
-type tableFlowController interface {
+type flowController interface {
 	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
 	Release(resolvedTs uint64)
 	Abort()
@@ -178,6 +178,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	flowController *flow.ProcessorFlowController,
 ) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
@@ -190,13 +191,13 @@ func NewTablePipeline(ctx cdcContext.Context,
 		replConfig:  replConfig,
 	}
 
-	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
-	log.Debug("creating table flow controller",
-		zap.String("changefeed", ctx.ChangefeedVars().ID),
-		zap.String("tableName", tableName),
-		zap.Int64("tableID", tableID),
-		zap.Uint64("quota", perTableMemoryQuota))
-	flowController := resource.NewTableFlowController(perTableMemoryQuota)
+	//perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
+	//log.Debug("creating table flow controller",
+	//	zap.String("changefeed", ctx.ChangefeedVars().ID),
+	//	zap.String("tableName", tableName),
+	//	zap.Int64("tableID", tableID),
+	//	zap.Uint64("quota", perTableMemoryQuota))
+	//flowController := flow.NewTableFlowController(perTableMemoryQuota)
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
@@ -206,7 +207,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
-		flowController, mounter, replConfig)
+		mounter, replConfig, flowController)
 	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))

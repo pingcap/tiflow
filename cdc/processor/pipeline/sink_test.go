@@ -36,7 +36,7 @@ type mockSink struct {
 	}
 }
 
-// mockFlowController is created because a real tableFlowController cannot be used
+// mockFlowController is created because a real flowController cannot be used
 // we are testing sinkNode by itself.
 type mockFlowController struct{}
 

@@ -31,7 +31,6 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
-	"github.com/pingcap/tiflow/pkg/resource"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -65,7 +64,7 @@ type tableActor struct {
 	started  bool
 	stopped  uint32
 	stopLock sync.Mutex
-	// TODO: try to reduce these config fileds below in the future
+	// TODO: try to reduce these config fields below in the future
 	tableID        int64
 	markTableID    int64
 	cyclicEnabled  bool
@@ -87,6 +86,8 @@ type tableActor struct {
 	cancel context.CancelFunc
 
 	lastFlushSinkTime time.Time
+
+	flowController flowController
 }
 
 // NewTableActor creates a table actor and starts it.
@@ -97,6 +98,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	flowController flowController,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
@@ -135,6 +137,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		actorID:        actorID,
 
 		stopCtx: cctx,
+
+		flowController: flowController,
 	}
 
 	startTime := time.Now()
@@ -256,17 +260,16 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 			zap.Int64("tableID", t.tableID),
 			zap.String("tableName", t.tableName))
 	}
-	log.Debug("creating table flow controller",
-		zap.String("changefeedID", t.changefeedID),
-		zap.Int64("tableID", t.tableID),
-		zap.String("tableName", t.tableName),
-		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := resource.NewTableFlowController(t.memoryQuota)
-	sorterNode := newSorterNode(t.tableName, t.tableID,
-		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig,
-	)
+	//log.Debug("creating table flow controller",
+	//	zap.String("changefeedID", t.changefeedID),
+	//	zap.Int64("tableID", t.tableID),
+	//	zap.String("tableName", t.tableName),
+	//	zap.Uint64("quota", t.memoryQuota))
+	//
+	//flowController := flow.NewTableFlowController(t.memoryQuota)
+	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
+		t.mounter, t.replicaConfig, t.flowController)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -298,9 +301,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return errors.Trace(err)
 	}
 
-	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+	actorSinkNode := newSinkNode(t.tableID, t.tableSink, t.replicaInfo.StartTs,
+		t.targetTs, t.flowController)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 

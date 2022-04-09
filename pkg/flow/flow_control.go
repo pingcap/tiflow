@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resource
+package flow
 
 import (
 	"sync"
@@ -257,6 +257,9 @@ func (t *commitTsSizeEntryPerTable) add(tableID model.TableID, commitTs, size ui
 		CommitTs: commitTs,
 		Size:     size,
 	})
+	if commitTs > t.lastCommitTs {
+		t.lastCommitTs = commitTs
+	}
 }
 
 func (t *commitTsSizeEntryPerTable) resolve(tableID model.TableID, resolvedTs uint64) uint64 {
@@ -280,37 +283,53 @@ func (t *commitTsSizeEntryPerTable) resolve(tableID model.TableID, resolvedTs ui
 	return result
 }
 
-type quotaEntry struct {
-	commitTs uint64
-	size     uint64
-}
-
-type quotaReleaseRequest struct {
-	changefeedID model.ChangeFeedID
-	tableID      model.TableID
-	resolvedTs   uint64
-}
-
-type quotaConsumeRequest struct {
-	changefeedID model.ChangeFeedID
-	tableID      model.TableID
-	entry        quotaEntry
-
-	resolvedTs uint64
-}
-
-type FlowController struct {
+type ProcessorFlowController struct {
 	memoryQuota *MemoryQuota
 
 	mu sync.Mutex
 
-	memo map[model.ChangeFeedID]map[model.TableID]deque.Deque
+	memo map[model.TableID]*commitTsSizeEntryPerTable
 }
 
-func (f *FlowController) Consume(request quotaConsumeRequest, blockCallBack func() error) error {
+func NewProcessorFlowController(changefeedID model.ChangeFeedID, quota uint64) *ProcessorFlowController {
+	return &ProcessorFlowController{
+		memoryQuota: NewMemoryQuota(quota),
+		mu:          sync.Mutex{},
+		memo:        make(map[model.TableID]*commitTsSizeEntryPerTable),
+	}
+}
+
+func (f *ProcessorFlowController) AddTable(tableID model.TableID) {
+	if _, ok := f.memo[tableID]; ok {
+		log.Panic("table already registered",
+			zap.Any("tableID", tableID))
+	}
+	f.memo[tableID] = NewCommitTsSizeEntryPerTable(tableID)
+}
+
+// DropTable drop the table from the controller
+func (f *ProcessorFlowController) DropTable(tableID model.TableID) {
+	if _, ok := f.memo[tableID]; !ok {
+		log.Panic("drop the table not found",
+			zap.Any("tableID", tableID))
+	}
+	delete(f.memo, tableID)
+	log.Info("table removed from the processor's flow controller",
+		zap.Any("tableID", tableID))
+}
+
+func (f *ProcessorFlowController) Consume(tableID model.TableID, commitTs uint64, size uint64, blockCallBack func() error) error {
 	return nil
 }
 
-func (f *FlowController) Release(request quotaReleaseRequest) {
+func (f *ProcessorFlowController) Release(tableID model.TableID, resolvedTs uint64) {
 
+}
+
+func (f *ProcessorFlowController) Abort() {
+	f.memoryQuota.Abort()
+}
+
+func (f *ProcessorFlowController) GetConsumption() uint64 {
+	return 0
 }

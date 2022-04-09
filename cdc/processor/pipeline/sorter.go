@@ -48,8 +48,7 @@ type sorterNode struct {
 	tableID   model.TableID
 	tableName string // quoted schema and table, used in metircs only
 
-	// for per-table flow control
-	flowController tableFlowController
+	flowController flowController
 
 	mounter entry.Mounter
 
@@ -70,8 +69,8 @@ type sorterNode struct {
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
-	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig,
+	mounter entry.Mounter, replConfig *config.ReplicaConfig,
+	flowController flowController,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -203,7 +202,7 @@ func (n *sorterNode) start(
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise, the pipeline would deadlock.
-					err = n.flowController.Consume(commitTs, size, func() error {
+					err = n.flowController.Consume(n.tableID, commitTs, size, func() error {
 						if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.

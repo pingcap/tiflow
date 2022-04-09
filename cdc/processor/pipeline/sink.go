@@ -78,13 +78,13 @@ type sinkNode struct {
 
 	rowBuffer []*model.RowChangedEvent
 
-	flowController tableFlowController
+	flowController flowController
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController flowController) *sinkNode {
 	return &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
