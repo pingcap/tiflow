@@ -709,6 +709,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			case ddlRawKV = <-ddlRawKVCh:
 			}
 			if ddlRawKV == nil {
+				log.Warn("raw ddl kv entry received",
+					zap.String("changefeed", ctx.ChangefeedVars().ID),
+					zap.Any("role", util.RoleProcessor))
 				continue
 			}
 			failpoint.Inject("processorDDLResolved", nil)
@@ -757,7 +760,7 @@ func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
 	if len(p.tables) == len(taskStatus.Tables) {
 		return nil
 	}
-	// check if a table should be listen but not
+	// check if a table should be listened but not yet
 	// this only could be happened in the first tick.
 	for tableID, replicaInfo := range taskStatus.Tables {
 		if _, exist := p.tables[tableID]; exist {

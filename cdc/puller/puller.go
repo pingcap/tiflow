@@ -179,7 +179,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricEventChanSize.Observe(float64(len(eventCh)))
 				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-				continue
 			case e = <-eventCh:
 			}
 
