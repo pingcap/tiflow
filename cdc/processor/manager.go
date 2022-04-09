@@ -34,15 +34,17 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
+	commandTpUnknown commandTp = iota //nolint:varcheck,deadcode
+	// commandTpClose should close all processors by the `processorManager`
 	commandTpClose
 	commandTpWriteDebugInfo
-	processorLogsWarnDuration = 1 * time.Second
 )
+
+const processorLogsWarnDuration = 1 * time.Second
 
 type command struct {
 	tp      commandTp
-	payload interface{}
+	payload io.Writer
 	done    chan<- error
 }
 
@@ -177,7 +179,7 @@ func (m *Manager) WriteDebugInfo(
 // sendCommands sends command to manager.
 // `done` is closed upon command completion or sendCommand returns error.
 func (m *Manager) sendCommand(
-	ctx context.Context, tp commandTp, payload interface{}, done chan<- error,
+	ctx context.Context, tp commandTp, payload io.Writer, done chan<- error,
 ) error {
 	cmd := &command{tp: tp, payload: payload, done: done}
 	select {
@@ -206,8 +208,7 @@ func (m *Manager) handleCommand() error {
 		// FIXME: we should drain command queue and signal callers an error.
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
-		w := cmd.payload.(io.Writer)
-		m.writeDebugInfo(w)
+		m.writeDebugInfo(cmd.payload)
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
