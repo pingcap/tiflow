@@ -23,15 +23,17 @@ import (
 // sorted PolymorphicEvents in Output channel
 type EventSorter interface {
 	Run(ctx context.Context) error
-	// TODO add constraints to entries, e.g., order and duplication guarantees.
+	// AddEntry add the entry to the sorter, this may be blocking if entry
+	// cannot be added to the sorter immediately.
+	// TODO: add constraints to entries, e.g., order and duplication guarantees.
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
 	// TryAddEntry tries to add and entry to the sorter.
 	// Returns false if the entry can not be added; otherwise it returns true
 	// Returns error if the sorter is closed or context is done
 	TryAddEntry(ctx context.Context, entry *model.PolymorphicEvent) (bool, error)
-	// Output sorted events, orderd by commit ts.
+	// Output sorted events, ordered by commit ts.
 	//
-	// Callers must not caching the returned channel, as sorter may not output
+	// Callers must not cache the returned channel, as sorter may not output
 	// any resolved events if callers skip calling `Output`.
 	//
 	//  func caller(ctx context.Context, sorter EventSorter) {
