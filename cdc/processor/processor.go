@@ -288,8 +288,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		ID:   state.ID,
 		Info: state.Info,
 	})
-	_, err := p.tick(ctx, state)
-
+	err := p.tick(ctx, state)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
 		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID),
@@ -330,33 +329,33 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) error {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
-		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
-		return p.changefeed, nil
+		return nil
 	}
 	if err := p.handleErrorCh(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
 	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.checkTablesNum(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return nil, err
+		return errors.Trace(err)
 	}
-	// it is no need to check the err here, because we will use
+	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
 
@@ -377,10 +376,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
-	return p.changefeed, nil
+	return nil
 }
 
 // checkChangefeedNormal checks if the changefeed is runnable.
