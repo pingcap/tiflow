@@ -125,6 +125,7 @@ func (c *actorNodeContext) Message() pmessage.Message {
 func (c *actorNodeContext) tryGetProcessedMessage() *pmessage.Message {
 	select {
 	case msg, ok := <-c.outputCh:
+		// outputCh closed.
 		if !ok {
 			return nil
 		}

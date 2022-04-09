@@ -13,7 +13,7 @@
 
 package util
 
-// Flag is a uint64 flag to show a 64 bit mask
+// Flag is an uint64 flag to show a 64 bit mask
 type Flag uint64
 
 // HasAll means has all flags
