@@ -25,7 +25,6 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/flow"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
@@ -78,8 +77,8 @@ type tablePipelineImpl struct {
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
 type flowController interface {
-	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
-	Release(resolvedTs uint64)
+	Consume(tableID model.TableID, commitTs uint64, size uint64, blockCallBack func() error) error
+	Release(tableID model.TableID, resolvedTs uint64)
 	Abort()
 	GetConsumption() uint64
 }
@@ -178,7 +177,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
-	flowController *flow.ProcessorFlowController,
+	flowController flowController,
 ) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
