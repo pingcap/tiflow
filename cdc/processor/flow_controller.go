@@ -26,6 +26,7 @@ func NewFlowController(changefeedID model.ChangeFeedID, quota uint64) *FlowContr
 	return &FlowController{
 		changefeedID: changefeedID,
 		mu:           sync.Mutex{},
+		memoryQuota:  common.NewTableMemoryQuota(quota),
 		memo:         make(map[model.TableID]*tableQuotaTracker),
 	}
 }
