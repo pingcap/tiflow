@@ -64,6 +64,8 @@ func (f *FlowController) RemoveTable(tableID model.TableID) {
 //Consume is called when an event has arrived for being processed by the sink.
 //It will handle transaction boundaries automatically, and will not block intra-transaction.
 func (f *FlowController) Consume(tableID model.TableID, commitTs uint64, size uint64, blockCallBack func() error) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	tracker, ok := f.memo[tableID]
 	if !ok {
 		log.Panic("FlowController.Consume: table not found",
@@ -96,8 +98,6 @@ func (f *FlowController) Consume(tableID model.TableID, commitTs uint64, size ui
 		}
 	}
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	tracker.add(commitTs, size)
 
 	return nil
@@ -105,6 +105,8 @@ func (f *FlowController) Consume(tableID model.TableID, commitTs uint64, size ui
 
 // Release is called when all events committed before resolvedTs has been freed from memory.
 func (f *FlowController) Release(tableID model.TableID, resolvedTs uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	tracker, ok := f.memo[tableID]
 	if !ok {
 		log.Panic("FlowController.Release: table not found",

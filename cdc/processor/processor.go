@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/common"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -59,7 +58,7 @@ type processor struct {
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	tables         map[model.TableID]tablepipeline.TablePipeline
-	flowController *common.ProcessorFlowController
+	flowController *FlowController
 
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
@@ -231,8 +230,8 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	conf := config.GetGlobalServerConfig()
 	p := &processor{
 		tables: make(map[model.TableID]tablepipeline.TablePipeline),
-		// todo: figure out how to set the quota for each processor, use 1GB at the moment.
-		flowController: common.NewProcessorFlowController(changefeedID, 1*1024*1024*1024),
+		//// todo: figure out how to set the quota for each processor, use 1GB at the moment.
+		flowController: NewFlowController(changefeedID, 1*1024*1024*1024),
 
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
@@ -1021,6 +1020,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			p.flowController)
 	}
 
+	p.flowController.AddTable(tableID)
+
 	if p.redoManager.Enabled() {
 		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
 	}
@@ -1041,6 +1042,7 @@ func (p *processor) removeTable(table tablepipeline.TablePipeline, tableID model
 	if p.redoManager.Enabled() {
 		p.redoManager.RemoveTable(tableID)
 	}
+	p.flowController.RemoveTable(tableID)
 }
 
 // doGCSchemaStorage trigger the schema storage GC
