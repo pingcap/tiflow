@@ -274,7 +274,7 @@ func newTbInfo(schemaID int64, schemaName string, tableID int64) *model.TableInf
 			},
 			Partition: &timodel.PartitionInfo{
 				Enable:      true,
-				Definitions: []timodel.PartitionDefinition{timodel.PartitionDefinition{ID: 65536 + tableID}},
+				Definitions: []timodel.PartitionDefinition{{ID: 65536 + tableID}},
 			},
 			Sequence: &timodel.SequenceInfo{Start: 0},
 		},

@@ -820,7 +820,7 @@ func (s *SchemaSnapshot) IterSchemas(f func(i *timodel.DBInfo)) {
 func (s *SchemaSnapshot) IterTableNames(f func(schema int64, table string, target int64)) {
 	tag := negative(s.currentTs)
 	var prefix int64 = -1
-	var entity = ""
+	entity := ""
 	s.tableNameToID.Ascend(func(i btree.Item) bool {
 		x := i.(versionedEntityName)
 		if (x.prefix != prefix || x.entity != entity) && x.tag >= tag {
@@ -836,7 +836,7 @@ func (s *SchemaSnapshot) IterTableNames(f func(schema int64, table string, targe
 
 func (s *SchemaSnapshot) IterSchemaNames(f func(schema string, target int64)) {
 	tag := negative(s.currentTs)
-	var entity = ""
+	entity := ""
 	s.schemaNameToID.Ascend(func(i btree.Item) bool {
 		x := i.(versionedEntityName)
 		if x.entity != entity && x.tag >= tag {
