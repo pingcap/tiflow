@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -162,11 +163,6 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 	// for **unsigned** integral types, should have type in `uint64`. see reference:
 	// https://github.com/pingcap/ticdc/blob/f0a38a7aaf9f3b11a4d807da275b567642733f58/cdc/entry/mounter.go#L493
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
-<<<<<<< HEAD
-	number, ok := c.Value.(uint64)
-	if !ok {
-		log.Panic("unsigned value not in type uint64", zap.Any("column", c))
-=======
 	if c.Value == nil {
 		return javaType, nil
 	}
@@ -182,7 +178,6 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType) {
 		number = a
 	default:
 		return javaType, errors.Errorf("unexpected type for unsigned value: %+v, column: %+v", reflect.TypeOf(v), c)
->>>>>>> 21e7eb610 (cdc/codec: fix nil value in canal codec. (#4741))
 	}
 
 	// Some special cases handled in canal
