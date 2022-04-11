@@ -29,7 +29,7 @@ func NewIgnoreValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ignore-error <task-name> <error-id|--all>",
 		Short: "ignore validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -39,7 +39,7 @@ func NewResolveValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "make-resolve <task-name> <error-id|--all>",
 		Short: "resolve validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_ResolveValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ResolveErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -49,7 +49,7 @@ func NewClearValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clear <task-name> <error-id|--all>",
 		Short: "clear validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_ClearValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ClearErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd

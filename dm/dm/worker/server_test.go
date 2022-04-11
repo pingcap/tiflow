@@ -384,7 +384,7 @@ func (t *testServer) TestServerQueryValidator(c *C) {
 	cfg.RelayKeepAliveTTL = keepAliveTTL
 
 	s := NewServer(cfg)
-	resp, err := s.GetWorkerValidateStatus(context.Background(), &pb.GetValidationStatusRequest{})
+	resp, err := s.GetWorkerValidatorStatus(context.Background(), &pb.GetValidationStatusRequest{})
 	c.Assert(err, IsNil)
 	c.Assert(resp.Result, IsFalse)
 	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
@@ -406,7 +406,7 @@ func (t *testServer) TestServerQueryValidatorError(c *C) {
 	cfg.RelayKeepAliveTTL = keepAliveTTL
 
 	s := NewServer(cfg)
-	resp, err := s.GetValidationError(context.Background(), &pb.GetValidationErrorRequest{})
+	resp, err := s.GetValidatorError(context.Background(), &pb.GetValidationErrorRequest{})
 	c.Assert(err, IsNil)
 	c.Assert(resp.Result, IsFalse)
 	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
@@ -428,7 +428,7 @@ func (t *testServer) TestServerOperateValidatorError(c *C) {
 	cfg.RelayKeepAliveTTL = keepAliveTTL
 
 	s := NewServer(cfg)
-	resp, err := s.OperateValidationError(context.Background(), &pb.OperateValidationErrorRequest{})
+	resp, err := s.OperateValidatorError(context.Background(), &pb.OperateValidationErrorRequest{})
 	c.Assert(err, IsNil)
 	c.Assert(resp.Result, IsFalse)
 	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")

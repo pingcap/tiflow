@@ -300,7 +300,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			args = append(args, []interface{}{
 				c.cfg.SourceID, table.Source.Schema, table.Source.Name, r.srcRow.Key,
 				table.Target.Schema, table.Target.Name,
-				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_NewValidateError,
+				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_NewErr,
 			})
 		}
 	}
@@ -493,7 +493,7 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	}
 	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
 		"FROM " + c.errorChangeTableName + " WHERE source=?"
-	if filterState != pb.ValidateErrorState_InvalidValidateError {
+	if filterState != pb.ValidateErrorState_InvalidErr {
 		sql += " AND status=?"
 		args = append(args, int(filterState))
 	}
@@ -531,16 +531,16 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 }
 
 func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
-	if validateOp == pb.ValidationErrOp_ClearValidationErrOp {
+	if validateOp == pb.ValidationErrOp_ClearErrOp {
 		return c.deleteError(errID, isAll)
 	}
 	sql := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
 	var setStatus pb.ValidateErrorState
 	switch validateOp {
-	case pb.ValidationErrOp_IgnoreValidationErrOp:
-		setStatus = pb.ValidateErrorState_IgnoredValidateError
-	case pb.ValidationErrOp_ResolveValidationErrOp:
-		setStatus = pb.ValidateErrorState_ResolvedValidateError
+	case pb.ValidationErrOp_IgnoreErrOp:
+		setStatus = pb.ValidateErrorState_IgnoredErr
+	case pb.ValidationErrOp_ResolveErrOp:
+		setStatus = pb.ValidateErrorState_ResolvedErr
 	default:
 		// unsupported op should be caught by caller
 		c.tctx.L().Warn("unsupported validator error operation", zap.Reflect("op", validateOp))

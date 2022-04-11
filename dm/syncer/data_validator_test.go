@@ -308,8 +308,8 @@ func TestValidatorDoValidate(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewValidateError, 2).AddRow(pb.ValidateErrorState_IgnoredValidateError, 3).
-			AddRow(pb.ValidateErrorState_ResolvedValidateError, 4))
+		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewErr, 2).AddRow(pb.ValidateErrorState_IgnoredErr, 3).
+			AddRow(pb.ValidateErrorState_ResolvedErr, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
@@ -472,9 +472,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
-	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load())
-	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load())
-	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load())
+	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
+	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
+	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
@@ -633,7 +633,7 @@ func TestGetValidationError(t *testing.T) {
 	)
 	// filter by status
 	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND status=\\?").
-		WithArgs(validator.cfg.SourceID, int(pb.ValidateErrorState_IgnoredValidateError)).
+		WithArgs(validator.cfg.SourceID, int(pb.ValidateErrorState_IgnoredErr)).
 		WillReturnRows(
 			sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
 				2, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data1", "unexpected data1", 2, 2, "2022-03-01",
@@ -651,7 +651,7 @@ func TestGetValidationError(t *testing.T) {
 				SrcData:   "source data",
 				DstData:   "unexpected data",
 				ErrorType: "Column data not matched",
-				Status:    pb.ValidateErrorState_NewValidateError,
+				Status:    pb.ValidateErrorState_NewErr,
 				Time:      "2022-03-01",
 			},
 		},
@@ -664,7 +664,7 @@ func TestGetValidationError(t *testing.T) {
 				SrcData:   "source data1",
 				DstData:   "unexpected data1",
 				ErrorType: "Column data not matched",
-				Status:    pb.ValidateErrorState_IgnoredValidateError,
+				Status:    pb.ValidateErrorState_IgnoredErr,
 				Time:      "2022-03-01",
 			},
 			{
@@ -675,15 +675,15 @@ func TestGetValidationError(t *testing.T) {
 				SrcData:   "source data2",
 				DstData:   "unexpected data2",
 				ErrorType: "Column data not matched",
-				Status:    pb.ValidateErrorState_IgnoredValidateError,
+				Status:    pb.ValidateErrorState_IgnoredErr,
 				Time:      "2022-03-01",
 			},
 		},
 	}
 	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
-	res := validator.GetValidationError(pb.ValidateErrorState_InvalidValidateError)
+	res := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
 	require.EqualValues(t, expected[0], res)
-	res = validator.GetValidationError(pb.ValidateErrorState_IgnoredValidateError)
+	res = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
 	require.EqualValues(t, expected[1], res)
 }
 
@@ -707,33 +707,33 @@ func TestOperateValidationError(t *testing.T) {
 		WithArgs(sourceID, 1).WillReturnRows()
 	// 3. mark all error as resolved
 	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedValidateError), sourceID).WillReturnRows()
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnRows()
 	// 4. mark all error as ignored
 	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredValidateError), sourceID).WillReturnRows()
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnRows()
 	// 5. mark error as resolved of errID
 	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedValidateError), sourceID, 1).WillReturnRows()
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnRows()
 	// 6. mark error as ignored of errID
 	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredValidateError), sourceID, 1).WillReturnRows()
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnRows()
 
 	// clear all error
-	err = validator.OperateValidationError(pb.ValidationErrOp_ClearValidationErrOp, 0, true)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)
 	require.NoError(t, err)
 	// clear error with id
-	err = validator.OperateValidationError(pb.ValidationErrOp_ClearValidationErrOp, 1, false)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 1, false)
 	require.NoError(t, err)
 	// mark all as resolved
-	err = validator.OperateValidationError(pb.ValidationErrOp_ResolveValidationErrOp, 0, true)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ResolveErrOp, 0, true)
 	require.NoError(t, err)
 	// mark all as ignored
-	err = validator.OperateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp, 0, true)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 0, true)
 	require.NoError(t, err)
 	// mark error as resolved with id
-	err = validator.OperateValidationError(pb.ValidationErrOp_ResolveValidationErrOp, 1, false)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ResolveErrOp, 1, false)
 	require.NoError(t, err)
 	// mark error as ignored with id
-	err = validator.OperateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp, 1, false)
+	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 1, false)
 	require.NoError(t, err)
 }

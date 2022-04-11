@@ -289,9 +289,9 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
 			errorCounts := []int64{
-				v.errorRowCounts[pb.ValidateErrorState_NewValidateError].Load(),
-				v.errorRowCounts[pb.ValidateErrorState_IgnoredValidateError].Load(),
-				v.errorRowCounts[pb.ValidateErrorState_ResolvedValidateError].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_NewErr].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load(),
 			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
@@ -898,7 +898,7 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 	return result
 }
 
-func (v *DataValidator) GetValidationError(errState pb.ValidateErrorState) []*pb.ValidationError {
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
 	failpoint.Inject("MockValidationQuery", func() {
 		failpoint.Return(
 			[]*pb.ValidationError{
@@ -916,7 +916,7 @@ func (v *DataValidator) GetValidationError(errState pb.ValidateErrorState) []*pb
 	return ret
 }
 
-func (v *DataValidator) OperateValidationError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
 	failpoint.Inject("MockValidationOperation", func() {
 		failpoint.Return(nil)
 	})

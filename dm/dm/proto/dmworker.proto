@@ -23,11 +23,11 @@ service Worker {
     // only some fields of the configuration of the subtask in the sync phase can be updated
     rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
 
-    rpc GetWorkerValidateStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
+    rpc GetWorkerValidatorStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
 
-    rpc GetValidationError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
+    rpc GetValidatorError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
 
-  rpc OperateValidationError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
+    rpc OperateValidatorError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
 }
 
 enum TaskOp {
@@ -454,10 +454,10 @@ message GetValidationErrorResponse {
 }
 
 enum ValidateErrorState {
-    InvalidValidateError = 0;
-    NewValidateError = 1;
-    IgnoredValidateError = 2;
-    ResolvedValidateError = 3;
+    InvalidErr = 0;
+    NewErr = 1;
+    IgnoredErr = 2;
+    ResolvedErr = 3;
 }
 
 message OperateValidationErrorRequest {
@@ -473,8 +473,8 @@ message OperateValidationErrorResponse {
 }
 
 enum ValidationErrOp {
-  InvalidValidationTaskOp = 0;
-  IgnoreValidationErrOp = 1;
-  ResolveValidationErrOp = 2;
-  ClearValidationErrOp = 3;
+  InvalidErrOp = 0;
+  IgnoreErrOp = 1;
+  ResolveErrOp = 2;
+  ClearErrOp = 3;
 }

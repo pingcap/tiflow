@@ -2778,7 +2778,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState == pb.ValidateErrorState_ResolvedValidateError {
+	if req.ErrState == pb.ValidateErrorState_ResolvedErr {
 		resp.Result = false
 		resp.Msg = "only support querying `all`, `unprocessed`, and `ignored` error"
 		return resp, nil

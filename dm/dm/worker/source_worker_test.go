@@ -843,9 +843,9 @@ func (t *testServer) TestGetWorkerValidatorErr(c *C) {
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
-	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidValidateError)), Equals, 0)
+	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)), Equals, 0)
 	// subtask match
-	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidValidateError)), Equals, 2)
+	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)), Equals, 2)
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
@@ -853,7 +853,7 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 	// when subtask name not exists
 	// return empty array
 	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
-	c.Assert(w.OperateWorkerValidateErr("invalidTask", pb.ValidationErrOp_ClearValidationErrOp, 0, true).Error(), Equals, taskNotFound.Error())
+	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
 	// subtask match
-	c.Assert(w.OperateWorkerValidateErr("testQueryValidator", pb.ValidationErrOp_ClearValidationErrOp, 0, true), IsNil)
+	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }

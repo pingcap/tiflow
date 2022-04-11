@@ -34,10 +34,10 @@ const (
 )
 
 var mapStr2ErrState = map[string]pb.ValidateErrorState{
-	ValidationAllErr:         pb.ValidateErrorState_InvalidValidateError,
-	ValidationIgnoredErr:     pb.ValidateErrorState_IgnoredValidateError,
-	ValidationUnprocessedErr: pb.ValidateErrorState_NewValidateError,
-	ValidationResolvedErr:    pb.ValidateErrorState_ResolvedValidateError,
+	ValidationAllErr:         pb.ValidateErrorState_InvalidErr,
+	ValidationIgnoredErr:     pb.ValidateErrorState_IgnoredErr,
+	ValidationUnprocessedErr: pb.ValidateErrorState_NewErr,
+	ValidationResolvedErr:    pb.ValidateErrorState_ResolvedErr,
 }
 
 func NewQueryValidationErrorCmd() *cobra.Command {

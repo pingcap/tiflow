@@ -2385,7 +2385,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	// test query all workers
 	for idx, worker := range workers {
 		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-		mockWorkerClient.EXPECT().GetWorkerValidateStatus(
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
@@ -2396,14 +2396,14 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 				},
 			},
 		}, nil)
-		mockWorkerClient.EXPECT().GetWorkerValidateStatus(
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
 			Result: false,
 			Msg:    "something wrong in worker",
 		}, nil)
-		mockWorkerClient.EXPECT().GetWorkerValidateStatus(
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{}, errors.New("grpc error"))
@@ -2481,7 +2481,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	// test query all workers
 	for idx, worker := range workers {
 		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-		mockWorkerClient.EXPECT().GetValidationError(
+		mockWorkerClient.EXPECT().GetValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationErrorResponse{
@@ -2492,7 +2492,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 				},
 			},
 		}, nil)
-		mockWorkerClient.EXPECT().GetValidationError(
+		mockWorkerClient.EXPECT().GetValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationErrorResponse{
@@ -2500,7 +2500,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 			Msg:    "something wrong in worker",
 			Error:  []*pb.ValidationError{},
 		}, nil)
-		mockWorkerClient.EXPECT().GetValidationError(
+		mockWorkerClient.EXPECT().GetValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationErrorResponse{}, errors.New("grpc error"))
@@ -2528,7 +2528,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	// 1. query existing task's error
 	errReq := &pb.GetValidationErrorRequest{
 		TaskName: taskName,
-		ErrState: pb.ValidateErrorState_InvalidValidateError,
+		ErrState: pb.ValidateErrorState_InvalidErr,
 	}
 	resp, err := server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
@@ -2543,14 +2543,14 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. query invalid state
 	errReq.TaskName = taskName
-	errReq.ErrState = pb.ValidateErrorState_ResolvedValidateError // invalid state
+	errReq.ErrState = pb.ValidateErrorState_ResolvedErr // invalid state
 	resp, err = server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Matches, ".*only support querying `all`, `unprocessed`, and `ignored` error.*")
 	c.Assert(resp.Result, check.IsFalse)
 	// 4. worker error
 	errReq.TaskName = taskName
-	errReq.ErrState = pb.ValidateErrorState_InvalidValidateError
+	errReq.ErrState = pb.ValidateErrorState_InvalidErr
 	resp, err = server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
@@ -2579,21 +2579,21 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	// test query all workers
 	for idx, worker := range workers {
 		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-		mockWorkerClient.EXPECT().OperateValidationError(
+		mockWorkerClient.EXPECT().OperateValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.OperateValidationErrorResponse{
 			Result: true,
 			Msg:    "",
 		}, nil)
-		mockWorkerClient.EXPECT().OperateValidationError(
+		mockWorkerClient.EXPECT().OperateValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.OperateValidationErrorResponse{
 			Result: false,
 			Msg:    "something wrong in worker",
 		}, nil)
-		mockWorkerClient.EXPECT().OperateValidationError(
+		mockWorkerClient.EXPECT().OperateValidatorError(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.OperateValidationErrorResponse{}, errors.New("grpc error"))

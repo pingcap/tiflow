@@ -900,7 +900,7 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.Valid
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
-		return st.validator.GetValidationError(errState)
+		return st.validator.GetValidatorError(errState)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error
@@ -911,7 +911,7 @@ func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, is
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
-		return st.validator.OperateValidationError(op, errID, isAll)
+		return st.validator.OperateValidatorError(op, errID, isAll)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error

@@ -535,10 +535,10 @@ func (t *testSubTask) TestGetValidatorError(c *C) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidValidateError)), Equals, 0)
+	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 0)
 	// validator != nil, validator not start
 	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidValidateError)), Equals, 0)
+	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 0)
 	// validator != nil, validator started
 	st.validator = nil
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
@@ -548,7 +548,7 @@ func (t *testSubTask) TestGetValidatorError(c *C) {
 		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
 	}()
 	st.StartValidator(pb.Stage_Running, false)
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidValidateError)), Equals, 2)
+	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 2)
 }
 
 func (t *testSubTask) TestOperateValidatorError(c *C) {
@@ -560,10 +560,10 @@ func (t *testSubTask) TestOperateValidatorError(c *C) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearValidationErrOp, 0, true), IsNil)
+	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 	// validator != nil, validator not start
 	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearValidationErrOp, 0, true), IsNil)
+	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 	// validator != nil, validator started
 	st.validator = nil
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
@@ -575,5 +575,5 @@ func (t *testSubTask) TestOperateValidatorError(c *C) {
 		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
 	}()
 	st.StartValidator(pb.Stage_Running, false)
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearValidationErrOp, 0, true), IsNil)
+	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }

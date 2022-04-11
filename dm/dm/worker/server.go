@@ -963,7 +963,7 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 	return resp, nil
 }
 
-func (s *Server) GetWorkerValidateStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
 	log.L().Info("", zap.String("request", "GetWorkerValidateStatus"), zap.Stringer("payload", req))
 
 	resp := &pb.GetValidationStatusResponse{
@@ -981,7 +981,7 @@ func (s *Server) GetWorkerValidateStatus(ctx context.Context, req *pb.GetValidat
 	return resp, nil
 }
 
-func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
 	w := s.getSourceWorker(true)
 	resp := &pb.GetValidationErrorResponse{
 		Result: true,
@@ -996,7 +996,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 	return resp, nil
 }
 
-func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
 	w := s.getSourceWorker(true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
@@ -1007,7 +1007,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
-	err := w.OperateWorkerValidateErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
+	err := w.OperateWorkerValidatorErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
