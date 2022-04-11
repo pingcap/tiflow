@@ -37,8 +37,8 @@ const (
 	GSSAPIMechanism SASLMechanism = sarama.SASLTypeGSSAPI
 )
 
-// SASLMechanismFormString converts the string to SASL mechanism.
-func SASLMechanismFormString(s string) (SASLMechanism, error) {
+// SASLMechanismFromString converts the string to SASL mechanism.
+func SASLMechanismFromString(s string) (SASLMechanism, error) {
 	switch strings.ToLower(s) {
 	case "plain":
 		return PlainMechanism, nil

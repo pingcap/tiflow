@@ -215,7 +215,7 @@ func (c *Config) applySASL(params url.Values) error {
 
 	s = params.Get("sasl-mechanism")
 	if s != "" {
-		mechanism, err := security.SASLMechanismFormString(s)
+		mechanism, err := security.SASLMechanismFromString(s)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}

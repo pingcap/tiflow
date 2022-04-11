@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSASLMechanismFormString(t *testing.T) {
+func TestSASLMechanismFromString(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -78,7 +78,7 @@ func TestSASLMechanismFormString(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			mechanism, err := SASLMechanismFormString(test.s)
+			mechanism, err := SASLMechanismFromString(test.s)
 			if test.expectErr != "" {
 				require.Error(t, err)
 				require.Regexp(t, test.expectErr, err.Error())
