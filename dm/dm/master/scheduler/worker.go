@@ -173,20 +173,26 @@ func (w *Worker) StartRelay(sources ...string) error {
 }
 
 // StopRelay clears relay source information of a bound worker and calculates the stage.
-func (w *Worker) StopRelay(source string) {
+func (w *Worker) StopRelay(sources ...string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if _, ok := w.relaySources[source]; !ok {
-		log.L().Debug("StopRelay on worker without this relay",
-			zap.String("worker name", w.baseInfo.Name),
-			zap.String("source", source))
-		return
+	deleted := false
+	for _, source := range sources {
+		if _, ok := w.relaySources[source]; !ok {
+			log.L().Debug("StopRelay on worker without this relay",
+				zap.String("worker name", w.baseInfo.Name),
+				zap.String("source", source))
+		} else {
+			delete(w.relaySources, source)
+			deleted = true
+		}
 	}
-	delete(w.relaySources, source)
 
-	w.checkFree()
-	w.reportMetrics()
+	if deleted {
+		w.checkFree()
+		w.reportMetrics()
+	}
 }
 
 // BaseInfo returns the base info of the worker.

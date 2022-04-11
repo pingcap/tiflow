@@ -2081,6 +2081,7 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 	bounds = make([]ha.SourceBound, 0, len(workerBounds))
 	for _, bound := range workerBounds {
 		bounds = append(bounds, bound)
+		sourcesBound = append(sourcesBound, bound.Source)
 	}
 	s.logger.Warn("worker already bound", zap.Stringer("worker", w.BaseInfo()), zap.Strings("sources", sourcesBound))
 	if len(bounds) > 0 {
@@ -2181,8 +2182,6 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 // However, we will try balance work load and bind some sources to newly added workers in the rebalancer.
 func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	// 1. handle this worker has unfinished load task.
-	// if we can run into this function it means we have at lease another one worker on
-	// we needn't to restart the unbound sources
 	worker, sourceID := s.getNextLoadTaskTransfer(w.BaseInfo().Name, "")
 	if sourceID != "" {
 		s.logger.Info("found unfinished load task source when worker bound",
@@ -2212,10 +2211,10 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 
 // tryBoundForSource tries to bound a source to a random Free worker. The order of picking worker is
 // - try to bind a worker which has unfinished load task
-// - try to bind a relay worker which has be bound to this source before
-// - try to bind any relay worker
+// - try to bind a relay worker with the least bound sources which has be bound to this source before
+// - try to bind a relay worker with the least bound sources
 // - try to bind any worker which has be bound to this source before
-// - try to bind any free worker
+// - try to bind the free worker with the least bound sources
 // pulling binlog using relay or not is determined by whether the worker has enabled relay.
 // caller should update the s.unbounds.
 // caller should make sure this source has source config.
@@ -2242,9 +2241,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 			w, ok := s.workers[boundWorker]
 			if ok {
 				// the worker is not Offline
-				if _, ok2 := relayWorkers[boundWorker]; ok2 && w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
+				if _, ok2 := relayWorkers[boundWorker]; ok2 && w.Stage() != WorkerOffline {
 					worker = w
-					boundSourcesNum = len(w.Bounds())
 					s.logger.Info("found history relay worker when source bound",
 						zap.String("worker", boundWorker),
 						zap.String("source", source))
@@ -2281,9 +2279,8 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 				return false, nil
 			}
 
-			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
+			if w.Stage() != WorkerOffline {
 				worker = w
-				boundSourcesNum = len(w.Bounds())
 				s.logger.Info("found history worker when source bound",
 					zap.String("worker", workerName),
 					zap.String("source", source))
@@ -2502,15 +2499,15 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, string) {
 	// try to get a source for online worker.
 	if worker != "" {
-		// try to get a unbounded source
+		// try to get an unbound source
 		for _, sourceID := range s.getUnboundSources() {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) {
 				return "", sourceID
 			}
 		}
-		// try to get a bounded source
+		// try to get a bound source
 		for sourceID, w := range s.bounds {
-			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
+			if sourceID != source && w.baseInfo.Name != worker && s.hasLoadTaskByWorkerAndSource(worker, sourceID) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
 				return w.baseInfo.Name, sourceID
 			}
 		}
@@ -2526,9 +2523,9 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 			}
 		}
 
-		// try to get a bounded worker
+		// try to get a bound worker
 		for sourceID, w := range s.bounds {
-			if sourceID != source && s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, source) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
+			if sourceID != source && w.baseInfo.Name != worker && s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, source) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
 				return w.baseInfo.Name, sourceID
 			}
 		}
