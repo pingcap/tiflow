@@ -41,10 +41,10 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -897,6 +897,7 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 	cp.RLock()
 	defer cp.RUnlock()
 	cp.globalPoint.rollback(schemaTracker, "")
+	tablesToDrop := make([]*filter.Table, 0)
 	tablesToCreate := make(map[string]map[string]*model.TableInfo)
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
@@ -909,15 +910,8 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 			from := point.MySQLLocation()
 			if point.rollback(schemaTracker, schemaName) {
 				logger.Info("rollback checkpoint", zap.Stringer("from", from), zap.Stringer("to", point.FlushedMySQLLocation()))
-				// schema changed
-				if err := schemaTracker.DropTable(table); err != nil {
-					logger.Warn("failed to drop table from schema tracker", log.ShortError(err))
-				}
+				tablesToDrop = append(tablesToDrop, table)
 				if point.savedPoint.ti != nil {
-					// TODO: Figure out how to recover from errors.
-					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
-					}
 					if _, ok := tablesToCreate[schemaName]; !ok {
 						tablesToCreate[schemaName] = map[string]*model.TableInfo{}
 					}
@@ -926,9 +920,10 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 			}
 		}
 	}
-	logger := cp.logCtx.L().WithFields(zap.Reflect("batch create table", tablesToCreate))
-	if err := schemaTracker.BatchCreateTableIfNotExist(tablesToCreate); err != nil {
-		logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
+	if err := schemaTracker.RecreateTables(cp.logCtx, tablesToDrop, tablesToCreate); err != nil {
+		cp.logCtx.L().Error("failed to rollback schema on schema tracker: cannot recreate table",
+			zap.Reflect("tables to drop", tablesToDrop), zap.Reflect("batch recreate table", tablesToCreate),
+			log.ShortError(err))
 	}
 
 	// drop any tables in the tracker if no corresponding checkpoint exists.

@@ -16,10 +16,13 @@ package syncer
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -34,16 +37,20 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-type validateErrorState int
+type validateErrorStatus int
 
 const (
 	// todo: maybe move to some common place, dmctl may use it
-	newValidateErrorRow validateErrorState = iota
+	newValidateErrorRow validateErrorStatus = iota
 	//nolint
 	ignoredValidateErrorRow
 	//nolint
 	resolvedValidateErrorRow
+
+	maxRowKeyLength = 64
 )
+
+var maxRowKeyLengthStr = strconv.Itoa(maxRowKeyLength)
 
 type validatorPersistHelper struct {
 	tctx              *tcontext.Context
@@ -109,7 +116,6 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	return err
 }
 
-// todo: need to drop them if remove-meta is specified
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
 	args := make([]interface{}, 0)
@@ -119,8 +125,6 @@ func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 }
 
 func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
-	// TODO: length of row_pk is set to 128 for now, need to make sure it can store the longest pk in mysql
-	// TODO: maybe use hash digest
 	sqls := []string{
 		`CREATE TABLE IF NOT EXISTS ` + c.checkpointTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -137,7 +141,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			schema_name VARCHAR(128) NOT NULL,
 			table_name VARCHAR(128) NOT NULL,
-			row_pk VARCHAR(128) NOT NULL,
+			row_pk VARCHAR(` + maxRowKeyLengthStr + `) NOT NULL,
 			data JSON NOT NULL,
 			revision bigint NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -150,16 +154,17 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			source VARCHAR(32) NOT NULL,
 			src_schema_name VARCHAR(128) NOT NULL,
 			src_table_name VARCHAR(128) NOT NULL,
-			row_pk VARCHAR(128) NOT NULL,
+			row_pk VARCHAR(` + maxRowKeyLengthStr + `) NOT NULL,
 			dst_schema_name VARCHAR(128) NOT NULL,
 			dst_table_name VARCHAR(128) NOT NULL,
 			data JSON NOT NULL,
 			dst_data JSON NOT NULL,
 			error_type int NOT NULL,
-			status int not null,
+			status int NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, row_pk)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name, row_pk),
+            INDEX idx_status(status)
 		)`,
 		`CREATE TABLE IF NOT EXISTS ` + c.tableStatusTableName + ` (
 			id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -301,7 +306,16 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	}
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
-	_, err := c.dbConn.ExecuteSQL(c.tctx, queries, args...)
+	var err error
+	failpoint.Inject("ValidatorCheckPointSkipExecuteSQL", func(val failpoint.Value) {
+		str := val.(string)
+		if str != "" {
+			err = errors.New(str)
+		}
+		failpoint.Goto("afterExecuteSQL")
+	})
+	_, err = c.dbConn.ExecuteSQL(c.tctx, queries, args...)
+	failpoint.Label("afterExecuteSQL")
 	if err != nil {
 		return err
 	}
@@ -352,6 +366,7 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	c.tctx.L().Info("checkpoint loaded", zap.Reflect("loc", location))
 	return location, nil
 }
 
@@ -365,6 +380,7 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 	}
 	defer rows.Close()
 
+	var count int
 	for rows.Next() {
 		var (
 			schemaName, tableName, key string
@@ -389,11 +405,13 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 		}
 		tblChange.rows[key] = row
 		rev = revision
+		count++
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
+	c.tctx.L().Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev))
 	return res, rev, nil
 }
 
@@ -430,6 +448,33 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	c.tctx.L().Info("table status loaded", zap.Reflect("count", len(res)))
+	return res, nil
+}
+
+func (c *validatorPersistHelper) loadErrorCount() (map[validateErrorStatus]int64, error) {
+	res := make(map[validateErrorStatus]int64)
+	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
+	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status int
+		var count int64
+		err = rows.Scan(&status, &count)
+		if err != nil {
+			return nil, err
+		}
+		res[validateErrorStatus(status)] = count
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	c.tctx.L().Info("error count loaded", zap.Reflect("counts", res))
 	return res, nil
 }
 

@@ -16,7 +16,7 @@ package outdated
 import (
 	"encoding/json"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 )
 
 // ReplicaConfigV1 represents some incompatible config with current Config
