@@ -73,6 +73,7 @@ type Server struct {
 	rootLis    net.Listener
 	svr        *grpc.Server
 	worker     *SourceWorker
+	workers    map[string]*SourceWorker
 	etcdClient *clientv3.Client
 
 	// relay status will never be put in server.sourceStatus
@@ -127,15 +128,21 @@ func (s *Server) Start() error {
 
 	s.startKeepAlive()
 
-	relaySource, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
+	relaySources, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
 	if err != nil {
 		return err
 	}
-	if relaySource != nil {
-		log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
-		if err2 := s.enableRelay(relaySource, true); err2 != nil {
-			return err2
+	if len(relaySources) != 0 {
+		relaySourcesArr := make([]string, 0, len(relaySources))
+		for _, sourceCfg := range relaySources {
+			if err2 := s.enableRelay(sourceCfg, true); err2 != nil {
+				log.L().Error("failed to enable assigned relay before keepalive", zap.String("source", sourceCfg.SourceID),
+					zap.Strings("started relay sources", relaySourcesArr), zap.Error(err2))
+				return err2
+			}
+			relaySourcesArr = append(relaySourcesArr, sourceCfg.SourceID)
 		}
+		log.L().Warn("worker has been assigned relay before keepalive", zap.Strings("relay sources", relaySourcesArr))
 	}
 
 	s.wg.Add(1)
@@ -289,7 +296,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					relaySource, rev1, err1 := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
+					relaySources, rev1, err1 := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
 					if err1 != nil {
 						log.L().Error("get relay config from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
@@ -299,40 +306,67 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						break
 					}
 					rev = rev1
-					if relaySource == nil {
-						if w := s.getSourceWorker(true); w != nil && w.startedRelayBySourceCfg {
-							break
+					if len(relaySources) == 0 {
+						// check whether all sources are started through enable relay
+						// if not, stop the relaySources that are operated to this worker
+						startedByCfg := true
+						for _, w := range s.getSourceWorkers(true) {
+							if !w.startedRelayBySourceCfg {
+								startedByCfg = false
+								break
+							}
 						}
-						log.L().Info("didn't found relay config after etcd retryable error. Will stop relay now")
-						err = s.disableRelay("")
-						if err != nil {
-							log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
-							return err // return if failed to stop the worker.
+						if !startedByCfg {
+							log.L().Info("didn't found relay config after etcd retryable error, will stop relay now")
+							err = s.disableRelay("")
+							if err != nil {
+								log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
+								return err // return if failed to stop the worker.
+							}
+						} else {
+							break
 						}
 					} else {
 						err2 := func() error {
 							s.Lock()
 							defer s.Unlock()
 
-							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
-								// we may face both relay config and subtask bound changed in a compaction error, so here
-								// we check if observeSourceBound has started a worker
-								// TODO: add a test for this situation
-								if !w.relayEnabled.Load() {
-									if err2 := w.EnableRelay(false); err2 != nil {
+							// mark relay workers in etcd as set A, relay workers started in dm-worker server as set B
+							// make sure relay workers in set `A` are all started
+							// TODO: batch these operations to avoid error
+							sourceWorkersSet := s.getSourceWorkers(false)
+							for source, sourceCfg := range relaySources {
+								if w, ok := sourceWorkersSet[source]; ok {
+									// we may face both relay config and subtask bound changed in a compaction error, so here
+									// we check if observeSourceBound has started a worker
+									// TODO: add a test for this situation
+									if !w.relayEnabled.Load() {
+										if err2 := w.EnableRelay(false); err2 != nil {
+											return err2
+										}
+									}
+								} else {
+									log.L().Info("will recover observeRelayConfig",
+										zap.String("relay source", source))
+									if err2 := s.enableRelay(sourceCfg, false); err2 != nil {
 										return err2
 									}
 								}
-								return nil
 							}
-							err = s.stopSourceWorker("", false, true)
-							if err != nil {
-								log.L().Error("fail to stop worker", zap.Error(err))
-								return err // return if failed to stop the worker.
+							// make sure relay workers in set `B - A` are all stopped
+							for source, w := range sourceWorkersSet {
+								if w == nil || w.startedRelayBySourceCfg || !w.relayEnabled.Load() {
+									continue
+								}
+								if _, ok := relaySources[source]; !ok {
+									err = s.stopSourceWorker(source, false, true)
+									if err != nil {
+										log.L().Error("fail to stop worker", zap.Error(err))
+										return err // return if failed to stop the worker.
+									}
+								}
 							}
-							log.L().Info("will recover observeRelayConfig",
-								zap.String("relay source", relaySource.SourceID))
-							return s.enableRelay(relaySource, false)
+							return nil
 						}()
 						if err2 != nil {
 							return err2
@@ -467,6 +501,19 @@ func (s *Server) Close() {
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
+func (s *Server) getSourceWorkers(needLock bool) map[string]*SourceWorker {
+	if needLock {
+		s.Lock()
+		defer s.Unlock()
+	}
+	sws := make(map[string]*SourceWorker, len(s.workers))
+	for source, w := range s.workers {
+		sws[source] = w
+	}
+	return s.workers
+}
+
+// if needLock is false, we should make sure Server has been locked in caller.
 func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 	if needLock {
 		s.Lock()
@@ -516,7 +563,7 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 	}
 }
 
-// if sourceID is set to "", worker will be closed directly
+// if sourceID is set to "", all relay workers will be closed directly
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
 func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
@@ -721,6 +768,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 	return nil
 }
 
+// disableRelay stops the relay that are operated to this worker.
 func (s *Server) disableRelay(source string) error {
 	s.Lock()
 	defer s.Unlock()
