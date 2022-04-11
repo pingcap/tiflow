@@ -23,13 +23,12 @@ type DebugConfig struct {
 
 	// EnableDBSorter enables db sorter.
 	//
-	// The default value is false.
+	// The default value is true.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
 	// EnableNewScheduler enables the peer-messaging based new scheduler.
-	// The default value is false.
-	// TODO: turn on after GA.
+	// The default value is true.
 	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
 	Messages           *MessagesConfig `toml:"messages" json:"messages"`
 }
