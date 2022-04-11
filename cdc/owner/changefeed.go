@@ -74,11 +74,12 @@ type changefeed struct {
 	// `wg` is used to manage those backend goroutines.
 	wg sync.WaitGroup
 
+	metricsChangefeedBarrierTsGauge       prometheus.Gauge
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 	metricsChangefeedResolvedTsGauge      prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
-	metricChangefeedTickDuration          prometheus.Observer
+	metricsChangefeedTickDuration         prometheus.Observer
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
@@ -131,7 +132,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
 		}
-		c.metricChangefeedTickDuration.Observe(costTime.Seconds())
+		c.metricsChangefeedTickDuration.Observe(costTime.Seconds())
 	}
 
 	if err != nil {
@@ -204,6 +205,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		)
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -212,7 +214,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
-		log.Info("barrierTs < checkpointTs, premature to schedule tables or update status",
+		log.Debug("barrierTs < checkpointTs, premature to schedule tables or update status",
 			zap.String("changefeed", c.id),
 			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
@@ -338,11 +340,12 @@ LOOP:
 	c.redoManager = redoManager
 
 	// init metrics
+	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
-	c.metricChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
+	c.metricsChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -386,7 +389,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id)
-	c.metricChangefeedTickDuration = nil
+	c.metricsChangefeedTickDuration = nil
+
+	changefeedBarrierTsGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedBarrierTsGauge = nil
 
 	c.initialized = false
 }
@@ -481,6 +487,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
+	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
+	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	switch barrierTp {
 	case ddlJobBarrier:

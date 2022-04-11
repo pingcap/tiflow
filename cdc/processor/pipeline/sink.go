@@ -140,17 +140,19 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 			n.status.Store(TableStatusStopped)
 			return
 		}
-		if n.checkpointTs >= n.targetTs {
+		if atomic.LoadUint64(&n.checkpointTs) >= n.targetTs {
 			err = n.stop(ctx)
 		}
 	}()
-	if resolvedTs > n.barrierTs {
-		resolvedTs = n.barrierTs
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
+	currentCheckpointTs := atomic.LoadUint64(&n.checkpointTs)
+	if resolvedTs > currentBarrierTs {
+		resolvedTs = currentBarrierTs
 	}
 	if resolvedTs > n.targetTs {
 		resolvedTs = n.targetTs
 	}
-	if resolvedTs <= n.checkpointTs {
+	if resolvedTs <= currentCheckpointTs {
 		return nil
 	}
 	if err := n.emitRowToSink(ctx); err != nil {
@@ -170,7 +172,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
 	//   checkpointTs than this one
-	if checkpointTs <= n.checkpointTs {
+	if checkpointTs <= currentCheckpointTs {
 		return nil
 	}
 	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
@@ -325,14 +327,14 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
-	if n.status == TableStatusStopped {
+	if n.status.Load() == TableStatusStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
-			if n.status == TableStatusInitializing {
+			if n.status.Load() == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
@@ -348,7 +350,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeTick:
-		if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+		if err := n.flushSink(ctx, atomic.LoadUint64(&n.resolvedTs)); err != nil {
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeCommand:
@@ -367,7 +369,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 
 func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 	atomic.StoreUint64(&n.barrierTs, ts)
-	if err := n.flushSink(ctx, n.resolvedTs); err != nil {
+	if err := n.flushSink(ctx, atomic.LoadUint64(&n.resolvedTs)); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
