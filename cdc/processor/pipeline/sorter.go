@@ -280,7 +280,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			// resolved ts, conflicts to this change.
 			// TODO: Remove redolog check once redolog decouples for global
 			//       resolved ts.
-			event.SetResolvedTsByBarrierTs(n.BarrierTs())
+			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
 	}
 	n.sorter.AddEntry(ctx, event)
