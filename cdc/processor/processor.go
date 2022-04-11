@@ -203,6 +203,7 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)
+	p.flowController.RemoveTable(tableID)
 	log.Info("Remove Table finished",
 		cdcContext.ZapFieldChangefeed(ctx),
 		zap.Int64("tableID", tableID))
@@ -1096,6 +1097,10 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
+
+	for tableID := range p.tables {
+		p.flowController.RemoveTable(tableID)
+	}
 
 	if p.newSchedulerEnabled {
 		if p.agent == nil {
