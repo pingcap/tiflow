@@ -189,6 +189,7 @@ func (c *StreamerController) ResetReplicationSyncer(tctx *tcontext.Context, loca
 	c.Lock()
 	defer c.Unlock()
 
+	tctx.L().Info("reset replication syncer", zap.Stringer("location", location))
 	return c.resetReplicationSyncer(tctx, location)
 }
 
