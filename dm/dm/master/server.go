@@ -2893,7 +2893,7 @@ func sendValidationRequest[T any](
 	worker := s.scheduler.GetWorkerBySource(sourceID)
 	if worker == nil {
 		err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
-		resp := genWorkerErrorResp(req, err, logMsg, "", sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, "", sourceID)
 		appendWorkerResp(workerRespMu, workerResps, resp.(T))
 		return
 	}
@@ -2903,21 +2903,21 @@ func sendValidationRequest[T any](
 		defer wg.Done()
 		workerResp, err := worker.SendRequest(ctx, req, s.cfg.RPCTimeout)
 		if err != nil {
-			resp := genWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+			resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
 			appendWorkerResp(workerRespMu, workerResps, resp.(T))
 		} else {
-			resp := getWorkerResp(req, workerResp)
+			resp := getValidationWorkerResp(req, workerResp)
 			appendWorkerResp(workerRespMu, workerResps, resp.(T))
 		}
 	}, func(args ...interface{}) {
 		defer wg.Done()
 		err := terror.ErrMasterNoEmitToken.Generate(sourceID)
-		resp := genWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
 		appendWorkerResp(workerRespMu, workerResps, resp.(T))
 	})
 }
 
-func getWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{} {
+func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{} {
 	switch req.Type {
 	case workerrpc.CmdGetValidationStatus:
 		return resp.GetValidationStatus
@@ -2930,7 +2930,7 @@ func getWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{}
 	}
 }
 
-func genWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) interface{} {
+func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) interface{} {
 	log.L().Error(logMsg, zap.Error(err), zap.String("source", sourceID), zap.String("worker", workerID))
 	switch req.Type {
 	case workerrpc.CmdGetValidationStatus:
