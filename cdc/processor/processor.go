@@ -32,13 +32,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/common"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/flow"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -59,7 +59,7 @@ type processor struct {
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	tables         map[model.TableID]tablepipeline.TablePipeline
-	flowController *flow.ProcessorFlowController
+	flowController *common.ProcessorFlowController
 
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
@@ -232,7 +232,7 @@ func newProcessor(ctx cdcContext.Context) *processor {
 	p := &processor{
 		tables: make(map[model.TableID]tablepipeline.TablePipeline),
 		// todo: figure out how to set the quota for each processor, use 1GB at the moment.
-		flowController: flow.NewProcessorFlowController(changefeedID, 1*1024*1024*1024),
+		flowController: common.NewProcessorFlowController(changefeedID, 1*1024*1024*1024),
 
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
