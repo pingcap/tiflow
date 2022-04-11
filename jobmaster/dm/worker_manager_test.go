@@ -29,7 +29,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 	workerStatus1 := runtime.NewWorkerStatus(source1, lib.WorkerDMDump, "worker-id-1", runtime.WorkerCreating)
-	workerStatus2 := runtime.NewWorkerStatus(source2, lib.WorkerDMDump, "worker-id-1", runtime.WorkerCreating)
+	workerStatus2 := runtime.NewWorkerStatus(source2, lib.WorkerDMDump, "worker-id-2", runtime.WorkerCreating)
 
 	// Creating
 	workerManager.UpdateWorkerStatus(workerStatus1)
@@ -83,6 +83,20 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source1)
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+
+	// mock dispatch error
+	workerManager.removeWorkerStatusByWorkerID("worker-not-exist")
+	workerStatusMap = workerManager.WorkerStatus()
+	require.Len(t.T(), workerStatusMap, 2)
+	require.Contains(t.T(), workerStatusMap, source1)
+	require.Contains(t.T(), workerStatusMap, source2)
+	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
+	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	workerManager.removeWorkerStatusByWorkerID(workerStatus1.ID)
+	workerStatusMap = workerManager.WorkerStatus()
+	require.Len(t.T(), workerStatusMap, 1)
+	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
 }
 
@@ -497,7 +511,7 @@ func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID strin
 	return result.workerID, result.err
 }
 
-func (mockAgent *MockWorkerAgent) DestroyWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (mockAgent *MockWorkerAgent) StopWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.destroyResults) == 0 {
