@@ -225,7 +225,8 @@ func (sm *saramaMetricsMonitor) collectBrokers() {
 			"use historical brokers to collect kafka broker level metrics",
 			zap.String("changefeed", sm.changefeedID),
 			zap.Any("role", sm.role),
-			zap.Duration("duration", time.Since(start)))
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
 		return
 	}
 
