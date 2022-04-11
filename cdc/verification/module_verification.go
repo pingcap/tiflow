@@ -192,7 +192,6 @@ func decodeKey(key []byte) (Module, uint64, []byte) {
 func (m *ModuleVerification) runVerify(ctx context.Context) {
 	outChan := m.etcdClient.Watch(ctx, etcd.GetEtcdKeyVerification(m.cfg.ChangefeedID), "", clientv3.WithKeysOnly())
 	for {
-		log.Info("module verify running", zap.String("cf", m.cfg.ChangefeedID))
 		select {
 		case <-ctx.Done():
 			log.Info("module runVerify ctx cancel",
@@ -204,7 +203,6 @@ func (m *ModuleVerification) runVerify(ctx context.Context) {
 			return
 		case ret := <-outChan:
 			for _, event := range ret.Events {
-				log.Info("module verify event", zap.ByteString("key", event.Kv.Key), zap.ByteString("value", event.Kv.Value))
 				info := &taskInfo{}
 				if err := info.Unmarshal(event.Kv.Value); err != nil {
 					log.Error("module verify unmarshal fail",
@@ -213,15 +211,15 @@ func (m *ModuleVerification) runVerify(ctx context.Context) {
 
 					continue
 				}
-				// if !info.EnoughCheck {
-				if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
-					log.Error("module verify ret",
-						zap.String("changefeed", m.cfg.ChangefeedID),
-						zap.String("startTs", info.StartTs),
-						zap.String("endTs", info.EndTs),
-						zap.Error(err))
+				if !info.EnoughCheck {
+					if err := m.Verify(ctx, info.StartTs, info.EndTs); err != nil {
+						log.Error("module verify ret",
+							zap.String("changefeed", m.cfg.ChangefeedID),
+							zap.String("startTs", info.StartTs),
+							zap.String("endTs", info.EndTs),
+							zap.Error(err))
+					}
 				}
-				//}
 				if err := m.GC(ctx, info.EndTs); err != nil {
 					log.Error("module verify gc fail",
 						zap.String("changefeed", m.cfg.ChangefeedID),
