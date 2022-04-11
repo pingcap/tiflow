@@ -411,7 +411,6 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 type SourceConfigForDowngrade struct {
 	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
-	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
 	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
@@ -436,7 +435,6 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 	return &SourceConfigForDowngrade{
 		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
-		AutoFixGTID:     sourceCfg.AutoFixGTID,
 		RelayDir:        sourceCfg.RelayDir,
 		MetaDir:         sourceCfg.MetaDir,
 		Flavor:          sourceCfg.Flavor,

@@ -1059,9 +1059,6 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	cfg.EnableGTID = sourceCfg.EnableGTID
 	cfg.UseRelay = enableRelay
 
-	// we can remove this from SubTaskConfig later, because syncer will always read from relay
-	cfg.AutoFixGTID = sourceCfg.AutoFixGTID
-
 	if cfg.CaseSensitive != sourceCfg.CaseSensitive {
 		log.L().Warn("different case-sensitive config between task config and source config, use `true` for it.")
 	}

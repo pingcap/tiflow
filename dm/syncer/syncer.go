@@ -3565,7 +3565,6 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RelayDir = newCfg.RelayDir
 	oldCfg.UseRelay = newCfg.UseRelay
 	oldCfg.EnableGTID = newCfg.EnableGTID
-	oldCfg.AutoFixGTID = newCfg.AutoFixGTID
 	oldCfg.CaseSensitive = newCfg.CaseSensitive
 
 	if oldCfg.String() != newCfg.String() {
@@ -3682,7 +3681,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	s.cfg.RelayDir = cfg.RelayDir
 	s.cfg.UseRelay = cfg.UseRelay
 	s.cfg.EnableGTID = cfg.EnableGTID
-	s.cfg.AutoFixGTID = cfg.AutoFixGTID
 	s.cfg.CaseSensitive = cfg.CaseSensitive
 	return nil
 }
