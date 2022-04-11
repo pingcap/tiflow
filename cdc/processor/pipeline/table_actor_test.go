@@ -50,7 +50,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		router:    tableActorRouter,
 		cancel:    func() {},
 		reportErr: func(err error) {},
-		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
+		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, nil),
 	}
 	require.True(t, tbl.AsyncStop(1))
 
@@ -319,7 +319,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, 10, nil)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.NotPanics(t, func() {
@@ -335,7 +335,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, 10, nil)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 

@@ -15,11 +15,13 @@ package pipeline
 
 import (
 	"container/list"
+	"context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
@@ -42,23 +44,26 @@ type cyclicMarkNode struct {
 
 	// todo : remove this flag after table actor is GA
 	isTableActorMode bool
+	verifier         verification.ModuleVerifier
 }
 
-func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
+func newCyclicMarkNode(markTableID model.TableID, verifier verification.ModuleVerifier) *cyclicMarkNode {
 	return &cyclicMarkNode{
 		markTableID:            markTableID,
 		unknownReplicaIDEvents: make(map[model.Ts][]*model.PolymorphicEvent),
 		currentReplicaIDs:      make(map[model.Ts]uint64),
+		verifier:               verifier,
 	}
 }
 
 func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	return n.InitTableActor(ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID, ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID, false)
+	return n.InitTableActor(ctx, false)
 }
 
-func (n *cyclicMarkNode) InitTableActor(localReplicaID uint64, filterReplicaID []uint64, isTableActorMode bool) error {
-	n.localReplicaID = localReplicaID
+func (n *cyclicMarkNode) InitTableActor(ctx pipeline.NodeContext, isTableActorMode bool) error {
+	n.localReplicaID = ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
+	filterReplicaID := ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
 	}
@@ -173,6 +178,11 @@ func (n *cyclicMarkNode) sendNormalRowEventToNextNode(ctx pipeline.NodeContext, 
 	}
 	for _, event := range events {
 		event.Row.ReplicaID = replicaID
+		if n.verifier != nil {
+			n.verifier.SentTrackData(context.Background(),
+				verification.Cyclic,
+				[]verification.TrackData{{TrackID: event.TrackID, CommitTs: event.CRTs}})
+		}
 		ctx.SendToNextNode(pmessage.PolymorphicEventMessage(event))
 	}
 }

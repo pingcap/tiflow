@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/verification"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
@@ -35,17 +36,20 @@ type pullerNode struct {
 	changefeed  string
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
+	verifier    verification.ModuleVerifier
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName, changefeed string,
+	verifier verification.ModuleVerifier,
 ) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
 		changefeed:  changefeed,
+		verifier:    verifier,
 	}
 }
 
@@ -97,6 +101,13 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
+				if n.verifier != nil {
+					if pEvent.TrackID != nil {
+						n.verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: pEvent.TrackID, CommitTs: pEvent.CRTs}})
+					} else if pEvent.RawKV.OpType == model.OpTypeResolved {
+						n.verifier.SentTrackData(ctxC, verification.Puller, []verification.TrackData{{TrackID: nil, CommitTs: pEvent.CRTs}})
+					}
+				}
 				if isActorMode {
 					sorter.handleRawEvent(ctx, pEvent)
 				} else {

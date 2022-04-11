@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
@@ -87,6 +88,7 @@ type tableActor struct {
 	cancel context.CancelFunc
 
 	lastFlushSinkTime time.Time
+	moduleVerifier    verification.ModuleVerifier
 }
 
 // NewTableActor creates a table actor and starts it.
@@ -97,6 +99,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	moduleVerifier verification.ModuleVerifier,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
@@ -134,7 +137,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		router:         globalVars.TableActorSystem.Router(),
 		actorID:        actorID,
 
-		stopCtx: cctx,
+		stopCtx:        cctx,
+		moduleVerifier: moduleVerifier,
 	}
 
 	startTime := time.Now()
@@ -265,7 +269,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicConfig,
+		t.mounter, t.replicConfig, t.moduleVerifier,
 	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
@@ -279,7 +283,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID, t.moduleVerifier)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -300,7 +304,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.targetTs, flowController, t.moduleVerifier)
 	actorSinkNode.initWithReplicaConfig(true, t.replicConfig)
 	t.sinkNode = actorSinkNode
 
@@ -328,7 +332,7 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 	}
 	// check if cyclic feature is enabled
 	if t.cyclicEnabled {
-		cyclicNode := newCyclicMarkNode(t.markTableID)
+		cyclicNode := newCyclicMarkNode(t.markTableID, t.moduleVerifier)
 		cyclicActorNodeContext := newCyclicNodeContext(
 			newContext(sdtTableContext, t.tableName,
 				t.globalVars.TableActorSystem.Router(),

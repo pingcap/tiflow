@@ -57,7 +57,7 @@ func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
 		Consistent: &config.ConsistentConfig{},
-	})
+	}, nil)
 	sn.sorter = memory.NewEntrySorter()
 	require.EqualValues(t, 1, sn.ResolvedTs())
 	nctx := pipeline.NewNodeContext(
@@ -105,7 +105,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	s := &checkSorter{ch: sch}
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
 		Consistent: &config.ConsistentConfig{},
-	})
+	}, nil)
 	sn.sorter = s
 
 	ch := make(chan pmessage.Message, 1)

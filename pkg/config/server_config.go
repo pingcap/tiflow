@@ -37,6 +37,9 @@ const (
 
 	// DebugConfigurationItem is the name of debug configurations
 	DebugConfigurationItem = "debug"
+
+	// DefaultVerificationDir is the sub directory path of data-dir.
+	DefaultVerificationDir = "/tmp/verification"
 )
 
 func init() {

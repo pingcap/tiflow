@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
@@ -82,9 +83,10 @@ type sinkNode struct {
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
+	verifier         verification.ModuleVerifier
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController, moduleVerifier verification.ModuleVerifier) *sinkNode {
 	return &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
@@ -95,6 +97,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 		barrierTs:    startTs,
 
 		flowController: flowController,
+		verifier:       moduleVerifier,
 	}
 }
 
@@ -213,7 +216,9 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 	} else {
 		n.rowBuffer = append(n.rowBuffer, event.Row)
 	}
-
+	if n.verifier != nil && event.TrackID != nil {
+		n.verifier.SentTrackData(ctx, verification.Sink, []verification.TrackData{{TrackID: event.TrackID, CommitTs: event.CRTs}})
+	}
 	if len(n.rowBuffer) >= defaultSyncResolvedBatch {
 		if err := n.emitRowToSink(ctx); err != nil {
 			return errors.Trace(err)

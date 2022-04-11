@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -66,12 +67,14 @@ type sorterNode struct {
 
 	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
 	isTableActorMode bool
+	moduleVerifier   verification.ModuleVerifier
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
+	verifier verification.ModuleVerifier,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -81,6 +84,7 @@ func newSorterNode(
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		replConfig:     replConfig,
+		moduleVerifier: verifier,
 	}
 }
 
@@ -229,6 +233,9 @@ func (n *sorterNode) start(
 					}
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
+				}
+				if n.moduleVerifier != nil && msg.TrackID != nil {
+					n.moduleVerifier.SentTrackData(ctx, verification.Sorter, []verification.TrackData{{TrackID: msg.TrackID, CommitTs: msg.CRTs}})
 				}
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}

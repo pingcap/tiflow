@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/verification"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
@@ -82,6 +83,8 @@ type processor struct {
 	agent               processorAgent
 	checkpointTs        model.Ts
 	resolvedTs          model.Ts
+
+	moduleVerifier verification.ModuleVerifier
 
 	metricResolvedTsGauge           prometheus.Gauge
 	metricResolvedTsLagGauge        prometheus.Gauge
@@ -502,6 +505,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
+	}
+	if ctx.ChangefeedVars().Info.SyncPointEnabled {
+		p.moduleVerifier, err = verification.NewModuleVerification(ctx,
+			&verification.ModuleVerificationConfig{
+				ChangefeedID: p.changefeedID,
+				CyclicEnable: ctx.ChangefeedVars().Info.Config.Cyclic.IsEnabled(),
+			}, ctx.GlobalVars().EtcdClient.Client)
+		if err != nil {
+			return err
+		}
 	}
 
 	if p.newSchedulerEnabled {
@@ -990,7 +1003,8 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			tableNameStr,
 			replicaInfo,
 			sink,
-			p.changefeed.Info.GetTargetTs())
+			p.changefeed.Info.GetTargetTs(),
+			p.moduleVerifier)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1003,6 +1017,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs(),
+			p.moduleVerifier,
 		)
 	}
 

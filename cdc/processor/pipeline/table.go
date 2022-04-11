@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/cdc/verification"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -178,6 +179,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	moduleVerifier verification.ModuleVerifier,
 ) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
@@ -205,14 +207,13 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
-		flowController, mounter, replConfig)
-	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
+	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig, moduleVerifier)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController, moduleVerifier)
 
-	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
+	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed, moduleVerifier))
 	p.AppendNode(ctx, "sorter", sorterNode)
 	if cyclicEnabled {
-		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))
+		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID, moduleVerifier))
 	}
 	p.AppendNode(ctx, "sink", sinkNode)
 
