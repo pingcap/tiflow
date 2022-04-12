@@ -113,6 +113,8 @@ func main() {
 		log.Fatal("Fail to move tables", zap.Error(err))
 	}
 
+	time.Sleep(time.Minute)
+
 	err = cluster.moveAllTables(ctx, targetCapture, sourceCapture)
 	if err != nil {
 		log.Fatal("Fail to move tables back", zap.Error(err))
