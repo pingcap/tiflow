@@ -113,7 +113,8 @@ func main() {
 		log.Fatal("Fail to move tables", zap.Error(err))
 	}
 
-	time.Sleep(time.Minute)
+	// Make sure the table synchronization starts.
+	time.Sleep(2 * time.Minute)
 
 	err = cluster.moveAllTables(ctx, targetCapture, sourceCapture)
 	if err != nil {
