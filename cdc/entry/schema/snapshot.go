@@ -16,6 +16,7 @@ package schema
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/google/btree"
@@ -110,8 +111,12 @@ type SchemaSnapshot struct {
 	forceReplicate bool
 
 	currentTs uint64
+
+	rwlock *sync.RWMutex
+	locked bool
 }
 
+// NewEmptySchemaSnapshot creates an empty schema snapshot.
 func NewEmptySchemaSnapshot(forceReplicate bool) *SchemaSnapshot {
 	return &SchemaSnapshot{
 		tableNameToID:    btree.New(16),
@@ -123,9 +128,32 @@ func NewEmptySchemaSnapshot(forceReplicate bool) *SchemaSnapshot {
 		ineligibleTables: btree.New(16),
 		forceReplicate:   forceReplicate,
 		currentTs:        0,
+		rwlock:           new(sync.RWMutex),
+		locked:           false,
 	}
 }
 
+// lock protects internal btrees as they are not thread safe.
+// All functions accessing btrees directly needs to call this.
+func (s *SchemaSnapshot) lock(readOnly bool) bool {
+	if !s.locked {
+		if readOnly {
+			s.rwlock.RLock()
+		} else {
+			s.rwlock.Lock()
+		}
+		s.locked = true
+		return true
+	}
+	return false
+}
+
+func (s *SchemaSnapshot) unlock() {
+	s.rwlock.Unlock()
+	s.locked = false
+}
+
+// NewSchemaSnapshotFromMeta creates a schema snapshot from meta.
 func NewSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*SchemaSnapshot, error) {
 	snap := NewEmptySchemaSnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
@@ -182,6 +210,7 @@ func NewSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 	return snap, nil
 }
 
+// Copy creates a new schema snapshot based on the given one.
 func (s *SchemaSnapshot) Copy() *SchemaSnapshot {
 	return &SchemaSnapshot{
 		tableNameToID:    s.tableNameToID,
@@ -193,9 +222,11 @@ func (s *SchemaSnapshot) Copy() *SchemaSnapshot {
 		ineligibleTables: s.ineligibleTables,
 		forceReplicate:   s.forceReplicate,
 		currentTs:        s.currentTs,
+		rwlock:           s.rwlock,
 	}
 }
 
+// PrintStatus prints the schema snapshot.
 func (s *SchemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 	logger("[SchemaSnap] Start to print status", zap.Uint64("currentTs", s.currentTs))
 
@@ -243,6 +274,10 @@ func (s *SchemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 // The second returned value is false if no schema with the specified id is found.
 // NOTE: The returned table info should always be READ-ONLY!
 func (s *SchemaSnapshot) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag := negative(s.currentTs)
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
@@ -258,6 +293,10 @@ func (s *SchemaSnapshot) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 // The second returned value is false if no table with the specified id is found.
 // NOTE: The returned table info should always be READ-ONLY!
 func (s *SchemaSnapshot) PhysicalTableByID(id int64) (tableInfo *model.TableInfo, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag := negative(s.currentTs)
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
@@ -279,6 +318,10 @@ func (s *SchemaSnapshot) PhysicalTableByID(id int64) (tableInfo *model.TableInfo
 
 // SchemaIDByName gets the schema id from the given schema name.
 func (s *SchemaSnapshot) SchemaIDByName(schema string) (id int64, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag := negative(s.currentTs)
 	start := newVersionedEntityName(-1, schema, tag)
 	end := newVersionedEntityName(-1, schema, negative(uint64(0)))
@@ -293,6 +336,10 @@ func (s *SchemaSnapshot) SchemaIDByName(schema string) (id int64, ok bool) {
 // TableIDByName returns the tableID by table schemaName and tableName.
 // The second returned value is false if no table with the specified name is found.
 func (s *SchemaSnapshot) TableIDByName(schema string, table string) (id int64, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	var prefix int64
 	prefix, ok = s.SchemaIDByName(schema)
 	if ok {
@@ -312,6 +359,10 @@ func (s *SchemaSnapshot) TableIDByName(schema string, table string) (id int64, o
 // The second returned value is false if no table with the specified name is found.
 // NOTE: The returned table info should always be READ-ONLY!
 func (s *SchemaSnapshot) TableByName(schema, table string) (info *model.TableInfo, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	id, ok := s.TableIDByName(schema, table)
 	if !ok {
 		return nil, ok
@@ -321,6 +372,10 @@ func (s *SchemaSnapshot) TableByName(schema, table string) (info *model.TableInf
 
 // SchemaByTableID returns the schema ID by table ID.
 func (s *SchemaSnapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tableInfo, ok := s.PhysicalTableByID(tableID)
 	if !ok {
 		return nil, false
@@ -330,17 +385,29 @@ func (s *SchemaSnapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) 
 
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL.
 func (s *SchemaSnapshot) IsTruncateTableID(id int64) bool {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag, ok := s.tableTagByID(id, true)
 	return ok && s.truncatedTables.Get(newVersionedID(id, tag)) != nil
 }
 
 // IsIneligibleTableID returns true if the table is ineligible.
 func (s *SchemaSnapshot) IsIneligibleTableID(id int64) (ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag, ok := s.tableTagByID(id, false)
 	return ok && s.ineligibleTables.Get(newVersionedID(id, tag)) != nil
 }
 
 func (s *SchemaSnapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, ok bool) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	tag := negative(s.currentTs)
 	start := newVersionedID(id, tag)
 	end := newVersionedID(id, negative(uint64(0)))
@@ -368,6 +435,10 @@ func (s *SchemaSnapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag ui
 
 // FillSchemaName fills the schema name in ddl job.
 func (s *SchemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
 	if job.Type == timodel.ActionRenameTables {
 		// DDLs on multiple schema or tables, ignore them.
 		return nil
@@ -628,6 +699,7 @@ func (s *SchemaSnapshot) renameTables(job *timodel.Job, currentTs uint64) error 
 	return nil
 }
 
+// HandleDDL handles the given job.
 func (s *SchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	if err := s.FillSchemaName(job); err != nil {
 		return errors.Trace(err)
@@ -638,6 +710,10 @@ func (s *SchemaSnapshot) HandleDDL(job *timodel.Job) error {
 // Drop drops the snapshot. It must be called when GC some snapshots.
 // Drop a snapshot will also drop all snapshots with a less timestamp.
 func (s *SchemaSnapshot) Drop() {
+	if s.lock(false) {
+		defer s.unlock()
+	}
+
 	tag := negative(s.currentTs)
 
 	schemas := make([]versionedID, 0, s.schemas.Len())
@@ -742,6 +818,115 @@ func (s *SchemaSnapshot) Drop() {
 	}
 }
 
+// CurrentTs returns the finish timestamp of the schema snapshot.
+func (s *SchemaSnapshot) CurrentTs() uint64 {
+	return s.currentTs
+}
+
+// IterTables iterates all tables in the snapshot.
+func (s *SchemaSnapshot) IterTables(includeIneligible bool, f func(i *model.TableInfo)) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
+	tag := negative(s.currentTs)
+	var tableID int64 = -1
+	s.tables.Ascend(func(i btree.Item) bool {
+		x := i.(versionedID)
+		if x.id != tableID && x.tag >= tag {
+			tableID = x.id
+			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
+				f((*model.TableInfo)(x.target))
+			}
+		}
+		return true
+	})
+	return
+}
+
+// IterPartitions iterates all partitions in the snapshot.
+func (s *SchemaSnapshot) IterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
+	tag := negative(s.currentTs)
+	var partitionID int64 = -1
+	s.partitionTables.Ascend(func(i btree.Item) bool {
+		x := i.(versionedID)
+		if x.id != partitionID && x.tag >= tag {
+			partitionID = x.id
+			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
+				f(partitionID, (*model.TableInfo)(x.target))
+			}
+		}
+		return true
+	})
+	return
+}
+
+// IterSchemas iterates all schemas in the snapshot.
+func (s *SchemaSnapshot) IterSchemas(f func(i *timodel.DBInfo)) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
+	tag := negative(s.currentTs)
+	var schemaID int64 = -1
+	s.schemas.Ascend(func(i btree.Item) bool {
+		x := i.(versionedID)
+		if x.id != schemaID && x.tag >= tag {
+			schemaID = x.id
+			if x.target != nil {
+				f((*timodel.DBInfo)(x.target))
+			}
+		}
+		return true
+	})
+}
+
+// IterTableNames iterates all table names in the snapshot.
+func (s *SchemaSnapshot) IterTableNames(f func(schema int64, table string, target int64)) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
+	tag := negative(s.currentTs)
+	var prefix int64 = -1
+	entity := ""
+	s.tableNameToID.Ascend(func(i btree.Item) bool {
+		x := i.(versionedEntityName)
+		if (x.prefix != prefix || x.entity != entity) && x.tag >= tag {
+			prefix = x.prefix
+			entity = x.entity
+			if x.target > 0 {
+				f(prefix, entity, x.target)
+			}
+		}
+		return true
+	})
+}
+
+// IterSchemaNames iterates all schema names in the snapshot.
+func (s *SchemaSnapshot) IterSchemaNames(f func(schema string, target int64)) {
+	if s.lock(true) {
+		defer s.unlock()
+	}
+
+	tag := negative(s.currentTs)
+	entity := ""
+	s.schemaNameToID.Ascend(func(i btree.Item) bool {
+		x := i.(versionedEntityName)
+		if x.entity != entity && x.tag >= tag {
+			entity = x.entity
+			if x.target > 0 {
+				f(entity, x.target)
+			}
+		}
+		return true
+	})
+}
+
 func (s *SchemaSnapshot) tablesInSchema(schema string) (tables []int64) {
 	schemaID, ok := s.SchemaIDByName(schema)
 	if !ok {
@@ -762,91 +947,6 @@ func (s *SchemaSnapshot) tablesInSchema(schema string) (tables []int64) {
 		return true
 	})
 	return
-}
-
-func (s *SchemaSnapshot) CurrentTs() uint64 {
-	return s.currentTs
-}
-
-// IterTables iterates all tables in the snapshot.
-func (s *SchemaSnapshot) IterTables(includeIneligible bool, f func(i *model.TableInfo)) {
-	tag := negative(s.currentTs)
-	var tableID int64 = -1
-	s.tables.Ascend(func(i btree.Item) bool {
-		x := i.(versionedID)
-		if x.id != tableID && x.tag >= tag {
-			tableID = x.id
-			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
-				f((*model.TableInfo)(x.target))
-			}
-		}
-		return true
-	})
-	return
-}
-
-func (s *SchemaSnapshot) IterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
-	tag := negative(s.currentTs)
-	var partitionID int64 = -1
-	s.partitionTables.Ascend(func(i btree.Item) bool {
-		x := i.(versionedID)
-		if x.id != partitionID && x.tag >= tag {
-			partitionID = x.id
-			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
-				f(partitionID, (*model.TableInfo)(x.target))
-			}
-		}
-		return true
-	})
-	return
-}
-
-// IterSchemas iterates all schemas in the snapshot.
-func (s *SchemaSnapshot) IterSchemas(f func(i *timodel.DBInfo)) {
-	tag := negative(s.currentTs)
-	var schemaID int64 = -1
-	s.schemas.Ascend(func(i btree.Item) bool {
-		x := i.(versionedID)
-		if x.id != schemaID && x.tag >= tag {
-			schemaID = x.id
-			if x.target != nil {
-				f((*timodel.DBInfo)(x.target))
-			}
-		}
-		return true
-	})
-}
-
-func (s *SchemaSnapshot) IterTableNames(f func(schema int64, table string, target int64)) {
-	tag := negative(s.currentTs)
-	var prefix int64 = -1
-	entity := ""
-	s.tableNameToID.Ascend(func(i btree.Item) bool {
-		x := i.(versionedEntityName)
-		if (x.prefix != prefix || x.entity != entity) && x.tag >= tag {
-			prefix = x.prefix
-			entity = x.entity
-			if x.target > 0 {
-				f(prefix, entity, x.target)
-			}
-		}
-		return true
-	})
-}
-
-func (s *SchemaSnapshot) IterSchemaNames(f func(schema string, target int64)) {
-	tag := negative(s.currentTs)
-	entity := ""
-	s.schemaNameToID.Ascend(func(i btree.Item) bool {
-		x := i.(versionedEntityName)
-		if x.entity != entity && x.tag >= tag {
-			entity = x.entity
-			if x.target > 0 {
-				f(entity, x.target)
-			}
-		}
-		return true
-	})
 }
 
 // Entity(schema or table) name with finish timestamp of the associated DDL job.
@@ -893,6 +993,10 @@ func newVersionedID(id int64, tag uint64) versionedID {
 
 // DoHandleDDL is like HandleDDL but doesn't fill schema name into job. It's only for tests.
 func (s *SchemaSnapshot) DoHandleDDL(job *timodel.Job) error {
+	if s.lock(false) {
+		defer s.unlock()
+	}
+
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
