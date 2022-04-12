@@ -308,8 +308,8 @@ func TestValidatorDoValidate(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(newValidateErrorRow, 2).AddRow(ignoredValidateErrorRow, 3).
-			AddRow(resolvedValidateErrorRow, 4))
+		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewErr, 2).AddRow(pb.ValidateErrorState_IgnoredErr, 3).
+			AddRow(pb.ValidateErrorState_ResolvedErr, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
@@ -472,9 +472,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
-	require.Equal(t, int64(2), validator.errorRowCounts[newValidateErrorRow].Load())
-	require.Equal(t, int64(3), validator.errorRowCounts[ignoredValidateErrorRow].Load())
-	require.Equal(t, int64(4), validator.errorRowCounts[resolvedValidateErrorRow].Load())
+	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
+	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
+	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
@@ -613,4 +613,127 @@ func TestGetValidationStatus(t *testing.T) {
 		require.Equal(t, ok, true)
 		require.EqualValues(t, ent, result)
 	}
+}
+
+func TestGetValidationError(t *testing.T) {
+	db, dbMock, err := sqlmock.New()
+	require.Equal(t, log.InitLogger(&log.Config{}), nil)
+	require.NoError(t, err)
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.persistHelper.tctx = validator.tctx
+	// all error
+	dbMock.ExpectQuery("SELECT .* FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WithArgs(validator.cfg.SourceID).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
+			1, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data", "unexpected data", 2, 1, "2022-03-01",
+		),
+	)
+	// filter by status
+	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND status=\\?").
+		WithArgs(validator.cfg.SourceID, int(pb.ValidateErrorState_IgnoredErr)).
+		WillReturnRows(
+			sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
+				2, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data1", "unexpected data1", 2, 2, "2022-03-01",
+			).AddRow(
+				3, "mysql-replica", "srcdb", "srctbl", "dstdb", "dsttbl", "source data2", "unexpected data2", 2, 2, "2022-03-01",
+			),
+		)
+	expected := [][]*pb.ValidationError{
+		{
+			{
+				Id:        "1",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data",
+				DstData:   "unexpected data",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_NewErr,
+				Time:      "2022-03-01",
+			},
+		},
+		{
+			{
+				Id:        "2",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data1",
+				DstData:   "unexpected data1",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_IgnoredErr,
+				Time:      "2022-03-01",
+			},
+			{
+				Id:        "3",
+				Source:    "mysql-replica",
+				SrcTable:  "`srcdb`.`srctbl`",
+				DstTable:  "`dstdb`.`dsttbl`",
+				SrcData:   "source data2",
+				DstData:   "unexpected data2",
+				ErrorType: "Column data not matched",
+				Status:    pb.ValidateErrorState_IgnoredErr,
+				Time:      "2022-03-01",
+			},
+		},
+	}
+	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	res := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	require.EqualValues(t, expected[0], res)
+	res = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
+	require.EqualValues(t, expected[1], res)
+}
+
+func TestOperateValidationError(t *testing.T) {
+	var err error
+	db, dbMock, err := sqlmock.New()
+	require.Equal(t, log.InitLogger(&log.Config{}), nil)
+	require.NoError(t, err)
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.persistHelper.tctx = validator.tctx
+	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	sourceID := validator.cfg.SourceID
+	// 1. clear all error
+	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WillReturnRows()
+	// 2. clear error of errID
+	dbMock.ExpectQuery("DELETE FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND id=\\?").
+		WithArgs(sourceID, 1).WillReturnRows()
+	// 3. mark all error as resolved
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnRows()
+	// 4. mark all error as ignored
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnRows()
+	// 5. mark error as resolved of errID
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnRows()
+	// 6. mark error as ignored of errID
+	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnRows()
+
+	// clear all error
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)
+	require.NoError(t, err)
+	// clear error with id
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 1, false)
+	require.NoError(t, err)
+	// mark all as resolved
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ResolveErrOp, 0, true)
+	require.NoError(t, err)
+	// mark all as ignored
+	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 0, true)
+	require.NoError(t, err)
+	// mark error as resolved with id
+	err = validator.OperateValidatorError(pb.ValidationErrOp_ResolveErrOp, 1, false)
+	require.NoError(t, err)
+	// mark error as ignored with id
+	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 1, false)
+	require.NoError(t, err)
 }
