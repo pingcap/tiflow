@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/clock"
@@ -380,7 +381,7 @@ func TestUpdateStatus(t *testing.T) {
 
 	suite := newWorkerManagerTestSuite(ctx)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, suite.MetaClient)
 	err := workerMetaClient.Store(ctx, workerID1,
 		&libModel.WorkerStatus{
 			Code:         libModel.WorkerStatusInit,
@@ -522,7 +523,7 @@ func TestWorkerTerminate(t *testing.T) {
 	manager.clock.(*clock.Mock).Set(time.Now())
 
 	mockKV := suite.MetaClient.(*mockkv.MetaMock)
-	workerMetaClient := NewWorkerMetadataClient(masterName, mockKV)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, mockKV)
 	err := workerMetaClient.Store(ctx, workerID1, &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal})
 	require.NoError(t, err)
 
@@ -639,7 +640,7 @@ func TestWorkerTombstones(t *testing.T) {
 	manager.clock = clock.NewMock()
 	manager.clock.(*clock.Mock).Set(time.Now())
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, suite.MetaClient)
 	for i := 0; i < 10; i++ {
 		err := workerMetaClient.Store(ctx, fmt.Sprintf("worker-%d", i), &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal})
 		require.NoError(t, err)
@@ -698,7 +699,7 @@ func TestWorkerTombstones(t *testing.T) {
 	require.True(t, ok)
 
 	require.Eventually(t, func() bool {
-		workerMetaClient := NewWorkerMetadataClient(masterName, suite.MetaClient)
+		workerMetaClient := metadata.NewWorkerMetadataClient(masterName, suite.MetaClient)
 		_, err := workerMetaClient.Load(ctx, "worker-5")
 		return derror.ErrWorkerNoMeta.Equal(err)
 	}, 1*time.Second, 10*time.Millisecond)

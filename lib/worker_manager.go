@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -157,7 +159,7 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 		workerStatuses, err := workerMetaClient.LoadAllWorkers(ctx)
 		if err != nil {
 			select {
@@ -198,7 +200,7 @@ func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id libMode
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+		workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 		ok, err := workerMetaClient.Remove(ctx, id)
 		if err != nil {
 			select {
@@ -437,7 +439,7 @@ func (m *workerManagerImpl) addWorker(id libModel.WorkerID, executorNodeID p2p.N
 		justOnlined: true,
 	}
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 
 	var receiver *statusutil.Reader
 	// TODO figure out whether it is acceptable to load from metastore here.
@@ -460,7 +462,7 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id libModel.Wor
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	workerMetaClient := NewWorkerMetadataClient(m.masterID, m.metaClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(m.masterID, m.metaClient)
 	err := workerMetaClient.Store(ctx, id, &libModel.WorkerStatus{
 		Code: libModel.WorkerStatusCreated,
 	})

@@ -231,7 +231,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 
-	masterMeta := &lib.MasterMetaKVData{
+	masterMeta := &libModel.MasterMetaKVData{
 		// GetWorkerId here returns id of current unit
 		ID:     req.GetWorkerId(),
 		Tp:     lib.WorkerType(req.GetTaskTypeId()),

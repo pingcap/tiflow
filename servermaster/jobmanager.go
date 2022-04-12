@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	cvs "github.com/hanfei1991/microcosm/jobmaster/cvsJob"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -43,7 +43,7 @@ type JobManagerImplV2 struct {
 	lib.BaseMaster
 	*JobFsm
 
-	masterMetaClient *lib.MasterMetadataClient
+	masterMetaClient *metadata.MasterMetadataClient
 	uuidGen          uuid.Generator
 	clocker          clock.Clock
 	tombstoneCleaned bool
@@ -76,7 +76,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if resp != nil {
 		return resp
 	}
-	mcli := lib.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
+	mcli := metadata.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
@@ -114,7 +114,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		err error
 	)
 
-	meta := &lib.MasterMetaKVData{
+	meta := &libModel.MasterMetaKVData{
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -143,7 +143,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	// Store job master meta data before creating it
-	err = lib.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		resp.Err = derrors.ToPBError(err)
 		return resp
@@ -154,7 +154,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	id, err = jm.BaseMaster.CreateWorker(
 		meta.Tp, meta, defaultJobMasterCost)
 	if err != nil {
-		err2 := lib.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
+		err2 := metadata.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
 		if err2 != nil {
 			// TODO: add more GC mechanism if master meta is failed to delete
 			log.L().Error("failed to delete master meta", zap.Error(err2))
@@ -175,14 +175,14 @@ func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id libModel.MasterID,
 ) (*JobManagerImplV2, error) {
-	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
-		return lib.NewMasterMetadataClient(id, metaKV), nil
+	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*metadata.MasterMetadataClient, error) {
+		return metadata.NewMasterMetadataClient(id, metaKV), nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	cli := masterMetaClient.(*lib.MasterMetadataClient)
+	cli := masterMetaClient.(*metadata.MasterMetadataClient)
 	impl := &JobManagerImplV2{
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
@@ -200,7 +200,7 @@ func NewJobManagerImplV2(
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.StatusCode = libModel.MasterStatusInit
-	err = lib.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	err := jm.JobFsm.IterPendingJobs(
-		func(job *lib.MasterMetaKVData) (string, error) {
+		func(job *libModel.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -229,7 +229,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 	if !jm.tombstoneCleaned && jm.BaseMaster.IsMasterReady() {
 		err = jm.JobFsm.IterWaitAckJobs(
-			func(job *lib.MasterMetaKVData) (string, error) {
+			func(job *libModel.MasterMetaKVData) (string, error) {
 				return jm.BaseMaster.CreateWorker(
 					job.Tp, job, defaultJobMasterCost)
 			})
@@ -249,6 +249,9 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
+		if job.Tp == lib.JobManager {
+			continue
+		}
 		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue

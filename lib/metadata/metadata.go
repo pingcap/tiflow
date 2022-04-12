@@ -1,4 +1,4 @@
-package lib
+package metadata
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func NewMasterMetadataClient(masterID libModel.MasterID, metaKVClient metaclient
 	}
 }
 
-func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, error) {
+func (c *MasterMetadataClient) Load(ctx context.Context) (*libModel.MasterMetaKVData, error) {
 	key := adapter.MasterMetaKey.Encode(c.masterID)
 	resp, err := c.metaKVClient.Get(ctx, key)
 	if err != nil {
@@ -36,14 +36,14 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, err
 	}
 	if len(resp.Kvs) == 0 {
 		// TODO refine handling the situation where the mata key does not exist at this point
-		masterMeta := &MasterMetaKVData{
+		masterMeta := &libModel.MasterMetaKVData{
 			ID:         c.masterID,
 			StatusCode: libModel.MasterStatusUninit,
 		}
 		return masterMeta, nil
 	}
 	masterMetaBytes := resp.Kvs[0].Value
-	var masterMeta MasterMetaKVData
+	var masterMeta libModel.MasterMetaKVData
 	if err := json.Unmarshal(masterMetaBytes, &masterMeta); err != nil {
 		// TODO wrap the error
 		return nil, errors.Trace(err)
@@ -51,7 +51,7 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*MasterMetaKVData, err
 	return &masterMeta, nil
 }
 
-func (c *MasterMetadataClient) Store(ctx context.Context, data *MasterMetaKVData) error {
+func (c *MasterMetadataClient) Store(ctx context.Context, data *libModel.MasterMetaKVData) error {
 	key := adapter.MasterMetaKey.Encode(c.masterID)
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
@@ -73,20 +73,18 @@ func (c *MasterMetadataClient) Delete(ctx context.Context) error {
 }
 
 // LoadAllMasters loads all job masters from metastore
-func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMetaKVData, error) {
+func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.MasterMetaKVData, error) {
 	resp, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), metaclient.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	meta := make([]*MasterMetaKVData, 0, len(resp.Kvs))
+	meta := make([]*libModel.MasterMetaKVData, 0, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
-		masterMeta := &MasterMetaKVData{}
+		masterMeta := &libModel.MasterMetaKVData{}
 		if err := json.Unmarshal(kv.Value, masterMeta); err != nil {
 			return nil, errors.Trace(err)
 		}
-		if masterMeta.Tp != JobManager {
-			meta = append(meta, masterMeta)
-		}
+		meta = append(meta, masterMeta)
 	}
 	return meta, nil
 }
@@ -190,7 +188,7 @@ func (c *WorkerMetadataClient) workerMetaKey(id libModel.WorkerID) string {
 func StoreMasterMeta(
 	ctx context.Context,
 	metaKVClient metaclient.KVClient,
-	meta *MasterMetaKVData,
+	meta *libModel.MasterMetaKVData,
 ) error {
 	metaClient := NewMasterMetadataClient(meta.ID, metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)

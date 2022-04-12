@@ -16,7 +16,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	fsm := NewJobFsm()
 
 	id := "fsm-test-job-master-1"
-	job := &lib.MasterMetaKVData{
+	job := &libModel.MasterMetaKVData{
 		ID:     id,
 		Config: []byte("simple config"),
 	}
@@ -25,7 +25,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 
 	// Failover, job fsm loads tombstone job master
 	fsm.JobDispatched(job, true)
-	err := fsm.IterWaitAckJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	err := fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		createWorkerCount++
 		return id, nil
 	})
@@ -34,7 +34,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// job that is not added from failover won't be processed
-	err = fsm.IterWaitAckJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	err = fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		createWorkerCount++
 		return id, nil
 	})
@@ -53,8 +53,8 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_pending))
 
 	// Tick, process pending jobs, Pending -> WaitAck
-	dispatchedJobs := make([]*lib.MasterMetaKVData, 0)
-	err = fsm.IterPendingJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	dispatchedJobs := make([]*libModel.MasterMetaKVData, 0)
+	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
 		return id, nil
 	})
@@ -69,7 +69,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// Tick, Pending -> WaitAck
-	err = fsm.IterPendingJobs(func(job *lib.MasterMetaKVData) (string, error) {
+	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
 		return id, nil
 	})
 	require.Nil(t, err)

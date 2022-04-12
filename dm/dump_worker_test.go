@@ -65,7 +65,7 @@ func putMasterMeta(
 	ctx context.Context,
 	t *testing.T,
 	metaClient metaclient.KVClient,
-	metaData *lib.MasterMetaKVData,
+	metaData *libModel.MasterMetaKVData,
 ) {
 	masterKey := adapter.MasterInfoKey.Encode(masterID)
 	masterInfoBytes, err := json.Marshal(metaData)
@@ -90,7 +90,7 @@ func TestDumpWorker(t *testing.T) {
 	worker := workerWrapped.(*dumpWorker)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
-	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &lib.MasterMetaKVData{
+	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{
 		ID:         masterID,
 		NodeID:     nodeID,
 		Epoch:      1,

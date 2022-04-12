@@ -22,7 +22,7 @@ var (
 	_ runtime.Runnable = (Worker)(nil)
 )
 
-func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *MasterMetaKVData) {
+func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient, metaData *libModel.MasterMetaKVData) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
 	masterInfoBytes, err := json.Marshal(metaData)
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -107,7 +107,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -164,7 +164,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -201,7 +201,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     executorNodeID3,
 		Epoch:      2,
@@ -227,7 +227,7 @@ func TestWorkerStatus(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
@@ -285,7 +285,7 @@ func TestWorkerSuicide(t *testing.T) {
 	worker := newMockWorkerImpl(workerID1, masterName)
 	worker.clock = clock.NewMock()
 	worker.clock.(*clock.Mock).Set(time.Now())
-	putMasterMeta(ctx, t, worker.metaKVClient, &MasterMetaKVData{
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,

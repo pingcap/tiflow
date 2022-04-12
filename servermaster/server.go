@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -612,8 +615,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	masterMeta := &lib.MasterMetaKVData{
-		ID: lib.JobManagerUUID,
+	masterMeta := &libModel.MasterMetaKVData{
+		ID: metadata.JobManagerUUID,
 		Tp: lib.JobManager,
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -660,7 +663,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, lib.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
 	if err != nil {
 		return
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -82,7 +83,7 @@ type BaseMaster interface {
 	MetaKVClient() metaclient.KVClient
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	MasterMeta() *MasterMetaKVData
+	MasterMeta() *libModel.MasterMetaKVData
 	MasterID() libModel.MasterID
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -124,7 +125,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
-	masterMeta    *MasterMetaKVData
+	masterMeta    *libModel.MasterMetaKVData
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
@@ -161,7 +162,7 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &MasterMetaKVData{}
+		masterMeta    = &libModel.MasterMetaKVData{}
 		params        masterParams
 	)
 	if ctx != nil {
@@ -338,7 +339,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	return nil
 }
 
-func (m *DefaultBaseMaster) MasterMeta() *MasterMetaKVData {
+func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMetaKVData {
 	return m.masterMeta
 }
 
@@ -463,7 +464,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch libModel.Epoch, err error) {
-	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
 
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
@@ -494,7 +495,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code libModel.MasterStatusCode,
 ) error {
-	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -514,7 +515,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 ) (rawConfig []byte, workerID libModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*MasterMetaKVData)
+		masterMeta, ok := config.(*libModel.MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return

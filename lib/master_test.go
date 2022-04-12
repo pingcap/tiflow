@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -36,7 +37,7 @@ type dummyConfig struct {
 
 func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClient) {
 	masterKey := adapter.MasterMetaKey.Encode(masterName)
-	masterInfo := &MasterMetaKVData{
+	masterInfo := &libModel.MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		StatusCode: libModel.MasterStatusUninit,
@@ -64,7 +65,7 @@ func TestMasterInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 
-	var masterData MasterMetaKVData
+	var masterData libModel.MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
 	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
@@ -175,7 +176,7 @@ func TestMasterCreateWorker(t *testing.T) {
 	require.Len(t, workerList, 1)
 	require.Contains(t, workerList, workerID)
 
-	workerMetaClient := NewWorkerMetadataClient(masterName, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterName, master.metaKVClient)
 	dummySt := &dummyStatus{Val: 4}
 	ext, err := dummySt.Marshal()
 	require.NoError(t, err)
@@ -278,7 +279,7 @@ func TestPrepareWorkerConfig(t *testing.T) {
 		workerID  string
 	}{
 		{
-			FakeJobMaster, &MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
+			FakeJobMaster, &libModel.MasterMetaKVData{ID: "master-1", Config: fakeCfgBytes},
 			fakeCfgBytes, "master-1",
 		},
 		{

@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -90,7 +91,7 @@ type DefaultBaseWorker struct {
 	masterClient *masterClient
 	masterID     libModel.MasterID
 
-	workerMetaClient *WorkerMetadataClient
+	workerMetaClient *metadata.WorkerMetadataClient
 	statusSender     *statusutil.Writer
 	messageRouter    *MessageRouter
 
@@ -205,7 +206,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			}))
 		})
 
-	w.workerMetaClient = NewWorkerMetadataClient(w.masterID, w.metaKVClient)
+	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.metaKVClient)
 
 	w.statusSender = statusutil.NewWriter(
 		w.metaKVClient, w.messageSender, w.masterClient, w.id)
@@ -499,7 +500,7 @@ func newMasterClient(
 }
 
 func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -518,7 +519,7 @@ func (m *masterClient) MasterNodeID() p2p.NodeID {
 }
 
 func (m *masterClient) refreshMasterInfo(ctx context.Context, clock clock.Clock) error {
-	metaClient := NewMasterMetadataClient(m.masterID, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)

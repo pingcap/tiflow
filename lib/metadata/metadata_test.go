@@ -1,4 +1,4 @@
-package lib
+package metadata
 
 import (
 	"context"
@@ -10,23 +10,29 @@ import (
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
+// These constants are only used for unit testing.
+const (
+	jobManager = libModel.WorkerType(iota + 1)
+	fakeJobMaster
+)
+
 func TestMasterMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	metaKVClient := mockkv.NewMetaMock()
-	meta := []*MasterMetaKVData{
+	meta := []*libModel.MasterMetaKVData{
 		{
 			ID: JobManagerUUID,
-			Tp: JobManager,
+			Tp: jobManager,
 		},
 		{
 			ID: "master-1",
-			Tp: FakeJobMaster,
+			Tp: fakeJobMaster,
 		},
 		{
 			ID: "master-2",
-			Tp: FakeJobMaster,
+			Tp: fakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -37,10 +43,19 @@ func TestMasterMetadata(t *testing.T) {
 	cli := NewMasterMetadataClient("job-manager", metaKVClient)
 	masters, err := cli.LoadAllMasters(ctx)
 	require.Nil(t, err)
-	require.Len(t, masters, 2)
-	for _, master := range masters {
-		require.Equal(t, FakeJobMaster, master.Tp)
-	}
+	require.Len(t, masters, 3)
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: JobManagerUUID,
+		Tp: jobManager,
+	})
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: "master-1",
+		Tp: fakeJobMaster,
+	})
+	require.Contains(t, masters, &libModel.MasterMetaKVData{
+		ID: "master-2",
+		Tp: fakeJobMaster,
+	})
 }
 
 func TestOperateMasterMetadata(t *testing.T) {
@@ -50,14 +65,14 @@ func TestOperateMasterMetadata(t *testing.T) {
 		metaKVClient = mockkv.NewMetaMock()
 		addr1        = "127.0.0.1:10000"
 		addr2        = "127.0.0.1:10001"
-		meta         = &MasterMetaKVData{
+		meta         = &libModel.MasterMetaKVData{
 			ID:         "master-1",
-			Tp:         FakeJobMaster,
+			Tp:         fakeJobMaster,
 			Addr:       addr1,
 			StatusCode: libModel.MasterStatusInit,
 		}
 	)
-	loadMeta := func() *MasterMetaKVData {
+	loadMeta := func() *libModel.MasterMetaKVData {
 		cli := NewMasterMetadataClient(meta.ID, metaKVClient)
 		meta, err := cli.Load(ctx)
 		require.NoError(t, err)

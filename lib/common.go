@@ -1,18 +1,15 @@
 package lib
 
 import (
-	"encoding/json"
 	"time"
 
-	"github.com/pingcap/errors"
-
 	"github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+
+	"github.com/pingcap/errors"
 )
 
 type (
-	WorkerType int64
-
+	WorkerType   = model.WorkerType
 	WorkerConfig = interface{}
 )
 
@@ -58,36 +55,6 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 		tc.workerTimeoutDuration = 2*tc.workerHeartbeatInterval + time.Second*3
 	}
 	return tc
-}
-
-type (
-	MasterMetaKVData struct {
-		ID         model.MasterID         `json:"id"`
-		Addr       string                 `json:"addr"`
-		NodeID     p2p.NodeID             `json:"node-id"`
-		Epoch      model.Epoch            `json:"epoch"`
-		StatusCode model.MasterStatusCode `json:"status"`
-		Tp         WorkerType             `json:"type"`
-
-		// Config holds business-specific data
-		Config []byte `json:"config"`
-		// TODO: add master status and checkpoint data
-	}
-)
-
-func (m *MasterMetaKVData) Marshal() ([]byte, error) {
-	return json.Marshal(m)
-}
-
-func (m *MasterMetaKVData) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, m)
-}
-
-type WorkerMetaKVData struct {
-	MasterID   Master                 `json:"id"`
-	NodeID     p2p.NodeID             `json:"node-id"`
-	StatusCode model.WorkerStatusCode `json:"status-code"`
-	Message    string                 `json:"message"`
 }
 
 type MasterFailoverReasonCode int32

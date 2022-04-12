@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/hanfei1991/microcosm/lib/metadata"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -162,7 +164,7 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *libModel.WorkerStatus,
 ) {
-	workerMetaClient := NewWorkerMetadataClient(masterID, master.metaKVClient)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.metaKVClient)
 	err := workerMetaClient.Store(ctx, workerID, status)
 	require.NoError(t, err)
 
