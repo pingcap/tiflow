@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
+
 	"github.com/pingcap/errors"
 )
 
@@ -22,13 +23,13 @@ var (
 
 type Master interface {
 	// for create worker
-	CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error)
+	CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
 	// for operate-task
-	CurrentEpoch() lib.Epoch
+	CurrentEpoch() libModel.Epoch
 }
 
 type SendHandle interface {
-	ID() lib.WorkerID
+	ID() libModel.WorkerID
 	SendMessage(ctx context.Context, topic string, message interface{}, nonblocking bool) error
 }
 
@@ -38,12 +39,12 @@ type MessageAgent struct {
 	clocker     clock.Clock
 	messagePair *dmpkg.MessagePair
 	// for stop a task
-	id lib.WorkerID
+	id libModel.WorkerID
 	// taskID -> Sender(WorkerHandle)
 	sendHandles sync.Map
 }
 
-func NewMessageAgent(initSenders map[string]SendHandle, id lib.WorkerID, master Master) *MessageAgent {
+func NewMessageAgent(initSenders map[string]SendHandle, id libModel.WorkerID, master Master) *MessageAgent {
 	messageAgent := &MessageAgent{
 		master:      master,
 		clocker:     clock.New(),
@@ -66,14 +67,14 @@ func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sendHandle SendHand
 
 // Manage all interactions with workers in the message agent
 // Though we can create worker in jobmaster directly
-func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error) {
+func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error) {
 	if _, ok := agent.sendHandles.Load(taskID); ok {
 		return "", errors.Errorf("worker for task %s already exist", taskID)
 	}
 	return agent.master.CreateWorker(workerType, taskCfg, 1)
 }
 
-func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, workerID lib.WorkerID) error {
+func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.WorkerID, workerID libModel.WorkerID) error {
 	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
 		return errors.Errorf("worker for task %s not exist", taskID)
@@ -84,8 +85,8 @@ func (agent *MessageAgent) StopWorker(ctx context.Context, taskID lib.WorkerID, 
 		return errors.Errorf("worker for task %s mismatch: want %s, get %s", taskID, workerID, sender.ID())
 	}
 
-	topic := lib.WorkerStatusChangeRequestTopic(agent.id, workerID)
-	message := &lib.StatusChangeRequest{
+	topic := libModel.WorkerStatusChangeRequestTopic(agent.id, workerID)
+	message := &libModel.StatusChangeRequest{
 		SendTime:     agent.clocker.Mono(),
 		FromMasterID: agent.id,
 		Epoch:        agent.master.CurrentEpoch(),

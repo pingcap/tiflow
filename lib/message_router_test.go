@@ -41,7 +41,7 @@ func testMessageRouter(t *testing.T, suite *messageSuite) {
 
 	// send suite.sendCount messages to mesasge router
 	pool := workerpool.NewDefaultAsyncPool(1)
-	router := NewMessageRouter(WorkerID("test-worker"), pool, defaultMessageRouterBufferSize, routeFn)
+	router := NewMessageRouter("test-worker", pool, defaultMessageRouterBufferSize, routeFn)
 	for i := 0; i < suite.sendCount; i++ {
 		router.AppendMessage(p2p.Topic("test-topic"), testMessage{id: i})
 	}

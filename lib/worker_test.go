@@ -43,7 +43,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -58,11 +58,11 @@ func TestWorkerInitAndClose(t *testing.T) {
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval + 1*time.Second)
 
-	var hbMsg *HeartbeatPingMessage
+	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 		if ok {
-			hbMsg = rawMsg.(*HeartbeatPingMessage)
+			hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
@@ -111,7 +111,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -131,11 +131,11 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		require.NoError(t, err)
 
 		worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-		var hbMsg *HeartbeatPingMessage
+		var hbMsg *libModel.HeartbeatPingMessage
 		require.Eventually(t, func() bool {
-			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+			rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 			if ok {
-				hbMsg = rawMsg.(*HeartbeatPingMessage)
+				hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 			}
 			return ok
 		}, time.Second, time.Millisecond*10)
@@ -146,13 +146,13 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 		}, "last-send-time %s, cur-send-time %s", lastHeartbeatSendTime, hbMsg.SendTime)
 		lastHeartbeatSendTime = hbMsg.SendTime
 
-		pongMsg := &HeartbeatPongMessage{
+		pongMsg := &libModel.HeartbeatPongMessage{
 			SendTime:   hbMsg.SendTime,
 			ReplyTime:  time.Now(),
 			ToWorkerID: workerID1,
 			Epoch:      1,
 		}
-		err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+		err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 		require.NoError(t, err)
 	}
 }
@@ -168,7 +168,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -180,23 +180,23 @@ func TestWorkerMasterFailover(t *testing.T) {
 
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
 	worker.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerHeartbeatInterval)
-	var hbMsg *HeartbeatPingMessage
+	var hbMsg *libModel.HeartbeatPingMessage
 	require.Eventually(t, func() bool {
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, HeartbeatPingTopic(masterName))
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
 		if ok {
-			hbMsg = rawMsg.(*HeartbeatPingMessage)
+			hbMsg = rawMsg.(*libModel.HeartbeatPingMessage)
 		}
 		return ok
 	}, time.Second, time.Millisecond*10)
 	require.Equal(t, workerID1, hbMsg.FromWorkerID)
 
-	pongMsg := &HeartbeatPongMessage{
+	pongMsg := &libModel.HeartbeatPongMessage{
 		SendTime:   hbMsg.SendTime,
 		ReplyTime:  time.Now(),
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}
-	err = worker.messageHandlerManager.InvokeHandler(t, HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+	err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
@@ -205,7 +205,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 		ID:         masterName,
 		NodeID:     executorNodeID3,
 		Epoch:      2,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("OnMasterFailover", mock.Anything).Return(nil)
@@ -231,7 +231,7 @@ func TestWorkerStatus(t *testing.T) {
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
@@ -289,7 +289,7 @@ func TestWorkerSuicide(t *testing.T) {
 		ID:         masterName,
 		NodeID:     masterNodeName,
 		Epoch:      1,
-		StatusCode: MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)

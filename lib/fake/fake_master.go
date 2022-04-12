@@ -34,14 +34,14 @@ type Master struct {
 	lib.BaseJobMaster
 
 	// workerID stores the ID of the Master AS A WORKER.
-	workerID lib.WorkerID
+	workerID libModel.WorkerID
 
 	workerListMu      sync.Mutex
 	workerList        []lib.WorkerHandle
-	pendingWorkerSet  map[lib.WorkerID]int
+	pendingWorkerSet  map[libModel.WorkerID]int
 	statusRateLimiter *rate.Limiter
-	status            map[lib.WorkerID]int64
-	finishedSet       map[lib.WorkerID]int
+	status            map[libModel.WorkerID]int64
+	finishedSet       map[libModel.WorkerID]int
 	config            *Config
 	statusCode        struct {
 		sync.RWMutex
@@ -59,7 +59,7 @@ func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
 func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
 	switch msg := message.(type) {
-	case *lib.StatusChangeRequest:
+	case *libModel.StatusChangeRequest:
 		switch msg.ExpectState {
 		case libModel.WorkerStatusStopped:
 			m.setStatusCode(libModel.WorkerStatusStopped)
@@ -68,8 +68,8 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 				if worker == nil {
 					continue
 				}
-				wTopic := lib.WorkerStatusChangeRequestTopic(m.BaseJobMaster.ID(), worker.ID())
-				wMessage := &lib.StatusChangeRequest{
+				wTopic := libModel.WorkerStatusChangeRequestTopic(m.BaseJobMaster.ID(), worker.ID())
+				wMessage := &libModel.StatusChangeRequest{
 					SendTime:     m.clocker.Mono(),
 					FromMasterID: m.BaseJobMaster.ID(),
 					Epoch:        m.BaseJobMaster.CurrentEpoch(),
@@ -292,14 +292,14 @@ func (m *Master) getStatusCode() libModel.WorkerStatusCode {
 	return m.statusCode.code
 }
 
-func NewFakeMaster(ctx *dcontext.Context, workerID lib.WorkerID, masterID lib.MasterID, config lib.WorkerConfig) *Master {
+func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
 	ret := &Master{
-		pendingWorkerSet:  make(map[lib.WorkerID]int),
+		pendingWorkerSet:  make(map[libModel.WorkerID]int),
 		config:            config.(*Config),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
-		status:            make(map[lib.WorkerID]int64),
-		finishedSet:       make(map[lib.WorkerID]int),
+		status:            make(map[libModel.WorkerID]int64),
+		finishedSet:       make(map[libModel.WorkerID]int),
 		ctx:               ctx.Context,
 		clocker:           clock.New(),
 	}

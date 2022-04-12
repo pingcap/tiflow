@@ -28,15 +28,15 @@ type workerManager interface {
 	IsInitialized() bool
 	CheckError() error
 	Tick(ctx context.Context) (offlinedWorkers []*WorkerInfo, onlinedWorkers []*WorkerInfo)
-	HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error
-	OnWorkerCreated(ctx context.Context, id WorkerID, exeuctorNodeID p2p.NodeID) error
-	OnWorkerOffline(ctx context.Context, id WorkerID) error
-	GetWorkerInfo(id WorkerID) (*WorkerInfo, bool)
+	HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) error
+	OnWorkerCreated(ctx context.Context, id libModel.WorkerID, exeuctorNodeID p2p.NodeID) error
+	OnWorkerOffline(ctx context.Context, id libModel.WorkerID) error
+	GetWorkerInfo(id libModel.WorkerID) (*WorkerInfo, bool)
 	PutWorkerInfo(info *WorkerInfo) bool
 	MessageSender() p2p.MessageSender
-	GetWorkerHandle(id WorkerID) WorkerHandle
-	GetWorkers() map[WorkerID]WorkerHandle
-	GetStatus(id WorkerID) (*libModel.WorkerStatus, bool)
+	GetWorkerHandle(id libModel.WorkerID) WorkerHandle
+	GetWorkers() map[libModel.WorkerID]WorkerHandle
+	GetStatus(id libModel.WorkerID) (*libModel.WorkerStatus, bool)
 	CheckStatusUpdate(cb func(WorkerHandle, *libModel.WorkerStatus) error) error
 	OnWorkerStatusUpdated(msg *statusutil.WorkerStatusMessage)
 }
@@ -55,16 +55,16 @@ type workerManagerImpl struct {
 	mu              sync.Mutex
 	initialized     bool
 	initStartTime   time.Time
-	workerInfos     map[WorkerID]*WorkerInfo
-	tombstones      map[WorkerID]*libModel.WorkerStatus
-	statusReceivers map[WorkerID]*statusutil.Reader
+	workerInfos     map[libModel.WorkerID]*WorkerInfo
+	tombstones      map[libModel.WorkerID]*libModel.WorkerStatus
+	statusReceivers map[libModel.WorkerID]*statusutil.Reader
 
 	fsmState atomic.Int32
 	errCh    chan error
 
-	// read-onlyx
-	masterEpoch   Epoch
-	masterID      MasterID
+	// read-only
+	masterEpoch   libModel.Epoch
+	masterID      libModel.MasterID
 	timeoutConfig TimeoutConfig
 
 	// to help unit testing
@@ -87,9 +87,9 @@ type workerManagerParams struct {
 
 func newWorkerManager(
 	ctx *dcontext.Context,
-	id MasterID,
+	id libModel.MasterID,
 	needWait bool,
-	curEpoch Epoch,
+	curEpoch libModel.Epoch,
 	timeoutConfig *TimeoutConfig,
 ) workerManager {
 	var params workerManagerParams
@@ -106,9 +106,9 @@ func newWorkerManager(
 
 	return &workerManagerImpl{
 		initialized:     !needWait,
-		workerInfos:     make(map[WorkerID]*WorkerInfo),
-		tombstones:      make(map[WorkerID]*libModel.WorkerStatus),
-		statusReceivers: make(map[WorkerID]*statusutil.Reader),
+		workerInfos:     make(map[libModel.WorkerID]*WorkerInfo),
+		tombstones:      make(map[libModel.WorkerID]*libModel.WorkerStatus),
+		statusReceivers: make(map[libModel.WorkerID]*statusutil.Reader),
 
 		fsmState: *atomic.NewInt32(initFsmState),
 		errCh:    make(chan error, 1),
@@ -186,7 +186,7 @@ func (m *workerManagerImpl) asyncLoadAllWorkers(ctx context.Context) error {
 	return nil
 }
 
-func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id WorkerID) error {
+func (m *workerManagerImpl) asyncDeleteTombstone(ctx context.Context, id libModel.WorkerID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -307,7 +307,7 @@ func (m *workerManagerImpl) Tick(
 			// No heartbeat to respond to.
 			continue
 		}
-		reply := &HeartbeatPongMessage{
+		reply := &libModel.HeartbeatPongMessage{
 			SendTime:   workerInfo.lastHeartbeatSendTime,
 			ReplyTime:  m.clock.Now(),
 			ToWorkerID: workerID,
@@ -319,7 +319,7 @@ func (m *workerManagerImpl) Tick(
 			zap.String("worker-node-id", workerNodeID),
 			zap.Any("message", reply))
 
-		ok, err := m.messageSender.SendToNode(ctx, workerNodeID, HeartbeatPongTopic(m.masterID, workerID), reply)
+		ok, err := m.messageSender.SendToNode(ctx, workerNodeID, libModel.HeartbeatPongTopic(m.masterID, workerID), reply)
 		if err != nil {
 			log.L().Error("Failed to send heartbeat", zap.Error(err))
 		}
@@ -334,7 +334,7 @@ func (m *workerManagerImpl) Tick(
 	return
 }
 
-func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode p2p.NodeID) error {
+func (m *workerManagerImpl) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -366,7 +366,7 @@ func (m *workerManagerImpl) HandleHeartbeat(msg *HeartbeatPingMessage, fromNode 
 	return nil
 }
 
-func (m *workerManagerImpl) GetStatus(id WorkerID) (*libModel.WorkerStatus, bool) {
+func (m *workerManagerImpl) GetStatus(id libModel.WorkerID) (*libModel.WorkerStatus, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -379,14 +379,14 @@ func (m *workerManagerImpl) GetStatus(id WorkerID) (*libModel.WorkerStatus, bool
 	return ret, true
 }
 
-func (m *workerManagerImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (m *workerManagerImpl) GetWorkerInfo(id libModel.WorkerID) (*WorkerInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return m.getWorkerInfo(id)
 }
 
-func (m *workerManagerImpl) getWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (m *workerManagerImpl) getWorkerInfo(id libModel.WorkerID) (*WorkerInfo, bool) {
 	value, ok := m.workerInfos[id]
 	if !ok {
 		return nil, false
@@ -408,7 +408,7 @@ func (m *workerManagerImpl) putWorkerInfo(info *WorkerInfo) bool {
 	return !exists
 }
 
-func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) error {
+func (m *workerManagerImpl) addWorker(id libModel.WorkerID, executorNodeID p2p.NodeID) error {
 	if _, exists := m.workerInfos[id]; exists {
 		// TODO determine whether it is appropriate to panic here.
 		log.L().Panic("duplicate worker ID",
@@ -456,7 +456,7 @@ func (m *workerManagerImpl) addWorker(id WorkerID, executorNodeID p2p.NodeID) er
 	return nil
 }
 
-func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, executorID p2p.NodeID) error {
+func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id libModel.WorkerID, executorID p2p.NodeID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -474,7 +474,7 @@ func (m *workerManagerImpl) OnWorkerCreated(ctx context.Context, id WorkerID, ex
 	return nil
 }
 
-func (m *workerManagerImpl) OnWorkerOffline(ctx context.Context, id WorkerID) error {
+func (m *workerManagerImpl) OnWorkerOffline(ctx context.Context, id libModel.WorkerID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -489,14 +489,14 @@ func (m *workerManagerImpl) MessageSender() p2p.MessageSender {
 	return m.messageSender
 }
 
-func (m *workerManagerImpl) GetWorkerHandle(id WorkerID) WorkerHandle {
+func (m *workerManagerImpl) GetWorkerHandle(id libModel.WorkerID) WorkerHandle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	return m.getWorkerHandle(id)
 }
 
-func (m *workerManagerImpl) getWorkerHandle(id WorkerID) WorkerHandle {
+func (m *workerManagerImpl) getWorkerHandle(id libModel.WorkerID) WorkerHandle {
 	if _, exists := m.workerInfos[id]; exists {
 		return &workerHandleImpl{
 			manager: m,
@@ -512,11 +512,11 @@ func (m *workerManagerImpl) getWorkerHandle(id WorkerID) WorkerHandle {
 // NOTE this is a preliminary implementation and is likely to have performance problem
 // if called too frequently.
 // TODO cache the returned map, or rethink how to manage the list.
-func (m *workerManagerImpl) GetWorkers() map[WorkerID]WorkerHandle {
+func (m *workerManagerImpl) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ret := make(map[WorkerID]WorkerHandle)
+	ret := make(map[libModel.WorkerID]WorkerHandle)
 	for workerID := range m.workerInfos {
 		ret[workerID] = m.getWorkerHandle(workerID)
 	}
@@ -537,7 +537,7 @@ func (m *workerManagerImpl) CheckError() error {
 }
 
 type WorkerInfo struct {
-	ID     WorkerID
+	ID     libModel.WorkerID
 	NodeID p2p.NodeID
 
 	// fields for internal use by the Master.
@@ -562,7 +562,7 @@ func (w *WorkerInfo) hasTimedOut(clock clock.Clock, config *TimeoutConfig) bool 
 type WorkerHandle interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	Status() *libModel.WorkerStatus
-	ID() WorkerID
+	ID() libModel.WorkerID
 	IsTombStone() bool
 	ToPB() (*pb.WorkerInfo, error)
 
@@ -577,7 +577,7 @@ type workerHandleImpl struct {
 	manager *workerManagerImpl
 
 	// TODO think about how to handle the situation where the workerID has been removed from `manager`.
-	id WorkerID
+	id libModel.WorkerID
 }
 
 func (w *workerHandleImpl) ToPB() (*pb.WorkerInfo, error) {
@@ -619,7 +619,7 @@ func (w *workerHandleImpl) SendMessage(
 	return
 }
 
-func (w *workerHandleImpl) GetWorkerInfo(id WorkerID) (*WorkerInfo, bool) {
+func (w *workerHandleImpl) GetWorkerInfo(id libModel.WorkerID) (*WorkerInfo, bool) {
 	return w.manager.GetWorkerInfo(id)
 }
 
@@ -632,7 +632,7 @@ func (w *workerHandleImpl) Status() *libModel.WorkerStatus {
 	return status
 }
 
-func (w *workerHandleImpl) ID() WorkerID {
+func (w *workerHandleImpl) ID() libModel.WorkerID {
 	return w.id
 }
 
@@ -645,12 +645,12 @@ func (w *workerHandleImpl) DeleteTombStone(_ context.Context) (bool, error) {
 }
 
 type tombstoneWorkerHandleImpl struct {
-	id      WorkerID
+	id      libModel.WorkerID
 	status  libModel.WorkerStatus
 	manager workerManager
 }
 
-func NewTombstoneWorkerHandle(id WorkerID, status libModel.WorkerStatus, manager workerManager) WorkerHandle {
+func NewTombstoneWorkerHandle(id libModel.WorkerID, status libModel.WorkerStatus, manager workerManager) WorkerHandle {
 	return &tombstoneWorkerHandleImpl{
 		id:      id,
 		status:  status,
@@ -675,7 +675,7 @@ func (h *tombstoneWorkerHandleImpl) Workload() model.RescUnit {
 	return 0
 }
 
-func (h *tombstoneWorkerHandleImpl) ID() WorkerID {
+func (h *tombstoneWorkerHandleImpl) ID() libModel.WorkerID {
 	return h.id
 }
 

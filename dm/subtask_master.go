@@ -26,7 +26,7 @@ type SubTaskMaster struct {
 	cfg *config.SubTaskConfig
 	// workerSeq are different WorkerTypes that should be run one after another
 	workerSeq    []lib.WorkerType
-	currWorkerID lib.WorkerID
+	currWorkerID libModel.WorkerID
 }
 
 func newSubTaskMaster(

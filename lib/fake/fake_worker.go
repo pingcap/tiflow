@@ -130,7 +130,7 @@ func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
 func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
-	case *lib.StatusChangeRequest:
+	case *libModel.StatusChangeRequest:
 		switch msg.ExpectState {
 		case libModel.WorkerStatusStopped:
 			d.setStatusCode(libModel.WorkerStatusStopped)
@@ -163,7 +163,7 @@ func (d *dummyWorker) getStatusCode() libModel.WorkerStatusCode {
 
 func NewDummyWorker(
 	ctx *dcontext.Context,
-	id lib.WorkerID, masterID lib.MasterID,
+	id libModel.WorkerID, masterID libModel.MasterID,
 	cfg lib.WorkerConfig,
 ) lib.WorkerImpl {
 	return &dummyWorker{

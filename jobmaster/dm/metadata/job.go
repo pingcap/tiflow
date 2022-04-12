@@ -6,7 +6,7 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
-	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
@@ -62,10 +62,10 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 type JobStore struct {
 	*DefaultStore
 
-	id lib.MasterID
+	id libModel.MasterID
 }
 
-func NewJobStore(id lib.MasterID, kvClient metaclient.KVClient) *JobStore {
+func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
 	jobStore := &JobStore{
 		DefaultStore: NewDefaultStore(kvClient),
 		id:           id,

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
@@ -93,7 +94,7 @@ func TestDumpWorker(t *testing.T) {
 		ID:         masterID,
 		NodeID:     nodeID,
 		Epoch:      1,
-		StatusCode: lib.MasterStatusInit,
+		StatusCode: libModel.MasterStatusInit,
 	})
 
 	err = worker.Init(ctx)

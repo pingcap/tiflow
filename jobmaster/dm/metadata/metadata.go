@@ -1,7 +1,7 @@
 package metadata
 
 import (
-	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
@@ -11,7 +11,7 @@ type MetaData struct {
 	ddlStore *DDLStore
 }
 
-func NewMetaData(id lib.MasterID, kvClient metaclient.KVClient) *MetaData {
+func NewMetaData(id libModel.MasterID, kvClient metaclient.KVClient) *MetaData {
 	return &MetaData{
 		jobStore: NewJobStore(id, kvClient),
 		ddlStore: NewDDLStore(id, kvClient),

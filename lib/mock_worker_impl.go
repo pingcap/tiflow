@@ -21,7 +21,7 @@ type mockWorkerImpl struct {
 	mock.Mock
 
 	*DefaultBaseWorker
-	id WorkerID
+	id libModel.WorkerID
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         *p2p.MockMessageSender
@@ -41,7 +41,7 @@ type workerParamListForTest struct {
 }
 
 //nolint:unparam
-func newMockWorkerImpl(workerID WorkerID, masterID MasterID) *mockWorkerImpl {
+func newMockWorkerImpl(workerID libModel.WorkerID, masterID libModel.MasterID) *mockWorkerImpl {
 	ret := &mockWorkerImpl{
 		id: workerID,
 	}

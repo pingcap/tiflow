@@ -128,19 +128,19 @@ func lenSyncMap(m *sync.Map) int {
 
 type MockMaster struct{}
 
-func (m *MockMaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (lib.WorkerID, error) {
+func (m *MockMaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
 	return "mock-worker", nil
 }
 
-func (m *MockMaster) CurrentEpoch() lib.Epoch {
+func (m *MockMaster) CurrentEpoch() libModel.Epoch {
 	return 0
 }
 
 type MockSender struct {
-	id lib.WorkerID
+	id libModel.WorkerID
 }
 
-func (s *MockSender) ID() lib.WorkerID {
+func (s *MockSender) ID() libModel.WorkerID {
 	return s.id
 }
 

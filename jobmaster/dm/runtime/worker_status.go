@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 // WorkerStage represents the stage of a worker.
@@ -42,7 +43,7 @@ const (
 
 type WorkerStatus struct {
 	TaskID string
-	ID     lib.WorkerID
+	ID     libModel.WorkerID
 	Unit   lib.WorkerType
 	Stage  WorkerStage
 }
@@ -56,7 +57,7 @@ func (w *WorkerStatus) RunAsExpected() bool {
 	return w.Stage == WorkerOnline || w.Stage == WorkerCreating || w.Stage == WorkerFinished
 }
 
-func NewWorkerStatus(taskID string, unit lib.WorkerType, id lib.WorkerID, stage WorkerStage) WorkerStatus {
+func NewWorkerStatus(taskID string, unit lib.WorkerType, id libModel.WorkerID, stage WorkerStage) WorkerStatus {
 	return WorkerStatus{
 		TaskID: taskID,
 		ID:     id,

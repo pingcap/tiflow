@@ -26,7 +26,7 @@ type exampleMaster struct {
 	worker struct {
 		mu sync.Mutex
 
-		id          lib.WorkerID
+		id          libModel.WorkerID
 		handle      lib.WorkerHandle
 		online      bool
 		statusCode  libModel.WorkerStatusCode

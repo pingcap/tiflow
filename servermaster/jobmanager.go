@@ -56,8 +56,8 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 			Code: pb.ErrorCode_UnKnownJob,
 		}}
 	}
-	topic := lib.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
-	msg := &lib.StatusChangeRequest{
+	topic := libModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
+	msg := &libModel.StatusChangeRequest{
 		SendTime:     jm.clocker.Mono(),
 		FromMasterID: jm.BaseMaster.MasterID(),
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
@@ -86,10 +86,10 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 				Config: masterMeta.Config,
 			}
 			switch masterMeta.StatusCode {
-			case lib.MasterStatusFinished:
+			case libModel.MasterStatusFinished:
 				resp.Status = pb.QueryJobResponse_finished
 				return resp
-			case lib.MasterStatusStopped:
+			case libModel.MasterStatusStopped:
 				resp.Status = pb.QueryJobResponse_stopped
 				return resp
 			default:
@@ -110,7 +110,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
-		id  lib.WorkerID
+		id  libModel.WorkerID
 		err error
 	)
 
@@ -119,7 +119,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
 		Config:     req.Config,
-		StatusCode: lib.MasterStatusUninit,
+		StatusCode: libModel.MasterStatusUninit,
 	}
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
@@ -173,7 +173,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	id lib.MasterID,
+	id libModel.MasterID,
 ) (*JobManagerImplV2, error) {
 	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*lib.MasterMetadataClient, error) {
 		return lib.NewMasterMetadataClient(id, metaKV), nil
@@ -199,7 +199,7 @@ func NewJobManagerImplV2(
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
-	meta.StatusCode = lib.MasterStatusInit
+	meta.StatusCode = libModel.MasterStatusInit
 	err = lib.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		return err
 	}
 	for _, job := range jobs {
-		if job.StatusCode == lib.MasterStatusFinished || job.StatusCode == lib.MasterStatusStopped {
+		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}

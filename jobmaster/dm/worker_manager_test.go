@@ -13,6 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 )
 
@@ -471,7 +472,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 }
 
 type CreateResult struct {
-	workerID lib.WorkerID
+	workerID libModel.WorkerID
 	err      error
 }
 
@@ -500,7 +501,7 @@ func (mockAgent *MockWorkerAgent) SetStages(stages map[string]metadata.TaskStage
 	mockAgent.stages = stages
 }
 
-func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error) {
+func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.createResults) == 0 {
@@ -511,7 +512,7 @@ func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID strin
 	return result.workerID, result.err
 }
 
-func (mockAgent *MockWorkerAgent) StopWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (mockAgent *MockWorkerAgent) StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.destroyResults) == 0 {

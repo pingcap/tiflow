@@ -37,7 +37,7 @@ import (
 type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
-	MasterID() MasterID
+	MasterID() libModel.MasterID
 
 	runtime.Closer
 }
@@ -83,13 +83,13 @@ type BaseMaster interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	MasterMeta() *MasterMetaKVData
-	MasterID() MasterID
-	GetWorkers() map[WorkerID]WorkerHandle
+	MasterID() libModel.MasterID
+	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
 	Close(ctx context.Context) error
 	OnError(err error)
 	// CreateWorker registers worker handler and dispatches worker to executor
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
 }
 
 type DefaultBaseMaster struct {
@@ -120,7 +120,7 @@ type DefaultBaseMaster struct {
 	// closeCh is closed when the BaseMaster is exiting
 	closeCh chan struct{}
 
-	id            MasterID // id of this master itself
+	id            libModel.MasterID // id of this master itself
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig TimeoutConfig
@@ -156,7 +156,7 @@ type masterParams struct {
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
-	id MasterID,
+	id libModel.MasterID,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
@@ -229,7 +229,7 @@ func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 		}
 	}
 
-	if err := m.markStatusCodeInMetadata(ctx, MasterStatusInit); err != nil {
+	if err := m.markStatusCodeInMetadata(ctx, libModel.MasterStatusInit); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -268,10 +268,10 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 	ok, err := m.messageHandlerManager.RegisterHandler(
 		ctx,
-		HeartbeatPingTopic(m.id),
-		&HeartbeatPingMessage{},
+		libModel.HeartbeatPingTopic(m.id),
+		&libModel.HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			msg := value.(*HeartbeatPingMessage)
+			msg := value.(*libModel.HeartbeatPingMessage)
 			if err := m.workerManager.HandleHeartbeat(msg, sender); err != nil {
 				return errors.Trace(err)
 			}
@@ -281,7 +281,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", HeartbeatPingTopic(m.id)))
+		log.L().Panic("duplicate handler", zap.String("topic", libModel.HeartbeatPingTopic(m.id)))
 	}
 
 	ok, err = m.messageHandlerManager.RegisterHandler(
@@ -342,11 +342,11 @@ func (m *DefaultBaseMaster) MasterMeta() *MasterMetaKVData {
 	return m.masterMeta
 }
 
-func (m *DefaultBaseMaster) MasterID() MasterID {
+func (m *DefaultBaseMaster) MasterID() libModel.MasterID {
 	return m.id
 }
 
-func (m *DefaultBaseMaster) GetWorkers() map[WorkerID]WorkerHandle {
+func (m *DefaultBaseMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
 
@@ -462,7 +462,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
-func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch Epoch, err error) {
+func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch libModel.Epoch, err error) {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 
 	masterMeta, err := metaClient.Load(ctx)
@@ -486,13 +486,13 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 
 	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterMeta.StatusCode == MasterStatusUninit
+	isInit = masterMeta.StatusCode == libModel.MasterStatusUninit
 
 	return
 }
 
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
-	ctx context.Context, code MasterStatusCode,
+	ctx context.Context, code libModel.MasterStatusCode,
 ) error {
 	metaClient := NewMasterMetadataClient(m.id, m.metaKVClient)
 	masterMeta, err := metaClient.Load(ctx)
@@ -511,7 +511,7 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 //   marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType WorkerType, config WorkerConfig,
-) (rawConfig []byte, workerID WorkerID, err error) {
+) (rawConfig []byte, workerID libModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
 		masterMeta, ok := config.(*MasterMetaKVData)
@@ -539,7 +539,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
-func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (WorkerID, error) {
+func (m *DefaultBaseMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
 	log.L().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),

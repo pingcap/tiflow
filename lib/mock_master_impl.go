@@ -28,8 +28,8 @@ type MockMasterImpl struct {
 	mock.Mock
 
 	*DefaultBaseMaster
-	masterID MasterID
-	id       MasterID
+	masterID libModel.MasterID
+	id       libModel.MasterID
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
@@ -45,7 +45,7 @@ type MockMasterImpl struct {
 	serverMasterClient    *client.MockServerMasterClient
 }
 
-func NewMockMasterImpl(masterID, id MasterID) *MockMasterImpl {
+func NewMockMasterImpl(masterID, id libModel.MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
@@ -212,7 +212,7 @@ func (s *dummyStatus) Unmarshal(data []byte) error {
 type MockWorkerHandler struct {
 	mock.Mock
 
-	WorkerID WorkerID
+	WorkerID libModel.WorkerID
 }
 
 func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
@@ -225,7 +225,7 @@ func (m *MockWorkerHandler) Status() *libModel.WorkerStatus {
 	return args.Get(0).(*libModel.WorkerStatus)
 }
 
-func (m *MockWorkerHandler) ID() WorkerID {
+func (m *MockWorkerHandler) ID() libModel.WorkerID {
 	return m.WorkerID
 }
 

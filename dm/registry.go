@@ -4,6 +4,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/pkg/context"
 )
@@ -28,8 +29,8 @@ type unitWorkerFactory struct {
 
 func (u unitWorkerFactory) NewWorkerImpl(
 	ctx *context.Context,
-	workerID lib.WorkerID,
-	masterID lib.MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 	config registry.WorkerConfig,
 ) (lib.WorkerImpl, error) {
 	return u.constructor(config), nil
@@ -45,8 +46,8 @@ type jobMasterFactory struct{}
 
 func (j jobMasterFactory) NewWorkerImpl(
 	ctx *context.Context,
-	workerID lib.WorkerID,
-	masterID lib.MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 	config registry.WorkerConfig,
 ) (lib.WorkerImpl, error) {
 	return newSubTaskMaster(config), nil

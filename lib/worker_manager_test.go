@@ -105,7 +105,7 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	sendTime := clock.MonoNow()
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -123,9 +123,9 @@ func TestHeartBeatPingPongAfterCreateWorker(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
+		TryPop(executorNodeID1, libModel.HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
-	require.Equal(t, &HeartbeatPongMessage{
+	require.Equal(t, &libModel.HeartbeatPongMessage{
 		SendTime:   sendTime,
 		ReplyTime:  replyTime,
 		ToWorkerID: workerID1,
@@ -160,7 +160,7 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	sendTime := clock.MonoNow()
-	err := manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err := manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -177,9 +177,9 @@ func TestHeartBeatPingPongAfterFailover(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
+		TryPop(executorNodeID1, libModel.HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
-	require.Equal(t, &HeartbeatPongMessage{
+	require.Equal(t, &libModel.HeartbeatPongMessage{
 		SendTime:   sendTime,
 		ReplyTime:  replyTime,
 		ToWorkerID: workerID1,
@@ -225,7 +225,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.Empty(t, onlined)
 
 	sendTime1 := clock.MonoNow()
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     sendTime1,
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -233,7 +233,7 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.NoError(t, err)
 
 	sendTime2 := clock.MonoNow()
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     sendTime2,
 		FromWorkerID: workerID2,
 		Epoch:        1,
@@ -252,9 +252,9 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	msg, ok := manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
+		TryPop(executorNodeID1, libModel.HeartbeatPongTopic(masterName, workerID1))
 	require.True(t, ok)
-	require.Equal(t, &HeartbeatPongMessage{
+	require.Equal(t, &libModel.HeartbeatPongMessage{
 		SendTime:   sendTime1,
 		ReplyTime:  replyTime,
 		ToWorkerID: workerID1,
@@ -262,9 +262,9 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	}, msg)
 
 	msg, ok = manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID2, HeartbeatPongTopic(masterName, workerID2))
+		TryPop(executorNodeID2, libModel.HeartbeatPongTopic(masterName, workerID2))
 	require.True(t, ok)
-	require.Equal(t, &HeartbeatPongMessage{
+	require.Equal(t, &libModel.HeartbeatPongMessage{
 		SendTime:   sendTime2,
 		ReplyTime:  replyTime,
 		ToWorkerID: workerID2,
@@ -272,11 +272,11 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	}, msg)
 
 	_, ok = manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID3, HeartbeatPongTopic(masterName, workerID3))
+		TryPop(executorNodeID3, libModel.HeartbeatPongTopic(masterName, workerID3))
 	require.False(t, ok)
 
 	sendTime3 := clock.MonoNow()
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     sendTime3,
 		FromWorkerID: workerID3,
 		Epoch:        1,
@@ -290,17 +290,17 @@ func TestMultiplePendingHeartbeats(t *testing.T) {
 	require.Len(t, onlined, 1)
 
 	_, ok = manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID1, HeartbeatPongTopic(masterName, workerID1))
+		TryPop(executorNodeID1, libModel.HeartbeatPongTopic(masterName, workerID1))
 	require.False(t, ok)
 
 	_, ok = manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID2, HeartbeatPongTopic(masterName, workerID2))
+		TryPop(executorNodeID2, libModel.HeartbeatPongTopic(masterName, workerID2))
 	require.False(t, ok)
 
 	msg, ok = manager.messageSender.(*p2p.MockMessageSender).
-		TryPop(executorNodeID3, HeartbeatPongTopic(masterName, workerID3))
+		TryPop(executorNodeID3, libModel.HeartbeatPongTopic(masterName, workerID3))
 	require.True(t, ok)
-	require.Equal(t, &HeartbeatPongMessage{
+	require.Equal(t, &libModel.HeartbeatPongMessage{
 		SendTime:   sendTime3,
 		ReplyTime:  replyTime,
 		ToWorkerID: workerID3,
@@ -336,7 +336,7 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	ok = manager.IsInitialized()
 	require.False(t, ok)
 
-	err := manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err := manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -366,7 +366,7 @@ func TestWorkerManagerInitialization(t *testing.T) {
 	suite.Close()
 }
 
-func safeAddWorker(manager *workerManagerImpl, id WorkerID, executorNodeID p2p.NodeID) error {
+func safeAddWorker(manager *workerManagerImpl, id libModel.WorkerID, executorNodeID p2p.NodeID) error {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	return manager.addWorker(id, executorNodeID)
@@ -473,7 +473,7 @@ func TestWorkerTimedOut(t *testing.T) {
 	err := safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     manager.clock.Mono(),
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -529,7 +529,7 @@ func TestWorkerTerminate(t *testing.T) {
 	err = safeAddWorker(manager, workerID1, executorNodeID1)
 	require.NoError(t, err)
 
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     manager.clock.Mono(),
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -588,7 +588,7 @@ func TestWorkerTimedOutWithPendingHeartbeat(t *testing.T) {
 	require.Empty(t, offlined)
 	require.Empty(t, onlined)
 
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     manager.clock.Mono(),
 		FromWorkerID: workerID1,
 		Epoch:        1,
@@ -652,21 +652,21 @@ func TestWorkerTombstones(t *testing.T) {
 
 	manager.clock.(*clock.Mock).Add(defaultTimeoutConfig.workerTimeoutDuration / 2)
 
-	err := manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err := manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
 		FromWorkerID: "worker-0",
 		Epoch:        1,
 	}, executorNodeID1)
 	require.NoError(t, err)
 
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
 	}, executorNodeID2)
 	require.NoError(t, err)
 
-	err = manager.HandleHeartbeat(&HeartbeatPingMessage{
+	err = manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     clock.MonoNow(),
 		FromWorkerID: "worker-2",
 		Epoch:        1,

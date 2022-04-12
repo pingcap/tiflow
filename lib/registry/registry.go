@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
@@ -21,8 +22,8 @@ type Registry interface {
 	CreateWorker(
 		ctx *dcontext.Context,
 		tp lib.WorkerType,
-		workerID lib.WorkerID,
-		masterID lib.MasterID,
+		workerID libModel.WorkerID,
+		masterID libModel.MasterID,
 		config []byte,
 	) (lib.Worker, error)
 }
@@ -59,8 +60,8 @@ func (r *registryImpl) RegisterWorkerType(tp lib.WorkerType, factory WorkerFacto
 func (r *registryImpl) CreateWorker(
 	ctx *dcontext.Context,
 	tp lib.WorkerType,
-	workerID lib.WorkerID,
-	masterID lib.MasterID,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
 	configBytes []byte,
 ) (lib.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)

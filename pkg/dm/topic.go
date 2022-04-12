@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
-	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -22,7 +22,7 @@ type Request Message
 
 type Response Message
 
-func OperateTaskMessageTopic(masterID lib.MasterID, taskID string) p2p.Topic {
+func OperateTaskMessageTopic(masterID libModel.MasterID, taskID string) p2p.Topic {
 	return fmt.Sprintf("operate-task-message-%s-%s", masterID, taskID)
 }
 

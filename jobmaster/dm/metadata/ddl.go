@@ -1,7 +1,7 @@
 package metadata
 
 import (
-	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
@@ -16,10 +16,10 @@ type DDL struct {
 type DDLStore struct {
 	*DefaultStore
 
-	id lib.MasterID
+	id libModel.MasterID
 }
 
-func NewDDLStore(id lib.MasterID, kvClient metaclient.KVClient) *DDLStore {
+func NewDDLStore(id libModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
 		DefaultStore: NewDefaultStore(kvClient),
 		id:           id,

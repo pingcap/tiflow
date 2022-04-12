@@ -14,6 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 var (
@@ -22,8 +23,8 @@ var (
 )
 
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (lib.WorkerID, error)
-	StopWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error
+	CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error)
+	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
 }
 
 type CheckpointAgent interface {
@@ -250,7 +251,7 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	return err
 }
 
-func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID lib.WorkerID) error {
+func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	if err := wm.workerAgent.StopWorker(ctx, taskID, workerID); err != nil {
 		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
@@ -265,7 +266,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 	return nil
 }
 
-func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID lib.WorkerID) {
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID libModel.WorkerID) {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)

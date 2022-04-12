@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/fake"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
@@ -43,7 +44,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 }
 
 func TestNewSimpleWorkerFactory(t *testing.T) {
-	dummyConstructor := func(ctx *dcontext.Context, id lib.WorkerID, masterID lib.MasterID, config WorkerConfig) lib.WorkerImpl {
+	dummyConstructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config WorkerConfig) lib.WorkerImpl {
 		return fake.NewDummyWorker(ctx, id, masterID, config)
 	}
 	fac := NewSimpleWorkerFactory(dummyConstructor, &fake.WorkerConfig{})

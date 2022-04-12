@@ -25,9 +25,9 @@ const (
 	executorNodeID2       = "node-exec-2"
 	executorNodeID3       = "node-exec-3"
 	workerTypePlaceholder = 999
-	workerID1             = WorkerID("worker-1")
-	workerID2             = WorkerID("worker-2")
-	workerID3             = WorkerID("worker-3")
+	workerID1             = libModel.WorkerID("worker-1")
+	workerID2             = libModel.WorkerID("worker-2")
+	workerID3             = libModel.WorkerID("worker-3")
 )
 
 type dummyConfig struct {
@@ -39,7 +39,7 @@ func prepareMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVClie
 	masterInfo := &MasterMetaKVData{
 		ID:         masterName,
 		NodeID:     masterNodeName,
-		StatusCode: MasterStatusUninit,
+		StatusCode: libModel.MasterStatusUninit,
 	}
 	masterInfoBytes, err := json.Marshal(masterInfo)
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestMasterInit(t *testing.T) {
 	var masterData MasterMetaKVData
 	err = json.Unmarshal(resp.Kvs[0].Value, &masterData)
 	require.NoError(t, err)
-	require.Equal(t, MasterStatusInit, masterData.StatusCode)
+	require.Equal(t, libModel.MasterStatusInit, masterData.StatusCode)
 
 	master.On("CloseImpl", mock.Anything).Return(nil)
 	err = master.Close(ctx)
