@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
@@ -809,4 +810,50 @@ func (t *testServer) TestQueryValidator(c *C) {
 	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
+}
+
+func (t *testServer) setupValidator(c *C) *SourceWorker {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	return w
+}
+
+func (t *testServer) TestGetWorkerValidatorErr(c *C) {
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)), Equals, 0)
+	// subtask match
+	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)), Equals, 2)
+}
+
+func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
+	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
+	// subtask match
+	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }
