@@ -66,6 +66,12 @@ func (c *MasterMetadataClient) Store(ctx context.Context, data *MasterMetaKVData
 	return nil
 }
 
+func (c *MasterMetadataClient) Delete(ctx context.Context) error {
+	key := adapter.MasterMetaKey.Encode(c.masterID)
+	_, err := c.metaKVClient.Delete(ctx, key)
+	return errors.Trace(err)
+}
+
 // LoadAllMasters loads all job masters from metastore
 func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*MasterMetaKVData, error) {
 	resp, err := c.metaKVClient.Get(ctx, adapter.MasterMetaKey.Path(), metaclient.WithPrefix())
@@ -197,4 +203,13 @@ func StoreMasterMeta(
 	}
 
 	return metaClient.Store(ctx, meta)
+}
+
+func DeleteMasterMeta(
+	ctx context.Context,
+	metaKVClient metaclient.KVClient,
+	masterID MasterID,
+) error {
+	metaClient := NewMasterMetadataClient(masterID, metaKVClient)
+	return metaClient.Delete(ctx)
 }

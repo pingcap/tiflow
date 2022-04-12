@@ -154,6 +154,12 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	id, err = jm.BaseMaster.CreateWorker(
 		meta.Tp, meta, defaultJobMasterCost)
 	if err != nil {
+		err2 := lib.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
+		if err2 != nil {
+			// TODO: add more GC mechanism if master meta is failed to delete
+			log.L().Error("failed to delete master meta", zap.Error(err2))
+		}
+
 		log.L().Error("create job master met error", zap.Error(err))
 		resp.Err = derrors.ToPBError(err)
 		return resp
