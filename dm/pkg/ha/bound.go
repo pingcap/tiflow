@@ -189,46 +189,54 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 // if source bound is empty, will return an empty sourceBound and an empty source config
 // if source bound is not empty but sourceConfig is empty, will return an error
 // if the source bound is different for over retryNum times, will return an error.
-func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBound, *config.SourceConfig, int64, error) {
+func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]SourceBound, []*config.SourceConfig, int64, error) {
 	var (
-		bound    SourceBound
-		newBound SourceBound
-		cfg      *config.SourceConfig
-		ok       bool
-		retryNum = defaultGetSourceBoundConfigRetry
-		sbm      map[string]SourceBound
+		bounds    []SourceBound
+		newBounds []SourceBound
+		cfgs      []*config.SourceConfig
+		ok        bool
+		retryNum  = defaultGetSourceBoundConfigRetry
+		sbm       map[string]SourceBound
+		nsbm      map[string]SourceBound
 	)
 	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
-		return bound, cfg, 0, err
+		return bounds, cfgs, 0, err
 	}
 	if sbm, ok = wbm[worker]; !ok {
-		return bound, cfg, rev, nil
+		return bounds, cfgs, rev, nil
 	}
-	bound = GetSourceBoundFromMap(sbm)
+	appendGetUpstreamCfgOps := func(sources map[string]SourceBound, ops []clientv3.Op) []clientv3.Op {
+		for sourceID := range sources {
+			ops = append(ops, clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(sourceID)))
+		}
+		return ops
+	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source)))
+		ops := make([]clientv3.Op, 1, len(sbm)+1)
+		ops[0] = clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+		appendGetUpstreamCfgOps(sbm, ops)
+		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return bounds, cfgs, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
 		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return bounds, cfgs, 0, err2
 		}
 
-		newBound, ok = sbm2[worker][bound.Source]
+		nsbm, ok = sbm2[worker]
 		// when ok is false, newBound will be empty which means bound for this worker has been deleted in this turn
 		// if bound is not empty, we should wait for another turn to make sure bound is really deleted.
-		if newBound != bound {
-			log.L().Warn("source bound has been changed, will take a retry", zap.Stringer("oldBound", bound),
-				zap.Stringer("newBound", newBound), zap.Int("retryTime", retryCnt))
+		if nsbm != sbm {
+			log.L().Warn("source bound has been changed, will take a retry", zap.Stringer("oldBound", bounds),
+				zap.Stringer("newBound", newBounds), zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update bound to save the last bound to error
 			if retryCnt != retryNum {
-				bound = newBound
+				bounds = newBounds
 			}
 			select {
 			case <-cli.Ctx().Done():
@@ -241,25 +249,25 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBo
 		}
 		// ok == false and newBound == bound means this bound is truly deleted, we don't need source config anymore
 		if !ok {
-			return bound, cfg, rev2, nil
+			return bounds, cfgs, rev2, nil
 		}
 
 		cfgResp := txnResp.Responses[1].GetResponseRange()
-		scm, err2 := sourceCfgFromResp(bound.Source, (*clientv3.GetResponse)(cfgResp))
+		scm, err2 := sourceCfgFromResp(bounds.Source, (*clientv3.GetResponse)(cfgResp))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return bounds, cfgs, 0, err2
 		}
-		cfg, ok = scm[bound.Source]
+		cfgs, ok = scm[bounds.Source]
 		// ok == false means we have got source bound but there is no source config, this shouldn't happen
 		if !ok {
 			// this should not happen.
-			return bound, cfg, 0, terror.ErrConfigMissingForBound.Generate(bound)
+			return bounds, cfgs, 0, terror.ErrConfigMissingForBound.Generate(bounds)
 		}
 
-		return bound, cfg, rev2, nil
+		return bounds, cfgs, rev2, nil
 	}
 
-	return bound, cfg, 0, terror.ErrMasterBoundChanging.Generate(bound, newBound)
+	return bounds, cfgs, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // WatchSourceBound watches PUT & DELETE operations for the bound relationship of the specified DM-worker.
