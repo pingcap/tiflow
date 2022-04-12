@@ -600,6 +600,9 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(ctx, w, doneM)
 	}
+	// NOTICE: we must release the lock before wait the debug info process down.
+	// Otherwise, the capture initialization and request response will compete
+	// for captureMu resulting in a deadlock.
 	c.captureMu.Unlock()
 	// wait the debug info printed
 	wait(doneM)
