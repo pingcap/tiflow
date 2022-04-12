@@ -17,14 +17,14 @@ type FlowController struct {
 
 	memoryQuota *common.TableMemoryQuota
 
-	memo syncMap
+	memo *syncQuotaTracker
 }
 
 func NewFlowController(changefeedID model.ChangeFeedID, quota uint64) *FlowController {
 	return &FlowController{
 		changefeedID: changefeedID,
 		memoryQuota:  common.NewTableMemoryQuota(quota),
-		memo:         newSyncMap(changefeedID),
+		memo:         newSyncQuotaTracker(changefeedID),
 	}
 }
 
@@ -137,20 +137,20 @@ func (t *tableQuotaTracker) resolve(resolvedTs uint64) uint64 {
 	return result
 }
 
-type syncMap struct {
+type syncQuotaTracker struct {
 	changefeedID model.ChangeFeedID
 	sync.Mutex
 	memo map[model.TableID]*tableQuotaTracker
 }
 
-func newSyncMap(changefeedID model.ChangeFeedID) syncMap {
-	return syncMap{
+func newSyncQuotaTracker(changefeedID model.ChangeFeedID) *syncQuotaTracker {
+	return &syncQuotaTracker{
 		changefeedID: changefeedID,
 		memo:         make(map[model.TableID]*tableQuotaTracker),
 	}
 }
 
-func (m syncMap) addTable(tableID model.TableID) {
+func (m *syncQuotaTracker) addTable(tableID model.TableID) {
 	m.Lock()
 	defer m.Unlock()
 	if _, ok := m.memo[tableID]; ok {
@@ -164,7 +164,7 @@ func (m syncMap) addTable(tableID model.TableID) {
 		zap.Any("tableID", tableID))
 }
 
-func (m syncMap) removeTable(tableID model.TableID) uint64 {
+func (m *syncQuotaTracker) removeTable(tableID model.TableID) uint64 {
 	m.Lock()
 	defer m.Unlock()
 	tracker, ok := m.memo[tableID]
@@ -179,36 +179,36 @@ func (m syncMap) removeTable(tableID model.TableID) uint64 {
 	return bytes
 }
 
-func (m syncMap) getLastCommitTsByTableID(tableID model.TableID) uint64 {
+func (m *syncQuotaTracker) getLastCommitTsByTableID(tableID model.TableID) uint64 {
 	m.Lock()
 	defer m.Unlock()
 	tracker, ok := m.memo[tableID]
 	if !ok {
-		log.Panic("FlowController.syncMap.getLastCommitTsByTableID: table not found",
+		log.Panic("FlowController.syncQuotaTracker.getLastCommitTsByTableID: table not found",
 			zap.Any("changefeed", m.changefeedID),
 			zap.Any("tableID", tableID))
 	}
 	return tracker.lastCommitTs
 }
 
-func (m syncMap) addEntryByTableID(tableID model.TableID, commitTs, size uint64) {
+func (m *syncQuotaTracker) addEntryByTableID(tableID model.TableID, commitTs, size uint64) {
 	m.Lock()
 	defer m.Unlock()
 	tracker, ok := m.memo[tableID]
 	if !ok {
-		log.Panic("FlowController.syncMap.addEntryByTableID: table not found",
+		log.Panic("FlowController.syncQuotaTracker.addEntryByTableID: table not found",
 			zap.Any("changefeed", m.changefeedID),
 			zap.Any("tableID", tableID))
 	}
 	tracker.add(commitTs, size)
 }
 
-func (m syncMap) resolve(tableID model.TableID, resolvedTs uint64) uint64 {
+func (m *syncQuotaTracker) resolve(tableID model.TableID, resolvedTs uint64) uint64 {
 	m.Lock()
 	defer m.Unlock()
 	tracker, ok := m.memo[tableID]
 	if !ok {
-		log.Panic("FlowController.syncMap.resolve: table not found",
+		log.Panic("FlowController.syncQuotaTracker.resolve: table not found",
 			zap.Any("changefeedID", m.changefeedID),
 			zap.Any("tableID", tableID))
 	}
