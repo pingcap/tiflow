@@ -65,7 +65,7 @@ func (m *TopicManager) Partitions(topic string) (int32, error) {
 		return partitions.(int32), nil
 	}
 
-	return m.cfg.PartitionNum, m.CreateTopic(topic)
+	return m.CreateTopic(topic)
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
@@ -97,7 +97,7 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 			m.topics.Store(topic, partitions)
 			log.Info(
 				"update topic partition number",
-				zap.String("duration", topic),
+				zap.String("topic", topic),
 				zap.Int32("oldPartitionNumber", oldPartitions.(int32)),
 				zap.Int32("newPartitionNumber", partitions),
 			)
@@ -106,27 +106,28 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 		m.topics.Store(topic, partitions)
 		log.Info(
 			"store topic partition number",
-			zap.String("duration", topic),
+			zap.String("topic", topic),
 			zap.Int32("partitionNumber", partitions),
 		)
 	}
 }
 
-// CreateTopic creates a topic with the given name.
-func (m *TopicManager) CreateTopic(topicName string) error {
+// CreateTopic creates a topic with the given name
+// and returns the number of partitions.
+func (m *TopicManager) CreateTopic(topicName string) (int32, error) {
 	start := time.Now()
 	topics, err := m.admin.ListTopics()
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
 			zap.Error(err),
-			zap.Duration("cost", time.Since(start)),
+			zap.Duration("duration", time.Since(start)),
 		)
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	log.Info(
 		"Kafka admin client list topics success",
-		zap.Duration("cost", time.Since(start)),
+		zap.Duration("duration", time.Since(start)),
 	)
 
 	// Now that we have access to the latest topics' information,
@@ -137,12 +138,16 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 
 	// Maybe our cache has expired information, so we just return it.
-	if _, ok := topics[topicName]; ok {
-		return nil
+	if t, ok := topics[topicName]; ok {
+		log.Info(
+			"topic already exists and the cached information has expired",
+			zap.String("topic", topicName),
+		)
+		return t.NumPartitions, nil
 	}
 
 	if !m.cfg.AutoCreate {
-		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+		return 0, cerror.ErrKafkaInvalidConfig.GenWithStack(
 			fmt.Sprintf("`auto-create-topic` is false, "+
 				"and %s not found", topicName))
 	}
@@ -162,7 +167,7 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	log.Info(
 		"Kafka admin client create the topic success",
@@ -173,5 +178,5 @@ func (m *TopicManager) CreateTopic(topicName string) error {
 	)
 	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 
-	return nil
+	return m.cfg.PartitionNum, nil
 }

@@ -35,6 +35,6 @@ func (m *TopicManager) Partitions(_ string) (int32, error) {
 }
 
 // CreateTopic do nothing.
-func (m *TopicManager) CreateTopic(_ string) error {
-	return nil
+func (m *TopicManager) CreateTopic(_ string) (int32, error) {
+	return m.partitionNum, nil
 }

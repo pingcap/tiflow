@@ -20,5 +20,5 @@ type TopicManager interface {
 	// Partitions returns the partitions of the topic.
 	Partitions(topic string) (int32, error)
 	// CreateTopic creates the topic.
-	CreateTopic(topicName string) error
+	CreateTopic(topicName string) (int32, error)
 }
