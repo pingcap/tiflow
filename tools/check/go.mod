@@ -11,6 +11,8 @@ require (
 	github.com/golangci/golangci-lint v1.45.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/mattn/goveralls v0.0.8
+	github.com/pingcap/errors v0.11.5-0.20211009033009-93128226aaa3
+	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/swaggo/swag v1.7.8
 	github.com/tinylib/msgp v1.1.6
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
@@ -143,6 +145,7 @@ require (
 	github.com/ryanrolds/sqlclosecheck v0.3.0 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.0.6 // indirect
 	github.com/securego/gosec/v2 v2.10.0 // indirect
+	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/sivchari/containedctx v1.0.2 // indirect
