@@ -711,6 +711,12 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 
 	err = sink.Barrier(ctx, 2)
 	require.Nil(t, err)
+	v, ok := sink.(*mysqlSink).tableMaxResolvedTs.Load(2)
+	require.False(t, ok)
+	require.Nil(t, v)
+	v, ok = sink.(*mysqlSink).tableCheckpointTs.Load(2)
+	require.False(t, ok)
+	require.Nil(t, v)
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)
