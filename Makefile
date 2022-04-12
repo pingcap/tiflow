@@ -7,7 +7,9 @@ PACKAGE_LIST := go list ./... | grep -vE 'proto|pb' | grep -v 'e2e'
 PACKAGES := $$($(PACKAGE_LIST))
 GOFILES := $$(find . -name '*.go' -type f | grep -vE 'proto|pb\.go')
 
-all: df-proto df-master df-executor df-master-client df-demo
+all: df-proto build
+
+build: df-master df-executor df-master-client df-demo
 
 df-proto:
 	./generate-proto.sh
