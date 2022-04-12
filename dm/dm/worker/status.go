@@ -126,22 +126,17 @@ func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *b
 }
 
 func (w *SourceWorker) GetValidateStatus(stName string, filterStatus pb.Stage) []*pb.ValidationStatus {
-	sts := w.subTaskHolder.getAllSubTasks()
+	st := w.subTaskHolder.findSubTask(stName)
 	res := make([]*pb.ValidationStatus, 0)
-	if len(sts) == 0 {
+	if st == nil {
 		return res
 	}
 	sourceIP := w.cfg.From.Host + ":" + strconv.Itoa(w.cfg.From.Port)
-	for _, st := range sts {
-		if st.cfg.Name != stName {
-			continue
-		}
-		tblStats := st.GetValidatorStatus()
-		for _, stat := range tblStats {
-			if filterStatus == pb.Stage_InvalidStage || stat.ValidationStatus == filterStatus.String() {
-				stat.Source = sourceIP
-				res = append(res, stat)
-			}
+	tblStats := st.GetValidatorStatus()
+	for _, stat := range tblStats {
+		if filterStatus == pb.Stage_InvalidStage || stat.ValidationStatus == filterStatus.String() {
+			stat.Source = sourceIP
+			res = append(res, stat)
 		}
 	}
 	return res
