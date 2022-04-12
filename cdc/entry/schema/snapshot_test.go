@@ -252,6 +252,31 @@ func TestUpdatePartition(t *testing.T) {
 	require.True(t, snap2.IsIneligibleTableID(11+65536*2))
 }
 
+func TestDrop(t *testing.T) {
+	snap := NewEmptySchemaSnapshot(false)
+
+	require.Nil(t, snap.createSchema(newDBInfo(1), 11))
+	require.Nil(t, snap.createSchema(newDBInfo(2), 12))
+	require.Nil(t, snap.replaceSchema(newDBInfo(2), 13))
+	require.Nil(t, snap.dropSchema(2, 14))
+
+	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 3), 15))
+	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 4), 16))
+	require.Nil(t, snap.replaceTable(newTbInfo(1, "DB_1", 4), 17))
+	require.Nil(t, snap.truncateTable(4, newTbInfo(1, "DB_1", 5), 18))
+	require.Nil(t, snap.dropTable(5, 19))
+	snap.Drop()
+
+	// After the latest snapshot is dropped, check schema and table count.
+	require.Equal(t, 1, snap.schemas.Len())
+	require.Equal(t, 1, snap.tables.Len())
+	require.Equal(t, 1, snap.schemaNameToID.Len())
+	require.Equal(t, 1, snap.tableNameToID.Len())
+	require.Equal(t, 1, snap.partitions.Len())
+	require.Equal(t, 0, snap.truncatedTables.Len())
+	require.Equal(t, 2, snap.ineligibleTables.Len())
+}
+
 func newDBInfo(id int64) *timodel.DBInfo {
 	return &timodel.DBInfo{
 		ID: id,

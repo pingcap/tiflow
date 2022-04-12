@@ -98,7 +98,7 @@ type SchemaSnapshot struct {
 	tables *btree.BTree
 
 	// map[versionedID] -> *model.TableInfo
-	partitionTables *btree.BTree
+	partitions *btree.BTree
 
 	// map[versionedID] -> struct{}
 	truncatedTables *btree.BTree
@@ -113,7 +113,7 @@ type SchemaSnapshot struct {
 	currentTs uint64
 
 	rwlock *sync.RWMutex
-	locked bool
+	locked int
 }
 
 // NewEmptySchemaSnapshot creates an empty schema snapshot.
@@ -123,34 +123,39 @@ func NewEmptySchemaSnapshot(forceReplicate bool) *SchemaSnapshot {
 		schemaNameToID:   btree.New(16),
 		schemas:          btree.New(16),
 		tables:           btree.New(16),
-		partitionTables:  btree.New(16),
+		partitions:       btree.New(16),
 		truncatedTables:  btree.New(16),
 		ineligibleTables: btree.New(16),
 		forceReplicate:   forceReplicate,
 		currentTs:        0,
 		rwlock:           new(sync.RWMutex),
-		locked:           false,
+		locked:           0,
 	}
 }
 
 // lock protects internal btrees as they are not thread safe.
 // All functions accessing btrees directly needs to call this.
 func (s *SchemaSnapshot) lock(readOnly bool) bool {
-	if !s.locked {
+	if s.locked == 0 {
 		if readOnly {
 			s.rwlock.RLock()
+			s.locked = 1 // 1 is for read lock
 		} else {
 			s.rwlock.Lock()
+			s.locked = 2 // 2 is for write lock
 		}
-		s.locked = true
 		return true
 	}
 	return false
 }
 
 func (s *SchemaSnapshot) unlock() {
-	s.rwlock.Unlock()
-	s.locked = false
+	if s.locked == 1 {
+		s.rwlock.RUnlock()
+	} else if s.locked == 2 {
+		s.rwlock.Unlock()
+	}
+	s.locked = 0
 }
 
 // NewSchemaSnapshotFromMeta creates a schema snapshot from meta.
@@ -197,7 +202,7 @@ func NewSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 				for _, partition := range pi.Definitions {
 					vid := newVersionedID(partition.ID, tag)
 					vid.target = unsafe.Pointer(tableInfo)
-					snap.partitionTables.ReplaceOrInsert(vid)
+					snap.partitions.ReplaceOrInsert(vid)
 					if !isEligible {
 						snap.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
@@ -217,7 +222,7 @@ func (s *SchemaSnapshot) Copy() *SchemaSnapshot {
 		schemaNameToID:   s.schemaNameToID,
 		schemas:          s.schemas,
 		tables:           s.tables,
-		partitionTables:  s.partitionTables,
+		partitions:       s.partitions,
 		truncatedTables:  s.truncatedTables,
 		ineligibleTables: s.ineligibleTables,
 		forceReplicate:   s.forceReplicate,
@@ -307,7 +312,7 @@ func (s *SchemaSnapshot) PhysicalTableByID(id int64) (tableInfo *model.TableInfo
 	})
 	if !ok {
 		// Try partition, it could be a partition table.
-		s.partitionTables.AscendRange(start, end, func(i btree.Item) bool {
+		s.partitions.AscendRange(start, end, func(i btree.Item) bool {
 			tableInfo = (*model.TableInfo)(i.(versionedID).target)
 			ok = tableInfo != nil
 			return false
@@ -412,7 +417,7 @@ func (s *SchemaSnapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag ui
 	start := newVersionedID(id, tag)
 	end := newVersionedID(id, negative(uint64(0)))
 	s.tables.AscendRange(start, end, func(i btree.Item) bool {
-		tableInfo := (*timodel.TableInfo)(i.(versionedID).target)
+		tableInfo := (*model.TableInfo)(i.(versionedID).target)
 		if nilAcceptable || tableInfo != nil {
 			foundTag = i.(versionedID).tag
 			ok = true
@@ -421,8 +426,8 @@ func (s *SchemaSnapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag ui
 	})
 	if !ok {
 		// Try partition, it could be a partition table.
-		s.partitionTables.AscendRange(start, end, func(i btree.Item) bool {
-			tableInfo := (*timodel.TableInfo)(i.(versionedID).target)
+		s.partitions.AscendRange(start, end, func(i btree.Item) bool {
+			tableInfo := (*model.TableInfo)(i.(versionedID).target)
 			if nilAcceptable || tableInfo != nil {
 				foundTag = i.(versionedID).tag
 				ok = true
@@ -538,7 +543,7 @@ func (s *SchemaSnapshot) doDropTable(tbInfo *model.TableInfo, currentTs uint64) 
 	s.tableNameToID.ReplaceOrInsert(newVersionedEntityName(tbInfo.SchemaID, tbInfo.TableName.Table, tag))
 	if pi := tbInfo.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+			s.partitions.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 		}
 	}
 }
@@ -618,7 +623,7 @@ func (s *SchemaSnapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64
 		for _, partition := range pi.Definitions {
 			vid := newVersionedID(partition.ID, tag)
 			vid.target = unsafe.Pointer(tbInfo)
-			s.partitionTables.ReplaceOrInsert(vid)
+			s.partitions.ReplaceOrInsert(vid)
 			if ineligible {
 				s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 			}
@@ -650,12 +655,12 @@ func (s *SchemaSnapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint
 		s.ineligibleTables.ReplaceOrInsert(newVersionedID(tbInfo.ID, tag))
 	}
 	for _, partition := range oldPi.Definitions {
-		s.partitionTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+		s.partitions.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 	}
 	for _, partition := range newPi.Definitions {
 		vid := newVersionedID(partition.ID, tag)
 		vid.target = unsafe.Pointer(tbInfo)
-		s.partitionTables.ReplaceOrInsert(vid)
+		s.partitions.ReplaceOrInsert(vid)
 		if ineligible {
 			s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 		}
@@ -713,7 +718,6 @@ func (s *SchemaSnapshot) Drop() {
 	if s.lock(false) {
 		defer s.unlock()
 	}
-
 	tag := negative(s.currentTs)
 
 	schemas := make([]versionedID, 0, s.schemas.Len())
@@ -759,16 +763,39 @@ func (s *SchemaSnapshot) Drop() {
 		info := (*model.TableInfo)(x.target)
 		if info != nil {
 			isEligible := info.IsEligible(s.forceReplicate)
-			if isEligible {
+			if !isEligible {
 				s.ineligibleTables.Delete(vid)
 			}
-			if pi := info.GetPartitionInfo(); pi != nil {
-				for _, partition := range pi.Definitions {
-					s.partitionTables.Delete(newVersionedID(partition.ID, vid.tag))
-					if !isEligible {
-						s.ineligibleTables.Delete(newVersionedID(partition.ID, vid.tag))
-					}
-				}
+		} else {
+			// Maybe the table is truncated.
+			s.truncatedTables.Delete(vid)
+		}
+	}
+
+	partitions := make([]versionedID, 0, s.partitions.Len())
+	var partitionID int64 = -1
+	var partitionDroped bool = false
+	s.partitions.Ascend(func(i btree.Item) bool {
+		x := i.(versionedID)
+		if x.tag >= tag {
+			if x.id != partitionID {
+				partitionID = x.id
+				partitionDroped = false
+			}
+			if partitionDroped || x.target == nil {
+				partitions = append(partitions, newVersionedID(x.id, x.tag))
+			}
+			partitionDroped = true
+		}
+		return true
+	})
+	for _, vid := range partitions {
+		x := s.partitions.Delete(vid).(versionedID)
+		info := (*model.TableInfo)(x.target)
+		if info != nil {
+			isEligible := info.IsEligible(s.forceReplicate)
+			if !isEligible {
+				s.ineligibleTables.Delete(vid)
 			}
 		}
 	}
@@ -852,7 +879,7 @@ func (s *SchemaSnapshot) IterPartitions(includeIneligible bool, f func(id int64,
 
 	tag := negative(s.currentTs)
 	var partitionID int64 = -1
-	s.partitionTables.Ascend(func(i btree.Item) bool {
+	s.partitions.Ascend(func(i btree.Item) bool {
 		x := i.(versionedID)
 		if x.id != partitionID && x.tag >= tag {
 			partitionID = x.id
@@ -1085,6 +1112,12 @@ func (s *SchemaSnapshot) TableCount(includeIneligible bool) (count int) {
 	return
 }
 
+// SchemaCount counts schemas in the snapshot. It's only for tests.
+func (s *SchemaSnapshot) SchemaCount() (count int) {
+	s.IterSchemas(func(i *timodel.DBInfo) { count += 1 })
+	return
+}
+
 // DumpToString dumps the snapshot to a string.
 func (s *SchemaSnapshot) DumpToString() string {
 	schemas := make([]string, 0, s.schemas.Len())
@@ -1097,7 +1130,7 @@ func (s *SchemaSnapshot) DumpToString() string {
 		tables = append(tables, fmt.Sprintf("%v", tbInfo))
 	})
 
-	partitions := make([]string, 0, s.partitionTables.Len())
+	partitions := make([]string, 0, s.partitions.Len())
 	s.IterPartitions(true, func(id int64, _ *model.TableInfo) {
 		partitions = append(partitions, fmt.Sprintf("%d", id))
 	})
