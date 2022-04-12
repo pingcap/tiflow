@@ -23,7 +23,7 @@ import (
 )
 
 func TestTablesInSchema(t *testing.T) {
-	snap := NewEmptySchemaSnapshot(true)
+	snap := NewEmptySnapshot(true)
 	require.Nil(t, snap.createSchema(newDBInfo(1), 100))
 	var vname versionedEntityName
 
@@ -61,7 +61,7 @@ func TestTablesInSchema(t *testing.T) {
 }
 
 func TestIterSchemas(t *testing.T) {
-	snap := NewEmptySchemaSnapshot(true)
+	snap := NewEmptySnapshot(true)
 	require.Nil(t, snap.createSchema(newDBInfo(1), 90))
 	require.Nil(t, snap.replaceSchema(newDBInfo(1), 100))
 	require.Nil(t, snap.createSchema(newDBInfo(2), 110))
@@ -76,7 +76,7 @@ func TestIterSchemas(t *testing.T) {
 }
 
 func TestSchema(t *testing.T) {
-	snap := NewEmptySchemaSnapshot(true)
+	snap := NewEmptySnapshot(true)
 
 	// createSchema fails if the schema ID or name already exist.
 	dbName := timodel.CIStr{O: "DB_1", L: "db_1"}
@@ -132,7 +132,7 @@ func TestSchema(t *testing.T) {
 func TestTable(t *testing.T) {
 	var ok bool
 	for _, forceReplicate := range []bool{true, false} {
-		snap := NewEmptySchemaSnapshot(forceReplicate)
+		snap := NewEmptySnapshot(forceReplicate)
 
 		// createTable should check whether the schema or table exist or not.
 		require.Error(t, snap.createTable(newTbInfo(1, "DB_1", 11), 100))
@@ -207,11 +207,11 @@ func TestTable(t *testing.T) {
 
 func TestUpdatePartition(t *testing.T) {
 	var oldTb, newTb *model.TableInfo
-	var snap1, snap2 *SchemaSnapshot
+	var snap1, snap2 *Snapshot
 	var info *model.TableInfo
 	var ok bool
 
-	snap := NewEmptySchemaSnapshot(false)
+	snap := NewEmptySnapshot(false)
 	require.Nil(t, snap.createSchema(newDBInfo(1), 100))
 
 	// updatePartition fails if the old table is not partitioned.
@@ -253,7 +253,7 @@ func TestUpdatePartition(t *testing.T) {
 }
 
 func TestDrop(t *testing.T) {
-	snap := NewEmptySchemaSnapshot(false)
+	snap := NewEmptySnapshot(false)
 
 	require.Nil(t, snap.createSchema(newDBInfo(1), 11))
 	require.Nil(t, snap.createSchema(newDBInfo(2), 12))

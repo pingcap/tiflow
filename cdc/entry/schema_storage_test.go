@@ -56,7 +56,7 @@ func TestSchema(t *testing.T) {
 		Query:      "create database test",
 	}
 	// reconstruct the local schema
-	snap := schema.NewEmptySchemaSnapshot(false)
+	snap := schema.NewEmptySnapshot(false)
 	err := snap.HandleDDL(job)
 	require.Nil(t, err)
 	_, exist := snap.SchemaByID(job.SchemaID)
@@ -198,7 +198,7 @@ func TestTable(t *testing.T) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	snap := schema.NewEmptySchemaSnapshot(false)
+	snap := schema.NewEmptySnapshot(false)
 	for _, job := range jobs {
 		err := snap.HandleDDL(job)
 		require.Nil(t, err)
@@ -286,7 +286,7 @@ func TestTable(t *testing.T) {
 }
 
 func TestHandleDDL(t *testing.T) {
-	snap := schema.NewEmptySchemaSnapshot(false)
+	snap := schema.NewEmptySnapshot(false)
 	dbName := timodel.NewCIStr("Test")
 	colName := timodel.NewCIStr("A")
 	tbName := timodel.NewCIStr("T")
@@ -387,7 +387,7 @@ func TestHandleDDL(t *testing.T) {
 
 func TestHandleRenameTables(t *testing.T) {
 	// Initial schema: db_1.table_1 and db_2.table_2.
-	snap := schema.NewEmptySchemaSnapshot(true)
+	snap := schema.NewEmptySnapshot(true)
 	var i int64
 	for i = 1; i < 3; i++ {
 		dbInfo := &timodel.DBInfo{
@@ -472,7 +472,7 @@ func TestHandleRenameTables(t *testing.T) {
 	require.Equal(t, uint64(11112222), snap.CurrentTs())
 }
 
-func testDoDDLAndCheck(t *testing.T, snap *schema.SchemaSnapshot, job *timodel.Job, isErr bool) {
+func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, isErr bool) {
 	err := snap.HandleDDL(job)
 	require.Equal(t, err != nil, isErr)
 }
@@ -768,7 +768,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := schema.NewSchemaSnapshotFromMeta(meta, ver.Ver, false)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false)
 	require.Nil(t, err)
 	_, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
@@ -804,13 +804,13 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
-	snap1, err := schema.NewSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
+	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
-	snap2, err := schema.NewSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
+	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
 	require.Nil(t, err)
-	snap3, err := schema.NewSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
+	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 
 	require.Equal(t, snap2.TableCount(true)-snap1.TableCount(true), 5)
@@ -950,7 +950,7 @@ func TestSchemaStorage(t *testing.T) {
 			ts := job.BinlogInfo.FinishedTS
 			meta, err := kv.GetSnapshotMeta(store, ts)
 			require.Nil(t, err)
-			snapFromMeta, err := schema.NewSchemaSnapshotFromMeta(meta, ts, false)
+			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false)
 			require.Nil(t, err)
 			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)

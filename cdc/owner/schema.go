@@ -30,7 +30,7 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot *schema.SchemaSnapshot
+	schemaSnapshot *schema.Snapshot
 	filter         *filter.Filter
 	config         *config.ReplicaConfig
 
@@ -52,7 +52,7 @@ func newSchemaWrap4Owner(
 			return nil, errors.Trace(err)
 		}
 	}
-	schemaSnap, err := schema.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
+	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -215,7 +215,7 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	snap, err := schema.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}

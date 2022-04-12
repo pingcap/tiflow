@@ -37,9 +37,9 @@ import (
 type SchemaStorage interface {
 	// GetSnapshot returns the snapshot which of ts is specified.
 	// It may block caller when ts is larger than ResolvedTs.
-	GetSnapshot(ctx context.Context, ts uint64) (*schema.SchemaSnapshot, error)
+	GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error)
 	// GetLastSnapshot returns the last snapshot
-	GetLastSnapshot() *schema.SchemaSnapshot
+	GetLastSnapshot() *schema.Snapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
 	// AdvanceResolvedTs advances the resolved
@@ -52,7 +52,7 @@ type SchemaStorage interface {
 }
 
 type schemaStorageImpl struct {
-	snaps      []*schema.SchemaSnapshot
+	snaps      []*schema.Snapshot
 	snapsMu    sync.RWMutex
 	gcTs       uint64
 	resolvedTs uint64
@@ -68,18 +68,18 @@ func NewSchemaStorage(
 	meta *timeta.Meta, startTs uint64, filter *filter.Filter,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
-	var snap *schema.SchemaSnapshot
+	var snap *schema.Snapshot
 	var err error
 	if meta == nil {
-		snap = schema.NewEmptySchemaSnapshot(forceReplicate)
+		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
-		snap, err = schema.NewSchemaSnapshotFromMeta(meta, startTs, forceReplicate)
+		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	schema := &schemaStorageImpl{
-		snaps:          []*schema.SchemaSnapshot{snap},
+		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
 		forceReplicate: forceReplicate,
@@ -88,7 +88,7 @@ func NewSchemaStorage(
 	return schema, nil
 }
 
-func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.SchemaSnapshot, error) {
+func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
 		// Unexpected error, caller should fail immediately.
@@ -112,8 +112,8 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.SchemaSnapshot, erro
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema.SchemaSnapshot, error) {
-	var snap *schema.SchemaSnapshot
+func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
+	var snap *schema.Snapshot
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
 	// DDL puller lagging too much.
@@ -142,7 +142,7 @@ func isRetryable(err error) bool {
 }
 
 // GetLastSnapshot returns the last snapshot
-func (s *schemaStorageImpl) GetLastSnapshot() *schema.SchemaSnapshot {
+func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
@@ -156,7 +156,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	}
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
-	var snap *schema.SchemaSnapshot
+	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
@@ -167,7 +167,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		}
 		snap = lastSnap.Copy()
 	} else {
-		snap = schema.NewEmptySchemaSnapshot(s.forceReplicate)
+		snap = schema.NewEmptySnapshot(s.forceReplicate)
 	}
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
@@ -227,7 +227,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 
 	// copy the part of the slice that is needed instead of re-slicing it
 	// to maximize efficiency of Go runtime GC.
-	newSnaps := make([]*schema.SchemaSnapshot, len(s.snaps)-startIdx)
+	newSnaps := make([]*schema.Snapshot, len(s.snaps)-startIdx)
 	copy(newSnaps, s.snaps[startIdx:])
 	s.snaps = newSnaps
 
