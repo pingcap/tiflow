@@ -12,6 +12,120 @@ import (
 	"go.uber.org/zap"
 )
 
+// TableMemoryQuota is designed to curb the total memory consumption of processing
+// the event streams in a table.
+// A higher-level controller more suitable for direct use by the pipeline is TableFlowController.
+//type TableMemoryQuota struct {
+//	Quota uint64 // should not be changed once initialized
+//
+//	IsAborted uint32
+//
+//	mu       sync.Mutex
+//	Consumed uint64
+//
+//	cond *sync.Cond
+//}
+//
+//// NewTableMemoryQuota creates a new TableMemoryQuota
+//// quota: max advised memory consumption in bytes.
+//func NewTableMemoryQuota(quota uint64) *TableMemoryQuota {
+//	ret := &TableMemoryQuota{
+//		Quota:    quota,
+//		mu:       sync.Mutex{},
+//		Consumed: 0,
+//	}
+//
+//	ret.cond = sync.NewCond(&ret.mu)
+//	return ret
+//}
+//
+//// ConsumeWithBlocking is called when a hard-limit is needed. The method will
+//// block until enough memory has been freed up by Release.
+//// blockCallBack will be called if the function will block.
+//// Should be used with care to prevent deadlock.
+//func (c *TableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func() error) error {
+//	if nBytes >= c.Quota {
+//		return cerrors.ErrFlowControllerEventLargerThanQuota.GenWithStackByArgs(nBytes, c.Quota)
+//	}
+//
+//	c.mu.Lock()
+//	if c.Consumed+nBytes >= c.Quota {
+//		c.mu.Unlock()
+//		err := blockCallBack()
+//		if err != nil {
+//			return errors.Trace(err)
+//		}
+//	} else {
+//		c.mu.Unlock()
+//	}
+//
+//	c.mu.Lock()
+//	defer c.mu.Unlock()
+//
+//	for {
+//		if atomic.LoadUint32(&c.IsAborted) == 1 {
+//			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+//		}
+//
+//		if c.Consumed+nBytes < c.Quota {
+//			break
+//		}
+//		c.cond.Wait()
+//	}
+//
+//	c.Consumed += nBytes
+//	return nil
+//}
+//
+//// ForceConsume is called when blocking is not acceptable and the limit can be violated
+//// for the sake of avoid deadlock. It merely records the increased memory consumption.
+//func (c *TableMemoryQuota) ForceConsume(nBytes uint64) error {
+//	c.mu.Lock()
+//	defer c.mu.Unlock()
+//
+//	if atomic.LoadUint32(&c.IsAborted) == 1 {
+//		return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+//	}
+//
+//	c.Consumed += nBytes
+//	return nil
+//}
+//
+//// Release is called when a chuck of memory is done being used.
+//func (c *TableMemoryQuota) Release(nBytes uint64) {
+//	c.mu.Lock()
+//
+//	if c.Consumed < nBytes {
+//		c.mu.Unlock()
+//		log.Panic("TableMemoryQuota: releasing more than consumed, report a bug",
+//			zap.Uint64("consumed", c.Consumed),
+//			zap.Uint64("released", nBytes))
+//	}
+//
+//	c.Consumed -= nBytes
+//	if c.Consumed < c.Quota {
+//		c.mu.Unlock()
+//		c.cond.Signal()
+//		return
+//	}
+//
+//	c.mu.Unlock()
+//}
+//
+//// Abort interrupts any ongoing ConsumeWithBlocking call
+//func (c *TableMemoryQuota) Abort() {
+//	atomic.StoreUint32(&c.IsAborted, 1)
+//	c.cond.Signal()
+//}
+//
+//// GetConsumption returns the current memory consumption
+//func (c *TableMemoryQuota) GetConsumption() uint64 {
+//	c.mu.Lock()
+//	defer c.mu.Unlock()
+//
+//	return c.Consumed
+//}
+
 type FlowController struct {
 	changefeedID model.ChangeFeedID
 
