@@ -38,8 +38,8 @@ function run() {
 		"\"result\": true" 2 \
 		"\"unit\": \"Sync\"" 1
 
-  run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-  check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_sql "select * from dm_syncer_tracker.t" $TIDB_PORT $TIDB_PASSWORD
 	check_not_contains "dm_syncer_ignore_db"
 }
