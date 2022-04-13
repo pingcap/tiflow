@@ -21,7 +21,7 @@ mysql-instances:
 black-white-list: # compatible with deprecated config
   instance:
     do-tables:
-      - db-name: "webui"
+      - db-name: "full_mode"
         tbl-name: "*"
 
 mydumpers:
@@ -40,5 +40,5 @@ syncers:
 
 routes:
   route-rule-1:
-    schema-pattern: "webui"
-    target-schema: "webui_test"
+    schema-pattern: "full_mode"
+    target-schema: "full_mode_test"

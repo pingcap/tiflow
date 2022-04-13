@@ -143,8 +143,8 @@ function empty_data() {
 }
 
 function only_route_schema() {
-	run_sql_source1 "drop database if exists webui;"
-	run_sql_source1 "create database webui;"
+	run_sql_source1 "drop database if exists full_mode;"
+	run_sql_source1 "create database full_mode;"
 	init_cluster
 
 	dmctl_start_task_standalone "$cur/conf/dm-task-2.yaml" "--remove-meta"
@@ -152,7 +152,7 @@ function only_route_schema() {
 		"query-status test" \
 		"\"stage\": \"Finished\"" 1
 
-	run_sql_tidb_with_retry "SHOW DATABASES LIKE 'webui_test';" "Database: webui_test"
+	run_sql_tidb_with_retry "SHOW DATABASES LIKE 'full_mode_test';" "Database: full_mode_test"
 	cleanup_process $*
 	cleanup_data full_mode
 }
