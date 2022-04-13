@@ -18,11 +18,9 @@ mysql-instances:
     syncer-config-name: "global"
     route-rules: ["route-rule-1"]
 
-black-white-list: # compatible with deprecated config
+block-allow-list: # compatible with deprecated config
   instance:
-    do-tables:
-      - db-name: "full_mode"
-        tbl-name: "*"
+    do-dbs: ["full_mode"]
 
 mydumpers:
   global:

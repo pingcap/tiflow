@@ -158,10 +158,10 @@ function only_route_schema() {
 }
 
 function run() {
-	only_route_schema
 	fail_acquire_global_lock
 	escape_schema
 	empty_data
+	only_route_schema
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='NO_BACKSLASH_ESCAPES'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
