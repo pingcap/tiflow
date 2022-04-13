@@ -22,19 +22,12 @@ package tools
 import (
 
 	// make go module happy
-	_ "github.com/AlekSi/gocov-xml"
-	_ "github.com/axw/gocov/gocov"
-	_ "github.com/deepmap/oapi-codegen/cmd/oapi-codegen"
 	_ "github.com/gogo/protobuf/protoc-gen-gogofaster"
 	_ "github.com/golang/mock/mockgen"
 	_ "github.com/golangci/golangci-lint/pkg/commands"
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
-	_ "github.com/jstemmer/go-junit-report"
-	_ "github.com/mattn/goveralls"
 	_ "github.com/pingcap/failpoint"
 	_ "github.com/pingcap/failpoint/failpoint-ctl"
-	_ "github.com/rakyll/statik"
-	_ "github.com/zhouqiang-cl/gocovmerge"
 	_ "mvdan.cc/gofumpt"
 	_ "mvdan.cc/sh/v3/cmd/shfmt"
 )

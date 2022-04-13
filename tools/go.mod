@@ -3,18 +3,11 @@ module github.com/pingcap/dm/tools
 go 1.18
 
 require (
-	github.com/AlekSi/gocov-xml v0.0.0-20190121064608-3a14fb1c4737
-	github.com/axw/gocov v1.0.0
-	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
 	github.com/golangci/golangci-lint v1.45.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/jstemmer/go-junit-report v0.9.1
-	github.com/mattn/goveralls v0.0.8
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00
-	github.com/rakyll/statik v0.1.7
-	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
 	mvdan.cc/gofumpt v0.3.1-0.20220318211649-1dfe9cab509c
 	mvdan.cc/sh/v3 v3.3.1
 )
@@ -49,11 +42,8 @@ require (
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/fzipp/gocyclo v0.4.0 // indirect
-	github.com/getkin/kin-openapi v0.61.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-critic/go-critic v0.6.2 // indirect
-	github.com/go-openapi/jsonpointer v0.19.5 // indirect
-	github.com/go-openapi/swag v0.19.5 // indirect
 	github.com/go-toolsmith/astcast v1.0.0 // indirect
 	github.com/go-toolsmith/astcopy v1.0.0 // indirect
 	github.com/go-toolsmith/astequal v1.0.1 // indirect
@@ -97,13 +87,10 @@ require (
 	github.com/kulti/thelper v0.5.1 // indirect
 	github.com/kunwardeep/paralleltest v1.0.3 // indirect
 	github.com/kyoh86/exportloopref v0.1.8 // indirect
-	github.com/labstack/echo/v4 v4.2.1 // indirect
-	github.com/labstack/gommon v0.3.0 // indirect
 	github.com/ldez/gomoddirectives v0.2.2 // indirect
 	github.com/ldez/tagliatelle v0.3.1 // indirect
 	github.com/leonklingele/grouper v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
-	github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e // indirect
 	github.com/maratori/testpackage v1.0.1 // indirect
 	github.com/matoous/godox v0.0.0-20210227103229-6504466cf951 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
@@ -164,14 +151,10 @@ require (
 	github.com/ultraware/funlen v0.0.3 // indirect
 	github.com/ultraware/whitespace v0.0.5 // indirect
 	github.com/uudashr/gocognit v1.0.5 // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasttemplate v1.2.1 // indirect
 	github.com/yagipy/maintidx v1.0.0 // indirect
 	github.com/yeya24/promlinter v0.1.1-0.20210918184747-d757024714a1 // indirect
 	gitlab.com/bosi/decorder v0.2.1 // indirect
-	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
