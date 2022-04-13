@@ -25,8 +25,8 @@ import (
 
 const (
 	defaultSendChanCap       = 8
-	numProducers             = 16
-	numMsgPerProducer        = 10000
+	numProducers             = 8
+	numMsgPerProducer        = 1000
 	numMsgPerProducerForSync = 100
 )
 
