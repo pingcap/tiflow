@@ -27,11 +27,33 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
+
+func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp rowChangeJobType, data []interface{}) *rowChangeJob {
+	var beforeImage, afterImage []interface{}
+	if tp == rowInsert {
+		afterImage = data
+	} else if tp == rowUpdated {
+		beforeImage, afterImage = data, data
+	} else {
+		beforeImage = data
+	}
+	return &rowChangeJob{
+		Key: key,
+		Tp:  tp,
+		row: sqlmodel.NewRowChange(
+			&cdcmodel.TableName{Schema: tbl.Schema, Table: tbl.Name},
+			&cdcmodel.TableName{Schema: tbl.Schema, Table: tbl.Name},
+			beforeImage, afterImage, tblInfo, tblInfo, nil,
+		),
+	}
+}
 
 func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 	testFunc := func(t *testing.T, mode string) {
@@ -39,12 +61,9 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 		tbl2 := filter.Table{Schema: "test", Name: "tbl2"}
 		tbl3 := filter.Table{Schema: "test", Name: "tbl3"}
-		tableInfo1 := genValidateTableInfo(t, tbl1.Schema, tbl1.Name,
-			"create table tbl1(a int primary key, b varchar(100))")
-		tableInfo2 := genValidateTableInfo(t, tbl2.Schema, tbl2.Name,
-			"create table tbl2(a varchar(100) primary key, b varchar(100))")
-		tableInfo3 := genValidateTableInfo(t, tbl3.Schema, tbl3.Name,
-			"create table tbl3(a varchar(100) primary key, b varchar(100))")
+		tableInfo1 := genValidateTableInfo(t, "create table tbl1(a int primary key, b varchar(100))")
+		tableInfo2 := genValidateTableInfo(t, "create table tbl2(a varchar(100) primary key, b varchar(100))")
+		tableInfo3 := genValidateTableInfo(t, "create table tbl3(a varchar(100) primary key, b varchar(100))")
 
 		cfg := genSubtaskConfig(t)
 		cfg.ValidatorCfg.Mode = mode
@@ -81,24 +100,10 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		checkInitStatus()
 
 		// insert & update same table, both row are validated failed
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "1",
-			Data:  []interface{}{1, "a"},
-			Tp:    rowInsert,
-		})
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "1",
-			Data:  []interface{}{1, "b"},
-			Tp:    rowUpdated,
-		})
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "2",
-			Data:  []interface{}{2, "2b"},
-			Tp:    rowInsert,
-		})
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowUpdated, []interface{}{1, "b"}))
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "2", rowInsert, []interface{}{2, "2b"}))
+
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}).AddRow(2, "incorrect data"))
 		worker.validateTableChange()
@@ -158,18 +163,9 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 
 		//
 		// add 2 delete row of tbl2 and tbl3
-		worker.updateRowChange(&rowChange{
-			table: tableInfo2,
-			Key:   "a",
-			Data:  []interface{}{"a", "b"},
-			Tp:    rowDeleted,
-		})
-		worker.updateRowChange(&rowChange{
-			table: tableInfo3,
-			Key:   "aa",
-			Data:  []interface{}{"aa", "b"},
-			Tp:    rowDeleted,
-		})
+		worker.updateRowChange(genRowChangeJob(tbl2, tableInfo2, "a", rowDeleted, []interface{}{"a", "b"}))
+		worker.updateRowChange(genRowChangeJob(tbl3, tableInfo3, "aa", rowDeleted, []interface{}{"aa", "b"}))
+
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}))
 		mock.ExpectQuery("SELECT .* FROM .*tbl2.* WHERE .*").WillReturnRows(
@@ -214,24 +210,10 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		//
 		// validate with batch size = 2
 		worker.batchSize = 2
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "1",
-			Data:  []interface{}{1, "a"},
-			Tp:    rowInsert,
-		})
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "2",
-			Data:  []interface{}{2, "2b"},
-			Tp:    rowInsert,
-		})
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "3",
-			Data:  []interface{}{3, "3c"},
-			Tp:    rowInsert,
-		})
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "2", rowInsert, []interface{}{2, "2b"}))
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "3", rowInsert, []interface{}{3, "3c"}))
+
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a").AddRow(2, "2b"))
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -297,12 +279,8 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 
 		// set reachedSyncer = false, there should not be any errors and failedCount=0
 		validator.reachedSyncer.Store(false)
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "1",
-			Data:  []interface{}{1, "a"},
-			Tp:    rowInsert,
-		})
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
+
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}))
 		worker.validateTableChange()
@@ -334,12 +312,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		// set reachedSyncer=true, rowErrorDelayInSec = 0, failed rows became error directly
 		validator.reachedSyncer.Store(true)
 		worker.rowErrorDelayInSec = 0
-		worker.updateRowChange(&rowChange{
-			table: tableInfo1,
-			Key:   "1",
-			Data:  []interface{}{1, "a"},
-			Tp:    rowInsert,
-		})
+		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}))
 		worker.validateTableChange()
@@ -471,9 +444,12 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 			dataRows = dataRows.AddRow(rowData...)
 		}
 		mock.ExpectQuery(tc.querySQL).WithArgs(args...).WillReturnRows(dataRows)
+		tblInfo := genValidateTableInfo(t, tc.creatSQL)
+		tbl := &filter.Table{Schema: tc.schemaName, Name: tc.tblName}
 		cond := &Cond{
-			Table:     genValidateTableInfo(t, tc.schemaName, tc.tblName, tc.creatSQL),
-			ColumnCnt: 2,
+			TargetTbl: tbl.String(),
+			Columns:   tblInfo.Columns,
+			PK:        tblInfo.Indices[0],
 			PkValues:  tc.pkValues,
 		}
 		dbConn := genDBConn(t, db, genSubtaskConfig(t))
@@ -503,9 +479,11 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 		}
 	}
 
+	tblInfo := genValidateTableInfo(t, "create table tbl(a int primary key)")
 	cond := &Cond{
-		Table:     genValidateTableInfo(t, "test", "tbl", "create table tbl(a int primary key)"),
-		ColumnCnt: 1,
+		TargetTbl: "tbl",
+		Columns:   tblInfo.Columns,
+		PK:        tblInfo.Indices[0],
 		PkValues:  [][]string{{"1"}},
 	}
 	worker := &validateWorker{
@@ -521,19 +499,11 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 }
 
 func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
-	rows := getSourceRowsForCompare([]*rowChange{
-		{
-			Key: "a",
-			Data: []interface{}{
-				nil, 1,
-			},
-		},
-		{
-			Key: "b",
-			Data: []interface{}{
-				1, 2,
-			},
-		},
+	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
+	tableInfo1 := genValidateTableInfo(t, "create table tbl1(a varchar(10) primary key, b int)")
+	rows := getSourceRowsForCompare([]*rowChangeJob{
+		genRowChangeJob(tbl1, tableInfo1, "a", rowInsert, []interface{}{nil, 1}),
+		genRowChangeJob(tbl1, tableInfo1, "b", rowInsert, []interface{}{1, 2}),
 	})
 	require.Len(t, rows, 2)
 	require.Len(t, rows["a"], 2)

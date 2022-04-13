@@ -57,8 +57,6 @@ const (
 	downstreamPKColumnOutOfBoundsMsg = "primary key column of downstream table out of range of binlog event row"
 )
 
-var errNoPrimaryKey = errors.New("no primary key")
-
 type validateTableInfo struct {
 	targetTable         *filter.Table
 	srcTableInfo        *model.TableInfo

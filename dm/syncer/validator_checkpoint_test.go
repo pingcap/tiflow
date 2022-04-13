@@ -53,7 +53,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
 			// insert with pk=11
-			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
+			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-ts\": 0, \"failed-cnt\": 0}", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
@@ -76,9 +76,15 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-		mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
-	)
+	//mock.MatchExpectationsInOrder(false)
+	//mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+	//	mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
+	//)
+	mock.ExpectBegin()
+	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName, createTableSQL))
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
@@ -104,16 +110,12 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 			require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL"))
 		}()
 		validator.startValidateWorkers()
+		tbl := filter.Table{Schema: schemaName, Name: tableName}
+		tblInfo := genValidateTableInfo(t, createTableSQL)
 		validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
 			tp:      deletedRowExists,
-			dstData: []*sql.NullString{{String: "", Valid: true}},
-			srcJob: &rowChange{
-				table: &validateTableInfo{
-					Source: &filter.Table{Schema: schemaName, Name: tableName},
-					Target: &filter.Table{Schema: schemaName, Name: tableName},
-				},
-				Key: "1",
-			},
+			dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
+			srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
 		})
 		lastRev := validator.persistHelper.revision
 		err2 := validator.persistCheckpointAndData(*validator.location)

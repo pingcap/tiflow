@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -523,19 +522,6 @@ func TestValidatorGenRowKey(t *testing.T) {
 	}
 }
 
-func TestValidatorGenColData(t *testing.T) {
-	res := genColData(1)
-	require.Equal(t, "1", res)
-	res = genColData(1.2)
-	require.Equal(t, "1.2", res)
-	res = genColData("abc")
-	require.Equal(t, "abc", res)
-	res = genColData([]byte{'\x01', '\x02', '\x03'})
-	require.Equal(t, "\x01\x02\x03", res)
-	res = genColData(decimal.NewFromInt(222123123))
-	require.Equal(t, "222123123", res)
-}
-
 func TestGetValidationStatus(t *testing.T) {
 	var err error
 	createTableSQL1 := "CREATE TABLE `db`.`tbl1` (id int primary key, v varchar(100))"
@@ -557,7 +543,7 @@ func TestGetValidationStatus(t *testing.T) {
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
 	validator.workerCnt = 1
-	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowChange, workerChannelSize)}}
+	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowChangeJob, workerChannelSize)}}
 	defer close(validator.workers[0].rowChangeCh)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists("db"))
 	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL1))

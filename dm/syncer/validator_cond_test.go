@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) *validateTableInfo {
+func genValidateTableInfo(t *testing.T, creatSQL string) *model.TableInfo {
 	t.Helper()
 	var (
 		err       error
@@ -38,42 +38,22 @@ func genValidateTableInfo(t *testing.T, schemaName, tableName, creatSQL string) 
 	require.NoError(t, err)
 	tableInfo, err = dbutil.GetTableInfoBySQL(creatSQL, parser2)
 	require.NoError(t, err)
-	var primaryIdx *model.IndexInfo
-	for _, idx := range tableInfo.Indices {
-		if idx.Primary {
-			primaryIdx = idx
-		}
-	}
-	require.NotNil(t, primaryIdx)
-	columnMap := make(map[string]*model.ColumnInfo)
-	for _, col := range tableInfo.Columns {
-		columnMap[col.Name.O] = col
-	}
-	tableDiff := &validateTableInfo{
-		Source: &filter.Table{
-			Schema: schemaName,
-			Name:   tableName,
-		},
-		Info:       tableInfo,
-		PrimaryKey: primaryIdx,
-		Target: &filter.Table{
-			Schema: schemaName,
-			Name:   tableName,
-		},
-	}
-	return tableDiff
+	return tableInfo
 }
 
 func genValidationCond(t *testing.T, schemaName, tblName, creatSQL string, pkvs [][]string) *Cond {
 	t.Helper()
-	tblDiff := genValidateTableInfo(t, schemaName, tblName, creatSQL)
+	tbl := filter.Table{Schema: schemaName, Name: tblName}
+	tblInfo := genValidateTableInfo(t, creatSQL)
 	return &Cond{
-		Table:    tblDiff,
-		PkValues: pkvs,
+		TargetTbl: tbl.String(),
+		Columns:   tblInfo.Columns,
+		PK:        tblInfo.Indices[0],
+		PkValues:  pkvs,
 	}
 }
 
-func Test_validatorCond_SelectMultiKey(t *testing.T) {
+func TestValidatorCondSelectMultiKey(t *testing.T) {
 	var res *sql.Rows
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -112,7 +92,7 @@ func Test_validatorCond_SelectMultiKey(t *testing.T) {
 	require.NoError(t, res.Err())
 }
 
-func Test_validatorCond_GetWhereArgs(t *testing.T) {
+func TestValidatorCondGetWhereArgs(t *testing.T) {
 	db, _, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
