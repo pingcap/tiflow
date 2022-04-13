@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -36,6 +37,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
+
+const maxCheckSourceEmptyRetries = 30
 
 var (
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
@@ -96,43 +99,14 @@ func main() {
 		log.Fatal("no target, unexpected")
 	}
 
-	// move all tables to another capture
-	for _, table := range cluster.captures[sourceCapture] {
-		err = moveTable(ctx, cluster.ownerAddr, table.Changefeed, targetCapture, table.ID)
-		if err != nil {
-			log.Warn("failed to move table", zap.Error(err))
-			continue
-		}
-
-		log.Info("moved table successful", zap.Int64("tableID", table.ID))
-	}
-
+	cluster.moveAllTables(ctx, sourceCapture, targetCapture)
 	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 
-	for counter := 0; counter < 30; counter++ {
-		err := retry.Do(ctx, func() error {
-			return cluster.refreshInfo(ctx)
-		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-		if err != nil {
-			log.Warn("error refreshing cluster info", zap.Error(err))
-		}
+	// Make sure the table synchronization starts.
+	time.Sleep(2 * time.Minute)
 
-		tables, ok := cluster.captures[sourceCapture]
-		if !ok {
-			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
-			break
-		}
-
-		if len(tables) == 0 {
-			log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
-			break
-		}
-
-		if counter != 30 {
-			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
-			time.Sleep(time.Second * 10)
-		}
-	}
+	cluster.moveAllTables(ctx, targetCapture, sourceCapture)
+	log.Info("all tables are moved back", zap.String("sourceCapture", targetCapture), zap.String("targetCapture", sourceCapture))
 }
 
 type tableInfo struct {
@@ -183,6 +157,49 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 	log.Info("new cluster initialized")
 
 	return ret, nil
+}
+
+func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCapture string) {
+	// move all tables to another capture
+	for _, table := range c.captures[sourceCapture] {
+		err := moveTable(ctx, c.ownerAddr, table.Changefeed, targetCapture, table.ID)
+		if err != nil {
+			log.Warn("failed to move table", zap.Error(err))
+			continue
+		}
+
+		log.Info("moved table successful", zap.Int64("tableID", table.ID))
+	}
+
+	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
+
+	for counter := 0; counter < maxCheckSourceEmptyRetries; counter++ {
+		err := retry.Do(ctx, func() error {
+			return c.refreshInfo(ctx)
+		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+		if err != nil {
+			log.Warn("error refreshing cluster info", zap.Error(err))
+		}
+
+		tables, ok := c.captures[sourceCapture]
+		if !ok {
+			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
+			break
+		}
+
+		if len(tables) == 0 {
+			log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
+			break
+		}
+
+		if counter != maxCheckSourceEmptyRetries {
+			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
+			time.Sleep(time.Second * 10)
+		} else {
+			// non-zero error code indicates failed test.
+			os.Exit(1)
+		}
+	}
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
