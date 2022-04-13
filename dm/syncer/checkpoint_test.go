@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
@@ -548,4 +549,19 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.Len(t, tableInfo.Columns, 1)
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
+}
+
+func TestLastFlushOutdated(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	cfg.CheckpointFlushInterval = 1
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
+
+	require.True(t, checkpoint.LastFlushOutdated())
+	require.Nil(t, checkpoint.Snapshot(true))
+	// though snapshot is nil, checkpoint is not outdated
+	require.False(t, checkpoint.LastFlushOutdated())
 }
