@@ -938,7 +938,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 
 	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
-	var tableName *model.TableName = nil
+	var tableName *model.TableName
 	retry.Do(ctx, func() error { //nolint:errcheck
 		if x, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
 			tableName = &x.TableName
