@@ -30,8 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
@@ -39,6 +37,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
+
+const maxCheckSourceEmptyRetries = 30
 
 var (
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
