@@ -8,5 +8,10 @@ only_dml
 adjust_gtid
 checkpoint_transaction
 lightning_mode
+<<<<<<< HEAD
 slow_relay_writer
 sync_collation
+=======
+downstream_diff_index
+downstream_index_order
+>>>>>>> 022c58144 (tracker(dm): fix tracker panic when pk of downstream table orders behind (#5165))
