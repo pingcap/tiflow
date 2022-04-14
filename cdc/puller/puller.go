@@ -116,14 +116,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
-	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		util.ChangefeedIDFromCtx(ctx), util.RoleFromCtx(ctx))
+	lockResolver := txnutil.NewLockerResolver(p.kvStorage, util.ChangefeedIDFromCtx(ctx), util.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
-				lockResolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockResolver, p, eventCh)
 		})
 	}
 
@@ -188,17 +186,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			var e model.RegionFeedEvent
 			select {
 			case e = <-eventCh:
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
 			}
-
 			if e.Val != nil {
 				metricTxnCollectCounterKv.Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
 				continue
-			}
-
-			if e.Resolved != nil {
+			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",

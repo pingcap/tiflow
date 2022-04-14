@@ -3351,7 +3351,7 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
 	isPullInit := &mockPullerInit{}
-	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool)
@@ -3361,7 +3361,7 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
+		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		cdcClient.Close() //nolint:errcheck
 	}()
@@ -3439,7 +3439,7 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 		nil, /*regionCache*/
 		nil, /*kvStorage*/
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-		nil,   /*lockresolver*/
+		nil,   /*lockResolver*/
 		nil,   /*isPullerInit*/
 		false, /*enableOldValue*/
 		100,   /*startTs*/
