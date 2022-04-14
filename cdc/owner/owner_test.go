@@ -34,8 +34,7 @@ import (
 
 var _ = check.Suite(&ownerSuite{})
 
-type ownerSuite struct {
-}
+type ownerSuite struct{}
 
 type mockManager struct {
 	gc.Manager
@@ -328,22 +327,20 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
+		return 0, nil
+	}
 	err := o.updateGCSafepoint(ctx, state)
 	c.Assert(err, check.IsNil)
 
 	// add a failed changefeed, it must not trigger update GC safepoint.
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			c.Fatal("must not update")
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		c.Fatal("must not update")
+		return 0, nil
+	}
 	changefeedID1 := "changefeed-test1"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
@@ -360,15 +357,14 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	// switch the state of changefeed to normal, it must update GC safepoint to
 	// 1 (checkpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(1))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(1))
+		c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	state.Changefeeds[changefeedID1].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			info.State = model.StateNormal
@@ -398,15 +394,14 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
 		})
 	tester.MustApplyPatches()
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(19))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(19))
+		c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	err = o.updateGCSafepoint(ctx, state)
 	c.Assert(err, check.IsNil)
 	select {

@@ -24,8 +24,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-type canalFlatSuite struct {
-}
+type canalFlatSuite struct{}
 
 var _ = check.Suite(&canalFlatSuite{})
 

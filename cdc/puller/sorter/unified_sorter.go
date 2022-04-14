@@ -52,8 +52,7 @@ type metricsInfo struct {
 	captureAddr  string
 }
 
-type ctxKey struct {
-}
+type ctxKey struct{}
 
 // UnifiedSorterCheckDir checks whether the directory needed exists and is writable.
 // If it does not exist, we try to create one.
@@ -89,7 +88,8 @@ func NewUnifiedSorter(
 	changeFeedID model.ChangeFeedID,
 	tableName string,
 	tableID model.TableID,
-	captureAddr string) (*UnifiedSorter, error) {
+	captureAddr string,
+) (*UnifiedSorter, error) {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
