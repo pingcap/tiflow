@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -47,8 +48,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&etcdWorkerSuite{})
 
-type etcdWorkerSuite struct {
-}
+type etcdWorkerSuite struct{}
 
 type simpleReactor struct {
 	state     *simpleReactorState
@@ -766,4 +766,12 @@ func (s *etcdWorkerSuite) TestModifyAfterDelete(c *check.C) {
 
 	_ = cli1.Unwrap().Close()
 	_ = cli2.Unwrap().Close()
+}
+
+func (s *etcdWorkerSuite) TestRetryableError(c *check.C) {
+	defer testleak.AfterTest(c)()
+	c.Check(isRetryableError(cerrors.ErrEtcdTryAgain), check.IsTrue)
+	c.Check(isRetryableError(cerrors.ErrReachMaxTry.Wrap(rpctypes.ErrTimeoutDueToLeaderFail)), check.IsTrue)
+	c.Check(isRetryableError(errors.Trace(context.DeadlineExceeded)), check.IsTrue)
+	c.Check(isRetryableError(context.Canceled), check.IsFalse)
 }

@@ -162,7 +162,6 @@ var _ = check.Suite(&taskStatusSuite{})
 func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := TaskStatus{
-
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
 			2: {StartTs: 100},

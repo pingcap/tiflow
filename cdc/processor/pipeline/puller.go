@@ -37,8 +37,12 @@ type pullerNode struct {
 }
 
 func newPullerNode(
+<<<<<<< cherry-pick-4373-to-release-5.2
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName, changefeed string,
+=======
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string,
+>>>>>>> release-5.2
 ) pipeline.Node {
 	return &pullerNode{
 		tableID:     tableID,
