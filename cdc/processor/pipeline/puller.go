@@ -36,7 +36,8 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string) pipeline.Node {
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string,
+) pipeline.Node {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,

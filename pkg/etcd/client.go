@@ -220,7 +220,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
-	var lastRevision int64
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer func() {
 		// Using closures to handle changes to the cancel function
@@ -275,7 +276,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchR
 				watchCtx, cancel = context.WithCancel(ctx)
 				// to avoid possible context leak warning from govet
 				_ = cancel
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
