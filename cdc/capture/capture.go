@@ -88,9 +88,17 @@ func NewCapture4Test() *Capture {
 }
 
 func (c *Capture) reset(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
+	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	conf := config.GetGlobalServerConfig()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
@@ -101,11 +109,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
-	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
-	}
+
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 

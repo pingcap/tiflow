@@ -52,9 +52,9 @@ const (
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
-	// etcdTxnTimeoutDuration represents the timeout duration for committing a
-	// transaction to Etcd
-	etcdTxnTimeoutDuration = 30 * time.Second
+	// etcdClientTimeoutDuration represents the timeout duration for
+	// etcd client to execute a remote call
+	etcdClientTimeoutDuration = 30 * time.Second
 )
 
 var (
@@ -103,20 +103,28 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 }
 
 // Put delegates request to clientv3.KV.Put
-func (c *Client) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (resp *clientv3.PutResponse, err error) {
+func (c *Client) Put(
+	ctx context.Context, key, val string, opts ...clientv3.OpOption,
+) (resp *clientv3.PutResponse, err error) {
+	putCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
-		resp, inErr = c.cli.Put(ctx, key, val, opts...)
+		resp, inErr = c.cli.Put(putCtx, key, val, opts...)
 		return inErr
 	})
 	return
 }
 
 // Get delegates request to clientv3.KV.Get
-func (c *Client) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.GetResponse, err error) {
+func (c *Client) Get(
+	ctx context.Context, key string, opts ...clientv3.OpOption,
+) (resp *clientv3.GetResponse, err error) {
+	getCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
-		resp, inErr = c.cli.Get(ctx, key, opts...)
+		resp, inErr = c.cli.Get(getCtx, key, opts...)
 		return inErr
 	})
 	return
@@ -127,14 +135,18 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOpti
 	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
+	delCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	// We don't retry on delete operation. It's dangerous.
-	return c.cli.Delete(ctx, key, opts...)
+	return c.cli.Delete(delCtx, key, opts...)
 }
 
 // Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
 // such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
-func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (resp *clientv3.TxnResponse, err error) {
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+func (c *Client) Txn(
+	ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op,
+) (resp *clientv3.TxnResponse, err error) {
+	txnCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
 		var inErr error
@@ -145,10 +157,14 @@ func (c *Client) Txn(ctx context.Context, cmps []clientv3.Cmp, opsThen, opsElse 
 }
 
 // Grant delegates request to clientv3.Lease.Grant
-func (c *Client) Grant(ctx context.Context, ttl int64) (resp *clientv3.LeaseGrantResponse, err error) {
+func (c *Client) Grant(
+	ctx context.Context, ttl int64,
+) (resp *clientv3.LeaseGrantResponse, err error) {
+	grantCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
-		resp, inErr = c.cli.Grant(ctx, ttl)
+		resp, inErr = c.cli.Grant(grantCtx, ttl)
 		return inErr
 	})
 	return
@@ -177,20 +193,28 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 }
 
 // Revoke delegates request to clientv3.Lease.Revoke
-func (c *Client) Revoke(ctx context.Context, id clientv3.LeaseID) (resp *clientv3.LeaseRevokeResponse, err error) {
+func (c *Client) Revoke(
+	ctx context.Context, id clientv3.LeaseID,
+) (resp *clientv3.LeaseRevokeResponse, err error) {
+	revokeCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
-		resp, inErr = c.cli.Revoke(ctx, id)
+		resp, inErr = c.cli.Revoke(revokeCtx, id)
 		return inErr
 	})
 	return
 }
 
 // TimeToLive delegates request to clientv3.Lease.TimeToLive
-func (c *Client) TimeToLive(ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+func (c *Client) TimeToLive(
+	ctx context.Context, lease clientv3.LeaseID, opts ...clientv3.LeaseOption,
+) (resp *clientv3.LeaseTimeToLiveResponse, err error) {
+	timeToLiveCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
+	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
-		resp, inErr = c.cli.TimeToLive(ctx, lease, opts...)
+		resp, inErr = c.cli.TimeToLive(timeToLiveCtx, lease, opts...)
 		return inErr
 	})
 	return
