@@ -93,9 +93,6 @@ func newMqSink(
 	role := util.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	statistics := NewStatistics(ctx, sinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 

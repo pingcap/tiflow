@@ -334,8 +334,6 @@ func (oc *syncerConfig) convertToNewFormat() (*config.SubTaskConfig, error) {
 		SyncerConfig: config.SyncerConfig{
 			WorkerCount: oc.WorkerCount,
 			Batch:       oc.Batch,
-			MaxRetry:    oc.MaxRetry,
-			AutoFixGTID: oc.AutoFixGTID,
 			EnableGTID:  oc.EnableGTID,
 			SafeMode:    oc.SafeMode,
 		},
