@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -21,7 +22,7 @@ func TestWorkerStatus(t *testing.T) {
 	require.True(t, workerStatus.IsOffline())
 	require.False(t, workerStatus.RunAsExpected())
 
-	workerStatus = NewWorkerStatus(task, lib.WorkerDMLoad, workerID, WorkerCreating)
+	workerStatus = InitWorkerStatus(task, lib.WorkerDMLoad, workerID)
 	require.Equal(t, workerStatus.Unit, lib.WorkerDMLoad)
 	require.Equal(t, workerStatus.Stage, WorkerCreating)
 	require.False(t, workerStatus.IsOffline())
@@ -38,4 +39,9 @@ func TestWorkerStatus(t *testing.T) {
 	require.Equal(t, workerStatus.Stage, WorkerFinished)
 	require.False(t, workerStatus.IsOffline())
 	require.True(t, workerStatus.RunAsExpected())
+
+	workerStatus = InitWorkerStatus(task, lib.WorkerDMLoad, workerID)
+	require.False(t, workerStatus.CreateFailed())
+	workerStatus.createdTime = time.Now().Add(-2*HeartbeatInterval - 1)
+	require.True(t, workerStatus.CreateFailed())
 }

@@ -109,6 +109,9 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 		if worker.IsOffline() {
 			log.L().Info("remove offline worker status", zap.String("task_id", worker.TaskID))
 			wm.workerStatusMap.Delete(key)
+		} else if worker.CreateFailed() {
+			log.L().Info("remove failed worker status when creating", zap.String("task_id", worker.TaskID))
+			wm.workerStatusMap.Delete(key)
 		}
 		return true
 	})
@@ -244,9 +247,8 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 		//		When create fails, we create it again until the next time we receive WorkerDispatchFailed/WorkerOffline event, so the create interval will be longer.
 		//	We need to handle the intermediate state.
 		//	We choose the second mechanism now.
-		//	Disscuss: Is there a case where a worker is created but never receives a dispatch/online/offline event?
-		//	Dissucss: If master crash before dispatch/online, will the worker be created twice?
-		wm.UpdateWorkerStatus(runtime.NewWorkerStatus(taskID, unit, workerID, runtime.WorkerCreating))
+		//	If a worker is created but never receives a dispatch/online/offline event(2 ticker?), we should remove it.
+		wm.UpdateWorkerStatus(runtime.InitWorkerStatus(taskID, unit, workerID))
 	}
 	return err
 }

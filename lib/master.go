@@ -66,6 +66,7 @@ type MasterImpl interface {
 	// OnWorkerMessage is called when a customized message is received.
 	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
 
+	// OnWorkerStatusUpdated is called when a worker's status is updated.
 	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
 
 	// CloseImpl is called when the master is being closed

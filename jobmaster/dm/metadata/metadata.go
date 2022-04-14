@@ -11,7 +11,7 @@ type MetaData struct {
 	ddlStore *DDLStore
 }
 
-func NewMetaData(id libModel.MasterID, kvClient metaclient.KVClient) *MetaData {
+func NewMetaData(id libModel.WorkerID, kvClient metaclient.KVClient) *MetaData {
 	return &MetaData{
 		jobStore: NewJobStore(id, kvClient),
 		ddlStore: NewDDLStore(id, kvClient),
