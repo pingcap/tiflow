@@ -240,7 +240,7 @@ type Syncer struct {
 	firstMeetBinlogTS *int64
 	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
-	locations *locationRecorder
+	//locations *locationRecorder
 	// initial executed binlog location, set once for each instance of syncer.
 	initExecutedLoc *binlog.Location
 
@@ -288,7 +288,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
-	syncer.locations = &locationRecorder{}
+	//syncer.locations = &locationRecorder{}
 	return syncer
 }
 
@@ -1690,7 +1690,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
 	if s.streamerController.IsClosed() {
-		s.locations.reset(lastLocation)
+		//s.locations.reset(lastLocation)
 		err = s.streamerController.Start(s.runCtx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
@@ -1789,7 +1789,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// if suffix>0, we are replacing error
 		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 
-		s.locations.reset(currentLocation)
+		//s.locations.reset(currentLocation)
 		err3 := s.streamerController.RedirectStreamer(s.tctx, currentLocation)
 		if err3 != nil {
 			return err3
@@ -1855,7 +1855,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentLocation = shardingReSync.currLocation
 			// if suffix>0, we are replacing error
 			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
-			s.locations.reset(shardingReSync.currLocation)
+			//s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.RedirectStreamer(s.runCtx, shardingReSync.currLocation)
 			if err != nil {
 				return err
@@ -2052,7 +2052,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
 				currentLocation.Suffix = 0
 				s.isReplacingOrInjectingErr = false
-				s.locations.reset(currentLocation)
+				//s.locations.reset(currentLocation)
 				if !s.errOperatorHolder.IsInject(startLocation) {
 					// replace operator need redirect to currentLocation
 					if err = s.streamerController.RedirectStreamer(s.runCtx, currentLocation); err != nil {
@@ -3810,7 +3810,7 @@ func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location)
 
 	e, err := s.streamerController.GetEvent(tctx)
 	if err == nil {
-		s.locations.update(e)
+		//s.locations.update(e)
 	}
 	return e, err
 }

@@ -100,10 +100,10 @@ func (b *binlogPoint) save(location binlog.Location, ti *model.TableInfo) error 
 	b.Lock()
 	defer b.Unlock()
 
-	if binlog.CompareLocation(location, b.savedPoint.location, b.enableGTID) < 0 {
-		// support to save equal location, but not older location
-		return terror.ErrCheckpointSaveInvalidPos.Generate(location, b.savedPoint.location)
-	}
+	//if binlog.CompareLocation(location, b.savedPoint.location, b.enableGTID) < 0 {
+	//	// support to save equal location, but not older location
+	//	return terror.ErrCheckpointSaveInvalidPos.Generate(location, b.savedPoint.location)
+	//}
 
 	b.savedPoint.location = location
 	b.savedPoint.ti = ti

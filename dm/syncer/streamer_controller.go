@@ -26,7 +26,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -254,11 +253,12 @@ var mockRestarted = false
 
 // GetEvent returns binlog event, should only have one thread call this function.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, err error) {
-	ctx, cancel := context.WithTimeout(tctx.Context(), common.SlaveReadTimeout)
+	//ctx, cancel := context.WithTimeout(tctx.Context(), common.SlaveReadTimeout)
+	ctx := tctx.Context()
 	failpoint.Inject("SyncerEventTimeout", func(val failpoint.Value) {
 		if seconds, ok := val.(int); ok {
-			cancel()
-			ctx, cancel = context.WithTimeout(tctx.Context(), time.Duration(seconds)*time.Second)
+			//cancel()
+			//ctx, cancel = context.WithTimeout(tctx.Context(), time.Duration(seconds)*time.Second)
 			tctx.L().Info("set fetch binlog event timeout", zap.String("failpoint", "SyncerEventTimeout"), zap.Int("value", seconds))
 		}
 	})
@@ -277,7 +277,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	c.RUnlock()
 
 	event, err = streamer.GetEvent(ctx)
-	cancel()
+	//cancel()
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
