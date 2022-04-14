@@ -735,7 +735,7 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	c.Assert(clone.truncateTableID, check.DeepEquals, snap.truncateTableID)
 	c.Assert(clone.ineligibleTableID, check.DeepEquals, snap.ineligibleTableID)
 	c.Assert(clone.currentTs, check.Equals, snap.currentTs)
-	c.Assert(clone.explicitTables, check.Equals, snap.explicitTables)
+	c.Assert(clone.forceReplicate, check.Equals, snap.forceReplicate)
 	c.Assert(len(clone.tables), check.Equals, len(snap.tables))
 	c.Assert(len(clone.schemas), check.Equals, len(snap.schemas))
 	c.Assert(len(clone.partitionTable), check.Equals, len(snap.partitionTable))
