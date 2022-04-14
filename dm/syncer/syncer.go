@@ -247,6 +247,7 @@ type Syncer struct {
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
+	metrics                    *metrics.Metrics
 }
 
 // NewSyncer creates a new Syncer.
@@ -466,6 +467,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
 	}
 	s.reset()
+	s.metrics = metrics.NewMetrics(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName)
 	return nil
 }
 
@@ -1950,20 +1952,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		})
 
 		// time duration for reading an event from relay log or upstream master.
-		metrics.BinlogReadDurationHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+		s.metrics.BinlogReadDurationHistogram.Observe(time.Since(startTime).Seconds())
 		startTime = time.Now() // reset start time for the next metric.
 
 		// get binlog event, reset tryReSync, so we can re-sync binlog while syncer meets errors next time
 		tryReSync = true
-		metrics.BinlogPosGauge.WithLabelValues("syncer", s.cfg.Name, s.cfg.SourceID).Set(float64(e.Header.LogPos))
+		s.metrics.BinlogPosGauge.Set(float64(e.Header.LogPos))
 		index, err := binlog.GetFilenameIndex(lastLocation.Position.Name)
 		if err != nil {
 			s.tctx.L().Warn("fail to get index number of binlog file, may because only specify GTID and hasn't saved according binlog position", log.ShortError(err))
 		} else {
-			metrics.BinlogFileGauge.WithLabelValues("syncer", s.cfg.Name, s.cfg.SourceID).Set(float64(index))
+			s.metrics.BinlogFileGauge.Set(float64(index))
 		}
 		s.binlogSizeCount.Add(int64(e.Header.EventSize))
-		metrics.BinlogEventSizeHistogram.WithLabelValues(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(float64(e.Header.EventSize))
+		s.metrics.BinlogEventSizeHistogram.Observe(float64(e.Header.EventSize))
 
 		failpoint.Inject("ProcessBinlogSlowDown", nil)
 

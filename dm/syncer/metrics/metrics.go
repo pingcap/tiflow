@@ -329,3 +329,20 @@ func RemoveLabelValuesWithTaskInMetrics(task string) {
 	ReplicationTransactionBatch.DeleteAllAboutLabels(prometheus.Labels{"task": task})
 	FlushCheckPointsTimeInterval.DeleteAllAboutLabels(prometheus.Labels{"task": task})
 }
+
+// Metrics caches the metrics variables to avoid looking up by name in metricsproxy each time.
+type Metrics struct {
+	BinlogReadDurationHistogram prometheus.Observer
+	BinlogPosGauge              prometheus.Gauge
+	BinlogFileGauge             prometheus.Gauge
+	BinlogEventSizeHistogram    prometheus.Observer
+}
+
+func NewMetrics(taskName, sourceID, workerName string) *Metrics {
+	return &Metrics{
+		BinlogReadDurationHistogram: BinlogReadDurationHistogram.WithLabelValues(taskName, sourceID),
+		BinlogPosGauge:              BinlogPosGauge.WithLabelValues("syncer", taskName, sourceID),
+		BinlogFileGauge:             BinlogFileGauge.WithLabelValues("syncer", taskName, sourceID),
+		BinlogEventSizeHistogram:    BinlogEventSizeHistogram.WithLabelValues(taskName, workerName, sourceID),
+	}
+}
