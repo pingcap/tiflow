@@ -23,7 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -61,7 +60,7 @@ func main() {
 	}
 
 	log.Info("table mover started")
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
 	cluster, err := newCluster(ctx, *pd)
@@ -108,13 +107,12 @@ func main() {
 		log.Fatal("no target, unexpected")
 	}
 
-	cluster.moveAllTables(ctx, sourceCapture, targetCapture)
-	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
-	// Make sure the table synchronization starts.
-	time.Sleep(2 * time.Minute)
+	err = cluster.moveAllTables(ctx, sourceCapture, targetCapture)
+	if err != nil {
+		log.Fatal("failed to move tables", zap.Error(err))
+	}
 
-	cluster.moveAllTables(ctx, targetCapture, sourceCapture)
-	log.Info("all tables are moved back", zap.String("sourceCapture", targetCapture), zap.String("targetCapture", sourceCapture))
+	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 }
 
 type tableInfo struct {
@@ -167,7 +165,7 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 	return ret, nil
 }
 
-func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCapture string) {
+func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCapture string) error {
 	// move all tables to another capture
 	for _, table := range c.captures[sourceCapture] {
 		err := moveTable(ctx, c.ownerAddr, table.Changefeed, targetCapture, table.ID)
@@ -190,7 +188,7 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 		tables, ok := c.captures[sourceCapture]
 		if !ok {
 			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
-			break
+			return errors.New("source capture is gone")
 		}
 
 		if len(tables) == 0 {
@@ -202,10 +200,11 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
 			time.Sleep(time.Second * 10)
 		} else {
-			// non-zero error code indicates failed test.
-			os.Exit(1)
+			return errors.New("source capture is not empty after retries")
 		}
 	}
+
+	return nil
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
