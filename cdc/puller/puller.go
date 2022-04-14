@@ -194,7 +194,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
-				continue
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
