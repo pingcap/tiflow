@@ -50,12 +50,13 @@ import (
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	captureMu sync.Mutex
-	info      *model.CaptureInfo
-
-	ownerMu          sync.Mutex
-	owner            owner.Owner
+	// captureMu is used to protect the capture info and processorManager.
+	captureMu        sync.Mutex
+	info             *model.CaptureInfo
 	processorManager *processor.Manager
+
+	ownerMu sync.Mutex
+	owner   owner.Owner
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -595,11 +596,14 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 
 	doneM := make(chan error, 1)
 	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(ctx, w, doneM)
 	}
+	// NOTICE: we must release the lock before wait the debug info process down.
+	// Otherwise, the capture initialization and request response will compete
+	// for captureMu resulting in a deadlock.
+	c.captureMu.Unlock()
 	// wait the debug info printed
 	wait(doneM)
 }
