@@ -220,7 +220,8 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 	tableName      string
 	createTableDDL string
 	values         [][]interface{}
-}) {
+},
+) {
 	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck

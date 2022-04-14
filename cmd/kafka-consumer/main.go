@@ -438,8 +438,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID =
-					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Panic("emit row changed event failed", zap.Error(err))
