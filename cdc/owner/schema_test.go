@@ -26,10 +26,11 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-<<<<<<< HEAD
 var _ = check.Suite(&schemaSuite{})
 
 type schemaSuite struct{}
+
+const dummyChangeFeedID = "dummy_changefeed"
 
 func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer testleak.AfterTest(c)()
@@ -40,21 +41,6 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.HasLen, 0)
-=======
-const (
-	dummyChangeFeedID = "dummy_changefeed"
-)
-
-func TestAllPhysicalTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
-	require.Nil(t, err)
-	require.Len(t, schema.AllPhysicalTables(), 0)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
@@ -90,29 +76,7 @@ func TestAllPhysicalTables(t *testing.T) {
 	}
 	sortTableIDs(expectedTableIDs)
 	sortTableIDs(schema.AllPhysicalTables())
-<<<<<<< HEAD
 	c.Assert(schema.AllPhysicalTables(), check.DeepEquals, expectedTableIDs)
-=======
-	require.Equal(t, schema.AllPhysicalTables(), expectedTableIDs)
-}
-
-func TestAllTableNames(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
-	require.Nil(t, err)
-	require.Len(t, schema.AllTableNames(), 0)
-	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	require.Nil(t, schema.HandleDDL(job))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
-	// add ineligible table
-	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
-	require.Equal(t, []model.TableName{{Schema: "test", Table: "t1"}}, schema.AllTableNames())
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 }
 
 func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
@@ -120,16 +84,9 @@ func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
-=======
-	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
-	require.Nil(t, err)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
@@ -147,16 +104,9 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
-=======
-	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
-	require.Nil(t, err)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	event, err := schema.BuildDDLEvent(job)

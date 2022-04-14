@@ -83,15 +83,10 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	log.Debug("DDL puller started", zap.String("changefeed-id", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-<<<<<<< HEAD
-	errg, stdCtx := errgroup.WithContext(stdCtx)
-=======
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	g, stdCtx := errgroup.WithContext(stdCtx)
-	lastResolvedTsAdvancedTime := h.clock.Now()
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+	errg, stdCtx := errgroup.WithContext(stdCtx)
 
-	g.Go(func() error {
+	errg.Go(func() error {
 		return h.puller.Run(stdCtx)
 	})
 
@@ -105,10 +100,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			if rawDDL.CRTs > h.resolvedTS {
-<<<<<<< HEAD
-=======
-				lastResolvedTsAdvancedTime = h.clock.Now()
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 				h.resolvedTS = rawDDL.CRTs
 			}
 			return nil
@@ -135,29 +126,11 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		return nil
 	}
 
-<<<<<<< HEAD
 	errg.Go(func() error {
-=======
-	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
-	defer ticker.Stop()
-
-	g.Go(func() error {
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 		for {
 			select {
 			case <-stdCtx.Done():
 				return stdCtx.Err()
-<<<<<<< HEAD
-=======
-			case <-ticker.C:
-				duration := h.clock.Since(lastResolvedTsAdvancedTime)
-				if duration > ownerDDLPullerStuckWarnTimeout {
-					log.Warn("ddl puller resolved ts has not advanced",
-						zap.String("changefeed", ctx.ChangefeedVars().ID),
-						zap.Duration("duration", duration),
-						zap.Uint64("resolvedTs", h.resolvedTS))
-				}
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 			case e := <-rawDDLCh:
 				if err := receiveDDL(e); err != nil {
 					return errors.Trace(err)
@@ -166,7 +139,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 	})
 
-	return g.Wait()
+	return errg.Wait()
 }
 
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
