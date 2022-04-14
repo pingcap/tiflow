@@ -20,12 +20,6 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/prometheus/client_golang/prometheus"
-	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
-	clientV3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -134,27 +128,15 @@ func (c *Client) Get(ctx context.Context, key string,
 	return
 }
 
-<<<<<<< HEAD
-// Delete delegates request to clientv3.KV.Delete
-func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
-<<<<<<< HEAD
-	if metric, ok := c.metrics[EtcdTxn]; ok {
-=======
 // Delete delegates request to clientV3.KV.Delete
-func (c *Client) Delete(ctx context.Context, key string,
-	opts ...clientV3.OpOption) (resp *clientV3.DeleteResponse, err error) {
+func (c *Client) Delete(ctx context.Context, key string, opts ...clientV3.OpOption) (resp *clientV3.DeleteResponse, err error) {
 	if metric, ok := c.metrics[EtcdDel]; ok {
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
-=======
-	if metric, ok := c.metrics[EtcdDel]; ok {
->>>>>>> release-5.2
 		metric.Inc()
 	}
 	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(ctx, key, opts...)
 }
 
-<<<<<<< HEAD
 // TxnWithoutRetry delegates request to clientv3.KV.Txn
 func (c *Client) TxnWithoutRetry(ctx context.Context) clientv3.Txn {
 	if metric, ok := c.metrics[EtcdTxn]; ok {
@@ -164,9 +146,6 @@ func (c *Client) TxnWithoutRetry(ctx context.Context) clientv3.Txn {
 }
 
 // Txn delegates request to clientv3.KV.Txn. The error returned can only be a non-retryable error,
-=======
-// Txn delegates request to clientV3.KV.Txn. The error returned can only be a non-retryable error,
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 // such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
 func (c *Client) Txn(ctx context.Context,
 	cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op) (resp *clientV3.TxnResponse, err error) {
