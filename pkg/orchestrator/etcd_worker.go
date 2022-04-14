@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	// etcdWorkerLogsWarnDuration when EtcdWorker commits a txn to etcd or ticks
-	// it reactor takes more than etcdWorkerLogsWarnDuration, it will print a log
+	// When EtcdWorker commits a txn to etcd or ticks its reactor
+	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )

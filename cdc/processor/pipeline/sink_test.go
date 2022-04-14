@@ -95,7 +95,8 @@ func (s *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
 func (s *mockSink) Check(c *check.C, expected []struct {
 	resolvedTs model.Ts
 	row        *model.RowChangedEvent
-}) {
+},
+) {
 	c.Assert(s.received, check.DeepEquals, expected)
 }
 

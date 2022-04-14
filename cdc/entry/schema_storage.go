@@ -50,8 +50,8 @@ type schemaSnapshot struct {
 
 	currentTs uint64
 
-	// if explicit is true, treat tables without explicit row id as eligible
-	explicitTables bool
+	// if forceReplicate is true, treat ineligible tables as eligible.
+	forceReplicate bool
 }
 
 // SingleSchemaSnapshot is a single schema snapshot independent of schema storage
@@ -98,17 +98,17 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 }
 
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*SingleSchemaSnapshot, error) {
+func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*SingleSchemaSnapshot, error) {
 	// meta is nil only in unit tests
 	if meta == nil {
-		snap := newEmptySchemaSnapshot(explicitTables)
+		snap := newEmptySchemaSnapshot(forceReplicate)
 		snap.currentTs = currentTs
 		return snap, nil
 	}
-	return newSchemaSnapshotFromMeta(meta, currentTs, explicitTables)
+	return newSchemaSnapshotFromMeta(meta, currentTs, forceReplicate)
 }
 
-func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
+func newEmptySchemaSnapshot(forceReplicate bool) *schemaSnapshot {
 	return &schemaSnapshot{
 		tableNameToID:  make(map[model.TableName]int64),
 		schemaNameToID: make(map[string]int64),
@@ -121,12 +121,12 @@ func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
 
-		explicitTables: explicitTables,
+		forceReplicate: forceReplicate,
 	}
 }
 
-func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*schemaSnapshot, error) {
-	snap := newEmptySchemaSnapshot(explicitTables)
+func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*schemaSnapshot, error) {
+	snap := newEmptySchemaSnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
@@ -146,7 +146,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTabl
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
-			isEligible := tableInfo.IsEligible(explicitTables)
+			isEligible := tableInfo.IsEligible(forceReplicate)
 			if !isEligible {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
 			}
@@ -468,7 +468,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 				zap.Int64("add partition id", partition.ID))
 		}
 		s.partitionTable[partition.ID] = tbl
-		if !tbl.IsEligible(s.explicitTables) {
+		if !tbl.IsEligible(s.forceReplicate) {
 			s.ineligibleTableID[partition.ID] = struct{}{}
 		}
 		delete(oldIDs, partition.ID)
@@ -504,14 +504,20 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	s.tableInSchema[table.SchemaID] = tableInSchema
 
 	s.tables[table.ID] = table
-	if !table.IsEligible(s.explicitTables) {
-		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+	if !table.IsEligible(s.forceReplicate) {
+		// Sequence is not supported yet, and always ineligible.
+		// Skip Warn to avoid confusion.
+		// See https://github.com/pingcap/tiflow/issues/4559
+		if !table.IsSequence() {
+			log.Warn("this table is ineligible to replicate",
+				zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		}
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.IsEligible(s.explicitTables) {
+			if !table.IsEligible(s.forceReplicate) {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}
@@ -529,14 +535,20 @@ func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
 		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", table.Name, table.ID)
 	}
 	s.tables[table.ID] = table
-	if !table.IsEligible(s.explicitTables) {
-		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+	if !table.IsEligible(s.forceReplicate) {
+		// Sequence is not supported yet, and always ineligible.
+		// Skip Warn to avoid confusion.
+		// See https://github.com/pingcap/tiflow/issues/4559
+		if !table.IsSequence() {
+			log.Warn("this table is ineligible to replicate",
+				zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		}
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.IsEligible(s.explicitTables) {
+			if !table.IsEligible(s.forceReplicate) {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}
@@ -672,13 +684,9 @@ type schemaStorageImpl struct {
 	resolvedTs uint64
 
 	filter         *filter.Filter
-<<<<<<< HEAD
-	explicitTables bool
-=======
 	forceReplicate bool
 
 	id model.ChangeFeedID
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -698,12 +706,8 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
 		snaps:          []*schemaSnapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
-<<<<<<< HEAD
-		explicitTables: forceReplicate,
-=======
 		forceReplicate: forceReplicate,
 		id:             id,
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}
 	return schema, nil
 }
@@ -783,7 +787,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		}
 		snap = lastSnap.Clone()
 	} else {
-		snap = newEmptySchemaSnapshot(s.explicitTables)
+		snap = newEmptySchemaSnapshot(s.forceReplicate)
 	}
 	if err := snap.handleDDL(job); err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
@@ -853,12 +857,9 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
-<<<<<<< HEAD
-=======
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("changefeed", s.id))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard DDL",
 			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),

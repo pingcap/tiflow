@@ -20,15 +20,12 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
-=======
 	"github.com/prometheus/client_golang/prometheus"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -67,19 +64,10 @@ const (
 )
 
 var (
-<<<<<<< HEAD
-	// TxnEmptyCmps represents empty compare-opration of an etcd Txn
-	TxnEmptyCmps = []clientv3.Cmp{}
-	// TxnEmptyOpsThen represents empty then-opration of an etcd Txn
-	TxnEmptyOpsThen = []clientv3.Op{}
-	// TxnEmptyOpsElse represents empty else-opration of an etcd Txn
-	TxnEmptyOpsElse = []clientv3.Op{}
-=======
 	txnEmptyCmps    = []clientV3.Cmp{}
 	txnEmptyOpsThen = []clientV3.Op{}
 	// TxnEmptyOpsElse is a no-op operation.
 	TxnEmptyOpsElse = []clientV3.Op{}
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -149,6 +137,7 @@ func (c *Client) Get(ctx context.Context, key string,
 <<<<<<< HEAD
 // Delete delegates request to clientv3.KV.Delete
 func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
+<<<<<<< HEAD
 	if metric, ok := c.metrics[EtcdTxn]; ok {
 =======
 // Delete delegates request to clientV3.KV.Delete
@@ -156,9 +145,12 @@ func (c *Client) Delete(ctx context.Context, key string,
 	opts ...clientV3.OpOption) (resp *clientV3.DeleteResponse, err error) {
 	if metric, ok := c.metrics[EtcdDel]; ok {
 >>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+=======
+	if metric, ok := c.metrics[EtcdDel]; ok {
+>>>>>>> release-5.2
 		metric.Inc()
 	}
-	// We don't retry on delete operatoin. It's dangerous.
+	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(ctx, key, opts...)
 }
 
@@ -259,7 +251,8 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchR
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))
 	}()
-	var lastRevision int64
+	// get initial revision from opts to avoid revision fall back
+	lastRevision := getRevisionFromWatchOpts(opts...)
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer func() {
 		// Using closures to handle changes to the cancel function
@@ -315,11 +308,15 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchR
 				// to avoid possible context leak warning from govet
 				_ = cancel
 <<<<<<< HEAD
+<<<<<<< HEAD
 				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision+1))
 =======
 				watchCh = c.cli.Watch(watchCtx, key,
 					clientV3.WithPrefix(), clientV3.WithRev(lastRevision))
 >>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+=======
+				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
+>>>>>>> release-5.2
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
