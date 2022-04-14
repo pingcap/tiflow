@@ -381,7 +381,6 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 // SendMessage sends a message. It will block if the client is not ready to
 // accept the message for now. Once the function returns without an error,
 // the client will try its best to send the message, until `Run` is canceled.
-// NOTE: for higher performance, use TrySendMessage.
 func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, false)
 }

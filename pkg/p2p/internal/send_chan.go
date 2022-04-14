@@ -57,9 +57,6 @@ func NewSendChan(cap int64) *SendChan {
 }
 
 // SendSync sends a message synchronously.
-// The performance of SendSync is about 500x slower than
-// SendAsync when CPU is saturated, so please refrain from
-// using it unless necessary or for testing.
 func (c *SendChan) SendSync(
 	ctx context.Context,
 	topic string,
@@ -80,7 +77,7 @@ func (c *SendChan) SendSync(
 			return 0, errors.Trace(ctx.Err())
 		case <-closeCh:
 			return 0, cerror.ErrPeerMessageClientClosed.GenWithStackByArgs()
-		case <-c.notifyChan:
+		case c.notifyChan <- struct{}{}:
 		case <-ticker.C:
 		}
 	}
