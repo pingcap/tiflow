@@ -690,8 +690,7 @@ type schemaStorageImpl struct {
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
-	forceReplicate bool, id model.ChangeFeedID) (SchemaStorage, error) {
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool, id model.ChangeFeedID) (SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {
@@ -752,8 +751,7 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 			logTime = now
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(),
-		retry.WithIsRetryableErr(isRetryable))
+	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
 
 	return snap, err
 }

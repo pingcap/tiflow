@@ -167,8 +167,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
-				// If DDL executing failed, and the error can not be ignored,
-				// throw an error and pause the changefeed
+				// If DDL executing failed, and the error can not be ignored, throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
 					zap.String("changefeed", ctx.ChangefeedVars().ID),
 					zap.Error(err),

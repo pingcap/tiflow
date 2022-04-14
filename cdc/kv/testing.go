@@ -156,12 +156,10 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 
 	startTS := mustGetTimestamp(t, storage)
 
-	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+	lockresolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: nil, End: nil},
-			startTS, false, lockResolver, isPullInit, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -247,12 +245,10 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
-	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
+	lockresolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: nil, End: nil},
-			startTS, false, lockResolver, isPullInit, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -274,9 +270,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx,
-					regionspan.ComparableSpan{Start: nil, End: nil},
-					startTS, false, lockResolver, isPullInit, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}
