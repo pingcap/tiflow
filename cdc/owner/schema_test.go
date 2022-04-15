@@ -38,7 +38,7 @@ func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.HasLen, 0)
 	// add normal table
