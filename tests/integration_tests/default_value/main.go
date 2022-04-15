@@ -352,6 +352,7 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 		Fmt          string
 		DefaultValue interface{}
 		DDLFunc      func(context.Context, *sql.DB, string, string, interface{})
+		NoDMLParas   bool
 	}
 
 	Units := []Unit{
@@ -364,47 +365,56 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 date not null",
 			"2020-10-10",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 datetime not null",
 			"2020-10-10 10:10:10",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 timestamp not null",
 			"2020-10-10 10:10:10",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 time not null",
 			"10:10:10",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 year not null",
 			"2020",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			// For int year default
 			"alter table test.`%s` add column v1 year not null",
 			2020,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 datetime(5) not null",
 			"2020-10-10 10:10:10.9999",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 timestamp(5) not null",
 			"2020-10-10 10:10:10.9999",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 time(5) not null",
 			"10:10:10.9999",
 			ddlZeroValueFunc,
+			false,
 		},
 		// numeric data type
 		{
@@ -412,128 +422,153 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 bit not null",
 			[]byte{0x01},
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 tinyint not null",
 			-13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 mediumint not null",
 			-13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 int not null",
 			-13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 bigint not null",
 			-13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 decimal(5) not null",
 			-13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 float not null",
 			-13.13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 double not null",
 			-13.13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 bit(4) not null",
 			[]byte{0x03},
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 tinyint(4) unsigned not null",
 			13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 mediumint(4) unsigned not null",
 			13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 int(4) unsigned not null",
 			13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 bigint(4) unsigned not null",
 			13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 decimal(5,2) unsigned not null",
 			13.13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 float(5,2) unsigned not null",
 			13.13,
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 double(5,2) unsigned not null",
 			13.13,
 			ddlZeroValueFunc,
+			false,
 		},
 		// string data type
 		{
 			"alter table test.`%s` add column v1 char(10) not null",
 			"char",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 varchar(10) not null",
 			"varchar",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 binary(10) not null",
 			"binary",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 varbinary(10) not null",
 			"varbinary",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 blob not null",
 			"blob",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 text not null",
 			"text",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 enum('e0', 'e1') not null",
 			"e1",
 			ddlZeroValueFunc,
+			false,
 		},
 		{
 			"alter table test.`%s` add column v1 set('e0', 'e1') not null",
 			"e0,e1",
 			ddlZeroValueFunc,
+			false,
 		},
 		// json data type
 		{
 			"alter table test.`%s` add column v1 json not null",
 			"[99, {\"id\": \"HK500\", \"cost\": 75.99}, [\"hot\", \"cold\"]]",
 			ddlZeroValueFunc,
+			false,
 		},
 
 		////////////////////// Default Value Cases
@@ -546,47 +581,56 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 date default ? %s",
 			"2020-10-10",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 datetime default ? %s",
 			"2020-10-10 10:10:10",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 timestamp default ? %s",
 			"2020-10-10 10:10:10",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 time default ? %s",
 			"10:10:10",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 year default ? %s",
 			"2020",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			// For int year default
 			"alter table test.`%s` add column v1 year default ? %s",
 			2020,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 datetime(5) default ? %s",
 			"2020-10-10 10:10:10.9999",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 timestamp(5) default ? %s",
 			"2020-10-10 10:10:10.9999",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 time(5) default ? %s",
 			"10:10:10.9999",
 			ddlDefaultValueFunc,
+			true,
 		},
 
 		// numeric data type
@@ -595,81 +639,97 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 bit default ? %s",
 			[]byte{0x01},
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 tinyint default ? %s",
 			-13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 mediumint default ? %s",
 			-13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 int default ? %s",
 			-13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 bigint default ? %s",
 			-13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 decimal(5) default ? %s",
 			-13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 float default ? %s",
 			-13.13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 double default ? %s",
 			-13.13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 bit(4) default ? %s",
 			[]byte{0x03},
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 tinyint(4) unsigned default ? %s",
 			13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 mediumint(4) unsigned default ? %s",
 			13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 int(4) unsigned default ? %s",
 			13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 bigint(4) unsigned default ? %s",
 			13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 decimal(5,2) unsigned default ? %s",
 			13.13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 float(5,2) unsigned default ? %s",
 			13.13,
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 double(5,2) unsigned default ? %s",
 			13.13,
 			ddlDefaultValueFunc,
+			true,
 		},
 
 		// string data type
@@ -677,21 +737,25 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 char(10) default ? %s",
 			"char",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 varchar(10) default ? %s",
 			"varchar",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 binary(10) default ? %s",
 			"binary",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 varbinary(10) default ? %s",
 			"varbinary",
 			ddlDefaultValueFunc,
+			true,
 		},
 		/*
 			// The BLOB, TEXT, GEOMETRY, and JSON data types cannot be assigned a default value.
@@ -711,11 +775,13 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			"alter table test.`%s` add column v1 enum('e0', 'e1') default ? %s",
 			"e1",
 			ddlDefaultValueFunc,
+			true,
 		},
 		{
 			"alter table test.`%s` add column v1 set('e0', 'e1') default ? %s",
 			"e0,e1",
 			ddlDefaultValueFunc,
+			true,
 		},
 
 		/*
@@ -746,15 +812,18 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 		}
 	}()
 
+	var wg1 sync.WaitGroup
 	// seperate every case to different table
 	for i, unit := range Units {
-		wg.Add(1)
+		wg1.Add(1)
 
 		pool.Go(ctx, func() {
-			defer wg.Done()
+			defer wg1.Done()
 
 			// use uuid here to avoid table name conflict
-			newTbName := testName + guuid.New().String()
+			uuid := guuid.New().String()
+			uuid = strings.ReplaceAll(uuid, "-", "_")
+			newTbName := testName + uuid
 			mustCreateTable(srcs[0], newTbName)
 			log.S().Info("running ddl test: ", newTbName)
 
@@ -765,7 +834,11 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			for idx, src := range srcs {
 				wg2.Add(1)
 				go func(i int, s *sql.DB) {
-					dml(ctx, s, newTbName, i, unit.DefaultValue)
+					if unit.NoDMLParas {
+						dml(ctx, s, newTbName, i, nil)
+					} else {
+						dml(ctx, s, newTbName, i, unit.DefaultValue)
+					}
 					wg2.Done()
 				}(idx+i*2, src)
 			}
@@ -783,6 +856,8 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			wg2.Wait()
 		})
 	}
+
+	wg1.Wait()
 	util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", atomic.AddInt32(&finishIdx, 1)))
 }
 
