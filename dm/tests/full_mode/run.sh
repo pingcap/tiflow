@@ -142,10 +142,26 @@ function empty_data() {
 	cleanup_data full_mode
 }
 
+function only_route_schema() {
+	run_sql_source1 "drop database if exists full_mode;"
+	run_sql_source1 "create database full_mode;"
+	init_cluster
+
+	dmctl_start_task_standalone "$cur/conf/dm-task-2.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Finished\"" 1
+
+	run_sql_tidb_with_retry "SHOW DATABASES LIKE 'full_mode_test';" "Database: full_mode_test"
+	cleanup_process $*
+	cleanup_data full_mode
+}
+
 function run() {
 	fail_acquire_global_lock
 	escape_schema
 	empty_data
+	only_route_schema
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='NO_BACKSLASH_ESCAPES'"
 	run_sql_source1 "SET @@global.time_zone = '+01:00';"
