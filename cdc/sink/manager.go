@@ -91,6 +91,7 @@ func (m *Manager) Close(ctx context.Context) error {
 		defer cancel()
 		if err := m.bufSink.Close(ctx); err != nil {
 			log.Info("close bufSink failed",
+				zap.Error(err),
 				zap.String("changefeed", m.changefeedID),
 				zap.Duration("duration", time.Since(start)))
 			return err

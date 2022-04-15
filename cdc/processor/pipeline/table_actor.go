@@ -134,12 +134,14 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		router:         globalVars.TableActorSystem.Router(),
 		actorID:        actorID,
 
+		changefeedID: changefeedVars.ID,
+
 		stopCtx: cctx,
 	}
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -151,7 +153,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
@@ -381,7 +383,7 @@ func (t *tableActor) stop(err error) {
 			log.Warn("close sink failed",
 				zap.String("changefeed", t.changefeedID),
 				zap.String("tableName", t.tableName),
-				zap.Error(err), zap.Error(err))
+				zap.Error(err))
 		}
 	}
 	log.Info("table actor stopped",
