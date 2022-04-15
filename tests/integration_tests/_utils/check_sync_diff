@@ -14,14 +14,13 @@ binary=sync_diff_inspector
 
 PWD=$(pwd)
 LOG=$workdir/sync_diff_inspector.log
-OUTPUT_DIR=/tmp/ticdc_dm_test/output/
 
 mkdir -p /tmp/ticdc_dm_test
 
 cd $workdir
 i=0
 while [ $i -lt $check_time ]; do
-	rm -rf $OUTPUT_DIR
+	rm -rf $workdir/sync_diff/
 	$binary --config=$conf >>$LOG 2>&1
 	ret=$?
 	if [ "$ret" == 0 ]; then
@@ -38,7 +37,7 @@ if [ $i -ge $check_time ]; then
 	# show \n and other blanks
 	cat $LOG
 	printf "\n"
-	cat $OUTPUT_DIR/sync_diff.log
+	cat $workdir/sync_diff/output/sync_diff.log
 	printf "\n"
 	exit 1
 fi

@@ -24,8 +24,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-type canalFlatSuite struct {
-}
+type canalFlatSuite struct{}
 
 var _ = check.Suite(&canalFlatSuite{})
 
@@ -124,6 +123,8 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 			c.Assert(msgs, check.HasLen, int(resolvedTs-lastResolved))
 
 			for j := range msgs {
+				c.Assert(msgs[j].GetRowsCount(), check.Equals, 1)
+
 				var msg canalFlatMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				c.Assert(err, check.IsNil)
