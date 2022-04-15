@@ -277,10 +277,11 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func (k *mqSink) Close(ctx context.Context) error {
+	closedCh := k.mqProducer.AsyncClose()
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case err := <-k.mqProducer.AsyncClose():
+	case err := <-closedCh:
 		return errors.Trace(err)
 	}
 }
