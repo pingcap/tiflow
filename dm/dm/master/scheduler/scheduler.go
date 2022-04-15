@@ -247,7 +247,7 @@ func (s *Scheduler) Start(pCtx context.Context, etcdCli *clientv3.Client) (err e
 		return err
 	}
 
-	// check if we can bind free or relay source and workers
+	// check if we can bind sources to online workers
 	for _, source := range s.getUnboundSources() {
 		bound, err := s.tryBoundForSource(source)
 		if err != nil {
@@ -332,7 +332,7 @@ func (s *Scheduler) AddSourceCfg(cfg *config.SourceConfig) error {
 		return err
 	}
 
-	// try to bound it to a Free worker.
+	// try to bound it to an online worker.
 	_, err = s.tryBoundForSource(cfg.SourceID)
 	return err
 }
@@ -353,8 +353,8 @@ func (s *Scheduler) AddSourceCfgWithWorker(cfg *config.SourceConfig, workerName 
 		return terror.ErrSchedulerWorkerNotExist.Generate(workerName)
 	}
 
-	if w.stage != WorkerFree {
-		return terror.ErrSchedulerWorkerNotFree.Generate(workerName)
+	if w.stage == WorkerOffline {
+		return terror.ErrSchedulerWorkerOffline.Generate(workerName)
 	}
 
 	if err := s.addSource(cfg); err != nil {
@@ -514,8 +514,8 @@ func (s *Scheduler) GetSourceCfgByID(source string) *config.SourceConfig {
 // transferWorkerAndSource swaps two sources between two workers (maybe empty). The input means before invocation of
 // this function, left worker and left source are bound, right worker and right source are bound. After this function,
 // left worker should be bound to right source and vice versa.
-// lworker, "", "", rsource				This means an unbounded source bounded to a free worker
-// lworker, lsource, rworker, "" 		This means transfer a source from a worker to another free worker
+// lworker, "", "", rsource				This means an unbounded source bounded to an online worker
+// lworker, lsource, rworker, "" 		This means transfer a source from a worker to another online worker
 // lworker, lsource, "", rsource		This means transfer a worker from a bounded source to another unbounded source
 // lworker, lsource, rworker, rsource	This means transfer two bounded relations.
 func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource string) error {
@@ -631,7 +631,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 	return nil
 }
 
-// TransferSource unbinds the `source` and binds it to a free or same-source-relay `worker`.
+// TransferSource unbinds the `source` and binds it to an online worker.
 // If fails halfway, the old worker should try recover.
 func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) error {
 	if !s.started.Load() {
@@ -712,7 +712,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 		s.logger.DPanic("the oldWorker is get from s.bound, so there should not be an error", zap.Error(err2))
 	}
 	if err2 := s.updateStatusToBound(w, ha.NewSourceBound(source, worker)); err2 != nil {
-		s.logger.DPanic("we have checked w.stage is free, so there should not be an error", zap.Error(err2))
+		s.logger.DPanic("we have checked w.stage is online, so there should not be an error", zap.Error(err2))
 	}
 	s.lastBound[source] = ha.NewSourceBound(source, oldWorker.BaseInfo().Name)
 	s.mu.Unlock()
@@ -2090,11 +2090,11 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 		return err
 	}
 
-	// 3. change the stage (from Offline) to Free or Relay.
+	// 3. change the stage (from Offline) to Free or Bound.
 	unboundRelaySources := make([]string, 0)
 	if len(w.RelaySources()) == 0 {
-		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySourceID() is
-		// of course nothing, so we find the relay source from a better place
+		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySources() is
+		// of course nothing, so we try to bind unbound relay sources back to this worker
 		for source, workerM := range s.relayWorkers {
 			if _, ok2 := workerM[w.BaseInfo().Name]; !ok2 {
 				continue
@@ -2162,10 +2162,10 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 		}
 	}()
 
-	// 6. change the stage (from Free) to Offline.
+	// 6. change the stage (from Bound) to Offline.
 	w.ToOffline()
 
-	// 7. try to bound the source to a Free worker again.
+	// 7. try to bound the source to an online worker again.
 	for _, source := range unbounds {
 		_, err = s.tryBoundForSource(source)
 		if err != nil {
@@ -2209,12 +2209,12 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 	return true, nil
 }
 
-// tryBoundForSource tries to bound a source to a random Free worker. The order of picking worker is
+// tryBoundForSource tries to bound a source to a random online worker. The order of picking worker is
 // - try to bind a worker which has unfinished load task
 // - try to bind a relay worker with the least bound sources which has be bound to this source before
 // - try to bind a relay worker with the least bound sources
 // - try to bind any worker which has be bound to this source before
-// - try to bind the free worker with the least bound sources
+// - try to bind the online worker with the least bound sources
 // pulling binlog using relay or not is determined by whether the worker has enabled relay.
 // caller should update the s.unbounds.
 // caller should make sure this source has source config.
@@ -2289,7 +2289,7 @@ func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
 	}
 
 	if worker == nil {
-		// and then a Free worker with lease sources.
+		// and then an online worker with lease sources.
 		for _, w := range s.workers {
 			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
 				worker = w

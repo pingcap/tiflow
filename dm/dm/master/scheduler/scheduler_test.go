@@ -500,7 +500,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	// source2 not exist, worker1 is bound
 	t.sourceCfgNotExist(s, sourceID2)
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName1))
-	require.True(t.T(), terror.ErrSchedulerWorkerNotFree.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)))
+	require.True(t.T(), terror.ErrSchedulerWorkerOffline.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)))
 	// source2 is not created because expected worker1 is already bound
 	t.sourceCfgNotExist(s, sourceID2)
 	rebuildScheduler(ctx)

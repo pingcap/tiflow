@@ -144,7 +144,7 @@ func (w *Worker) checkFree() {
 	}
 }
 
-// Unbound changes worker's stage from Bound to Free or Relay.
+// Unbound changes worker's stage from Bound to Free.
 func (w *Worker) Unbound(source string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
