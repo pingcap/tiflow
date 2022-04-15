@@ -360,91 +360,15 @@ func (s *configSuite) TestChangeFeedInfoClone(c *check.C) {
 	c.Assert(info.Config.EnableOldValue, check.IsTrue)
 }
 
-<<<<<<< HEAD
 type changefeedSuite struct{}
 
 var _ = check.Suite(&changefeedSuite{})
-
-func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
-	defer testleak.AfterTest(c)()
-	now := time.Now()
-	info := &ChangeFeedInfo{
-		ErrorHis: []int64{},
-	}
-	for i := 0; i < 5; i++ {
-		tm := now.Add(-errorHistoryGCInterval)
-		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	for i := 0; i < ErrorHistoryThreshold-1; i++ {
-		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	time.Sleep(time.Millisecond)
-	needSave, canInit := info.CheckErrorHistory()
-	c.Assert(needSave, check.IsTrue)
-	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
-
-	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-	needSave, canInit = info.CheckErrorHistory()
-	c.Assert(needSave, check.IsFalse)
-	c.Assert(canInit, check.IsFalse)
-}
 
 func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,
-=======
-func TestChangefeedInfoStringer(t *testing.T) {
-	t.Parallel()
-
-	testcases := []struct {
-		info                  *ChangeFeedInfo
-		expectedSinkURIRegexp string
-	}{
-		{
-			&ChangeFeedInfo{
-				SinkURI: "blackhole://",
-				StartTs: 418881574869139457,
-			},
-			`.*blackhole:.*`,
-		},
-		{
-			&ChangeFeedInfo{
-				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
-				StartTs: 418881574869139457,
-			},
-			`.*kafka://\*\*\*/ticdc-test2.*`,
-		},
-		{
-			&ChangeFeedInfo{
-				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
-				StartTs: 418881574869139457,
-			},
-			`.*mysql://username:password@\*\*\*/.*`,
-		},
-		{
-			&ChangeFeedInfo{
-				SinkURI: "mysql://root@127.0.0.1:3306/",
-				StartTs: 418881574869139457,
-			},
-			`.*mysql://username:password@\*\*\*/.*`,
-		},
-		{
-			&ChangeFeedInfo{
-				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
-				StartTs: 418881574869139457,
-			},
-			`.*mysql://username:password@\*\*\*/.*`,
-		},
-	}
-
-	for _, tc := range testcases {
-		require.Regexp(t, tc.expectedSinkURIRegexp, tc.info.String())
->>>>>>> 58c7cc3ae (owner(ticdc): Add backoff mechanism into changefeed restart logic (#4262))
 	}
 	str := info.String()
 	c.Check(str, check.Matches, ".*sink-uri\":\"\\*\\*\\*\".*")
