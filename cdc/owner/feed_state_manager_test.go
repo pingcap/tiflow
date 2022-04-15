@@ -221,7 +221,7 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 	}
 
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
-	c.Assert(state.Info.State, check.Equals, model.StateError)
+	c.Assert(state.Info.State, check.Equals, model.StateFailed)
 	c.Assert(state.Info.AdminJobType, check.Equals, model.AdminStop)
 	c.Assert(state.Status.AdminJobType, check.Equals, model.AdminStop)
 
