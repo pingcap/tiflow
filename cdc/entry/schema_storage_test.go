@@ -545,7 +545,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil, false)
+	storage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -906,7 +906,7 @@ func (t *schemaSuite) TestSchemaStorage(c *check.C) {
 
 		jobs, err := getAllHistoryDDLJob(store)
 		c.Assert(err, check.IsNil)
-		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 		c.Assert(err, check.IsNil)
 		for _, job := range jobs {
 			err := scheamStorage.HandleDDLJob(job)

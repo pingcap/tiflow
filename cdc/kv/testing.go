@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
@@ -155,7 +156,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 
 	startTS := mustGetTimestamp(t, storage)
 
-	lockresolver := txnutil.NewLockerResolver(storage)
+	lockresolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
 		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
@@ -244,7 +245,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 	defer cli.Close()
 
 	startTS := mustGetTimestamp(t, storage)
-	lockresolver := txnutil.NewLockerResolver(storage)
+	lockresolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
 		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
