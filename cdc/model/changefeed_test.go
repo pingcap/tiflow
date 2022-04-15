@@ -364,33 +364,6 @@ type changefeedSuite struct{}
 
 var _ = check.Suite(&changefeedSuite{})
 
-func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
-	defer testleak.AfterTest(c)()
-	now := time.Now()
-	info := &ChangeFeedInfo{
-		ErrorHis: []int64{},
-	}
-	for i := 0; i < 5; i++ {
-		tm := now.Add(-errorHistoryGCInterval)
-		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	for i := 0; i < ErrorHistoryThreshold-1; i++ {
-		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-		time.Sleep(time.Millisecond)
-	}
-	time.Sleep(time.Millisecond)
-	needSave, canInit := info.CheckErrorHistory()
-	c.Assert(needSave, check.IsTrue)
-	c.Assert(canInit, check.IsTrue)
-	c.Assert(info.ErrorHis, check.HasLen, ErrorHistoryThreshold-1)
-
-	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
-	needSave, canInit = info.CheckErrorHistory()
-	c.Assert(needSave, check.IsFalse)
-	c.Assert(canInit, check.IsFalse)
-}
-
 func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{

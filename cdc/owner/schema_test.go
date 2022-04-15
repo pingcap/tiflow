@@ -30,13 +30,15 @@ var _ = check.Suite(&schemaSuite{})
 
 type schemaSuite struct{}
 
+const dummyChangeFeedID = "dummy_changefeed"
+
 func (s *schemaSuite) TestAllPhysicalTables(c *check.C) {
 	defer testleak.AfterTest(c)()
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(schema.AllPhysicalTables(), check.HasLen, 0)
 	// add normal table
@@ -83,7 +85,7 @@ func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -103,7 +105,7 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
