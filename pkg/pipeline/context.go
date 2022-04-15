@@ -53,24 +53,3 @@ func (ctx *nodeContext) SendToNextNode(msg pmessage.Message) {
 	// The header channel should never be blocked
 	ctx.outputCh <- msg
 }
-
-type messageContext struct {
-	NodeContext
-	message pmessage.Message
-}
-
-func withMessage(ctx NodeContext, msg pmessage.Message) NodeContext {
-	// Optimize for `nodeContext` to save one allocation.
-	if ctx, ok := ctx.(*nodeContext); ok {
-		ctx.msg = msg
-		return ctx
-	}
-	return messageContext{
-		NodeContext: ctx,
-		message:     msg,
-	}
-}
-
-func (ctx messageContext) Message() pmessage.Message {
-	return ctx.message
-}

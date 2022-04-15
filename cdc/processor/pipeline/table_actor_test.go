@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
@@ -71,8 +70,8 @@ func TestTableActorInterface(t *testing.T) {
 		sinkNode:    sink,
 		sortNode:    sorter,
 		tableName:   "t1",
-		replicConfig: &serverConfig.ReplicaConfig{
-			Consistent: &serverConfig.ConsistentConfig{
+		replicConfig: &config.ReplicaConfig{
+			Consistent: &config.ConsistentConfig{
 				Level: "node",
 			},
 		},
