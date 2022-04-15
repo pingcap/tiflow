@@ -1073,9 +1073,6 @@ func (r *Relay) Reload(newCfg *Config) error {
 	// Update From
 	r.cfg.From = newCfg.From
 
-	// Update AutoFixGTID
-	r.cfg.AutoFixGTID = newCfg.AutoFixGTID
-
 	// Update Charset
 	r.cfg.Charset = newCfg.Charset
 

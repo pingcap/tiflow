@@ -50,6 +50,8 @@ const (
 	CmdCheckSubtasksCanUpdate
 
 	CmdGetValidationStatus
+	CmdGetValidationError
+	CmdOperateValidationError
 )
 
 // Request wraps all dm-worker rpc requests.
@@ -68,7 +70,9 @@ type Request struct {
 
 	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateRequest
 
-	GetValidationStatus *pb.GetValidationStatusRequest
+	GetValidationStatus    *pb.GetValidationStatusRequest
+	GetValidationError     *pb.GetValidationErrorRequest
+	OperateValidationError *pb.OperateValidationErrorRequest
 }
 
 // Response wraps all dm-worker rpc responses.
@@ -87,7 +91,9 @@ type Response struct {
 
 	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateResponse
 
-	GetValidationStatus *pb.GetValidationStatusResponse
+	GetValidationStatus    *pb.GetValidationStatusResponse
+	GetValidationError     *pb.GetValidationErrorResponse
+	OperateValidationError *pb.OperateValidationErrorResponse
 }
 
 // Client is a client that sends RPC.
