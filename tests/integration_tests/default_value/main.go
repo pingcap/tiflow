@@ -114,7 +114,6 @@ func testGetDefaultValue(srcs []*sql.DB, wg *sync.WaitGroup) {
 			wg1.Add(1)
 			go func() {
 				ddlFunc(ctx, srcs[0])
-				time.Sleep(10 * time.Millisecond)
 				cancel()
 				wg1.Done()
 			}()
@@ -206,8 +205,8 @@ func dml(ctx context.Context, db *sql.DB, table string, id int, defaultValue int
 			}
 		}
 
-		if i%10 == 0 {
-			time.Sleep(5 * time.Millisecond)
+		if i%100 == 0 {
+			time.Sleep(100 * time.Millisecond)
 		}
 
 		select {
@@ -231,7 +230,7 @@ func modifyColumnDefaultValueDDL1(ctx context.Context, db *sql.DB) {
 	}
 
 	for _, modifyFmt := range modifyColumnFmts {
-		for value := 1; value < 10; value++ {
+		for value := 1; value < 3; value++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -240,7 +239,7 @@ func modifyColumnDefaultValueDDL1(ctx context.Context, db *sql.DB) {
 
 			var defaultValue interface{}
 
-			if value%5 != 0 {
+			if value%2 != 0 {
 				defaultValue = value
 			} else {
 				// use default null
@@ -249,7 +248,7 @@ func modifyColumnDefaultValueDDL1(ctx context.Context, db *sql.DB) {
 
 			sql := fmt.Sprintf(modifyFmt, testName)
 			util.MustExec(db, sql, defaultValue)
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(3 * time.Millisecond)
 		}
 	}
 }
@@ -262,10 +261,8 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 	mustCreateTable(db, testName)
 	sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
 	util.MustExec(db, sql)
-	time.Sleep(100 * time.Millisecond)
 	sql = fmt.Sprintf("alter table test.`%s` add column v1 int default 11", testName)
 	util.MustExec(db, sql)
-	time.Sleep(100 * time.Millisecond)
 
 	modifyColumnFmts := []string{
 		"alter table test.`%s` modify column v1 int default ?",
@@ -273,7 +270,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 	}
 
 	for _, modifyFmt := range modifyColumnFmts {
-		for value := 1; value < 10; value++ {
+		for value := 1; value < 3; value++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -282,7 +279,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 
 			var defaultValue interface{}
 
-			if value%5 != 0 {
+			if value%2 != 0 {
 				defaultValue = value
 			} else {
 				// use default null
@@ -291,7 +288,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 
 			sql := fmt.Sprintf(modifyFmt, testName)
 			util.MustExec(db, sql, defaultValue)
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(3 * time.Millisecond)
 		}
 	}
 }
@@ -312,11 +309,11 @@ func ddlZeroValueFunc(ctx context.Context, db *sql.DB, format string, table stri
 		// add column
 		sql := fmt.Sprintf(format, table)
 		util.MustExec(db, sql)
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 		// drop column
 		sql = fmt.Sprintf("alter table test.`%s` drop column v1", table)
 		util.MustExec(db, sql)
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 	}
 }
 
@@ -331,7 +328,7 @@ func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table s
 		}
 		sql := fmt.Sprintf("alter table test.`%s` drop column v1", table)
 		util.MustExec(db, sql)
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 
 		var notNULL string
 
@@ -341,7 +338,7 @@ func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table s
 		}
 		sql = fmt.Sprintf(format, table, notNULL)
 		util.MustExec(db, sql, defaultValue)
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 	}
 }
 
@@ -802,14 +799,11 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 		log.S().Info("testMultiDDLs take %v", time.Since(start))
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*180)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pool := workerpool.NewDefaultAsyncPool(8)
 	go func() {
-		if err := pool.Run(ctx); err != nil {
-			log.S().Error("start async pool fail")
-			return
-		}
+		pool.Run(ctx)
 	}()
 
 	var wg1 sync.WaitGroup
@@ -828,7 +822,7 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			log.S().Info("running ddl test: ", newTbName)
 
 			var wg2 sync.WaitGroup
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel2 := context.WithCancel(context.Background())
 
 			// start dml
 			for idx, src := range srcs {
@@ -849,7 +843,7 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			wg2.Add(1)
 			go func() {
 				unit.DDLFunc(ctx, srcs[0], unit.Fmt, newTbName, unit.DefaultValue)
-				cancel()
+				cancel2()
 				wg2.Done()
 			}()
 
