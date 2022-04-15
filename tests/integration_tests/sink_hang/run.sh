@@ -12,19 +12,6 @@ CDC_COUNT=3
 DB_COUNT=4
 MAX_RETRIES=20
 
-function check_changefeed_state() {
-	pd_addr=$1
-	changefeed_id=$2
-	expected=$3
-	state=$(cdc cli --pd=$pd_addr changefeed query -s -c $changefeed_id | jq -r ".state")
-	if [[ "$state" != "$expected" ]]; then
-		echo "unexpected state $state, expected $expected"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_state
-
 function run() {
 	# kafka is not supported yet.
 	if [ "$SINK_TYPE" == "kafka" ]; then
@@ -54,7 +41,7 @@ function run() {
 	run_sql "CREATE table sink_hang.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "BEGIN; INSERT INTO sink_hang.t1 VALUES (),(),(); INSERT INTO sink_hang.t2 VALUES (),(),(); COMMIT" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
 
 	check_table_exists "sink_hang.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "sink_hang.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
