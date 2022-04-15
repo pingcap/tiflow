@@ -101,19 +101,19 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	c.Assert(rsp.Succeeded, check.IsFalse)
 
 	// case 1: errors.ErrReachMaxTry
-	_, err = retrycli.Txn(ctx, txnEmptyCmps, nil, nil)
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, nil, nil)
 	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
 
 	// case 2: errors.ErrReachMaxTry
-	_, err = retrycli.Txn(ctx, nil, txnEmptyOpsThen, nil)
+	_, err = retrycli.Txn(ctx, nil, TxnEmptyOpsThen, nil)
 	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
 
 	// case 3: context.DeadlineExceeded
-	_, err = retrycli.Txn(ctx, txnEmptyCmps, txnEmptyOpsThen, nil)
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, nil)
 	c.Assert(err, check.Equals, context.DeadlineExceeded)
 
 	// other case: mock error
-	_, err = retrycli.Txn(ctx, txnEmptyCmps, txnEmptyOpsThen, TxnEmptyOpsElse)
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, TxnEmptyOpsElse)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
 
 	maxTries = originValue

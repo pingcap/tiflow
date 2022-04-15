@@ -58,8 +58,8 @@ const (
 )
 
 var (
-	txnEmptyCmps    = []clientv3.Cmp{}
-	txnEmptyOpsThen = []clientv3.Op{}
+	TxnEmptyCmps    = []clientv3.Cmp{}
+	TxnEmptyOpsThen = []clientv3.Op{}
 	// TxnEmptyOpsElse is a no-op operation.
 	TxnEmptyOpsElse = []clientv3.Op{}
 )
