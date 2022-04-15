@@ -58,9 +58,11 @@ const (
 )
 
 var (
-	TxnEmptyCmps    = []clientv3.Cmp{}
+	// TxnEmptyCmps represents empty compare-opration of an etcd Txn
+	TxnEmptyCmps = []clientv3.Cmp{}
+	// TxnEmptyOpsThen represents empty then-opration of an etcd Txn
 	TxnEmptyOpsThen = []clientv3.Op{}
-	// TxnEmptyOpsElse is a no-op operation.
+	// TxnEmptyOpsElse represents empty else-opration of an etcd Txn
 	TxnEmptyOpsElse = []clientv3.Op{}
 )
 
