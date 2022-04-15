@@ -312,9 +312,11 @@ func ddlZeroValueFunc(ctx context.Context, db *sql.DB, format string, table stri
 		// add column
 		sql := fmt.Sprintf(format, table)
 		util.MustExec(db, sql)
+		time.Sleep(5 * time.Millisecond)
 		// drop column
 		sql = fmt.Sprintf("alter table test.`%s` drop column v1", table)
 		util.MustExec(db, sql)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -329,6 +331,7 @@ func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table s
 		}
 		sql := fmt.Sprintf("alter table test.`%s` drop column v1", table)
 		util.MustExec(db, sql)
+		time.Sleep(5 * time.Millisecond)
 
 		var notNULL string
 
@@ -338,6 +341,7 @@ func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table s
 		}
 		sql = fmt.Sprintf(format, table, notNULL)
 		util.MustExec(db, sql, defaultValue)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -723,7 +727,6 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 				ddlDefaultValueFunc,
 			},
 		*/
-
 	}
 
 	testName := getFunctionName(testMultiDDLs)
@@ -733,10 +736,13 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 		log.S().Info("testMultiDDLs take %v", time.Since(start))
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*180)
 	defer cancel()
 	pool := workerpool.NewDefaultAsyncPool(8)
-	pool.Run(ctx)
+	if err := pool.Run(ctx); err != nil {
+		log.S().Error("start async pool fail")
+		return
+	}
 
 	// seperate every case to different table
 	for i, unit := range Units {
@@ -757,7 +763,7 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			for idx, src := range srcs {
 				wg2.Add(1)
 				go func(i int, s *sql.DB) {
-					dml(ctx, s, testName, i, unit.DefaultValue)
+					dml(ctx, s, newTbName, i, unit.DefaultValue)
 					wg2.Done()
 				}(idx+i*2, src)
 			}
