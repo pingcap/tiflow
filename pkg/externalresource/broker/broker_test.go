@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -15,9 +16,9 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
-func newBroker(t *testing.T) (*Impl, *manager.MockClient, string) {
+func newBroker(t *testing.T) (*Impl, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
-	client := manager.NewMockClient()
+	client := manager.NewWrappedMockClient()
 	broker := NewBroker(&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		client)
@@ -32,14 +33,15 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-1"}, mock.Anything).
+	innerClient := client.GetLeaderClient().(*manager.MockClient)
+	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-1"}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), st.Err())
 	hdl, err := brk.OpenStorage(context.Background(), "worker-1", "job-1", "/local/test-1")
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-1", hdl.ID())
 
-	client.AssertExpectations(t)
-	client.ExpectedCalls = nil
+	innerClient.AssertExpectations(t)
+	innerClient.ExpectedCalls = nil
 
 	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt")
 	require.NoError(t, err)
@@ -47,7 +49,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 	err = f.Close(context.Background())
 	require.NoError(t, err)
 
-	client.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
+	innerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
 		ResourceId:      "/local/test-1",
 		CreatorExecutor: "executor-1",
 		JobId:           "job-1",
@@ -57,7 +59,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 	err = hdl.Persist(context.Background())
 	require.NoError(t, err)
 
-	client.AssertExpectations(t)
+	innerClient.AssertExpectations(t)
 
 	fileName := filepath.Join(dir, "worker-1", "test-1", "1.txt")
 	require.FileExists(t, fileName)
@@ -66,7 +68,8 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 func TestBrokerOpenExistingStorage(t *testing.T) {
 	brk, client, dir := newBroker(t)
 
-	client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
+	innerClient := client.GetLeaderClient().(*manager.MockClient)
+	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
 		Return(&pb.QueryResourceResponse{
 			CreatorExecutor: "executor-1",
 			JobId:           "job-1",
@@ -76,7 +79,7 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-2", hdl.ID())
 
-	client.AssertExpectations(t)
+	innerClient.AssertExpectations(t)
 
 	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt")
 	require.NoError(t, err)

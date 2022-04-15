@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
 
@@ -15,8 +16,8 @@ type MockClient struct {
 	mock.Mock
 }
 
-func NewMockClient() *MockClient {
-	return &MockClient{}
+func NewWrappedMockClient() *rpcutil.FailoverRPCClients[pb.ResourceManagerClient] {
+	return rpcutil.NewFailoverRPCClientsForTest[pb.ResourceManagerClient](&MockClient{})
 }
 
 func (m *MockClient) CreateResource(ctx context.Context, in *pb.CreateResourceRequest, opts ...grpc.CallOption) (*pb.CreateResourceResponse, error) {

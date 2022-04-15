@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 )
 
-const dialTimeout = 5 * time.Second
+const DialTimeout = 5 * time.Second
 
 type MasterClient interface {
 	UpdateClients(ctx context.Context, urls []string, leaderURL string)
@@ -49,7 +49,7 @@ type MasterClientImpl struct {
 }
 
 var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.CloseableConnIface, error) {
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	ctx, cancel := context.WithTimeout(ctx, DialTimeout)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

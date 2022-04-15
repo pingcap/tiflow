@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/gogo/status"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -32,7 +33,7 @@ type BrExternalStorageHandle struct {
 	executorID resourcemeta.ExecutorID
 
 	inner  brStorage.ExternalStorage
-	client pb.ResourceManagerClient
+	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 }
 
 func (h *BrExternalStorageHandle) ID() resourcemeta.ResourceID {
@@ -44,12 +45,17 @@ func (h *BrExternalStorageHandle) BrExternalStorage() brStorage.ExternalStorage 
 }
 
 func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
-	_, err := h.client.CreateResource(ctx, &pb.CreateResourceRequest{
-		ResourceId:      h.id,
-		CreatorExecutor: string(h.executorID),
-		JobId:           h.jobID,
-		CreatorWorkerId: h.workerID,
-	})
+	_, err := rpcutil.DoFailoverRPC(
+		ctx,
+		h.client,
+		&pb.CreateResourceRequest{
+			ResourceId:      h.id,
+			CreatorExecutor: string(h.executorID),
+			JobId:           h.jobID,
+			CreatorWorkerId: h.workerID,
+		},
+		pb.ResourceManagerClient.CreateResource,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -63,7 +69,7 @@ func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 
 type Factory struct {
 	config     *storagecfg.Config
-	client     pb.ResourceManagerClient
+	client     *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 	executorID resourcemeta.ExecutorID
 }
 
@@ -119,7 +125,12 @@ func (f *Factory) CheckForExistingResource(
 	ctx context.Context,
 	resourceID resourcemeta.ResourceID,
 ) (*resourcemeta.ResourceMeta, bool, error) {
-	resp, err := f.client.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: resourceID})
+	resp, err := rpcutil.DoFailoverRPC(
+		ctx,
+		f.client,
+		&pb.QueryResourceRequest{ResourceId: resourceID},
+		pb.ResourceManagerClient.QueryResource,
+	)
 	if err == nil {
 		return &resourcemeta.ResourceMeta{
 			ID:       resourceID,

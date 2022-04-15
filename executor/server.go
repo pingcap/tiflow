@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -35,7 +37,6 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/config"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/serverutils"
@@ -47,14 +48,15 @@ type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	tcpServer   tcpserver.TCPServer
-	grpcSrv     *grpc.Server
-	cli         client.MasterClient
-	cliUpdateCh chan cliUpdateInfo
-	sch         *runtime.Runtime
-	workerRtm   *worker.TaskRunner
-	msgServer   *p2p.MessageRPCService
-	info        *model.NodeInfo
+	tcpServer      tcpserver.TCPServer
+	grpcSrv        *grpc.Server
+	masterClient   client.MasterClient
+	resourceClient *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+	cliUpdateCh    chan cliUpdateInfo
+	sch            *runtime.Runtime
+	workerRtm      *worker.TaskRunner
+	msgServer      *p2p.MessageRPCService
+	info           *model.NodeInfo
 
 	lastHearbeatTime time.Time
 
@@ -69,7 +71,7 @@ type Server struct {
 	userRawKVClient extkv.KVClientEx
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
-	resourceBroker  *externalresource.Broker
+	resourceBroker  broker.Broker
 }
 
 func NewServer(cfg *Config, ctx *test.Context) *Server {
@@ -143,7 +145,7 @@ func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRe
 	return &pb.PauseBatchTasksResponse{}, nil
 }
 
-func (s *Server) buildDeps(wid libModel.WorkerID) (*deps.Deps, error) {
+func (s *Server) buildDeps() (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
 		return s.msgServer.MakeHandlerManager()
@@ -181,26 +183,14 @@ func (s *Server) buildDeps(wid libModel.WorkerID) (*deps.Deps, error) {
 	}
 
 	err = deps.Provide(func() client.MasterClient {
-		return s.cli
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	proxy, err := s.resourceBroker.NewProxyForWorker(context.TODO(), wid)
-	if err != nil {
-		return nil, err
-	}
-	err = deps.Provide(func() externalresource.Proxy {
-		return proxy
+		return s.masterClient
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	err = deps.Provide(func() broker.Broker {
-		// TODO: use correct broker.Broker
-		return nil
+		return s.resourceBroker
 	})
 	if err != nil {
 		return nil, err
@@ -220,10 +210,10 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		MetaKVClient:          s.metaKVClient,
 		UserRawKVClient:       s.userRawKVClient,
 		ExecutorClientManager: client.NewClientManager(),
-		ServerMasterClient:    s.cli,
+		ServerMasterClient:    s.masterClient,
 	}
 
-	dp, err := s.buildDeps(req.GetWorkerId())
+	dp, err := s.buildDeps()
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +316,10 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 		s.sch.Run(ctx, 10)
 	}()
 
+	err = s.initClients(ctx)
+	if err != nil {
+		return err
+	}
 	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
@@ -378,13 +372,20 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.workerRtm.Run(ctx)
 	})
 
-	err := s.selfRegister(ctx)
+	err := s.initClients(ctx)
+	if err != nil {
+		return err
+	}
+	err = s.selfRegister(ctx)
 	if err != nil {
 		return err
 	}
 
 	// TODO: make the prefix configurable later
-	s.resourceBroker = externalresource.NewBroker(s.cfg.Name, s.cfg.Name, s.cli)
+	s.resourceBroker = broker.NewBroker(
+		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./"}},
+		s.info.ID,
+		s.resourceClient)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
@@ -459,7 +460,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 // current the metastore is an embed etcd underlying
 func (s *Server) fetchMetaStore(ctx context.Context) error {
 	// query service discovery metastore to fetch metastore connection endpoint
-	resp, err := s.cli.QueryMetaStore(
+	resp, err := s.masterClient.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
 		s.cfg.RPCTimeout,
@@ -497,7 +498,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.etcdCli = etcdCli
 
 	// fetch framework metastore connection endpoint
-	resp, err = s.cli.QueryMetaStore(
+	resp, err = s.masterClient.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
 		s.cfg.RPCTimeout,
@@ -520,7 +521,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	s.metaKVClient = kvclient.NewPrefixKVClient(cliEx, tenant.DefaultUserTenantID)
 
 	// fetch user metastore connection endpoint
-	resp, err = s.cli.QueryMetaStore(
+	resp, err = s.masterClient.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
 		s.cfg.RPCTimeout,
@@ -542,19 +543,45 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) selfRegister(ctx context.Context) (err error) {
-	// Register myself
-	s.cli, err = client.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
+func (s *Server) initClients(ctx context.Context) (err error) {
+	s.masterClient, err = client.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
 	if err != nil {
 		return err
 	}
-	log.L().Logger.Info("master client init successful")
+	log.L().Info("master client init successful")
+
+	resourceCliDialer := func(ctx context.Context, addr string) (pb.ResourceManagerClient, rpcutil.CloseableConnIface, error) {
+		ctx, cancel := context.WithTimeout(ctx, client.DialTimeout)
+		defer cancel()
+		// TODO: reuse connection with masterClient
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		}
+		return pb.NewResourceManagerClient(conn), conn, nil
+	}
+	s.resourceClient, err = rpcutil.NewFailoverRPCClients[pb.ResourceManagerClient](
+		ctx,
+		getJoinURLs(s.cfg.Join),
+		resourceCliDialer,
+	)
+	if err != nil {
+		if test.GetGlobalTestFlag() {
+			log.L().Info("ignore error when in unit tests")
+			return nil
+		}
+		return err
+	}
+	log.L().Info("resource client init successful")
+	return nil
+}
+
+func (s *Server) selfRegister(ctx context.Context) (err error) {
 	registerReq := &pb.RegisterExecutorRequest{
 		Address:    s.cfg.AdvertiseAddr,
 		Capability: defaultCapability,
 	}
-
-	resp, err := s.cli.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
+	resp, err := s.masterClient.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
 	if err != nil {
 		return err
 	}
@@ -603,7 +630,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.cli.Heartbeat(ctx, req, s.cfg.RPCTimeout)
+			resp, err := s.masterClient.Heartbeat(ctx, req, s.cfg.RPCTimeout)
 			if err != nil {
 				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
@@ -650,14 +677,13 @@ func getJoinURLs(addrs string) []string {
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
-	resourceIDs := s.resourceBroker.AllocatedIDs()
+	// TODO: do we need to report allocated resource to master?
 
 	rescs := s.sch.Resource()
 	req := &pb.ExecWorkloadRequest{
 		// TODO: use which field as ExecutorId is more accurate
 		ExecutorId: s.cfg.WorkerAddr,
 		Workloads:  make([]*pb.ExecWorkload, 0, len(rescs)),
-		ResourceId: resourceIDs,
 	}
 	for tp, resc := range rescs {
 		req.Workloads = append(req.Workloads, &pb.ExecWorkload{
@@ -665,7 +691,7 @@ func (s *Server) reportTaskRescOnce(ctx context.Context) error {
 			Usage: int32(resc),
 		})
 	}
-	resp, err := s.cli.ReportExecutorWorkload(ctx, req)
+	resp, err := s.masterClient.ReportExecutorWorkload(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -698,7 +724,8 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case info := <-s.cliUpdateCh:
-			s.cli.UpdateClients(ctx, info.urls, info.leaderURL)
+			s.masterClient.UpdateClients(ctx, info.urls, info.leaderURL)
+			s.resourceClient.UpdateClients(ctx, info.urls, info.leaderURL)
 		}
 	}
 }

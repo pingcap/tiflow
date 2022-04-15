@@ -179,3 +179,16 @@ func DoFailoverRPC[
 	}
 	return resp, err
 }
+
+func NewFailoverRPCClientsForTest[T FailoverRPCClientType](
+	client T,
+) *FailoverRPCClients[T] {
+	return &FailoverRPCClients[T]{
+		leader: "leader",
+		clients: map[string]*clientHolder[T]{
+			"leader": {
+				client: client,
+			},
+		},
+	}
+}

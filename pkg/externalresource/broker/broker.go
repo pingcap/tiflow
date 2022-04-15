@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
@@ -32,7 +33,11 @@ type Impl struct {
 	factory *Factory
 }
 
-func NewBroker(config *storagecfg.Config, executorID resourcemeta.ExecutorID, client pb.ResourceManagerClient) *Impl {
+func NewBroker(
+	config *storagecfg.Config,
+	executorID resourcemeta.ExecutorID,
+	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient],
+) *Impl {
 	return &Impl{
 		config:     config,
 		executorID: executorID,

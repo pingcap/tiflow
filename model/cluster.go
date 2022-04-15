@@ -21,6 +21,7 @@ type RescUnit int
 // DeployNodeID means the identify of a node
 type DeployNodeID string
 
+// ExecutorID is an alias for executor when NodeType is NodeTypeExecutor.
 type ExecutorID = DeployNodeID
 
 // NodeInfo describes the information of server instance, contains node type, node
