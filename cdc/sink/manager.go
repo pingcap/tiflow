@@ -86,6 +86,9 @@ func (m *Manager) Close(ctx context.Context) error {
 		log.Info("sinkManager try close bufSink",
 			zap.String("changefeed", m.changefeedID))
 		start := time.Now()
+		// close the bufSink asynchronously to prevent block too long
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
 		if err := m.bufSink.Close(ctx); err != nil {
 			log.Info("close bufSink failed",
 				zap.String("changefeed", m.changefeedID),
