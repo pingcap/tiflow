@@ -177,7 +177,7 @@ func TestPollStoppedActor(t *testing.T) {
 	require.False(t, tbl.Poll(context.TODO(), nil))
 	tbl = tableActor{stopped: stopped}
 	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
-		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+		message.ValueMessage(pmessage.TickMessage()),
 	}))
 	require.False(t, tbl.Poll(context.TODO(), nil))
 }
@@ -198,18 +198,18 @@ func TestPollTickMessage(t *testing.T) {
 		reportErr:         func(err error) {},
 	}
 	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
-		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+		message.ValueMessage(pmessage.TickMessage()),
 	}))
 	require.True(t, tbl.lastFlushSinkTime.After(startTime))
 	startTime = tbl.lastFlushSinkTime
 	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
-		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+		message.ValueMessage(pmessage.TickMessage()),
 	}))
 	require.True(t, tbl.lastFlushSinkTime.Equal(startTime))
 	tbl.lastFlushSinkTime = time.Now().Add(-2 * sinkFlushInterval)
 	tbl.sinkNode.status = TableStatusStopped
 	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
-		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+		message.ValueMessage(pmessage.TickMessage()),
 	}))
 }
 
@@ -279,7 +279,7 @@ func TestPollDataFailed(t *testing.T) {
 		},
 	}
 	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
-		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+		message.ValueMessage(pmessage.TickMessage()),
 	}))
 	require.Equal(t, stopped, tbl.stopped)
 }

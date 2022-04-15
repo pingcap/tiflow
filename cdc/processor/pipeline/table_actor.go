@@ -37,12 +37,28 @@ import (
 )
 
 var (
-	_       TablePipeline                 = (*tableActor)(nil)
-	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
-	stopped                               = uint32(1)
+	_        TablePipeline                 = (*tableActor)(nil)
+	_        actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                                = uint32(1)
+	workload                               = model.WorkloadInfo{Workload: 1}
 )
 
-const sinkFlushInterval = 500 * time.Millisecond
+const (
+	// TODO determine a reasonable default value
+	// This is part of sink performance optimization
+	resolvedTsInterpolateInterval = 200 * time.Millisecond
+	sinkFlushInterval             = 500 * time.Millisecond
+	defaultOutputChannelSize      = 64
+)
+
+// TODO find a better name or avoid using an interface
+// We use an interface here for ease in unit testing.
+type tableFlowController interface {
+	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
+	Release(resolvedTs uint64)
+	Abort()
+	GetConsumption() uint64
+}
 
 type tableActor struct {
 	actorID actor.ID

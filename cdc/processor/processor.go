@@ -836,7 +836,9 @@ func (p *processor) handlePosition(currentTs int64) {
 		return
 	}
 
-	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
+	// minResolvedTs and minCheckpointTs may less than global resolved ts and
+	// global checkpoint ts when a new table added,
+	// the startTs of the new table is less than global checkpoint ts.
 	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
 		minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
 		p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -981,29 +983,17 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 
 	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
 	var table tablepipeline.TablePipeline
-	if config.GetGlobalServerConfig().Debug.EnableTableActor {
-		var err error
-		table, err = tablepipeline.NewTableActor(
-			ctx,
-			p.mounter,
-			tableID,
-			tableNameStr,
-			replicaInfo,
-			sink,
-			p.changefeed.Info.GetTargetTs())
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	} else {
-		table = tablepipeline.NewTablePipeline(
-			ctx,
-			p.mounter,
-			tableID,
-			tableNameStr,
-			replicaInfo,
-			sink,
-			p.changefeed.Info.GetTargetTs(),
-		)
+	var err error
+	table, err = tablepipeline.NewTableActor(
+		ctx,
+		p.mounter,
+		tableID,
+		tableNameStr,
+		replicaInfo,
+		sink,
+		p.changefeed.Info.GetTargetTs())
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	if p.redoManager.Enabled() {
